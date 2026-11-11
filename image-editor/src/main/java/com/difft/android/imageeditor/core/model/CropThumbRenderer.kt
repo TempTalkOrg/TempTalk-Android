@@ -10,11 +10,11 @@ import com.difft.android.imageeditor.core.Renderer
 import com.difft.android.imageeditor.core.RendererContext
 import java.util.UUID
 
-/**
- * Hit tests a circle that is [R.dimen.crop_area_renderer_edge_size] in radius on the screen.
- *
- * Does not draw anything.
- */
+
+
+
+
+
 @Parcelize
 class CropThumbRenderer(
     override val controlPoint: ThumbRenderer.ControlPoint,

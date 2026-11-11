@@ -4,7 +4,7 @@ import com.difft.android.base.R
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/** Trailing-slot indicator and background rules of the chat list row. */
+
 class RecentChatRowIndicatorTest {
 
     private fun indicator(
@@ -26,7 +26,7 @@ class RecentChatRowIndicatorTest {
 
     @Test
     fun `unread count or manual-unread dot takes the slot before every icon`() {
-        // displayUnreadNum is 1 for a manual-unread dot and the real count otherwise.
+        
         assertEquals(TrailingIndicator.UNREAD, indicator(displayUnreadNum = 1))
         assertEquals(TrailingIndicator.UNREAD, indicator(displayUnreadNum = 120))
         assertEquals(TrailingIndicator.UNREAD, indicator(isFocusCard = true, displayUnreadNum = 3))

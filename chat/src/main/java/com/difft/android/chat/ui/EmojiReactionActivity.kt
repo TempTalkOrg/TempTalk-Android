@@ -7,7 +7,7 @@ import com.difft.android.base.utils.pane.DetailShellActivity
 import dagger.hilt.android.AndroidEntryPoint
 import difft.android.messageserialization.For
 
-/** Full-window shell for [EmojiReactionFragment] (chat shells and popups). */
+
 @AndroidEntryPoint
 class EmojiReactionActivity : DetailShellActivity() {
 

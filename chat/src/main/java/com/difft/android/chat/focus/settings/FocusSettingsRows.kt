@@ -28,10 +28,10 @@ import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.user.GlobalNotificationType
 import com.difft.android.chat.R
 
-/**
- * Geometry of the "- " secondary rows (iOS parity): the dash at 32dp, the label and the divider at
- * 48dp (dash 8 + gap 8). A row with its value below the label pads 12dp vertically.
- */
+
+
+
+
 object FocusRowDefaults {
     val SubIndent: Dp = 32.dp
     val DashWidth: Dp = 16.dp
@@ -39,24 +39,24 @@ object FocusRowDefaults {
     val SubDetailContentPadding = PaddingValues(start = SubIndent, end = 16.dp, top = 12.dp, bottom = 12.dp)
 }
 
-/**
- * One cell of a settings group that holds a primary row plus its secondary rows. The group paints
- * the divider colour between cells, so this block fills itself with the row surface and draws its
- * own inset dividers ([InsetDivider]) between the rows it holds.
- */
+
+
+
+
+
 @Composable
 fun FocusRowBlock(content: @Composable ColumnScope.() -> Unit) {
     Column(Modifier.fillMaxWidth().background(DifftSettingsDefaults.RowSurfaceColor), content = content)
 }
 
-/** Divider between a primary row and its secondary rows, starting where the secondary label starts. */
+
 @Composable
 fun InsetDivider() {
     Box(
         Modifier
             .fillMaxWidth()
             .padding(start = FocusRowDefaults.SubIndent + FocusRowDefaults.DashWidth)
-            .height(DifftSettingsDefaults.SeparatorThickness)
+            .height(DifftSettingsDefaults.separatorThickness)
             .background(DifftTheme.colors.divider),
     )
 }
@@ -76,7 +76,7 @@ private fun SubLabel(text: String, modifier: Modifier = Modifier) {
     )
 }
 
-/** "- Label    value >" secondary navigation row. A null or empty [value] shows no value. */
+
 @Composable
 fun FocusSubRow(label: String, value: String?, onClick: () -> Unit) {
     DifftSettingsRow(onClick = onClick, contentPadding = FocusRowDefaults.SubContentPadding) {
@@ -93,10 +93,10 @@ fun FocusSubRow(label: String, value: String?, onClick: () -> Unit) {
     }
 }
 
-/**
- * "- Label >" secondary navigation row with its value on a second line under the label ("Other Groups
- * Still Notify", "Still Notify"): the list of items may be long. An empty [detail] shows the label alone.
- */
+
+
+
+
 @Composable
 fun FocusSubDetailRow(label: String, detail: String, onClick: () -> Unit) {
     val hasDetail = detail.isNotEmpty()
@@ -124,7 +124,7 @@ fun FocusSubDetailRow(label: String, detail: String, onClick: () -> Unit) {
     }
 }
 
-/** "- Label    [switch]" secondary row. */
+
 @Composable
 fun FocusSubSwitchRow(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
     DifftSwitchRow(
@@ -137,10 +137,10 @@ fun FocusSubSwitchRow(label: String, checked: Boolean, onCheckedChange: (Boolean
     }
 }
 
-/**
- * A row taken over by focus or mute: no switch, disabled title, "Paused" value; a tap explains why.
- * What it returns to is written below its card.
- */
+
+
+
+
 @Composable
 fun PausedRow(label: String, onClick: () -> Unit) {
     DifftSettingsRow(onClick = onClick, showChevron = false) {
@@ -164,7 +164,7 @@ fun PausedRow(label: String, onClick: () -> Unit) {
     }
 }
 
-/** "@Me, @All" style summary; empty when nothing is enabled. */
+
 @Composable
 fun stillNotifySummary(items: List<StillNotifyItem>): String =
     items.map { stringResource(it.labelRes()) }.joinToString(stringResource(R.string.focus_item_separator))
@@ -175,7 +175,7 @@ fun StillNotifyItem.labelRes(): Int = when (this) {
     StillNotifyItem.GROUP_CALL -> R.string.focus_item_group_call
 }
 
-/** The saved-level label (same wording as the existing Notifications rows). */
+
 @Composable
 fun notificationLevelLabel(level: GlobalNotificationType): String = stringResource(
     when (level) {
@@ -185,14 +185,14 @@ fun notificationLevelLabel(level: GlobalNotificationType): String = stringResour
     }
 )
 
-/** Renders [FocusEnd] as "HH:MM", "Tomorrow HH:MM" or the manual label. */
+
 @Composable
 fun focusEndText(end: FocusEnd): String = when (end) {
     FocusEnd.Manual -> stringResource(R.string.focus_duration_manual)
     is FocusEnd.At -> if (end.tomorrow) stringResource(R.string.focus_end_tomorrow, end.time) else end.time
 }
 
-/** The text under the focus row for [caption]. */
+
 @Composable
 fun focusCaptionText(caption: FocusCaption): String = when (caption) {
     FocusCaption.Off -> stringResource(R.string.focus_caption_off)
@@ -204,6 +204,6 @@ fun focusCaptionText(caption: FocusCaption): String = when (caption) {
     }
 }
 
-/** Member count label of the group picker row. */
+
 @Composable
 fun memberCountText(count: Int): String = pluralStringResource(R.plurals.focus_picker_members, count, count)

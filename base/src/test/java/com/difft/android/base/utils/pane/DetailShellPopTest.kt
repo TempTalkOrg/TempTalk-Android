@@ -11,7 +11,7 @@ import org.robolectric.Robolectric
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
-/** Ordinary Activity boundaries; participating-shell result wiring is covered by app integration tests. */
+
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [33])
 class DetailShellPopTest {

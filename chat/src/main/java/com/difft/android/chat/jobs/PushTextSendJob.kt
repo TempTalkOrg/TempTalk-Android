@@ -52,7 +52,7 @@ import java.io.File
 import java.util.concurrent.TimeUnit
 import kotlin.properties.Delegates
 
-// All wcdb calls in this class run on Dispatchers.IO.
+
 @Suppress("BlockingWcdbInSuspend")
 class PushTextSendJob @AssistedInject constructor(
     @Assisted
@@ -80,7 +80,7 @@ class PushTextSendJob @AssistedInject constructor(
     private val attachmentUploadHelper: com.difft.android.chat.gif.favorite.AttachmentUploadHelper
         get() = EntryPointAccessors.fromApplication<EntryPoint>(context).attachmentUploadHelper
 
-    /** Which attachment row this job writes, and where a resend's staged bytes are. */
+    
     private val attachmentIdentity = AttachmentSendIdentity(textMessage.id)
 
     private var startExecuteTime by Delegates.notNull<Long>()
@@ -117,27 +117,26 @@ class PushTextSendJob @AssistedInject constructor(
 
     public override suspend fun onPushSend() {
         try {
-            // 如果有附件，先上传附件
             if (textMessage.isAttachmentMessage()) {
                 L.i { "[Message][PushTextSendJob] timeStamp:${textMessage.timeStamp} Starting attachment upload, RetryCount: $runAttempt" }
                 uploadAttachment()
                 L.i { "[Message][PushTextSendJob] timeStamp:${textMessage.timeStamp} Attachment upload completed, RetryCount: $runAttempt" }
             }
 
-            // A forward carries no attachment of its own — its files hang off the forward tree, whose
-            // pointers are re-authorized by the forward flow instead of uploaded. A leaf whose
-            // authorization MISSED is repaired here (issue #1181), before the data message is built
-            // from it, so the wire and the row see the same new pointer. A leaf whose authorization
-            // HIT never enters the repair, so the ordinary forward keeps exactly the failure modes it
-            // had; deliberately NOT guarded against throwing, because a leaf with no local bytes must
-            // fail the send rather than deliver a pointer nobody can ever download.
+            
+            
+            
+            
+            
+            
+            
             textMessage.forwardContext?.let {
                 ForwardAttachmentReupload.repairMissingAuthorizations(
                     forwardContext = it,
                     messageId = textMessage.id,
-                    // Lazy: resolved only when a leaf actually needs a repair, so the ordinary
-                    // all-authorized forward neither pays the group-members lookup nor gains a
-                    // new failure mode from it.
+                    
+                    
+                    
                     recipients = { sendRecipients(textMessage.forWhat, groupUtil) },
                     uploadHelper = attachmentUploadHelper,
                     identity = attachmentIdentity
@@ -152,9 +151,9 @@ class PushTextSendJob @AssistedInject constructor(
                 notification = createNotification()
             }
 
-            // Admitted after the upload, which does not touch the message queue; a deferral
-            // re-serializes the uploaded pointer. A refusal returns without throwing, so the catch
-            // below never maps it to a retry or a failure (#1382).
+            
+            
+            
             val admission = admitSend() ?: return
 
             L.i { "[Message][PushTextSendJob] timeStamp:${textMessage.timeStamp} Send text message to-> ${textMessage.forWhat.id}, RetryCount: $runAttempt" }
@@ -167,7 +166,10 @@ class PushTextSendJob @AssistedInject constructor(
             )
 
             result.success?.let {
-                if (textMessage.recall != null) {// recall消息成功，需要删除对应消息
+                if (textMessage.forWhat is For.Group && textMessage.recall == null && textMessage.reactions.isNullOrEmpty()) {
+                    groupUtil.clearExpiry(textMessage.forWhat.id, "sent")
+                }
+                if (textMessage.recall != null) {
                     wcdb.message.getFirstObject(DBMessageModel.id.eq(textMessage.id))?.delete()
                     RecallResultTracker.emitResult(textMessage.id, true)
                 } else {
@@ -180,16 +182,15 @@ class PushTextSendJob @AssistedInject constructor(
                 markSendFailed()
             }
         } catch (e: Exception) {
-            // Real cancellation leaves the message pending for the next run instead of failing it.
+            
             if (e is CancellationException) currentCoroutineContext().ensureActive()
             L.e { "[Message][PushTextSendJob] timeStamp:${textMessage.timeStamp} Send message exception, Exception: ${e.stackTraceToString()}, RetryCount: $runAttempt" }
 
-            // 处理已知的特定异常，这些异常不需要重试
             if (e is NonSuccessfulResponseCodeException) {
                 val shouldReturn = when (e.code) {
                     430 -> true
 
-                    432 -> { // 非好友限制为每天最多发送三条消息
+                    432 -> { 
                         appScope.launch { localMessageCreator.createNonFriendLimitMessage(textMessage.forWhat) }
                         true
                     }
@@ -197,30 +198,29 @@ class PushTextSendJob @AssistedInject constructor(
                     404 -> {
                         if (e is AccountOfflineException) {
                             when (e.status) {
-                                10105 -> appScope.launch { // 对方离线
+                                10105 -> appScope.launch {
                                     localMessageCreator.createOfflineMessage(textMessage.forWhat, TTNotifyMessage.NOTIFY_ACTION_TYPE_OFFLINE)
                                 }
 
-                                10110 -> appScope.launch { // 对方账号注销
+                                10110 -> appScope.launch {
                                     localMessageCreator.createOfflineMessage(textMessage.forWhat, TTNotifyMessage.NOTIFY_ACTION_TYPE_ACCOUNT_UNREGISTERED)
                                 }
                             }
-                        } else { // 账号不可用
+                        } else {
                             appScope.launch { localMessageCreator.createOfflineMessage(textMessage.forWhat, TTNotifyMessage.NOTIFY_ACTION_TYPE_ACCOUNT_DISABLED) }
                         }
                         true
                     }
-                    
+
                     else -> false
                 }
-                
+
                 if (shouldReturn) {
                     markSendFailed()
                     return
                 }
             }
 
-            // 对于其他异常，检查是否在重试范围内
             if (onShouldRetry(e)) {
                 throw e
             } else {
@@ -233,14 +233,9 @@ class PushTextSendJob @AssistedInject constructor(
 
     private fun createNotification(): OutgoingPushMessage.Notification = buildTextMessageNotification(textMessage, gson)
 
-    /**
-     * Update message with server timestamps and send status.
-     * This method replaces the old updateSendStatus approach by:
-     * 1. First trying to insert the message if it doesn't exist (putWhenNonExist)
-     * 2. Then updating timestamps and status in one database operation
-     */
+    
     private fun updateMessage(status: Int) {
-        // Recall and legacy reaction jobs have no DBMessageModel row.
+        
         if (textMessage.recall != null || textMessage.reactions?.isNotEmpty() == true) {
             return
         }
@@ -249,26 +244,25 @@ class PushTextSendJob @AssistedInject constructor(
 
         textMessage.sendType = status
 
-        // Try to insert the message if it doesn't exist
         messageStore.putWhenNonExist(textMessage)
 
-        // The room-level aggregate is only ever ESCALATED at the source. The recompute in
-        // WCDBUpdateService is clear-only (it skips rooms stored as NONE), so without the write
-        // below a failure would never surface as a conversation-list tag.
-        //
-        // ORDERING IS LOAD-BEARING: the message row must be committed BEFORE the room row, so the
-        // message write MUST stay ABOVE the room write. The clear side is a single conditional
-        // UPDATE that re-checks "no failed message" (clearRoomSendStatusIfNoFailure); with
-        // message-before-room, no interleaving of the two can lose this FAILED. Emitting the room
-        // write first opens a window where a concurrent clear sees no failed message, writes NONE,
-        // and the failure is silently lost with no self-heal.
-        //
-        // That ordering — not atomicity — is what carries the correctness, so the two writes are
-        // NOT wrapped in a transaction: a failure in between costs this room its tag only, and the
-        // room's next failure restores it. Sent needs no room write at all (the gated clears
-        // handle it). SENDING escalates its own independent column under the same ordering rule;
-        // the two aggregates never write each other's cell, which is what keeps a concurrent
-        // failure-write and sending-clear race-free without any cross-column reasoning.
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
         writeMessageStatusRow(status)
         if (status == MessageModel.SEND_TYPE_FAILED) {
             wcdb.writeRoomSendStatus(textMessage.forWhat.id, ROOM_SEND_STATUS_FAILED)
@@ -279,7 +273,7 @@ class PushTextSendJob @AssistedInject constructor(
         RoomChangeTracker.trackRoom(textMessage.forWhat.id, RoomChangeType.MESSAGE)
     }
 
-    /** Update both timestamps and send status in one operation. */
+    
     private fun writeMessageStatusRow(status: Int) {
         wcdb.message.updateRow(
             arrayOf(
@@ -287,7 +281,7 @@ class PushTextSendJob @AssistedInject constructor(
                 Value(textMessage.notifySequenceId),
                 Value(textMessage.sequenceId),
                 Value(status),
-                Value(textMessage.systemShowTimestamp)  // readTime = systemShowTimestamp for self-sent messages
+                Value(textMessage.systemShowTimestamp)  
             ),
             arrayOf(
                 DBMessageModel.systemShowTimestamp,
@@ -303,23 +297,23 @@ class PushTextSendJob @AssistedInject constructor(
     private suspend fun uploadAttachment() {
         val attachment = textMessage.attachments?.firstOrNull() ?: return
 
-        // Progress key = the copy's own localId, the same value the rendering bubble derives via
-        // `getAttachmentIdForProgress`. A job persisted before the localId column carries none, so
-        // the row's id is recovered and adopted first — emitting under the message id would leave
-        // that bubble's spinner unfed. Only a row that cannot be named at all keeps the old key.
-        // Resolved BEFORE the upload source so a source that cannot be resolved at all can still
-        // reconcile the row and the bubble under the key they are rendered by.
+        
+        
+        
+        
+        
+        
         val progressKey = attachmentIdentity.localIdOf(attachment)
             ?: attachmentIdentity.recoverLocalId(attachment)
             ?: textMessage.id
 
-        // The staged path is serialized WITH the job, so a job queued before per-copy addressing
-        // carries the owner-message address — which the migration copies away from and stage 5
-        // reclaims once the copy is verified. Only a path that still holds bytes is trusted; anything
-        // else falls through to the resend recovery, which resolves the copy's CURRENT address
-        // (migrating a legacy file across on the way) instead of uploading from a dead path.
-        // A recovery that finds nothing throws: mark the row FAILED first, exactly as an upload
-        // failure below does, so the bubble does not keep rendering a transfer that will never run.
+        
+        
+        
+        
+        
+        
+        
         val path = try {
             attachmentIdentity.uploadSourcePath(attachment) ?: return
         } catch (e: Exception) {
@@ -335,15 +329,15 @@ class PushTextSendJob @AssistedInject constructor(
         FileUtil.emitProgressUpdate(progressKey, 0)
 
         val file = File(path)
-        // Every attachment is encrypted at rest (see EncryptedAttachmentAccess): only the .encrypt
-        // file stays on disk, read on demand via the EncryptedAttachmentProvider, and the plaintext
-        // original is deleted after the upload. The ciphertext path stays "<path>.encrypt".
+        
+        
+        
         val encryptPath = "$path.encrypt"
 
         val recipientIds = sendRecipients(textMessage.forWhat, groupUtil)
         val attachmentType = attachmentUploadType(attachment)
 
-        // Progress throttling (every 50ms or >=5% delta) preserved from the original inline path.
+        
         var lastEmitTime = System.currentTimeMillis()
         var lastEmitProgress = 0
 
@@ -353,8 +347,8 @@ class PushTextSendJob @AssistedInject constructor(
                 recipients = recipientIds,
                 attachmentType = attachmentType,
                 encryptPath = encryptPath,
-                // An at-rest attachment must RETAIN its ciphertext on disk for on-demand decryption.
-                // (Deleting it here left neither ciphertext nor plaintext -> broken image on reopen.)
+                
+                
                 deleteEncryptFile = false,
                 onProgress = { progress ->
                     val now = System.currentTimeMillis()
@@ -372,8 +366,8 @@ class PushTextSendJob @AssistedInject constructor(
             attachment.status = AttachmentStatus.SUCCESS.code
             attachmentIdentity.updateRow(attachment)
 
-            // The .encrypt file is kept for on-demand decryption (bubble, preview, share, save to
-            // gallery); the plaintext original must not survive the upload.
+            
+            
             file.delete()
             FileUtil.emitProgressUpdate(progressKey, 100)
         } catch (e: Exception) {
@@ -436,8 +430,7 @@ class PushTextSendJob @AssistedInject constructor(
             return Parameters.Builder()
                 .setQueue("[$KEY::${forWhat.id}]" + (if (isAttachment) "::MEDIA" else ""))
                 .setLifespan(TimeUnit.DAYS.toMillis(1))
-                .setMaxAttempts(3)  //最大重试次数
-//                .addConstraint(NetworkConstraint.KEY)
+                .setMaxAttempts(3)
                 .build()
         }
     }

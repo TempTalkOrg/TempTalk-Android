@@ -6,7 +6,7 @@ import kotlin.test.assertTrue
 
 class DataHasAndEmptyTest {
 
-    // region has* methods
+    
 
     @Test
     fun `hasString returns true when present`() {
@@ -158,9 +158,9 @@ class DataHasAndEmptyTest {
         assertFalse(data.hasBooleanArray("missing"))
     }
 
-    // endregion
+    
 
-    // region Data.EMPTY
+    
 
     @Test
     fun `EMPTY has no strings`() {
@@ -222,5 +222,5 @@ class DataHasAndEmptyTest {
         assertFalse(Data.EMPTY.hasBooleanArray("anything"))
     }
 
-    // endregion
+    
 }

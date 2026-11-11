@@ -23,7 +23,7 @@ class ThrottlerTest {
 
         throttler.publish(runnable)
 
-        // Leading edge: should have run synchronously during publish(), no looper idle needed.
+        
         verify(exactly = 1) { runnable.run() }
     }
 
@@ -52,7 +52,7 @@ class ThrottlerTest {
         throttler.publish(first)
         verify(exactly = 1) { first.run() }
 
-        // Advance past the throttle window.
+        
         mainLooper.idleFor(301, TimeUnit.MILLISECONDS)
 
         throttler.publish(second)
@@ -66,7 +66,7 @@ class ThrottlerTest {
         val second = mockk<Runnable>(relaxed = true)
 
         throttler.publish(first)
-        throttler.publish(second) // dropped
+        throttler.publish(second) 
         verify(exactly = 0) { second.run() }
 
         throttler.clear()
@@ -77,7 +77,7 @@ class ThrottlerTest {
     @Test
     fun `MockK can mock Throttler (open class)`() {
         val mock: Throttler = mockk(relaxed = true)
-        mock.publish { /* no-op */ }
+        mock.publish {  }
         verify { mock.publish(any()) }
     }
 }

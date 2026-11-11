@@ -1,6 +1,8 @@
 package com.difft.android.chat.ui
 
 import android.annotation.SuppressLint
+import com.difft.android.base.widget.applyFloatingSurface
+import com.difft.android.base.widget.floatAsTopBarButton
 import android.content.Context
 import android.content.DialogInterface
 import android.content.res.ColorStateList
@@ -28,6 +30,7 @@ import androidx.core.graphics.createBitmap
 import androidx.core.net.toUri
 import androidx.core.view.children
 import androidx.core.view.doOnNextLayout
+import androidx.core.view.updateLayoutParams
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
@@ -91,6 +94,8 @@ import com.difft.android.chat.message.generateMessageFromForward
 import com.difft.android.chat.message.getAttachmentProgress
 import com.difft.android.chat.message.isAttachmentMessage
 import com.difft.android.chat.message.singleForwardableAttachment
+import com.difft.android.chat.ui.theme.ChatThemeSetting
+import com.difft.android.chat.ui.theme.followChatTheme
 import difft.android.messageserialization.model.isLongText
 import com.difft.android.chat.message.isConfidential
 import com.difft.android.chat.pagination.PageLoadDecision
@@ -99,6 +104,8 @@ import com.difft.android.chat.pagination.decidePageLoad
 import com.difft.android.chat.pagination.launchScrollPrefetch
 import com.difft.android.chat.pagination.runGatedPageLoad
 import com.difft.android.chat.setting.viewmodel.ChatSettingViewModel
+import com.difft.android.chat.ui.messageaction.ChatChromeInsets
+import com.difft.android.chat.ui.messageaction.ChatContentBand
 import com.difft.android.chat.ui.messageaction.FailedMessageActionPopup
 import com.difft.android.chat.ui.messageaction.MessageActionCoordinator
 import com.difft.android.chat.widget.AudioAmplitudesHelper
@@ -131,7 +138,14 @@ import com.difft.android.chat.media.EncryptedAttachmentAccess
 import com.difft.android.chat.media.applyExportPolicy
 import com.difft.android.chat.gif.favorite.MAX_FAVORITE_ASSET_BYTES
 import difft.android.messageserialization.model.isImage
-import difft.android.messageserialization.model.isVideo
+import difft.android.messageserialization.model.isPlayableVideo
+import com.difft.android.base.utils.RoomChangeTracker
+import com.difft.android.base.utils.RoomChangeType
+import com.difft.android.chat.attachment.videoprobe.VideoProbeCoordinator
+import com.difft.android.chat.attachment.mayOpenExternally
+import com.difft.android.chat.attachment.opensInAppViewer
+import com.difft.android.chat.attachment.videoprobe.rendersAttachment
+import difft.android.messageserialization.model.isVideoShownAsFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.BufferOverflow
@@ -165,7 +179,7 @@ import kotlin.math.abs
 @AndroidEntryPoint
 class ChatMessageListFragment : Fragment() {
 
-    // The attachment save's wait, released with this page's view (it is mounted on the home screen).
+    
     private val saveWait = PageWait(this)
 
     private var keyboardStateListener: InsetAwareConstraintLayout.KeyboardStateListener? = null
@@ -185,6 +199,9 @@ class ChatMessageListFragment : Fragment() {
     @Inject
     lateinit var urlManager: UrlManager
 
+    @Inject
+    lateinit var videoProbeCoordinator: VideoProbeCoordinator
+
     private val messageActionHelper by lazy {
         MessageActionHelper(requireActivity(), viewLifecycleOwner.lifecycleScope)
     }
@@ -193,20 +210,20 @@ class ChatMessageListFragment : Fragment() {
 
     private lateinit var binding: ChatFragmentMessageListBinding
 
-    // Use parent fragment as ViewModel owner when nested (in ChatFragment/GroupChatFragment),
-    // otherwise use activity (when directly in Activity).
-    // Parent fragment initializes ViewModels in onCreateView before child fragments are created.
+    
+    
+    
     private val chatViewModel: ChatMessageViewModel by viewModels(
         ownerProducer = { parentFragment ?: requireActivity() }
     )
     private val chatSettingViewModel: ChatSettingViewModel by viewModels(
         ownerProducer = { parentFragment ?: requireActivity() }
     )
-    // Shared with ChatMessageInputFragment (same parent owner): long-press "add to favorites".
+    
     private val favoriteViewModel: com.difft.android.chat.gif.favorite.FavoriteViewModel by viewModels(
         ownerProducer = { parentFragment ?: requireActivity() }
     )
-    /** Auto-translate visible-range reporting; bound to the view lifecycle, nulled in onDestroyView. */
+    
     private var translateBinder: ChatTranslateListBinder? = null
 
     private val chatMessageAdapter: ChatMessageAdapter by lazy {
@@ -225,10 +242,10 @@ class ChatMessageListFragment : Fragment() {
                     val forwardContext = data.forwardContext ?: return
                     val forwards = forwardContext.forwards ?: return
                     if (data.isConfidential()) {
-                        // A confidential single forward that is nothing but an attachment follows the
-                        // same rules as a plain confidential attachment: expired / still downloading
-                        // dead-end in a toast, failed re-fetches — opening the detail in those states
-                        // would send the view receipt and burn the message for a file the user never saw.
+                        
+                        
+                        
+                        
                         attachmentOnlyForward(forwards)?.let { soleAttachment ->
                             val consumed = handleAttachmentTapBeforeOpen(soleAttachment, data.getAttachmentProgress()) {
                                 downloadAttachment(data, soleAttachment)
@@ -255,8 +272,11 @@ class ChatMessageListFragment : Fragment() {
                             }
                             if (consumed) return
 
-                            if (attachment.isImage() || attachment.isVideo()) {
+                            if (attachment.isImage() || attachment.isPlayableVideo()) {
                                 openPreview(generateMessageFromForward(forward) as TextChatMessage)
+                            } else if (attachment.isVideoShownAsFile()) {
+                                
+                                openAttachmentFile(generateMessageFromForward(forward) as TextChatMessage)
                             }
                         } else {
                             ChatForwardMessageActivity.startActivity(
@@ -278,7 +298,7 @@ class ChatMessageListFragment : Fragment() {
                             source = data.authorId
                         )
                     }
-                    // Shared contact: send receipt and delete immediately (only needs contact ID)
+                    
                     sendConfidentialViewReceipt(data)
                     deleteConfidentialMessage(data)
                 } else if (data.isAttachmentMessage()) {
@@ -306,18 +326,18 @@ class ChatMessageListFragment : Fragment() {
                 val isKeyboardVisible = imm.isAcceptingText
                 imm.hideSoftInputFromWindow(rootView.windowToken, 0)
 
-                // Delay to wait for view layout to stabilize before showing reaction menu
-                // Use longer delay when keyboard is closing (layout needs to resize)
+                
+                
                 val delayMs = if (isKeyboardVisible) 300L else 100L
                 viewLifecycleOwner.lifecycleScope.launch {
                     delay(delayMs)
 
-                    // Check if the view is still attached after delay (RecyclerView may have recycled it)
+                    
                     if (!rootView.isAttachedToWindow) {
                         return@launch
                     }
 
-                    // Get bubble view (ChatMessageContainerView with id contentContainer)
+                    
                     val bodyBubble = rootView.findViewById<View>(R.id.contentContainer) ?: return@launch
 
                     showNewMessageActionPopup(
@@ -423,42 +443,47 @@ class ChatMessageListFragment : Fragment() {
     private var userScrolling = false
     private var isDragging = false
 
-    /**
-     * One signal per `onScrolled`, so a page-load check can run DURING a fling instead of only after
-     * it settles. Capacity 1 + DROP_OLDEST: the signal carries no data, so a dropped one is fully
-     * replaced by the next frame's.
-     */
+    
+
+
+
+
     private val scrollPrefetchSignals = MutableSharedFlow<Unit>(
         replay = 0,
         extraBufferCapacity = 1,
         onBufferOverflow = BufferOverflow.DROP_OLDEST,
     )
 
-    /** Serialises page loads across directions; see `runGatedPageLoad`. */
+    
     private val pageLoadGate = Mutex()
 
-    // Viewport anchor restored from saved state, applied to the first non-empty list.
+    
     private var pendingAnchor: MessageAnchor? = null
 
-    // One bottom-button refresh is queued for the view's first layout.
+    
     private var bottomButtonAwaitsLayout = false
 
-    private var lastScrollPos: Int = -1 //上次滚动位置
+    private var lastScrollPos: Int = -1
     private val jumpTarget = JumpTargetAnchor()
-    private var lastMessageCount: Int = -1 //上次消息数量
-    private var lastDayTimeUpdate: Long = 0 //上次更新时间
-    private val dayTimeUpdateInterval: Long = 500 //更新间隔时间(毫秒)
+
+    
+    private var chromeInsets = ChatChromeInsets.NONE
+    private var appliedChromeInsets = ChatChromeInsets.NONE
+    private var lastMessageCount: Int = -1
+    private var lastDayTimeUpdate: Long = 0
+    private val dayTimeUpdateInterval: Long = 500
     private var lastPlaceholderCheckTime: Long = 0
     private companion object {
         const val PLACEHOLDER_CHECK_INTERVAL = 500L
         const val KEY_PENDING_CONFIDENTIAL_BURN = "pending_confidential_burn"
+        const val FLOATING_LIST_BUTTON_DP = 40f
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Burns owed by a confidential viewer that recreation closed before its close handler ran
-        // (#1440). Goes through the message store, not chatViewModel: on a process-death restore
-        // this runs before ChatFragment creates the assisted ViewModel.
+        
+        
+        
         val pendingBurnIds = savedInstanceState?.getStringArrayList(KEY_PENDING_CONFIDENTIAL_BURN)
         if (!pendingBurnIds.isNullOrEmpty()) {
             pendingBurnIds.forEach { id -> L.i { "[Confidential] Burn pending on restore messageId=$id" } }
@@ -477,16 +502,16 @@ class ChatMessageListFragment : Fragment() {
         if (pendingBurnIds.isNotEmpty()) {
             outState.putStringArrayList(KEY_PENDING_CONFIDENTIAL_BURN, pendingBurnIds)
         }
-        // A covered page keeps its view, so its anchor is saved too; an anchor not yet applied
-        // carries over to the next instance.
+        
+        
         (currentAnchor() ?: pendingAnchor)?.saveTo(outState)
     }
 
-    /**
-     * Top message of the viewport, [MessageAnchor.BOTTOM] when the newest message's bottom edge is on
-     * screen ([isAtBottom] reads estimated scroll extents and can miss by a few px), or null without
-     * a view.
-     */
+    
+
+
+
+
     private fun currentAnchor(): MessageAnchor? {
         if (view == null || !this::binding.isInitialized) return null
         val recycler = binding.recyclerViewMessage
@@ -504,10 +529,10 @@ class ChatMessageListFragment : Fragment() {
         return MessageAnchor(message.timeStamp, top - recycler.paddingTop)
     }
 
-    /**
-     * Applies a restored anchor to the first non-empty list. Returns true when it took over this
-     * commit's scrolling.
-     */
+    
+
+
+
     private fun applyPendingAnchor(list: List<ChatMessage>): Boolean {
         val anchor = pendingAnchor ?: return false
         if (list.isEmpty()) return false
@@ -527,6 +552,7 @@ class ChatMessageListFragment : Fragment() {
             is MessageAnchor.Restore.InList -> {
                 (binding.recyclerViewMessage.layoutManager as? LinearLayoutManager)
                     ?.scrollToPositionWithOffset(restore.position, restore.offsetPx)
+                BubbleWidth.navigated(binding.recyclerViewMessage)
                 lastScrollPos = restore.position
                 lastMessageCount = list.size
             }
@@ -544,9 +570,19 @@ class ChatMessageListFragment : Fragment() {
     ): View {
         val binding = ChatFragmentMessageListBinding.inflate(inflater, container, false)
         this.binding = binding
+        applyFloatingChips()
         return binding.root
     }
 
+
+    
+    private fun applyFloatingChips() {
+        val bg1 = ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.bg1)
+        val bg3 = ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.bg3)
+        binding.cvDayTime.applyFloatingSurface(cornerRadiusPx = resources.getDimension(R.dimen.chat_day_chip_radius), fillColor = bg1, elevationDp = 1f)
+        binding.cvAt.applyFloatingSurface(maxCircleDiameterDp = FLOATING_LIST_BUTTON_DP, fillColor = bg3, elevationDp = 1f)
+        binding.cvToBottom.applyFloatingSurface(maxCircleDiameterDp = FLOATING_LIST_BUTTON_DP, fillColor = bg3, elevationDp = 1f)
+    }
 
     @SuppressLint("ClickableViewAccessibility", "NotifyDataSetChanged")
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -554,9 +590,9 @@ class ChatMessageListFragment : Fragment() {
         pendingAnchor = MessageAnchor.from(savedInstanceState)
         bottomButtonAwaitsLayout = false
 
-        // Set chat background for popup mode only
-        // Note: In dual-pane mode, background is set on detail_pane by IndexActivity
-        // to keep it fixed when keyboard appears (Fragment root receives IME padding)
+        
+        
+        
         if (activity is ChatPopupActivity || activity is GroupChatPopupActivity) {
             binding.recyclerViewMessage.background = ChatBackgroundDrawable(requireContext())
         }
@@ -568,8 +604,9 @@ class ChatMessageListFragment : Fragment() {
         }
 
         setupCallHeaderScrollCompensation()
+        observeVideoProbeResults()
 
-        // What was skipped while covered or hidden catches up once the list is shown again.
+        
         onVisibleTopAgain {
             sendAndUpdateMessageRead()
             checkAndRecordConfidentialPlaceholders()
@@ -580,12 +617,14 @@ class ChatMessageListFragment : Fragment() {
 
         binding.recyclerViewMessage.apply {
             val linearLayoutManager = LinearLayoutManager(this.context).apply {
-//                stackFromEnd = true
+                
             }
             layoutManager = linearLayoutManager
             itemAnimator = null
 
             adapter = chatMessageAdapter
+            chatMessageAdapter.followChatTheme(this, viewLifecycleOwner)
+            chatMessageAdapter.followBubbleWidth(this)
             translateBinder = ChatTranslateListBinder(this, chatMessageAdapter) { ids, reason ->
                 chatViewModel.onVisibleMessages(ids, reason)
             }
@@ -596,7 +635,7 @@ class ChatMessageListFragment : Fragment() {
                     when (newState) {
                         RecyclerView.SCROLL_STATE_IDLE -> {
                             isDragging = false
-                            // Sync the floating date to the final resting position (throttle may have skipped it)
+                            
                             showDayTime(linearLayoutManager.findFirstVisibleItemPosition())
                             viewLifecycleOwner.lifecycleScope.launch {
                                 if (userScrolling) {
@@ -612,7 +651,7 @@ class ChatMessageListFragment : Fragment() {
                         RecyclerView.SCROLL_STATE_DRAGGING -> {
                             isDragging = true
                             userScrolling = true
-                            // The user moved first: a restored anchor or a jump target no longer applies.
+                            
                             pendingAnchor = null
                             jumpTarget.clear()
                         }
@@ -625,25 +664,24 @@ class ChatMessageListFragment : Fragment() {
 
                 override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
                     super.onScrolled(recyclerView, dx, dy)
-                    // Runs every frame, so it must stay a non-suspending emit with no viewport
-                    // reads: the collector does the throttled reading off this callback.
+                    
+                    
                     scrollPrefetchSignals.tryEmit(Unit)
                     val layoutManager = binding.recyclerViewMessage.layoutManager as? LinearLayoutManager ?: return
                     val firstVisibleItemPosition = layoutManager.findFirstVisibleItemPosition()
 
-                    // 实时更新位置
                     lastScrollPos = firstVisibleItemPosition
 
                     val currentTime = System.currentTimeMillis()
 
-                    // Throttle showDayTime; dy == 0 means a layout-dispatched callback — let it
-                    // through so the header shows immediately on entering the conversation
+                    
+                    
                     if (dy == 0 || currentTime - lastDayTimeUpdate >= dayTimeUpdateInterval) {
                         showDayTime(firstVisibleItemPosition)
                         lastDayTimeUpdate = currentTime
                     }
 
-                    // Detect confidential placeholders during dragging (throttled 500ms, skip flying state)
+                    
                     if (isDragging && currentTime - lastPlaceholderCheckTime >= PLACEHOLDER_CHECK_INTERVAL) {
                         checkAndRecordConfidentialPlaceholders()
                         lastPlaceholderCheckTime = currentTime
@@ -653,11 +691,10 @@ class ChatMessageListFragment : Fragment() {
 
             observeScrollPrefetch()
 
-            //右滑item进行引用消息功能
             val itemTouchHelper = ItemTouchHelper(object : ItemTouchHelper.SimpleCallback(ItemTouchHelper.RIGHT, ItemTouchHelper.RIGHT) {
 
                 override fun getMovementFlags(recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder): Int {
-                    // No swipe-to-reply while the action menu forwards list scrolls (#1294)
+                    
                     if (messageActionCoordinator?.isShowing == true) return makeMovementFlags(0, 0)
                     val swipeFlags = ItemTouchHelper.END
                     return makeMovementFlags(0, swipeFlags)
@@ -668,14 +705,14 @@ class ChatMessageListFragment : Fragment() {
                 }
 
                 override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {
-                    // 临时启用 DefaultItemAnimator，让 notifyItemChanged 触发平滑的复位动画
+                    
                     binding.recyclerViewMessage.itemAnimator = DefaultItemAnimator()
                     val position = viewHolder.bindingAdapterPosition
 
                     viewLifecycleOwner.lifecycleScope.launch {
                         chatMessageAdapter.notifyItemChanged(position)
 
-                        // 等待动画完成后（DefaultItemAnimator 默认 changeDuration 为 250ms）触发引用
+                        
                         delay(300)
                         if (!isAdded || view == null) return@launch
                         binding.recyclerViewMessage.itemAnimator = null
@@ -751,13 +788,17 @@ class ChatMessageListFragment : Fragment() {
 
             binding.recyclerViewMessage.addOnItemTouchListener(object : RecyclerView.OnItemTouchListener {
                 override fun onInterceptTouchEvent(rv: RecyclerView, e: MotionEvent): Boolean {
-                    // Touches forwarded by the action menu overlay only scroll the list (#1294)
+                    
                     if (messageActionCoordinator?.isShowing == true) return false
                     return gestureDetector.onTouchEvent(e)
                 }
 
-                override fun onTouchEvent(rv: RecyclerView, e: MotionEvent) {}
-                override fun onRequestDisallowInterceptTouchEvent(disallowIntercept: Boolean) {}
+                override fun onTouchEvent(rv: RecyclerView, e: MotionEvent) {
+        
+    }
+                override fun onRequestDisallowInterceptTouchEvent(disallowIntercept: Boolean) {
+        
+    }
             })
         }
 
@@ -781,27 +822,16 @@ class ChatMessageListFragment : Fragment() {
 
         registerKeyboardStateListener()
 
-        // Anchor bottom messages when RecyclerView shrinks (keyboard appearing).
-        // scrollBy is posted because we're inside the layout pass. See issue 32a90db4.
-        // Grown or shrunk right after a jump (a closing keyboard, a call strip appearing above the
-        // list): apply the jump again so its target stays instead of the bottom anchoring.
+        
+        
+        
+        
         binding.recyclerViewMessage.addOnLayoutChangeListener { v, _, _, _, bottom, _, _, _, oldBottom ->
-            val delta = oldBottom - bottom
-            val target = jumpTarget.reanchorOnLayout(delta)
-            if (target != null) {
-                // Bypass scrollTo(): its lastScrollPos cache would skip the same position.
-                v.post { (v as? RecyclerView)?.layoutManager?.scrollToPosition(target) }
-            } else if (delta > 0) {
-                v.post { (v as? RecyclerView)?.scrollBy(0, delta) }
-            }
+            val reanchor = jumpTarget.reanchorForBottomChange(oldBottom - bottom)
+            if (reanchor != ListReanchor.None) v.post { (v as? RecyclerView)?.reanchor(reanchor) }
         }
-
-        viewLifecycleOwner.lifecycleScope.launch {
-            chatViewModel.chatActionsShow.collect {
-                if (!isAdded || view == null) return@collect
-                scrollToBottom()
-            }
-        }
+        appliedChromeInsets = ChatChromeInsets.NONE
+        applyChromeInsets()
 
         binding.clToBottom.setOnClickListener {
             scrollToBottom()
@@ -822,36 +852,33 @@ class ChatMessageListFragment : Fragment() {
         observeChatMessageListState()
         observeSelectMessagesState()
 
-        // 监听输入框高度变化事件
         viewLifecycleOwner.lifecycleScope.launch {
             chatViewModel.inputHeightChanged.collect {
                 binding.recyclerViewMessage.noSmoothScrollToBottom()
             }
         }
 
-        // Collect text size changes at Fragment level and notify adapter
+        
         TextSizeUtil.textSizeState
             .flowWithLifecycle(viewLifecycleOwner.lifecycle, Lifecycle.State.STARTED)
             .onEach { chatMessageAdapter.notifyDataSetChanged() }
             .launchIn(viewLifecycleOwner.lifecycleScope)
 
-        // 监听联系人缓存刷新事件
         chatViewModel.contactorCacheRefreshed
             .flowWithLifecycle(viewLifecycleOwner.lifecycle, Lifecycle.State.STARTED)
             .onEach { chatMessageAdapter.notifyDataSetChanged() }
             .launchIn(viewLifecycleOwner.lifecycleScope)
 
-        // 监听会话配置变化，更新自动保存到相册设置
         chatSettingViewModel.conversationSet
             .flowWithLifecycle(viewLifecycleOwner.lifecycle, Lifecycle.State.STARTED)
             .onEach { conversationSet ->
-                // Calculate shouldSaveToPhotos based on conversation-level and global settings
-                // Priority: conversation-level setting > global setting
+                
+                
                 val globalSaveToPhotos = globalServices.userManager.getUserData()?.saveToPhotos == true
                 val shouldSaveToPhotos = when (conversationSet?.saveToPhotos) {
-                    1 -> true  // Always save
-                    0 -> false // Never save
-                    else -> globalSaveToPhotos // Follow global
+                    1 -> true  
+                    0 -> false 
+                    else -> globalSaveToPhotos 
                 }
                 chatMessageAdapter.shouldSaveToPhotos = shouldSaveToPhotos
                 L.d { "[SaveToPhotos] conversationSetting: ${conversationSet?.saveToPhotos}, globalSetting: $globalSaveToPhotos, result: $shouldSaveToPhotos" }
@@ -861,21 +888,16 @@ class ChatMessageListFragment : Fragment() {
 
     private fun observeChatMessageListState() {
         viewLifecycleOwner.lifecycleScope.launch {
-            //页面不可见时，不进行刷新，防止触发已读逻辑等
+            
             chatViewModel.chatMessageListUIState
                 .flowWithLifecycle(viewLifecycleOwner.lifecycle, Lifecycle.State.STARTED)
-                .filterNotNull() // 跳过初始 null 状态，null = 未加载，非 null = 已加载（包括空列表）
+                .filterNotNull() 
                 .distinctUntilChanged()
                 .collect { handleChatMessageListState(it) }
         }
     }
 
-    /**
-     * 单独观察选择状态，不通过 ViewModel combine
-     *
-     * 选择状态变化只更新 Adapter 的选择 UI，不重新组装整个消息列表
-     * 这样可以避免选择消息时触发不必要的数据重组和滚动
-     */
+    
     private fun observeSelectMessagesState() {
         var wasInEditMode = false
         viewLifecycleOwner.lifecycleScope.launch {
@@ -883,13 +905,13 @@ class ChatMessageListFragment : Fragment() {
                 chatMessageAdapter.updateSelectionState(selectState)
                 refreshBackEnabled()
 
-                // When entering edit mode (CombineForwardBar appears),
-                // scroll to bottom only if already at bottom to prevent being covered
+                
+                
                 val isNowInEditMode = selectState.editModel
                 if (isNowInEditMode && !wasInEditMode) {
                     val layoutManager = binding.recyclerViewMessage.layoutManager as? LinearLayoutManager
                     if (layoutManager != null && isAtBottom(layoutManager)) {
-                        // Post to wait for CombineForwardBar layout to complete
+                        
                         binding.recyclerViewMessage.post {
                             if (isAdded && view != null) {
                                 binding.recyclerViewMessage.noSmoothScrollToBottom()
@@ -901,9 +923,9 @@ class ChatMessageListFragment : Fragment() {
             }
         }
 
-        // When the VM rejects a checkbox tap (e.g. selection cap exceeded), the StateFlow
-        // doesn't change so no diff-driven rebind happens. Force a partial rebind on that
-        // specific row so the checkbox visual snaps back to its true selectedStatus.
+        
+        
+        
         viewLifecycleOwner.lifecycleScope.launch {
             chatViewModel.selectionRejected.collect { messageId ->
                 val position = chatMessageAdapter.currentList.indexOfFirst { it.id == messageId }
@@ -932,7 +954,7 @@ class ChatMessageListFragment : Fragment() {
         chatMessageAdapter.submitList(list) {
             if (!isAdded || view == null) return@submitList
 
-            // 1. 如果有 scrollAction，执行强制滚动 (a restored anchor replaces the replayed action)
+            
             val action = if (applyPendingAnchor(list)) ScrollAction.PreservePosition else scrollAction
             when (action) {
                 is ScrollAction.ToPosition -> {
@@ -953,19 +975,16 @@ class ChatMessageListFragment : Fragment() {
                     scrollTo(list.size - 1)
                 }
 
-                // 2. PreservePosition: pagination — DiffUtil keeps the anchor, never auto-snap.
-                //    Body is intentionally identical to the null/else arm today; kept as a
-                //    separate branch so pagination and passive-update paths can diverge later
-                //    without re-conflating them.
+                
                 is ScrollAction.PreservePosition -> {
                     viewLifecycleOwner.lifecycleScope.launch {
                         updateBottomFloatingButton()
                     }
                 }
-                // 3. No scrollAction: handle auto-scroll
+                
                 null -> {
                     if (isAtBottomBeforeUpdateList) {
-                        // Bypass scrollTo(): its lastScrollPos cache blocks re-anchoring when position/count are unchanged.
+                        
                         if (list.isNotEmpty()) {
                             binding.recyclerViewMessage.noSmoothScrollToBottom()
                             binding.recyclerViewMessage.post {
@@ -981,12 +1000,12 @@ class ChatMessageListFragment : Fragment() {
                 }
             }
 
-            // After list update, check visible area for newly appeared placeholder messages
+            
             checkAndRecordConfidentialPlaceholders()
             translateBinder?.onListCommitted()
 
-            // Last thing in the commit callback: the layout the trim decision reads is the one this
-            // submitList just produced.
+            
+            
             maybeTrimWindow(state)
         }
 
@@ -1004,19 +1023,18 @@ class ChatMessageListFragment : Fragment() {
         val timeDiff = event.eventTime - event.downTime
         val moveX = abs(event.x - touchDownX)
         val moveY = abs(event.y - touchDownY)
-        // A click must be quick (< 200ms) AND have minimal movement
+        
         return timeDiff < 200 && moveX < touchSlop && moveY < touchSlop
     }
 
     private var isFirstShow = true
 
     private fun sendAndUpdateMessageRead() {
-        // A covered or hidden list is not what the user reads: no read position or receipt.
+        
         if (!isAdded || !this::binding.isInitialized || !isVisibleTopNow()) return
         getLastVisibleMessage()?.let { message ->
             viewLifecycleOwner.lifecycleScope.launch {
-                // #1020 Phase 2: sample the read moment once so the wire ReadPosition.readAt and the
-                // local readTime record the same instant for this read.
+                
                 val readAt = ServerTimeProvider.nowMillis()
                 chatViewModel.sendReadRecipient(message.systemShowTimestamp, readAt)
                 chatViewModel.updateMessageReadPosition(message.systemShowTimestamp, readAt)
@@ -1025,7 +1043,7 @@ class ChatMessageListFragment : Fragment() {
         }
     }
 
-    // Numeric-only display (unread/mention counts); no English text to translate.
+    
     @SuppressLint("SetTextI18n")
     private suspend fun updateBottomFloatingButton() {
         if (!isAdded || view == null) return
@@ -1035,7 +1053,7 @@ class ChatMessageListFragment : Fragment() {
         val layoutManager = binding.recyclerViewMessage.layoutManager as? LinearLayoutManager ?: return
         val lastPos = layoutManager.findLastVisibleItemPosition()
         if (lastPos == RecyclerView.NO_POSITION && chatMessageAdapter.currentList.isNotEmpty()) {
-            // A fresh view's first commit runs before its first layout: decide once rows are placed.
+            
             if (!bottomButtonAwaitsLayout) {
                 bottomButtonAwaitsLayout = true
                 binding.recyclerViewMessage.doOnNextLayout {
@@ -1058,7 +1076,7 @@ class ChatMessageListFragment : Fragment() {
         if (unreadMessageInfo.unreadCount == 0) {
             binding.tvUnreadCount.visibility = View.GONE
         } else {
-            val tintColor = ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.t_info)
+            val tintColor = ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.primary)
             binding.ivToBottom.imageTintList = ColorStateList.valueOf(tintColor)
             binding.tvUnreadCount.visibility = View.VISIBLE
             binding.tvUnreadCountText.text = unreadMessageInfo.unreadCount.toString()
@@ -1095,7 +1113,7 @@ class ChatMessageListFragment : Fragment() {
     private fun scrollTo(pos: Int) {
         val currentMessageCount = chatViewModel.chatMessageListUIState.value?.chatMessages?.size ?: 0
 
-        //如果当前消息数量和上次消息数量相同，且滚动位置没有变化，则不进行滚动
+        
         if (pos < 0 || (pos == lastScrollPos && currentMessageCount == lastMessageCount)) return
 
         lastScrollPos = pos
@@ -1105,6 +1123,7 @@ class ChatMessageListFragment : Fragment() {
             binding.recyclerViewMessage.noSmoothScrollToBottom()
         } else {
             binding.recyclerViewMessage.layoutManager?.scrollToPosition(pos)
+            BubbleWidth.navigated(binding.recyclerViewMessage)
         }
 
         binding.recyclerViewMessage.post {
@@ -1123,10 +1142,10 @@ class ChatMessageListFragment : Fragment() {
         }
     }
 
-    /**
-     * Get the timestamp of the first visible message.
-     * Used for preserving scroll position when transitioning to full ChatActivity.
-     */
+    
+
+
+
     fun getFirstVisibleMessageTimestamp(): Long? {
         if (!this::binding.isInitialized) return null
         val layoutManager = binding.recyclerViewMessage.layoutManager as? LinearLayoutManager ?: return null
@@ -1136,7 +1155,7 @@ class ChatMessageListFragment : Fragment() {
         return message?.timeStamp
     }
 
-    // Track scroll position across pause/resume to handle system bar changes
+    
     private var wasAtBottomBeforePause = false
 
     override fun onPause() {
@@ -1148,7 +1167,7 @@ class ChatMessageListFragment : Fragment() {
     override fun onResume() {
         super.onResume()
         if (wasAtBottomBeforePause) {
-            // Restore scroll position after system bar changes (e.g., returning from fullscreen activity)
+            
             binding.recyclerViewMessage.post {
                 if (!isAdded) return@post
                 val layoutManager = binding.recyclerViewMessage.layoutManager as? LinearLayoutManager ?: return@post
@@ -1161,7 +1180,7 @@ class ChatMessageListFragment : Fragment() {
     }
 
     override fun onDestroyView() {
-        // Batch delete seen confidential placeholders on page close (appScope, independent of UI lifecycle)
+        
         appScope.launch {
             if (wcdb.isDbInaccessible) {
                 L.w { "[ChatMessageListFragment] skip pending confidential placeholders, DB inaccessible" }
@@ -1175,7 +1194,7 @@ class ChatMessageListFragment : Fragment() {
         keyboardStateListener = null
         keyboardListenerRegisterJob?.cancel()
         keyboardListenerRegisterJob = null
-        // Dismiss message action coordinator
+        
         messageActionCoordinator?.dismiss()
         messageActionCoordinator = null
         translateBinder = null
@@ -1191,11 +1210,11 @@ class ChatMessageListFragment : Fragment() {
     private var wasAtBottomBeforeKeyboardHide = false
     private var keyboardListenerRegisterJob: Job? = null
 
-    /**
-     * Register keyboard state listener with 500ms delay to avoid conflicts with
-     * message search positioning (keyboard state changes during Activity transition
-     * may trigger scrollToBottom and override the target position).
-     */
+    
+
+
+
+
     private fun registerKeyboardStateListener() {
         if (activity == null || !isAdded || view == null || keyboardStateListener != null) return
 
@@ -1213,8 +1232,8 @@ class ChatMessageListFragment : Fragment() {
                 override fun onKeyboardHidden() {
                     if (!isAdded || view == null) return
                     if (wasAtBottomBeforeKeyboardHide) {
-                        // dispatchKeyboardListeners already posts this callback one frame,
-                        // by which point the layout has finished shrinking. No inner post needed.
+                        
+                        
                         binding.recyclerViewMessage.noSmoothScrollToBottom()
                     }
                 }
@@ -1225,6 +1244,35 @@ class ChatMessageListFragment : Fragment() {
                 }
             }.also { insetLayout.addKeyboardStateListener(it) }
         }
+    }
+
+    
+
+
+
+
+    fun setChromeInsets(top: Int, bottom: Int) {
+        chromeInsets = ChatChromeInsets(top, bottom)
+        applyChromeInsets()
+    }
+
+    private fun applyChromeInsets() {
+        if (view == null || !this::binding.isInitialized) return
+        val insets = chromeInsets
+        val old = appliedChromeInsets
+        if (insets == old) return
+        appliedChromeInsets = insets
+        val rv = binding.recyclerViewMessage
+        val edge = resources.getDimensionPixelSize(R.dimen.chat_message_list_edge_padding)
+        val gap = resources.getDimensionPixelSize(R.dimen.chat_message_list_chrome_gap)
+        rv.clipToPadding = false
+        rv.setPadding(rv.paddingLeft, insets.top + edge, rv.paddingRight, insets.bottom + edge)
+        ChatContentBand.setInsets(rv, insets)
+        binding.cvDayTime.updateLayoutParams<ViewGroup.MarginLayoutParams> { topMargin = insets.top + gap }
+        binding.clToBottom.updateLayoutParams<ViewGroup.MarginLayoutParams> { bottomMargin = insets.bottom + gap }
+        
+        binding.clAt.updateLayoutParams<ConstraintLayout.LayoutParams> { goneBottomMargin = insets.bottom + gap }
+        rv.reanchor(jumpTarget.reanchorForChrome(old, insets))
     }
 
     private var failedMessagePopup: FailedMessageActionPopup? = null
@@ -1269,37 +1317,34 @@ class ChatMessageListFragment : Fragment() {
     var voiceMessageView: VoiceMessageView? = null
     private var currentAudioMessage: TextChatMessage? = null
 
-    /**
-     * Whether the confidential voice / text viewer currently open has actually revealed its content
-     * (the voice was played, the text was pressed). Those two viewers open with the content still
-     * hidden, so opening alone is not "viewing": the view receipt goes out only on that reveal, and
-     * closing the viewer burns the message only if the reveal happened — otherwise the message stays,
-     * matching iOS and Mac. Image / file viewers show their content on open and are not gated by this.
-     * One flag is enough: the two viewers are never open at the same time.
-     */
+    
+
+
+
+
+
+
+
     private var confidentialViewerConsumed = false
 
-    /** The reveal inside a confidential voice / text viewer: send the view receipt and arm the burn-on-close. */
+    
     fun consumeConfidentialInViewer(message: ChatMessage) {
-        // Repeated presses / plays in the same viewer must not send another receipt (#1440).
+        
         if (confidentialViewerConsumed) return
         confidentialViewerConsumed = true
         sendConfidentialViewReceipt(message)
     }
 
     fun showConfidentialAudioDialog(message: TextChatMessage) {
-        // 检查 Fragment 是否已附加且 Activity 存在
         if (!isAdded || activity == null) return
 
         currentAudioMessage = message
         confidentialViewerConsumed = false
 
-        // 使用 Activity 的 FragmentManager
         val fragmentManager = requireActivity().supportFragmentManager
 
-        // A stale result from a sheet closed after recreation would run this handler for the new message (#1440).
+        
         fragmentManager.clearFragmentResult("confidential_audio_dialog_result")
-        // 设置结果监听器
         fragmentManager.setFragmentResultListener(
             "confidential_audio_dialog_result",
             this
@@ -1318,8 +1363,8 @@ class ChatMessageListFragment : Fragment() {
             message.attachment?.playProgress = 0
             voiceMessageView = null
 
-            // Burn only after the voice was played: the receipt has gone out and the sender's copy is
-            // gone, so ours must follow. Closing without playing keeps the message for a later look.
+            
+            
             if (!message.isMine && confidentialViewerConsumed) {
                 deleteConfidentialMessage(message)
             }
@@ -1332,18 +1377,15 @@ class ChatMessageListFragment : Fragment() {
     private var currentTextMessage: TextChatMessage? = null
 
     fun showConfidentialTextDialog(message: TextChatMessage) {
-        // 检查 Fragment 是否已附加且 Activity 存在
         if (!isAdded || activity == null) return
 
         currentTextMessage = message
         confidentialViewerConsumed = false
 
-        // 使用 Activity 的 FragmentManager
         val fragmentManager = requireActivity().supportFragmentManager
 
-        // A stale result from a sheet closed after recreation would run this handler for the new message (#1440).
+        
         fragmentManager.clearFragmentResult("confidential_text_dialog_result")
-        // 设置结果监听器
         fragmentManager.setFragmentResultListener(
             "confidential_text_dialog_result",
             this
@@ -1358,8 +1400,8 @@ class ChatMessageListFragment : Fragment() {
 
     fun onConfidentialTextDialogDismiss() {
         currentTextMessage?.let { message ->
-            // Same rule as voice: the text was revealed by a press, so the receipt is out and the
-            // message burns on close; opened-and-closed without a press keeps it.
+            
+            
             if (!message.isMine && confidentialViewerConsumed) {
                 deleteConfidentialMessage(message)
             }
@@ -1372,17 +1414,14 @@ class ChatMessageListFragment : Fragment() {
     var currentAttachmentMessage: TextChatMessage? = null
 
     fun showConfidentialAttachmentDialog(message: TextChatMessage) {
-        // 检查 Fragment 是否已附加且 Activity 存在
         if (!isAdded || activity == null) return
 
         currentAttachmentMessage = message
 
-        // 使用 Activity 的 FragmentManager
         val fragmentManager = requireActivity().supportFragmentManager
 
-        // A stale result from a sheet closed after recreation would run this handler for the new message (#1440).
+        
         fragmentManager.clearFragmentResult("confidential_attachment_dialog_result")
-        // 设置结果监听器
         fragmentManager.setFragmentResultListener(
             "confidential_attachment_dialog_result",
             this
@@ -1409,12 +1448,12 @@ class ChatMessageListFragment : Fragment() {
         return scrollView.canScrollVertically(-1) || scrollView.canScrollVertically(1)
     }
 
-    /**
-     * Check visible confidential placeholder messages and record them in ViewModel.
-     * Called during scroll dragging and after list updates.
-     */
+    
+
+
+
     private fun checkAndRecordConfidentialPlaceholders() {
-        // A seen placeholder is deleted later; a covered list's range is not what the user saw.
+        
         if (!isAdded || !this::binding.isInitialized || !isVisibleTopNow()) return
         val layoutManager = binding.recyclerViewMessage.layoutManager as? LinearLayoutManager ?: return
         val firstVisible = layoutManager.findFirstVisibleItemPosition()
@@ -1429,19 +1468,19 @@ class ChatMessageListFragment : Fragment() {
         }
     }
 
-    /**
-     * Send view receipt for confidential message without deleting it.
-     * Used when deletion should happen separately (e.g., when dialog closes).
-     */
+    
+
+
+
     fun sendConfidentialViewReceipt(message: ChatMessage) {
         if (!message.isMine && message.isConfidential()) {
             chatViewModel.sendConfidentialViewReceipt(message)
         }
     }
 
-    /**
-     * Delete confidential message with logging.
-     */
+    
+
+
     private fun deleteConfidentialMessage(message: ChatMessage) {
         if (!message.isMine && message.isConfidential()) {
             L.i { "[Confidential] Delete message, messageId: ${message.id}, timestamp: ${message.timeStamp}" }
@@ -1449,26 +1488,26 @@ class ChatMessageListFragment : Fragment() {
         }
     }
 
-    /**
-     * Show first-use tip for viewing confidential message if not shown before.
-     * @param message The confidential message being viewed
-     * @param onProceed Callback to execute after tip is confirmed or if tip was already shown
-     */
+    
+
+
+
+
     private fun showConfidentialViewTipIfNeeded(message: ChatMessage, onProceed: () -> Unit) {
         if (!message.isMine && message.isConfidential() &&
             globalServices.userManager.getUserData()?.hasShownConfidentialTip != true
         ) {
-            // Mark as shown when dialog is displayed (regardless of how it's closed)
-            globalServices.userManager.update { hasShownConfidentialTip = true }
             var dialog: ComposeDialog? = null
             dialog = dismissWithView(ComposeDialogManager.showBottomDialog(
                 activity = requireActivity(),
+                showDragHandle = false,
                 onDismiss = { }
             ) {
                 ConfidentialTipDialogContent(
                     title = getString(R.string.chat_confidential_tip_title),
                     content = getString(R.string.chat_confidential_tip_content),
                     onConfirm = {
+                        globalServices.userManager.update { hasShownConfidentialTip = true }
                         dialog?.dismiss()
                         onProceed()
                     }
@@ -1494,10 +1533,10 @@ class ChatMessageListFragment : Fragment() {
             passOn = { requireActivity().onBackPressedDispatcher.onBackPressed() },
         ).also { it.refreshEnabled() }
         requireActivity().onBackPressedDispatcher.addCallback(detailBackOwner(), backPressedCallback)
-        // Activity-root overlays would outlive a covered, hidden or popped page.
+        
         dismissWhenLeavingVisibleTop { dismissActionOverlays() }
 
-        // Initialize message action coordinator
+        
         messageActionCoordinator = MessageActionCoordinator(
             activity = requireActivity(),
             globalConfigsManager = globalConfigsManager,
@@ -1507,17 +1546,17 @@ class ChatMessageListFragment : Fragment() {
         }
     }
 
-    /**
-     * Show the new message action popup
-     * @param message The message to show actions for
-     * @param messageView The view of the message item
-     * @param bubbleView The bubble view of the message
-     * @param mostUseEmojis List of most used emojis
-     * @param isForForward Whether in forward selection mode
-     * @param isSaved Whether the message is saved/favorited
-     */
-    // Clears the OnTouchListener installed by TextTruncationUtil.setupDoubleClickPreview;
-    // no click semantics involved (setOnTouchListener(null) only).
+    
+
+
+
+
+
+
+
+
+    
+    
     @SuppressLint("ClickableViewAccessibility")
     private fun showNewMessageActionPopup(
         message: TextChatMessage,
@@ -1529,17 +1568,17 @@ class ChatMessageListFragment : Fragment() {
     ) {
         val coordinator = messageActionCoordinator ?: return
 
-        // Get bubble bounds
+        
         val bubbleBounds = Rect()
         bubbleView.getGlobalVisibleRect(bubbleBounds)
 
-        // Find TextView from bubble view (for text messages only, not confidential)
-        // Custom text selection is handled by TextSelectionManager in MessageActionCoordinator
+        
+        
         val isConfidential = message.isConfidential()
         val textView = if (!isConfidential) {
             bubbleView.findViewById<android.widget.TextView>(R.id.textView)?.apply {
-                // Clear OnTouchListener set by TextTruncationUtil.setupDoubleClickPreview
-                // It will be restored when the popup is dismissed
+                
+                
                 setOnTouchListener(null)
             }
         } else {
@@ -1555,7 +1594,7 @@ class ChatMessageListFragment : Fragment() {
             isSaved = isSaved,
             touchPoint = Point(bubbleBounds.centerX(), bubbleBounds.top),
             containerView = binding.recyclerViewMessage,
-            enableTextSelection = !isConfidential  // Disable text selection for confidential messages
+            enableTextSelection = !isConfidential  
         )
         refreshBackEnabled()
     }
@@ -1564,17 +1603,14 @@ class ChatMessageListFragment : Fragment() {
         if (::backPressedCallback.isInitialized) backPressedCallback.refreshEnabled()
     }
 
-    /**
-     * Implementation of MessageActionCoordinator.ActionListener
-     * Handles actions from the new message action popup
-     */
+    
     private inner class MessageActionListenerImpl : MessageActionCoordinator.ActionListener {
         override fun onReactionSelected(message: TextChatMessage, emoji: String, isRemove: Boolean) {
             chatViewModel.emojiReaction(
                 EmojiReactionEvent(
                     message,
                     emoji,
-                    isRemove,  // true = remove reaction, false = add reaction
+                    isRemove,  
                     0L,
                     EmojiReactionFrom.EMOJI_DIALOG
                 )
@@ -1590,7 +1626,7 @@ class ChatMessageListFragment : Fragment() {
         }
 
         override fun onCopy(message: TextChatMessage, selectedText: String?) {
-            // PRD §4: copy notice emitted only after clipboard write succeeds.
+            
             if (!selectedText.isNullOrEmpty()) {
                 _root_ide_package_.com.difft.android.chat.util.Util.copyToClipboard(requireContext(), selectedText)
                 ToastUtil.show(getString(R.string.chat_message_action_copied))
@@ -1606,7 +1642,7 @@ class ChatMessageListFragment : Fragment() {
 
         override fun onTranslate(message: TextChatMessage, selectedText: String?) {
             if (selectedText != null) {
-                // Translate selected text
+                
                 com.difft.android.chat.ui.textpreview.TranslateBottomSheetFragment.show(requireActivity(), selectedText)
             } else {
                 showTranslateDialog(message)
@@ -1619,10 +1655,8 @@ class ChatMessageListFragment : Fragment() {
 
         override fun onForward(message: TextChatMessage, selectedText: String?) {
             if (selectedText != null) {
-                // Partial-text forward — pass source context for SINGLE forward notice.
-                // PRD §5.5: text selection inside a CF bubble is not allowed in main conv, so
-                // this path is always main-conv → UNKNOWN. CF-detail partial select goes through
-                // ChatForwardMessageFragment.onForward, which explicitly passes SUB_COMBINED_FORWARD.
+                
+                
                 selectChatsUtils.showChatSelectAndSendDialog(
                     requireActivity(),
                     selectedText,
@@ -1674,13 +1708,12 @@ class ChatMessageListFragment : Fragment() {
         }
 
         override fun onFavoriteGif(message: TextChatMessage) {
-            // Favorite-without-download: build a message attachment ref (no decrypt, no IO). The write
-            // path derives the account fileHash from the key, isExist-fast-passes, and only downloads the
-            // message ciphertext on a miss. Shares resolveActionAttachment with save-to-album so the file
-            // path can't drift (§5.3).
+            
+            
+            
             val (attachment, messageId) = resolveActionAttachment(message) ?: return
-            // Reject oversized gifs up front using the known attachment size (the write path also enforces
-            // MAX_FAVORITE_ASSET_BYTES as a backstop).
+            
+            
             if (attachment.size > MAX_FAVORITE_ASSET_BYTES) {
                 L.w { "[ChatMessageListFragment] favorite gif: too large size=${attachment.size} messageId=$messageId" }
                 ToastUtil.show(getString(R.string.gif_favorites_add_size_limit))
@@ -1688,7 +1721,7 @@ class ChatMessageListFragment : Fragment() {
             }
             val ref = com.difft.android.chat.gif.favorite.buildMessageRef(attachment, messageId)
             if (ref == null) {
-                // A gif with no attachment key/fileName can't be account-fileHashed or downloaded.
+                
                 L.w { "[ChatMessageListFragment] favorite gif: missing key/fileName messageId=$messageId" }
                 ToastUtil.show(getString(R.string.gif_favorites_failed))
                 return
@@ -1697,14 +1730,14 @@ class ChatMessageListFragment : Fragment() {
         }
 
         override fun onDismiss() {
-            // New popup doesn't use shade, so nothing to hide here
+            
             refreshBackEnabled()
         }
     }
 
-    /**
-     * Show the more emoji reaction dialog
-     */
+    
+
+
     private fun showMoreEmojiDialog(message: TextChatMessage) {
         val emojis = globalConfigsManager.getMostUseEmojis()
         if (emojis.isNullOrEmpty()) return
@@ -1713,7 +1746,9 @@ class ChatMessageListFragment : Fragment() {
         dialog = dismissWithView(ComposeDialogManager.showBottomDialog(
             activity = requireActivity(),
             layoutId = R.layout.layout_more_emoji_dialog,
-            onDismiss = { },
+            onDismiss = {
+        
+    },
             onViewCreated = { v ->
                 val rvMostUse = v.findViewById<RecyclerView>(R.id.rv_most_use)
                 val tvOthers = v.findViewById<TextView>(R.id.tv_others)
@@ -1821,27 +1856,43 @@ class ChatMessageListFragment : Fragment() {
         pendingSaveAttachmentMessage = null
     }
 
+    
+
+
+
+
+    private fun observeVideoProbeResults() {
+        viewLifecycleOwner.lifecycleScope.launch {
+            videoProbeCoordinator.results.collect { result ->
+                if (chatMessageAdapter.currentList.any { it.rendersAttachment(result.attachmentKey) }) {
+                    RoomChangeTracker.trackRoom(chatViewModel.forWhat.id, RoomChangeType.MESSAGE)
+                }
+            }
+        }
+    }
+
     private fun saveAttachment(data: TextChatMessage) {
         val (attachment, messageId) = resolveActionAttachment(data) ?: return
         val attachmentPath = AttachmentPathResolver.fileFor(attachment)
         val progress = data.getAttachmentProgress()
         val isFileValid = EncryptedAttachmentAccess.isReadable(attachmentPath)
 
-        // Encrypted-at-rest media keeps only the ciphertext (.encrypt) on disk — the plaintext
-        // file is gone, so File(...).exists() is false. Gate on isReadable and feed the save the
-        // decrypting content uri so SaveAttachmentUtil can stream the plaintext on demand.
+        
+        
+        
         if (isFileValid && (progress == null || progress == 100)) {
-            // Prefer the durable ciphertext (content uri) over the plaintext file: for a self-sent
-            // attachment PushTextSendJob deletes the plaintext right after upload, so a plaintext
-            // uri resolved here can ENOENT by the time this async save opens it (intermittent
-            // "error while saving"). The .encrypt copy decrypts on demand and never goes missing.
+            
+            
+            
+            
             val saveUri = EncryptedAttachmentAccess.exportContentUriIfEncrypted(messageId, attachmentPath)
                 ?: File(attachmentPath).toUri()
             val attachmentToSave = SaveAttachmentUtil.Attachment(
                 uri = saveUri,
                 contentType = attachment.contentType,
                 date = System.currentTimeMillis(),
-                fileName = attachment.fileName
+                fileName = attachment.fileName,
+                saveAsFile = attachment.isVideoShownAsFile()
             )
             viewLifecycleOwner.lifecycleScope.launch {
                 SaveAttachmentUtil.saveWithUI(requireContext(), attachmentToSave, wait = saveWait)
@@ -1859,7 +1910,7 @@ class ChatMessageListFragment : Fragment() {
         dialog = dismissWithView(ComposeDialogManager.showBottomDialog(
             activity = requireActivity(),
             layoutId = R.layout.layout_translate_method_dialog,
-            onDismiss = { /* Dialog dismissed */ },
+            onDismiss = {  },
             onViewCreated = { v ->
                 v.findViewById<TextView>(R.id.tv_english).setOnClickListener {
                     dialog?.dismiss()
@@ -1887,16 +1938,16 @@ class ChatMessageListFragment : Fragment() {
     }
 
 
-    /**
-     * The copy's own localId is both the job's row identity and its progress key — the collecting
-     * bubble derives the same value through `getAttachmentIdForProgress`.
-     */
+    
+
+
+
     private fun downloadAttachment(message: TextChatMessage, attachment: Attachment) {
         val filePath = AttachmentPathResolver.fileFor(attachment)
-        // Auto-save only for non-confidential images/videos when conversation setting allows
+        
         val autoSave = chatMessageAdapter.shouldSaveToPhotos &&
                 !message.isConfidential() &&
-                (attachment.isImage() || attachment.isVideo())
+                (attachment.isImage() || attachment.isPlayableVideo())
         ApplicationDependencies.getJobManager().add(
             DownloadAttachmentJob(
                 attachment.localId,
@@ -1910,16 +1961,16 @@ class ChatMessageListFragment : Fragment() {
         )
     }
 
-    /**
-     * What a main-thread read gate does when the file it needs is not readable: ask for the bytes
-     * when the row says they were transferred, and report whether it did so the caller can keep its
-     * own error message for the cases this cannot recover.
-     *
-     * An ENQUEUE, never a read: these gates run on the main thread, so the migration's rescue (which
-     * is blocking IO) belongs in the job, and the job runs it before any network call. That is what
-     * turns a permanent "load error" on a file still sitting at its pre-migration address into a
-     * bubble that fills in as soon as the copy lands.
-     */
+    
+
+
+
+
+
+
+
+
+
     private fun rescueMissingAttachment(
         message: TextChatMessage,
         attachment: Attachment?,
@@ -1935,13 +1986,13 @@ class ChatMessageListFragment : Fragment() {
         return true
     }
 
-    /** Routes a tap on an attachment bubble by attachment kind. */
+    
     private fun onAttachmentMessageClick(data: TextChatMessage) {
         val attachment = data.attachment ?: return
-        // Everything short of opening is decided and performed here; only a readable file goes on to
-        // the preview / viewer, which for a confidential message is where the receipt and the burn live.
-        // Long text is the one kind whose dialog does not need the file to be complete — it renders the
-        // body preview and reads the file only once it is — so a missing file does not hold its tap.
+        
+        
+        
+        
         val consumed = handleAttachmentTapBeforeOpen(
             attachment,
             data.getAttachmentProgress(),
@@ -1949,7 +2000,7 @@ class ChatMessageListFragment : Fragment() {
         ) { downloadAttachment(data, attachment) }
         if (consumed) return
 
-        if (attachment.isImage() || attachment.isVideo()) {
+        if (attachment.opensInAppViewer(data.isConfidential())) {
             if (data.isConfidential()) {
                 showConfidentialViewTipIfNeeded(data) {
                     openPreview(data)
@@ -1960,21 +2011,21 @@ class ChatMessageListFragment : Fragment() {
         } else if (attachment.isAudioMessage() || attachment.isAudioFile()) {
             if (data.isConfidential()) {
                 showConfidentialViewTipIfNeeded(data) {
-                    // VoiceMessageView handles download progress internally
-                    // View receipt is sent when user clicks play (not when dialog opens)
+                    
+                    
                     showConfidentialAudioDialog(data)
                 }
             }
         } else if (attachment.isLongText()) {
-            // Long-text attachment is displayed as text — route to text dialog, not attachment dialog.
+            
             if (data.isConfidential() && !TextUtils.isEmpty(data.message)) {
                 showConfidentialViewTipIfNeeded(data) {
                     showConfidentialTextDialog(data)
                 }
             }
         } else {
-            // Regular attachment (non-image/video/audio). Confidential: send receipt on open, delete
-            // on dismiss. Otherwise open the file directly, same as the bubble's open button.
+            
+            
             if (data.isConfidential()) {
                 showConfidentialViewTipIfNeeded(data) {
                     sendConfidentialViewReceipt(data)
@@ -1986,10 +2037,10 @@ class ChatMessageListFragment : Fragment() {
         }
     }
 
-    /** Opens a downloaded generic file attachment in an external app; tapping the bubble body equals the open button. */
+    
     private fun openAttachmentFile(message: TextChatMessage) {
-        // A running transfer owns the bubble (progress bar shown, open button hidden): ignore the tap
-        // instead of reporting a load error for a file that is still arriving.
+        
+        
         if (AttachmentDownloadDecision.isTransferInFlight(message.getAttachmentProgress())) return
         val filePath = message.attachment?.let { AttachmentPathResolver.fileFor(it) } ?: ""
         if (!EncryptedAttachmentAccess.isReadable(filePath)) {
@@ -2018,21 +2069,20 @@ class ChatMessageListFragment : Fragment() {
                 val mediaList = arrayListOf<LocalMedia>()
 
                 if (isConfidential) {
-                    // Confidential: only show the current message, no swiping
+                    
                     message.attachment?.let { mediaList.add(AttachmentPreview.localMediaFor(it)) }
                 } else {
                     chatMessageAdapter.currentList.forEach { msg ->
                         if (msg !is TextChatMessage) return@forEach
-                        // Filter out confidential messages from normal preview
+                        
                         if (msg.isConfidential()) return@forEach
 
-                        //消息附件
-                        msg.attachment?.takeIf { it.isImage() || it.isVideo() }?.let { attachment ->
+                        msg.attachment?.takeIf { it.isImage() || it.isPlayableVideo() }?.let { attachment ->
                             attachment.fileName ?: return@let
-                            // Off the main thread, so this read gate may also bring a file still at
-                            // its pre-migration address across — same reason as the forward branch
-                            // below; without it such an attachment silently drops out of the swipe
-                            // list until the background migration reaches it.
+                            
+                            
+                            
+                            
                             val path = AttachmentPathResolver.materializedFileFor(attachment, msg.id)
                             if (EncryptedAttachmentAccess.isReadable(path)) {
                                 mediaList.add(AttachmentPreview.localMediaFor(attachment))
@@ -2040,17 +2090,16 @@ class ChatMessageListFragment : Fragment() {
                             return@forEach
                         }
 
-                        //单条转发消息附件
                         val forward = msg.forwardContext?.forwards?.singleOrNull() ?: return@forEach
                         val forwardAttachment = forward.attachments?.firstOrNull()
-                        if (forwardAttachment?.isImage() == true || forwardAttachment?.isVideo() == true) {
+                        if (forwardAttachment?.isImage() == true || forwardAttachment?.isPlayableVideo() == true) {
                             val forwardMessage = generateMessageFromForward(forward) as? TextChatMessage ?: return@forEach
                             val forwardMsgAttachment = forwardMessage.attachment ?: return@forEach
                             forwardMsgAttachment.fileName ?: return@forEach
-                            // Off the main thread, so this read gate can also bring a forwarded file
-                            // that is still at its pre-migration address across; without it such a
-                            // copy would silently drop out of the swipe list until the background
-                            // migration reaches it.
+                            
+                            
+                            
+                            
                             val path = AttachmentPathResolver.materializedFileFor(forwardMsgAttachment, forwardMessage.id)
                             if (EncryptedAttachmentAccess.isReadable(path)) {
                                 mediaList.add(AttachmentPreview.localMediaFor(forwardMsgAttachment))
@@ -2076,11 +2125,13 @@ class ChatMessageListFragment : Fragment() {
                 .isAutoVideoPlay(true)
                 .isVideoPauseResumePlay(true)
                 .isShowConfidentialTip(isConfidential)
-                // Confidential previews keep their original close control and hint layout (parity with iOS).
+                
                 .isHideBottomClose(isConfidential)
                 .setVideoPlayerEngine(ExoVideoPlayerEngine())
                 .setAttachViewLifecycle(object : IBridgeViewLifecycle {
-                    override fun onViewCreated(fragment: Fragment?, view: View?, savedInstanceState: Bundle?) {}
+                    override fun onViewCreated(fragment: Fragment?, view: View?, savedInstanceState: Bundle?) {
+        
+    }
 
                     override fun onDestroy(fragment: Fragment?) {
                         if (message.isConfidential()) {
@@ -2096,7 +2147,8 @@ class ChatMessageListFragment : Fragment() {
                 .setImageEngine(GlideEngine.createGlideEngine())
                 .setExternalPreviewEventListener(object : OnExternalPreviewEventListener {
                     override fun onPreviewDelete(position: Int) {
-                    }
+        
+    }
 
                     override fun onLongPressDownload(context: Context?, media: LocalMedia?): Boolean {
                         return false
@@ -2105,7 +2157,7 @@ class ChatMessageListFragment : Fragment() {
         }
     }
 
-    /** Re-resolve the current itemView for a message by id (RecyclerView reuse-safe). */
+    
     private fun currentItemView(messageId: String): View? =
         resolveByMessageId(
             messageId,
@@ -2146,7 +2198,7 @@ class ChatMessageListFragment : Fragment() {
     private var isLoadingTop = false
     private var isLoadingBottom = false
 
-    /** Starts the throttled prefetch collector; one signal per `onScrolled`, one check per period. */
+    
     private fun observeScrollPrefetch() {
         viewLifecycleOwner.lifecycleScope.launchScrollPrefetch(
             signals = scrollPrefetchSignals,
@@ -2154,7 +2206,7 @@ class ChatMessageListFragment : Fragment() {
         ) { checkAndLoadMessages(PageLoadTrigger.PREFETCH) }
     }
 
-    /** Snapshots the live viewport + UI state into the pure decision. Non-suspending, Main-only. */
+    
     private fun currentPageLoadDecision(): PageLoadDecision {
         val layoutManager = binding.recyclerViewMessage.layoutManager as? LinearLayoutManager
             ?: return PageLoadDecision.NONE
@@ -2165,17 +2217,17 @@ class ChatMessageListFragment : Fragment() {
             lastVisible = layoutManager.findLastVisibleItemPosition(),
             itemCount = layoutManager.itemCount,
             isAtBottom = isAtBottom(layoutManager),
-            // An absent UI state must NOT suppress paging — false keeps the pre-gating behaviour.
+            
             hasReachedHistoryStart = state?.hasReachedHistoryStart ?: false,
             hasReachedLatest = state?.hasReachedLatest ?: false,
         )
     }
 
-    /**
-     * @param trigger IDLE waits out an in-flight load, because the read receipts sent right after it
-     *   in the IDLE block must go out after pagination completes; PREFETCH drops the check while the
-     *   gate is busy, since the next scroll signal or the next IDLE re-issues it.
-     */
+    
+
+
+
+
     private suspend fun checkAndLoadMessages(trigger: PageLoadTrigger) = runGatedPageLoad(
         gate = pageLoadGate,
         waitIfBusy = trigger == PageLoadTrigger.IDLE,
@@ -2184,24 +2236,18 @@ class ChatMessageListFragment : Fragment() {
         loadOlder = { loadPreviousPage(trigger) },
     )
 
-    /**
-     * Asks the ViewModel to trim the loaded window back to its cap, but only while the user is
-     * parked at the bottom.
-     *
-     * That gate is the CRIT-2 defence: trimming drops rows off the OLDEST end, which is exactly
-     * where the viewport is when the user has scrolled back into history. Called from the
-     * `submitList` commit callback so the layout it reads is current, and from
-     * `viewLifecycleOwner.lifecycleScope` (`Main.immediate`) so `trimToLatest()` reaches its
-     * `update {}` in this same main-loop turn — see that function's KDoc.
-     */
+    
+
+
+
     private fun maybeTrimWindow(state: ChatMessageListUIState) {
         val layoutManager = binding.recyclerViewMessage.layoutManager as? LinearLayoutManager ?: return
         val trim = shouldTrimWindow(
             windowSize = state.windowSize,
             highWater = TRIM_HIGH_WATER,
-            // pageLoadGate on top of the two direction flags: a page load overwrites the
-            // controller's state whole, so one running concurrently with a trim writes the pre-trim
-            // window straight back — self-healing, but it wastes a full re-transform.
+            
+            
+            
             isLoadingPage = isLoadingTop || isLoadingBottom || pageLoadGate.isLocked,
         ) { isAtBottom(layoutManager) }
         if (!trim) return
@@ -2218,7 +2264,6 @@ class ChatMessageListFragment : Fragment() {
         }
     }
 
-    // 检查是否滑动到底部
     private fun isAtBottom(layoutManager: LinearLayoutManager): Boolean {
         val lastVisibleItemPosition = layoutManager.findLastVisibleItemPosition()
 
@@ -2227,7 +2272,6 @@ class ChatMessageListFragment : Fragment() {
             val verticalScrollOffset = binding.recyclerViewMessage.computeVerticalScrollOffset()
             val verticalScrollExtent = binding.recyclerViewMessage.computeVerticalScrollExtent()
 
-            // 计算是否已经滑动到底部（考虑内容的总高度和当前的垂直偏移量）
             return verticalScrollRange - verticalScrollOffset <= verticalScrollExtent
         }
 
@@ -2235,27 +2279,25 @@ class ChatMessageListFragment : Fragment() {
 
     }
 
-    // 加载下一页数据的方法
     private suspend fun loadNextPage(trigger: PageLoadTrigger) {
         if (!isLoadingBottom) {
-            isLoadingBottom = true  // 标记为正在加载数据
-            // finally: a throwing load must not strand the flag true — that would permanently
-            // no-op this direction and block window trimming for the rest of the view's life.
+            isLoadingBottom = true
+            
+            
             try {
                 logPageLoadStart("loadNextPage", trigger)
                 chatViewModel.loadNextPage()
             } finally {
-                isLoadingBottom = false  // 标记为加载完成
+                isLoadingBottom = false
             }
             L.i { "[message] loadNextPage done" }
         }
     }
 
-    // 加载上一页数据的方法
     private suspend fun loadPreviousPage(trigger: PageLoadTrigger) {
         if (!isLoadingTop) {
             isLoadingTop = true
-            // finally: see loadNextPage — a stranded flag disables this direction permanently.
+            
             try {
                 logPageLoadStart("loadPreviousPage", trigger)
                 chatViewModel.loadPreviousPage()
@@ -2266,7 +2308,7 @@ class ChatMessageListFragment : Fragment() {
         }
     }
 
-    /** Pairs with the existing `done` lines so one page load's cost and trigger are both readable. */
+    
     private fun logPageLoadStart(what: String, trigger: PageLoadTrigger) {
         val lm = binding.recyclerViewMessage.layoutManager as? LinearLayoutManager
         L.i {
@@ -2275,7 +2317,6 @@ class ChatMessageListFragment : Fragment() {
         }
     }
 
-    // 获取 RecyclerView 中手指触摸到的 item 的位置
     fun getTouchedPosition(e: MotionEvent): Int {
         val child = binding.recyclerViewMessage.findChildViewUnder(e.x, e.y)
         return if (child != null) {
@@ -2291,21 +2332,21 @@ class ChatMessageListFragment : Fragment() {
             return
         }
 
-        // When the list can't scroll, every inline date separator is already on screen —
-        // the floating header would be redundant and cover content
+        
+        
         if (!binding.recyclerViewMessage.canScrollVertically(1) && !binding.recyclerViewMessage.canScrollVertically(-1)) {
             binding.cvDayTime.visibility = View.GONE
             return
         }
 
         val data = chatMessageAdapter.currentList.getOrNull(firstVisibleItemPosition) ?: return
-        // Archive tombstone carries a sentinel sort timestamp, not a real date
+        
         if (data.systemShowTimestamp == MessageModel.ARCHIVE_TOMBSTONE_SORT_SENTINEL) {
             binding.cvDayTime.visibility = View.GONE
             return
         }
-        // E2EE header row carries no real date either — hide the floating pill while it's the
-        // first visible item; scrolling past it to a real message row restores the pill above.
+        
+        
         if (data is EncryptionHeaderChatMessage) {
             binding.cvDayTime.visibility = View.GONE
             return
@@ -2338,34 +2379,34 @@ class ChatMessageListFragment : Fragment() {
     }
 
     private fun setAudioObservers() {
-        // Initialize playback speed from global settings
+        
         val globalSpeed = globalServices.userManager.getUserData()?.voicePlaybackSpeed ?: 1.0f
         AudioMessageManager.setPlaybackSpeed(globalSpeed)
 
-        // Only handle business logic here, UI updates are handled by VoiceMessageView
+        
         viewLifecycleOwner.lifecycleScope.launch {
             AudioMessageManager.playStatusUpdate.collect { (message, status) ->
                 when (status) {
                     AudioMessageManager.PLAY_STATUS_START -> {
-                        // Show voice speed button for the playing message
+                        
                         updateVoiceSpeedButtonVisibility(message, true)
                     }
 
                     AudioMessageManager.PLAY_STATUS_PAUSED -> {
-                        // Hide speed button when paused to avoid state inconsistency
-                        // (clicking speed button while paused won't resume playback)
+                        
+                        
                         updateVoiceSpeedButtonVisibility(message, false)
                     }
 
                     AudioMessageManager.PLAY_STATUS_COMPLETE -> {
-                        // Hide voice speed button when playback completes
+                        
                         updateVoiceSpeedButtonVisibility(message, false)
 
-                        // Update play status in database
+                        
                         if (message.playStatus == AudioMessageManager.PLAY_STATUS_NOT_PLAY) {
                             chatViewModel.updatePlayStatus(message, AudioMessageManager.PLAY_STATUS_PLAYED)
                         }
-                        // Find next auto-play message
+                        
                         val nextAutoPlayMessage = chatMessageAdapter.currentList.filter { msg ->
                             msg.systemShowTimestamp > message.systemShowTimestamp
                                     && msg is TextChatMessage
@@ -2377,10 +2418,10 @@ class ChatMessageListFragment : Fragment() {
                         }.minByOrNull { msg -> msg.systemShowTimestamp }
                         nextAutoPlayMessage?.let { next ->
                             val nextAttachment = (next as TextChatMessage).attachment ?: return@let
-                            // Migrating read, off the main thread: auto-play-next is not a download
-                            // gate — the next clip is usually off-screen, so no bind funnel has run
-                            // for it, and one still at its pre-per-copy address would end the chain
-                            // silently.
+                            
+                            
+                            
+                            
                             val attachmentPath = withContext(Dispatchers.IO) {
                                 AttachmentPathResolver.materializedFileFor(nextAttachment, next.id)
                             }
@@ -2391,10 +2432,10 @@ class ChatMessageListFragment : Fragment() {
             }
         }
 
-        // Observe playback speed changes to update the speed button text
+        
         viewLifecycleOwner.lifecycleScope.launch {
             AudioMessageManager.playbackSpeed.collect { speed ->
-                // Update speed button text for the currently playing message
+                
                 AudioMessageManager.currentPlayingMessage?.let { message ->
                     updateVoiceSpeedButtonVisibility(message, true)
                 }
@@ -2402,9 +2443,9 @@ class ChatMessageListFragment : Fragment() {
         }
     }
 
-    /**
-     * Update voice speed button visibility for a message item
-     */
+    
+
+
     private fun updateVoiceSpeedButtonVisibility(message: TextChatMessage, visible: Boolean) {
         val position = chatMessageAdapter.currentList.indexOfFirst { it.id == message.id }
         if (position != -1) {
@@ -2412,30 +2453,30 @@ class ChatMessageListFragment : Fragment() {
             if (viewHolder is ChatMessageViewHolder.Message) {
                 val currentSpeed = AudioMessageManager.playbackSpeed.value
                 viewHolder.updateVoiceSpeedButton(visible, currentSpeed) {
-                    // On click: cycle speed
+                    
                     AudioMessageManager.cyclePlaybackSpeed()
                 }
             }
         }
     }
 
-    /**
-     * Compensates scroll position when the call header bar appears during initial load.
-     *
-     * Listens for actual RecyclerView height decreases rather than relying on
-     * [OnGoingCallStateManager.chatHeaderCallVisibility] state transitions, which avoids:
-     * - Race conditions between async state changes and message loading
-     * - Page flicker caused by resetting global visibility state
-     *
-     * Triggers compensation only when ALL conditions are met:
-     * 1. RecyclerView height decreased (call header appeared and took space)
-     * 2. First render scroll has completed ([needsCallHeaderScrollCompensation] = true)
-     * 3. Call header is confirmed visible ([chatHeaderCallVisibility] = true)
-     *
-     * Uses [noSmoothScrollToBottom] to anchor the last message at the viewport bottom.
-     * Skipped for [ScrollAction.ToMessage] since the user explicitly jumped to a
-     * specific message and expects it to stay anchored.
-     */
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     private fun setupCallHeaderScrollCompensation() {
         var lastKnownHeight = 0
         binding.recyclerViewMessage.addOnLayoutChangeListener(
@@ -2467,9 +2508,6 @@ class ChatMessageListFragment : Fragment() {
         )
     }
 
-    /**
-     * 机密音频消息对话框
-     */
     class ConfidentialAudioBottomSheetFragment : BaseBottomSheetDialogFragment() {
 
         companion object {
@@ -2478,21 +2516,18 @@ class ChatMessageListFragment : Fragment() {
             }
         }
 
-        // 使用默认容器（带圆角和拖拽条）
         override fun getContentLayoutResId(): Int = R.layout.chat_layout_confidential_audio_dialog
 
-        // 全屏、不可取消、不可拖拽
         override fun isFullScreen(): Boolean = true
         override fun isCancelableByUser(): Boolean = false
         override fun isDraggable(): Boolean = false
         override fun showDragHandle(): Boolean = false
 
         override fun onContentViewCreated(view: View, savedInstanceState: Bundle?) {
-            view.findViewById<ImageView>(R.id.iv_close).setOnClickListener {
+            view.findViewById<ImageView>(R.id.iv_close).apply { floatAsTopBarButton(leading = false) }.setOnClickListener {
                 dismiss()
             }
 
-            // 通过接口获取 ChatMessageListFragment
             val chatFragment = (requireActivity() as? ChatMessageListProvider)?.getChatMessageListFragment()
             val currentMessage = chatFragment?.currentAudioMessage
             if (chatFragment == null || currentMessage == null) {
@@ -2503,8 +2538,8 @@ class ChatMessageListFragment : Fragment() {
             chatFragment.voiceMessageView = view.findViewById(R.id.voice_message_view)
             chatFragment.voiceMessageView?.setAudioMessage(currentMessage)
 
-            // Playing is the reveal: it sends the view receipt and arms the burn that
-            // onConfidentialAudioDialogDismiss performs on close.
+            
+            
             if (!currentMessage.isMine) {
                 chatFragment.voiceMessageView?.onConfidentialPlayStarted = { message ->
                     chatFragment.consumeConfidentialInViewer(message)
@@ -2512,28 +2547,23 @@ class ChatMessageListFragment : Fragment() {
             }
 
             val clVoiceMessageView = view.findViewById<ConstraintLayout>(R.id.cl_voice_message_view)
-            if (currentMessage.isMine) {
-                clVoiceMessageView?.setBackgroundResource(R.drawable.chat_message_content_bg_mine)
-            } else {
-                clVoiceMessageView?.setBackgroundResource(R.drawable.chat_message_content_bg_others)
-            }
+            
+            val theme = ChatThemeSetting.current
+            clVoiceMessageView?.background = bubbleFillDrawable(requireContext(), currentMessage.isMine, theme)
+            chatFragment.voiceMessageView?.applyPalette(BubblePalette.of(requireContext(), sent = currentMessage.isMine, theme))
         }
 
         override fun onDismiss(dialog: DialogInterface) {
             super.onDismiss(dialog)
-            // 使用现代的 Fragment 结果 API
             try {
                 requireActivity().supportFragmentManager.setFragmentResult("confidential_audio_dialog_result", Bundle())
             } catch (e: Exception) {
-                // Fragment 可能已经被销毁，忽略错误
+                
                 L.w { "[ChatMessageListFragment] setFragmentResult confidential_audio failed: ${e.stackTraceToString()}" }
             }
         }
     }
 
-    /**
-     * 机密文本消息对话框
-     */
     class ConfidentialTextBottomSheetFragment : BaseBottomSheetDialogFragment() {
 
         companion object {
@@ -2542,24 +2572,21 @@ class ChatMessageListFragment : Fragment() {
             }
         }
 
-        // 使用默认容器（带圆角和拖拽条）
         override fun getContentLayoutResId(): Int = R.layout.chat_layout_confidential_text_dialog
 
-        // 全屏、不可取消、不可拖拽
         override fun isFullScreen(): Boolean = true
         override fun isCancelableByUser(): Boolean = false
         override fun isDraggable(): Boolean = false
         override fun showDragHandle(): Boolean = false
 
-        // SetTextI18n: line-number overlay uses numeric-only display; no English text to translate.
+        
         @SuppressLint("ClickableViewAccessibility", "SetTextI18n")
         override fun onContentViewCreated(view: View, savedInstanceState: Bundle?) {
 
-            view.findViewById<ImageView>(R.id.iv_close).setOnClickListener {
+            view.findViewById<ImageView>(R.id.iv_close).apply { floatAsTopBarButton(leading = false) }.setOnClickListener {
                 dismiss()
             }
 
-            // 通过接口获取 ChatMessageListFragment
             val chatFragment = (requireActivity() as? ChatMessageListProvider)?.getChatMessageListFragment()
             val currentMessage = chatFragment?.currentTextMessage
             if (chatFragment == null || currentMessage == null) {
@@ -2577,7 +2604,7 @@ class ChatMessageListFragment : Fragment() {
             textView.movementMethod = null
             textView.textSize = if (TextSizeUtil.isLarger) 24f else 16f
 
-            // Renders text + builds confidential line-number overlay + touch handler.
+            
             fun renderConfidentialText(text: String) {
                 LinkTextUtils.setMarkdownToTextview(requireContext(), text, textView, mentions = null)
                 textView.post {
@@ -2614,7 +2641,7 @@ class ChatMessageListFragment : Fragment() {
 
                                 when (event.action) {
                                     MotionEvent.ACTION_DOWN -> {
-                                        // Pressing reveals the lines under the finger: this is the view.
+                                        
                                         chatFragment.consumeConfidentialInViewer(currentMessage)
                                         v.parent.requestDisallowInterceptTouchEvent(touchX <= regionWidth)
                                     }
@@ -2647,18 +2674,18 @@ class ChatMessageListFragment : Fragment() {
 
             renderConfidentialText(bodyText)
 
-            // For long-text, load full file content and re-render to replace the 2KB body preview.
+            
             val attachment = currentMessage.attachment
             if (attachment?.isLongText() == true) {
                 val ownerMessageId = currentMessage.id
                 val appContext = requireContext().applicationContext
                 viewLifecycleOwner.lifecycleScope.launch {
                     val fullText = withContext(Dispatchers.IO) {
-                        // materializedFileFor: rescues a pre-migration long-text file still at its
-                        // legacy owner-message address (IO context — allowed to migrate on access).
+                        
+                        
                         val filePath = AttachmentPathResolver.materializedFileFor(attachment, ownerMessageId)
                         if (EncryptedAttachmentAccess.isReadable(filePath)) {
-                            // Plaintext-first, otherwise stream-decrypt via provider (no plaintext on disk).
+                            
                             try { EncryptedAttachmentAccess.readDecryptedText(appContext, filePath) } catch (_: Exception) { null }
                         } else null
                     }
@@ -2670,19 +2697,15 @@ class ChatMessageListFragment : Fragment() {
 
         override fun onDismiss(dialog: DialogInterface) {
             super.onDismiss(dialog)
-            // 使用现代的 Fragment 结果 API
             try {
                 requireActivity().supportFragmentManager.setFragmentResult("confidential_text_dialog_result", Bundle())
             } catch (e: Exception) {
-                // Fragment 可能已经被销毁，忽略错误
+                
                 L.w { "[ChatMessageListFragment] setFragmentResult confidential_text failed: ${e.stackTraceToString()}" }
             }
         }
     }
 
-    /**
-     * 显示完整文本内容的对话框
-     */
     class TextContentBottomSheetFragment : BaseBottomSheetDialogFragment() {
 
         companion object {
@@ -2699,17 +2722,15 @@ class ChatMessageListFragment : Fragment() {
             }
         }
 
-        // 使用默认容器（带圆角和拖拽条）
         override fun getContentLayoutResId(): Int = R.layout.chat_layout_text_content_dialog
 
-        // 全屏、不可取消、不可拖拽
         override fun isFullScreen(): Boolean = true
         override fun isCancelableByUser(): Boolean = false
         override fun isDraggable(): Boolean = false
         override fun showDragHandle(): Boolean = false
 
         override fun onContentViewCreated(view: View, savedInstanceState: Bundle?) {
-            view.findViewById<ImageView>(R.id.iv_close).setOnClickListener {
+            view.findViewById<ImageView>(R.id.iv_close).apply { floatAsTopBarButton(leading = false) }.setOnClickListener {
                 dismiss()
             }
 
@@ -2734,9 +2755,6 @@ class ChatMessageListFragment : Fragment() {
         }
     }
 
-    /**
-     * 机密附件消息对话框
-     */
     class ConfidentialAttachmentBottomSheetFragment : BaseBottomSheetDialogFragment() {
 
         companion object {
@@ -2748,21 +2766,18 @@ class ChatMessageListFragment : Fragment() {
         private var attachMessageView: com.difft.android.chat.widget.AttachMessageView? = null
         private var currentMessage: TextChatMessage? = null
 
-        // 使用默认容器（带圆角和拖拽条）
         override fun getContentLayoutResId(): Int = R.layout.chat_layout_confidential_attachment_dialog
 
-        // 全屏、不可取消、不可拖拽
         override fun isFullScreen(): Boolean = true
         override fun isCancelableByUser(): Boolean = false
         override fun isDraggable(): Boolean = false
         override fun showDragHandle(): Boolean = false
 
         override fun onContentViewCreated(view: View, savedInstanceState: Bundle?) {
-            view.findViewById<ImageView>(R.id.iv_close).setOnClickListener {
+            view.findViewById<ImageView>(R.id.iv_close).apply { floatAsTopBarButton(leading = false) }.setOnClickListener {
                 dismiss()
             }
 
-            // 通过接口获取 ChatMessageListFragment
             val chatFragment = (requireActivity() as? ChatMessageListProvider)?.getChatMessageListFragment()
             val message = chatFragment?.currentAttachmentMessage
             if (chatFragment == null || message == null) {
@@ -2772,22 +2787,23 @@ class ChatMessageListFragment : Fragment() {
             currentMessage = message
 
             val clAttachmentView = view.findViewById<ConstraintLayout>(R.id.cl_attachment_view)
-            if (message.isMine) {
-                clAttachmentView?.setBackgroundResource(R.drawable.chat_message_content_bg_mine)
-            } else {
-                clAttachmentView?.setBackgroundResource(R.drawable.chat_message_content_bg_others)
-            }
+            val theme = ChatThemeSetting.current
+            clAttachmentView?.background = bubbleFillDrawable(requireContext(), message.isMine, theme)
 
             attachMessageView = view.findViewById(R.id.attach_message_view)
             attachMessageView?.setupAttachmentView(message)
+            
+            attachMessageView?.applyPalette(BubblePalette.of(requireContext(), sent = message.isMine, theme))
             attachMessageView?.setOnClickListener {
-                // 点击附件打开文件查看器
-                // Encrypted-at-rest: generic files keep only "<path>.encrypt" on disk, so a
-                // plaintext-only isFileValid() would report "not available" and block opening.
-                // Gate on isReadable; viewFile() already routes ciphertext through the decrypting
-                // content uri (and falls back to a FileProvider uri for any legacy plaintext).
+                
+                
+                
+                
                 val filePath = message.attachment?.let { AttachmentPathResolver.fileFor(it) } ?: ""
-                if (EncryptedAttachmentAccess.isReadable(filePath)) {
+                
+                if (message.attachment?.mayOpenExternally(isConfidential = true) == false) {
+                    L.w { "[ChatMessageListFragment] confidential video blocked from external open messageId=${message.id}" }
+                } else if (EncryptedAttachmentAccess.isReadable(filePath)) {
                     requireContext().viewFile(filePath)
                 } else if (!chatFragment.rescueMissingAttachment(message, message.attachment, isFileValid = false)) {
                     ToastUtil.showLong(R.string.file_load_error)
@@ -2797,28 +2813,20 @@ class ChatMessageListFragment : Fragment() {
 
         override fun onDismiss(dialog: DialogInterface) {
             super.onDismiss(dialog)
-            // 使用现代的 Fragment 结果 API
             try {
                 requireActivity().supportFragmentManager.setFragmentResult("confidential_attachment_dialog_result", Bundle())
             } catch (e: Exception) {
-                // Fragment 可能已经被销毁，忽略错误
+                
                 L.w { "[ChatMessageListFragment] setFragmentResult confidential_attachment failed: ${e.stackTraceToString()}" }
             }
         }
     }
 }
 
-/**
- * The window-trim decision behind [ChatMessageListFragment.maybeTrimWindow].
- *
- * Pure, so the CRIT-2 gate can be exhausted by unit tests — `ChatMessageListFragment`'s Hilt graph
- * makes direct instantiation impractical, the same reason [resolveByMessageId] was lifted out. Only
- * the already-computed `Boolean` crosses the boundary; the viewport reading itself stays in the
- * Fragment.
- *
- * [isAtBottom] is a lambda, not a value, so the viewport read (three `computeVerticalScroll*` calls)
- * happens only once the two cheap guards pass — this runs on every list commit.
- */
+
+
+
+
 internal fun shouldTrimWindow(
     windowSize: Int,
     highWater: Int,
@@ -2826,11 +2834,10 @@ internal fun shouldTrimWindow(
     isAtBottom: () -> Boolean,
 ): Boolean = windowSize >= highWater && !isLoadingPage && isAtBottom()
 
-/**
- * Resolve an item by message id: look up its current position via [indexOf], then resolve the item
- * via [itemAt]. Returns null when the id is absent (position < 0) — [itemAt] is never invoked then.
- * Pure logic behind [ChatMessageListFragment.currentItemView], extracted for unit testing (H8/H9).
- */
+
+
+
+
 internal fun <T> resolveByMessageId(
     messageId: String,
     indexOf: (String) -> Int,
@@ -2840,27 +2847,27 @@ internal fun <T> resolveByMessageId(
     return if (position >= 0) itemAt(position) else null
 }
 
-/**
- * Resolve the actionable attachment + its directory key — the SINGLE source of truth shared by
- * save AND favorite (in both the chat list and the forward detail) so their file-path resolution
- * can never diverge. Returns null when the message carries no actionable attachment.
- */
+
+
+
+
+
 internal fun resolveActionAttachment(message: TextChatMessage): Pair<Attachment, String>? {
     val attachment = message.singleForwardableAttachment() ?: return null
     return attachment to AttachmentPathResolver.directoryKeyFor(attachment)
 }
 
-/**
- * Apply the shared tap policy ([AttachmentDownloadDecision.tapAction]) to an attachment and perform
- * everything short of opening: the dead-end toasts, the retry, the rescue. Returns true when the tap
- * was consumed here, false when the caller may open the preview / viewer / detail. `download` is the
- * caller's own enqueue — the chat list and the forward detail build the job differently — and it is
- * the ONLY thing that differs between surfaces, which is what keeps this the one place a tap is judged.
- *
- * @param rescueMissingFile whether [AttachmentTapAction.Rescue] holds the tap. False only for content
- *   whose viewer does not need the file to be complete (long text shows its body preview), where the
- *   tap proceeds to open and the bubble's own auto-download brings the file.
- */
+
+
+
+
+
+
+
+
+
+
+
 internal fun handleAttachmentTapBeforeOpen(
     attachment: Attachment,
     progress: Int?,
@@ -2891,22 +2898,22 @@ private fun AttachmentTapBlockedReason.toastRes(): Int = when (this) {
     AttachmentTapBlockedReason.DOWNLOADING -> R.string.file_preparing
 }
 
-/**
- * The attachment of a forward wrapper that is a single item whose ONLY content is that attachment,
- * or null. Such a bubble is, to the user, just that attachment, so a tap on it follows the attachment
- * tap rules instead of opening the detail page. A forward that also carries text (or nests further
- * forwards) is not one: the text remains readable in the detail, whatever state the attachment is in.
- */
+
+
+
+
+
+
 internal fun attachmentOnlyForward(forwards: List<Forward>): Attachment? {
     val forward = forwards.singleOrNull() ?: return null
     if (!forward.text.isNullOrBlank() || !forward.forwards.isNullOrEmpty()) return null
     return forward.attachments?.singleOrNull()
 }
 
-/**
- * A confidential sheet restored after recreation has no message (the list fragment's fields are
- * gone), so it would stay blank and non-cancelable; close it before its first frame (#1440).
- */
+
+
+
+
 private fun BaseBottomSheetDialogFragment.dismissRestoredConfidentialSheet(kind: String) {
     L.i { "[Confidential] restored sheet without message, dismissing kind=$kind" }
     dismissAllowingStateLoss()

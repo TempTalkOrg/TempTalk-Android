@@ -18,7 +18,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 
-/** The deleted focus-row records: per group, local, kept while the group stays in the focus set, account-stamped. */
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class FocusDeletedRowStoreTest {
 
@@ -55,7 +55,7 @@ class FocusDeletedRowStoreTest {
     fun `a deletion is recorded only for a group in the focus set, and persisted for this account`() = runTest {
         val f = setUp()
         f.store.markDeleted("A")
-        f.store.markDeleted("Z") // not in the focus set
+        f.store.markDeleted("Z") 
         assertEquals(setOf("A"), f.store.deletedGids.value)
         assertEquals("me|A", f.dataStore.data.value[AppStateKeys.FOCUS_DELETED_ROW_GIDS])
     }
@@ -84,13 +84,13 @@ class FocusDeletedRowStoreTest {
         f.store.markDeleted("A")
         f.store.markDeleted("B")
 
-        // A stays (the group set changed around it), B is removed, C is new and shows normally.
+        
         f.repository.apply(FocusSnapshot(enabled = true, groupIds = listOf("A", "C"), version = 2), trigger = "USER")
         runCurrent()
         assertEquals(setOf("A"), f.store.deletedGids.value)
         assertEquals("me|A", f.dataStore.data.value[AppStateKeys.FOCUS_DELETED_ROW_GIDS])
 
-        // A remote change that leaves the group in the set does not clear its record.
+        
         f.repository.apply(FocusSnapshot(enabled = true, groupIds = listOf("A"), othersAllowMentionAll = true, version = 3), trigger = "USER")
         runCurrent()
         assertEquals(setOf("A"), f.store.deletedGids.value)
@@ -118,7 +118,7 @@ class FocusDeletedRowStoreTest {
         assertEquals(setOf("B"), f.store.deletedGids.value)
         assertEquals("me|B", f.dataStore.data.value[AppStateKeys.FOCUS_DELETED_ROW_GIDS])
 
-        f.store.clear("Z") // nothing recorded: no-op
+        f.store.clear("Z") 
         assertEquals(setOf("B"), f.store.deletedGids.value)
     }
 
@@ -132,7 +132,7 @@ class FocusDeletedRowStoreTest {
         assertIs<FocusResult.Failure>(runSelectingWrite("A", f.store) { FocusResult.Failure(FocusError.Conflict) })
         assertEquals(setOf("A", "B"), f.store.deletedGids.value)
 
-        runSelectingWrite(null, f.store) { ok } // end / until / options: no group selected
+        runSelectingWrite(null, f.store) { ok } 
         assertEquals(setOf("A", "B"), f.store.deletedGids.value)
 
         assertIs<FocusResult.Success>(runSelectingWrite("A", f.store) { ok })
@@ -147,7 +147,7 @@ class FocusDeletedRowStoreTest {
         val unstamped = setUp(mutablePreferencesOf(AppStateKeys.FOCUS_DELETED_ROW_GIDS to "A"))
         assertEquals(emptySet(), unstamped.store.deletedGids.value)
 
-        // This account's first deletion replaces the other account's value.
+        
         other.store.markDeleted("B")
         assertEquals("me|B", other.dataStore.data.value[AppStateKeys.FOCUS_DELETED_ROW_GIDS])
 
@@ -155,6 +155,6 @@ class FocusDeletedRowStoreTest {
         val signedOut = setUp(mutablePreferencesOf(AppStateKeys.FOCUS_DELETED_ROW_GIDS to "me|A"))
         assertEquals(emptySet(), signedOut.store.deletedGids.value)
         signedOut.store.markDeleted("A")
-        assertEquals("me|A", signedOut.dataStore.data.value[AppStateKeys.FOCUS_DELETED_ROW_GIDS]) // untouched, not ours to write
+        assertEquals("me|A", signedOut.dataStore.data.value[AppStateKeys.FOCUS_DELETED_ROW_GIDS]) 
     }
 }

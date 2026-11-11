@@ -10,20 +10,20 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
 
-/**
- * Framework-assumption pins (real EditText, zero mocks) that the shell's contract is built on.
- *
- * E5: TextView.setText notifies TextWatchers UNCONDITIONALLY — it does not short-circuit when
- * the new text equals the old text. This is why [DifftClearableInputView.clear] must fire
- * [DifftClearableInputView.onClear] even from an already-empty state: GroupInCommonActivity's
- * group-update refresh chain historically relied on `text = null` firing the watcher while the
- * field was already empty. If this pin ever fails (framework change), the clear() contract
- * needs re-evaluation.
- *
- * E4: EditText freezes its text into instance state by default (getFreezesText() == true), so
- * text survives recreation with no host code. The shell replicates this with an explicit
- * onSaveInstanceState — DifftClearableInputViewTest pins the replica; this pins the original.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class TextWatcherNotificationFrameworkTest {

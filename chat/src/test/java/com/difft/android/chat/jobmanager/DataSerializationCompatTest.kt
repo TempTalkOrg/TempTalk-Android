@@ -7,20 +7,12 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/**
- * Verifies backward compatibility: the NEW Kotlin [Data] class can deserialize
- * JSON that was produced by the OLD Java Data class.
- *
- * The old Java class serialized all 13 Map fields. The new Kotlin class uses
- * a primary constructor with non-nullable Map parameters. These tests prove
- * whether Jackson + KotlinModule can handle missing, partial, and full JSON
- * payloads without crashing.
- */
-class DataSerializationCompatTest {
 
-    // -------------------------------------------------------------------------
-    // Helper: build a JSON string with all 13 map fields (old Java format)
-    // -------------------------------------------------------------------------
+
+
+
+class DataSerializationCompatTest {
+    
 
     private fun buildOldJavaJson(
         strings: String = "{}",
@@ -53,10 +45,7 @@ class DataSerializationCompatTest {
           "byteArrays": $byteArrays
         }
     """.trimIndent()
-
-    // =========================================================================
-    // Test 1: Normal roundtrip — new code serialize + deserialize
-    // =========================================================================
+    
 
     @Test
     fun `normal roundtrip preserves all data types`() {
@@ -93,10 +82,7 @@ class DataSerializationCompatTest {
         assertContentEquals(doubleArrayOf(1.0, 2.0), restored.getDoubleArray("coords"))
         assertContentEquals(booleanArrayOf(true, false), restored.getBooleanArray("flags"))
     }
-
-    // =========================================================================
-    // Test 2: Old Java-style JSON with all 13 Map fields present
-    // =========================================================================
+    
 
     @Test
     fun `old Java JSON with all 13 fields deserializes correctly`() {
@@ -119,7 +105,7 @@ class DataSerializationCompatTest {
         assertEquals(0.75f, data.getFloat("ratio"))
         assertEquals(3.141592653589793, data.getDouble("precise"))
 
-        // Empty maps should not have any keys
+        
         assertFalse(data.hasStringArray("anything"))
         assertFalse(data.hasLongArray("anything"))
         assertFalse(data.hasByteArray("anything"))
@@ -131,10 +117,7 @@ class DataSerializationCompatTest {
     } catch (_: IllegalStateException) {
         false
     }
-
-    // =========================================================================
-    // Test 3: JSON with MISSING Map fields (simulate very old or partial data)
-    // =========================================================================
+    
 
     @Test
     fun `JSON with only 2 of 13 fields deserializes without crash`() {
@@ -147,11 +130,11 @@ class DataSerializationCompatTest {
 
         val data = JsonUtils.fromJson(json, Data::class.java)
 
-        // The present fields should work
+        
         assertEquals("value", data.getString("key"))
         assertEquals(123L, data.getLong("big"))
 
-        // Missing map fields should behave as empty (no keys present)
+        
         assertFalse(data.hasInt("anything"))
         assertFalse(data.hasBoolean("anything"))
         assertFalse(data.hasFloat("anything"))
@@ -159,10 +142,7 @@ class DataSerializationCompatTest {
         assertFalse(data.hasStringArray("anything"))
         assertFalse(data.hasLongArray("anything"))
     }
-
-    // =========================================================================
-    // Test 4: JSON with extra unknown fields (forward compatibility)
-    // =========================================================================
+    
 
     @Test
     fun `JSON with unknown extra fields deserializes without error`() {
@@ -191,10 +171,7 @@ class DataSerializationCompatTest {
 
         assertEquals("value", data.getString("key"))
     }
-
-    // =========================================================================
-    // Test 5: Empty JSON object
-    // =========================================================================
+    
 
     @Test
     fun `empty JSON object deserializes without crash`() {
@@ -202,7 +179,7 @@ class DataSerializationCompatTest {
 
         val data = JsonUtils.fromJson(json, Data::class.java)
 
-        // All maps should be empty — no keys present
+        
         assertFalse(data.hasString("anything"))
         assertFalse(data.hasInt("anything"))
         assertFalse(data.hasLong("anything"))
@@ -210,17 +187,14 @@ class DataSerializationCompatTest {
         assertFalse(data.hasFloat("anything"))
         assertFalse(data.hasDouble("anything"))
     }
-
-    // =========================================================================
-    // Test 6: Simulate actual PushTextSendJob old serialized data
-    // =========================================================================
+    
 
     @Test
     fun `PushTextSendJob old serialized format deserializes correctly`() {
-        // PushTextSendJob.serialize() puts:
-        //   - "message_out" -> JSON string of TextMessage (a nested JSON string)
-        //   - "notification" -> JSON string or ""
-        // The nested JSON must be escaped inside the string value.
+        
+        
+        
+        
         val textMessageJson = """{"id":"msg-123","content":"Hello"}"""
         val escapedTextMessageJson = textMessageJson
             .replace("\\", "\\\\")
@@ -236,19 +210,16 @@ class DataSerializationCompatTest {
         assertFalse(data.hasLong("anything"))
         assertFalse(data.hasBoolean("anything"))
     }
-
-    // =========================================================================
-    // Test 7: Simulate actual DownloadAttachmentJob old serialized data
-    // =========================================================================
+    
 
     @Test
     fun `DownloadAttachmentJob old serialized format deserializes correctly`() {
-        // DownloadAttachmentJob.serialize() puts:
-        //   - strings: message_id, attachment_id, file_path
-        //   - longs: authorized_id
-        //   - byteArrays: file_key
-        //   - booleans: should_decrypt, auto_save
-        val fileKeyBase64 = "AQID" // base64 of [1, 2, 3]
+        
+        
+        
+        
+        
+        val fileKeyBase64 = "AQID" 
         val json = buildOldJavaJson(
             strings = """{"message_id": "msg-456", "attachment_id": "att-789", "file_path": "/data/files/image.jpg"}""",
             longs = """{"authorized_id": 1001}""",
@@ -264,20 +235,17 @@ class DataSerializationCompatTest {
         assertEquals(1001L, data.getLong("authorized_id"))
         assertTrue(data.getBoolean("should_decrypt"))
         assertFalse(data.getBoolean("auto_save"))
-        // byteArrays are Base64-encoded in JSON by Jackson
+        
         assertContentEquals(byteArrayOf(1, 2, 3), data.getByteArray("file_key"))
     }
-
-    // =========================================================================
-    // Test 8: Simulate actual PushReadReceiptSendJob old serialized data
-    // =========================================================================
+    
 
     @Test
     fun `PushReadReceiptSendJob old serialized format deserializes correctly`() {
-        // PushReadReceiptSendJob.serialize() puts:
-        //   - strings: recipient_id, message_read_position, message_message_mode, message_conversation_id
-        //   - longArrays: message_sent_timestamps
-        //   - booleans: send_receipt_to_sender, send_sync_to_self
+        
+        
+        
+        
         val json = buildOldJavaJson(
             strings = """{
                 "recipient_id": "user-abc",

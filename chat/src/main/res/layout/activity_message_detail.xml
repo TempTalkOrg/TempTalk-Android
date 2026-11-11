@@ -201,7 +201,7 @@
                         android:gravity="center"
                         android:textColor="@color/t.third"
                         android:textSize="14sp"
-                        tools:text="nate" />
+                        tools:text="Display name" />
                 </LinearLayout>
 
                 <LinearLayout
@@ -311,9 +311,9 @@
                 <View
                     android:id="@+id/view_line1"
                     android:layout_width="match_parent"
-                    android:layout_height="1dp"
+                    android:layout_height="@dimen/hairline"
                     android:layout_marginTop="5dp"
-                    android:background="@color/line" />
+                    android:background="@color/divider" />
 
                 <androidx.recyclerview.widget.RecyclerView
                     android:id="@+id/rv_read"
@@ -325,9 +325,9 @@
                 <View
                     android:id="@+id/view_line2"
                     android:layout_width="match_parent"
-                    android:layout_height="1dp"
+                    android:layout_height="@dimen/hairline"
                     android:layout_marginTop="5dp"
-                    android:background="@color/line" />
+                    android:background="@color/divider" />
             </LinearLayout>
 
             <LinearLayout
@@ -354,9 +354,9 @@
                 <View
                     android:id="@+id/view_line3"
                     android:layout_width="match_parent"
-                    android:layout_height="1dp"
+                    android:layout_height="@dimen/hairline"
                     android:layout_marginTop="5dp"
-                    android:background="@color/line" />
+                    android:background="@color/divider" />
 
                 <androidx.recyclerview.widget.RecyclerView
                     android:id="@+id/rv_unread"
@@ -368,9 +368,9 @@
                 <View
                     android:id="@+id/view_line4"
                     android:layout_width="match_parent"
-                    android:layout_height="1dp"
+                    android:layout_height="@dimen/hairline"
                     android:layout_marginTop="5dp"
-                    android:background="@color/line" />
+                    android:background="@color/divider" />
             </LinearLayout>
 
             <LinearLayout
@@ -418,8 +418,8 @@
         <View
             android:id="@+id/view_line5"
             android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="@color/line" />
+            android:layout_height="@dimen/hairline"
+            android:background="@color/divider" />
 
         <androidx.appcompat.widget.AppCompatImageView
             android:id="@+id/iv_share"
@@ -429,7 +429,7 @@
             android:layout_margin="12dp"
             android:scaleType="fitXY"
             android:src="@drawable/ic_sharing"
-            android:tint="@color/t.info"
+            android:tint="@color/primary"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"

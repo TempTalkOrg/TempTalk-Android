@@ -23,11 +23,11 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
-/**
- * Group-info crypto operations: the operation claim is released on
- * every path, and a rotation whose key was superseded meanwhile distributes nothing. (The page's
- * wait-dialog claim is covered by PageWaitTest.)
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33])
 class GroupCryptoClaimAndSupersededKeyTest {
@@ -80,7 +80,7 @@ class GroupCryptoClaimAndSupersededKeyTest {
 
     @Test
     fun `a superseded rotation still reports the reset as done`() {
-        // The server accepted our rotation; a newer key on top of it does not undo the reset.
+        
         assertEquals(R.string.group_crypto_reset_success, rotationResetMessage(InitiatorRotation.SUPERSEDED))
         assertEquals(R.string.group_crypto_reset_success, rotationResetMessage(InitiatorRotation.APPLIED))
     }
@@ -88,8 +88,8 @@ class GroupCryptoClaimAndSupersededKeyTest {
     @Test
     fun `a rotation takes the server version, else one step past its request base`() {
         assertEquals(7, rotatedKeyVersion(serverVersion = 7, requestBase = 3))
-        // A newer key stored meanwhile (say v9) must not lift the fallback above it: base 3 → 4,
-        // which the stale-version check then refuses.
+        
+        
         assertEquals(4, rotatedKeyVersion(serverVersion = null, requestBase = 3))
         assertFalse(shouldApplyInitiatorRotation(storedVersion = 9, version = rotatedKeyVersion(null, 3)))
     }

@@ -17,7 +17,7 @@ class ReadInfoModel {
     var uid: String = ""
 
     @WCDBField
-    var readPosition: Long = 0 //读的位置
+    var readPosition: Long = 0
 
     override fun equals(other: Any?): Boolean {
         if (other == null || javaClass != other.javaClass) return false

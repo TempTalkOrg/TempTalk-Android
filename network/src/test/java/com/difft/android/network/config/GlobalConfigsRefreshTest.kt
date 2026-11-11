@@ -22,15 +22,15 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/**
- * [GlobalConfigsManager]'s refresh: only a fetch that adopted a config stamps the throttle, so a
- * failed round is retried on the next state-change signal instead of a full interval later
- * (#1395). The fake [HttpService] serves both the plaintext and the encrypted endpoint, so the
- * test holds whichever config mode the build was compiled with.
- */
+
+
+
+
+
+
 class GlobalConfigsRefreshTest {
 
-    /** Response per request in order: a config code, or null for a network failure. */
+    
     private val script = ArrayDeque<Int?>()
     private var requests = 0
     private var monoNow = 1_000_000L

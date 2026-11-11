@@ -20,20 +20,9 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentActivity
 import com.google.android.material.snackbar.Snackbar
 
-/**
- * Compose Dialog Manager
- * 用于替换DialogX框架的Compose实现
- *
- * The composables it mounts live next to it: [MessageDialog], [WaitDialog] (state in
- * [WaitDialogSlot]), [BottomDialog] / [FullScreenBottomDialog]; [ComposeDialog] and
- * [getSafeActivity] are in `ComposeDialog.kt`.
- */
+
 object ComposeDialogManager {
-    /**
-     * 对话框类型
-     *
-     * Material palette hues, not Difft tokens: the design library defines no tip/snackbar colours yet.
-     */
+    
     enum class DialogType(val color: Color) {
         SUCCESS(Color(0xFF4CAF50)),
         ERROR(Color(0xFFF44336)),
@@ -41,16 +30,16 @@ object ComposeDialogManager {
         INFO(Color(0xFF2196F3))
     }
 
-    /**
-     * 显示提示消息 (替换TipDialog)
-     * @param fragment Fragment实例
-     * @param message 消息内容
-     * @param type 对话框类型
-     * @param duration 显示时长(毫秒)
-     * @param actionText 操作按钮文本
-     * @param onAction 操作按钮点击回调
-     * @param onDismiss 消失回调
-     */
+    
+
+
+
+
+
+
+
+
+
     fun showTip(
         fragment: Fragment,
         message: String,
@@ -64,9 +53,6 @@ object ComposeDialogManager {
         showTipInternal(view, message, type, duration, actionText, onAction, onDismiss)
     }
 
-    /**
-     * 显示提示消息 (替换TipDialog) - Activity版本
-     */
     fun showTip(
         activity: FragmentActivity,
         message: String,
@@ -80,9 +66,6 @@ object ComposeDialogManager {
         showTipInternal(view, message, type, duration, actionText, onAction, onDismiss)
     }
 
-    /**
-     * 显示简单提示 (替换PopTip)
-     */
     fun showPopTip(
         fragment: Fragment,
         message: String,
@@ -92,9 +75,6 @@ object ComposeDialogManager {
         showTipInternal(view, message, DialogType.INFO, duration, null, null, null)
     }
 
-    /**
-     * 显示简单提示 (替换PopTip) - Activity版本
-     */
     fun showPopTip(
         activity: FragmentActivity,
         message: String,
@@ -105,11 +85,8 @@ object ComposeDialogManager {
         showTipInternal(view, message, DialogType.INFO, duration, null, null, onDismiss)
     }
 
-    // === 直接调用API - 适用于传统Activity ===
 
-    /**
-     * 在Context中显示消息对话框 - 自动安全转换为Activity，如果转换失败则不显示
-     */
+    
     fun showMessageDialog(
         context: Context,
         title: String,
@@ -164,10 +141,9 @@ object ComposeDialogManager {
 
             dialog
         } else {
-            // 如果无法获取Activity，返回一个空的ComposeDialog实现
             object : ComposeDialog {
                 override fun dismiss() {
-                    // 什么都不做
+                    
                 }
 
                 override val isShowing: Boolean get() = false
@@ -175,9 +151,7 @@ object ComposeDialogManager {
         }
     }
 
-    /**
-     * 在Context中显示消息对话框 - 支持自定义View，自动安全转换为Activity
-     */
+    
     fun showMessageDialog(
         context: Context,
         title: String,
@@ -216,7 +190,7 @@ object ComposeDialogManager {
                     },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(0.dp), // 去掉默认内边距
+                        .padding(0.dp),
                     update = { view ->
                         onViewCreated(view)
                     }
@@ -226,9 +200,7 @@ object ComposeDialogManager {
     }
 
 
-    /**
-     * Java 友好的 showMessageDialog 方法 - 接受Context并安全转换为Activity
-     */
+    
     @JvmStatic
     @JvmOverloads
     fun showMessageDialogForJava(
@@ -257,19 +229,19 @@ object ComposeDialogManager {
         )
     }
 
-    // 全局WaitDialog管理 — 状态与逻辑都在 [WaitDialogSlot]，这里只保留调用面。
-    /** No claim taken: releasing it closes nothing. See [WaitDialogSlot.NO_CLAIM]. */
+    
+    
     const val NO_CLAIM = WaitDialogSlot.NO_CLAIM
 
-    /**
-     * 显示全局WaitDialog - 类似DialogX的使用方式
-     * @param context Context实例
-     * @param message 消息内容
-     * @param cancelable 是否可取消
-     * @param layoutId 自定义布局ID，传入时使用透明背景
-     * @param onViewCreated 自定义View创建回调
-     * @return the claim token to pass to [dismissWait]
-     */
+    
+
+
+
+
+
+
+
+
     @JvmOverloads
     fun showWait(
         context: Context,
@@ -280,29 +252,27 @@ object ComposeDialogManager {
         onViewCreated: (View) -> Unit = {},
     ): Int = WaitDialogSlot.showWait(context, message, cancelable, layoutId, onDismiss, onViewCreated)
 
-    /** 关闭全局WaitDialog - 类似DialogX的使用方式. See [WaitDialogSlot.dismissWait]. */
+    
     @JvmStatic
     fun dismissWait() = WaitDialogSlot.dismissWait()
 
-    /** Releases the wait dialog only while [token] is the live claim. See [WaitDialogSlot]. */
+    
     @JvmStatic
     fun dismissWait(token: Int) = WaitDialogSlot.dismissWait(token)
 
-    /** Whether the dialog [token] claimed is still the one on screen. */
+    
     @JvmStatic
     fun isWaitShowing(token: Int): Boolean = WaitDialogSlot.isWaitShowing(token)
 
-    /** Releases the wait dialog only when the slot holds the one [owner] showed. */
+    
     @JvmStatic
     fun dismissWait(owner: Activity) = WaitDialogSlot.dismissWait(owner)
 
 
-    /**
-     * 在Activity中显示普通底部Dialog - 直接调用API (Compose内容)
-     */
     fun showBottomDialog(
         activity: Activity,
         onDismiss: () -> Unit = {},
+        showDragHandle: Boolean = true,
         content: @Composable () -> Unit
     ): ComposeDialog {
         val composeView = ComposeView(activity)
@@ -322,7 +292,7 @@ object ComposeDialogManager {
             DialogTheme {
                 var showSheet by remember { mutableStateOf(true) }
 
-                // 如果弹窗被意外关闭，确保清理资源
+                
                 if (!showSheet) {
                     ComposeActivityMount.unmount(activity, composeView)
                     return@DialogTheme
@@ -330,6 +300,7 @@ object ComposeDialogManager {
 
                 BottomDialog(
                     isVisible = showSheet,
+                    showDragHandle = showDragHandle,
                     onDismiss = {
                         showSheet = false
                         showing = false
@@ -345,10 +316,10 @@ object ComposeDialogManager {
         return dialog
     }
 
-    /**
-     * 在Activity中显示普通底部Dialog - 直接调用API (自定义View)
-     * @return 返回Dialog对象
-     */
+    
+
+
+
     fun showBottomDialog(
         activity: Activity,
         layoutId: Int,
@@ -372,7 +343,7 @@ object ComposeDialogManager {
             DialogTheme {
                 var showSheet by remember { mutableStateOf(true) }
 
-                // 如果弹窗被意外关闭，确保清理资源
+                
                 if (!showSheet) {
                     ComposeActivityMount.unmount(activity, composeView)
                     return@DialogTheme
@@ -396,9 +367,6 @@ object ComposeDialogManager {
         return dialog
     }
 
-    /**
-     * 在Activity中显示全屏底部Dialog - 直接调用API (Compose内容)
-     */
     fun showFullScreenBottomDialog(
         activity: Activity,
         backgroundDrawable: android.graphics.drawable.Drawable? = null,
@@ -410,7 +378,7 @@ object ComposeDialogManager {
             DialogTheme {
                 var showSheet by remember { mutableStateOf(true) }
 
-                // 如果弹窗被意外关闭，确保清理资源
+                
                 if (!showSheet) {
                     ComposeActivityMount.unmount(activity, composeView)
                     return@DialogTheme
@@ -431,9 +399,6 @@ object ComposeDialogManager {
         ComposeActivityMount.mount(activity, composeView)
     }
 
-    /**
-     * 在Activity中显示全屏底部Dialog - 直接调用API (自定义View)
-     */
     fun showFullScreenBottomDialog(
         activity: Activity,
         layoutId: Int,
@@ -446,7 +411,7 @@ object ComposeDialogManager {
             DialogTheme {
                 var showSheet by remember { mutableStateOf(true) }
 
-                // 如果弹窗被意外关闭，确保清理资源
+                
                 if (!showSheet) {
                     ComposeActivityMount.unmount(activity, composeView)
                     return@DialogTheme

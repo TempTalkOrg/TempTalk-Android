@@ -8,19 +8,19 @@ import io.mockk.unmockkStatic
 import org.junit.rules.TestWatcher
 import org.junit.runner.Description
 
-/**
- * JUnit Rule that mocks the top-level globalServices entry point.
- *
- * In TempTalk, global access goes through `globalServices` (a lazy
- * GlobalHiltEntryPoint) defined in ExtensionsKt. This rule mocks that
- * property so tests can control myId, userManager, etc.
- *
- * Usage:
- * ```
- * @get:Rule(order = 2)
- * val globalMocks = GlobalStaticMockRule()
- * ```
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
 class GlobalStaticMockRule(
     var testUserId: String = "test-user-001"
 ) : TestWatcher() {

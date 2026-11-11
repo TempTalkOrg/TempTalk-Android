@@ -11,22 +11,22 @@ import okhttp3.ResponseBody
 import okio.Buffer
 import okio.BufferedSource
 
-/** Requests an interceptor actually handed to `chain.proceed`, in order. */
+
 internal class SentRequests {
     val all = mutableListOf<Request>()
 
-    /** Body of the response each `proceed` answered with, same order as [all]. */
+    
     val bodies = mutableListOf<CloseTrackingBody>()
     val single: Request get() = all.single()
     val first: Request get() = all.first()
     val size: Int get() = all.size
 }
 
-/**
- * `ResponseBody` that records whether it was closed, so a test can assert the interceptor released
- * the connection of a response it did not return. The buffer is a field rather than a fresh
- * `Buffer()` per `source()` call, or `close()` would drain a different sink than a reader saw.
- */
+
+
+
+
+
 internal class CloseTrackingBody : ResponseBody() {
     private val buffer = Buffer().writeUtf8("stub")
 
@@ -43,10 +43,10 @@ internal class CloseTrackingBody : ResponseBody() {
     }
 }
 
-/**
- * A mocked `Interceptor.Chain` — the precedent from `ProxyHostInterceptorTest` — that records every
- * request and answers each `proceed` with the next code in [codes] (the last code repeats).
- */
+
+
+
+
 internal fun chainOf(request: Request, vararg codes: Int): Pair<Interceptor.Chain, SentRequests> {
     val sent = SentRequests()
     val chain = mockk<Interceptor.Chain>()

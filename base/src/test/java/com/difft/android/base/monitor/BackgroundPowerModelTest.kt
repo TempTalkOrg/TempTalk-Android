@@ -4,7 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** #1376: [BackgroundPowerModel] attributes background intervals by charging state and transport. */
+
 class BackgroundPowerModelTest {
 
     private fun sample(

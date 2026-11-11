@@ -1,25 +1,29 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
 
     <style name="Theme.Chative" parent="Theme.AppCompat.DayNight.NoActionBar">
-        <!-- Primary brand color. -->
+        
+        <item name="android:scrollbarThumbVertical">@android:color/transparent</item>
+        <item name="android:scrollbarThumbHorizontal">@android:color/transparent</item>
+        
+        <item name="android:windowAnimationStyle">@style/Animation.Chative.Activity</item>
+        
         <item name="colorPrimary">@android:color/transparent</item>
         <item name="colorPrimaryVariant">@android:color/transparent</item>
         <item name="colorOnPrimary">@android:color/transparent</item>
-        <!-- Secondary brand color. -->
+        
         <item name="colorSecondary">@android:color/transparent</item>
         <item name="colorSecondaryVariant">@android:color/transparent</item>
         <item name="colorOnSecondary">@android:color/transparent</item>
-        <!-- Default page background: bg is bgpage-secondary (#0B0E11 in dark).
-             Content pages paint @color/bg1 on their root layout. -->
+        
         <item name="android:windowBackground">@color/bg</item>
         <item name="android:statusBarColor">@color/bg</item>
         <item name="android:navigationBarColor">@color/bg</item>
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowLightNavigationBar" tools:targetApi="o_mr1">false</item>
-        <!-- Customize your theme here. -->
+        
     </style>
 
-    <!-- Dark variant for uCrop activities (see values/themes.xml for details). -->
+    
     <style name="Theme.Chative.UCrop" parent="Theme.AppCompat.NoActionBar">
         <item name="android:windowBackground">@color/bg</item>
         <item name="android:statusBarColor">@color/bg</item>
@@ -27,4 +31,14 @@
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowLightNavigationBar" tools:targetApi="o_mr1">false</item>
     </style>
+    
+    <style name="Theme.TT.BottomSheetDialog" parent="Theme.Design.BottomSheetDialog">
+        
+        <item name="android:scrollbarThumbVertical">@android:color/transparent</item>
+        <item name="android:scrollbarThumbHorizontal">@android:color/transparent</item>
+        <item name="enableEdgeToEdge">true</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightNavigationBar" tools:targetApi="o_mr1">false</item>
+    </style>
+
 </resources>

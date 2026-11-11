@@ -50,10 +50,10 @@ import com.difft.android.setting.viewmodel.ProxySettingsViewModel.UiState
 
 private const val PROXY_HELP_URL = "https://quicall.app/proxy-help.html"
 
-/**
- * Stateless proxy-settings body. Every mutation is reported through a callback so the screen owns
- * the ViewModel and this can be rendered from a test with a hand-built [UiState].
- */
+
+
+
+
 @Composable
 fun ProxySettingsContent(
     state: UiState,
@@ -64,9 +64,9 @@ fun ProxySettingsContent(
     onSave: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // Scrolling settings above a footer that stays put: the IME inset is applied to the whole
-    // page, so the keyboard lifts the Save button with it, and the address field grows without
-    // bound while the page scrolls the cursor into view.
+    
+    
+    
     Column(modifier.fillMaxSize().imePadding()) {
         Column(
             modifier = Modifier
@@ -119,8 +119,8 @@ private fun ProxySettingsBody(
 
     DifftSettingsGroup(footer = { ProxyUseProxyDescription() }) {
         ProxyGroupSwitchRow(
-            // During a call the switch is NOT greyed out: it shows the real state and
-            // a tap raises a toast (handled in the ViewModel) instead of toggling.
+            
+            
             label = stringResource(R.string.proxy_use_proxy),
             checked = state.useProxy,
             onCheckedChange = onUseProxyChange,
@@ -136,8 +136,8 @@ private fun ProxySettingsBody(
             label = stringResource(R.string.proxy_protect_call),
             checked = state.protectCallIp,
             onCheckedChange = onProtectCallIpChange,
-            // Greyed while the proxy is off; the row stays tappable so the ViewModel can
-            // answer the tap with "enable the proxy first" instead of swallowing it.
+            
+            
             switchAppearsEnabled = state.useProxy,
         )
     }
@@ -163,7 +163,7 @@ private fun ProxySettingsBody(
     Spacer(Modifier.height(DifftSettingsDefaults.PageInset))
 }
 
-/** A switch row carrying the group's own row fill, as [DifftSettingsGroup] requires of its rows. */
+
 @Composable
 private fun ProxyGroupSwitchRow(
     label: String,
@@ -181,10 +181,10 @@ private fun ProxyGroupSwitchRow(
     contentPadding = DifftSettingsDefaults.RowContentPadding,
 )
 
-/**
- * Feature description with a trailing "Learn more" link that opens the proxy help
- * page in the external browser. Rendered as the "Use proxy" group's footer.
- */
+
+
+
+
 @Composable
 private fun ProxyUseProxyDescription() {
     val context = LocalContext.current
@@ -215,7 +215,7 @@ private fun ProxyUseProxyDescription() {
     )
 }
 
-/** Address label, input and the no-TURN warning that belongs to it. */
+
 @Composable
 private fun ProxyAddressField(
     address: String,
@@ -235,15 +235,15 @@ private fun ProxyAddressField(
         onValueChange = onAddressChange,
         onClear = { onAddressChange("") },
         hint = stringResource(R.string.proxy_address_hint),
-        // No clear slot: a proxy link is edited, not wiped, and only ClearMode.Never supports
-        // the multi-line height chain.
+        
+        
         clearMode = ClearMode.Never,
-        // Read-only rather than disabled: a link stays selectable/copyable during a call.
+        
         readOnly = readOnly,
-        // Text area: at least four lines tall, top-aligned, growing with the link; the page
-        // scrolls, the field never does.
+        
+        
         maxLines = Int.MAX_VALUE,
-        // Card-owned box: explicit fill suppresses the Form border, the card supplies the surface.
+        
         containerColor = DifftTheme.colors.background,
         textStyle = DifftTheme.typography.bodyMedium,
         height = null,
@@ -262,14 +262,10 @@ private fun ProxyAddressField(
     }
 }
 
-/**
- * The single status line (proxy design §6): a hint under the address field, not a settings row,
- * so it reads as feedback on the input above it. Renders exactly ONE main status.
- *
- * - [ProbeState.Checking] -> a small loading indicator in the dot slot, no text.
- * - a settled main status -> a coloured dot + text in the same colour. A compact "recheck" icon
- *   trails the text ONLY for failure states; a successful status shows no retry affordance.
- */
+
+
+
+
 @Composable
 private fun ProxyStatusLine(
     probe: ProbeState,
@@ -277,8 +273,8 @@ private fun ProxyStatusLine(
     onRecheck: () -> Unit,
 ) {
     Row(
-        // Pinned to the recheck button's height so checking -> failed -> checking does not pump
-        // the line up and down as the button comes and goes.
+        
+        
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = STATUS_LINE_MIN_HEIGHT),
@@ -308,7 +304,7 @@ private fun ProxyStatusLine(
                 color = statusColor,
                 modifier = Modifier.weight(1f),
             )
-            // The recheck affordance only appears when the connection test FAILED.
+            
             if (!probe.isSuccess) {
                 Spacer(Modifier.width(STATUS_LINE_GAP))
                 RecheckIconButton(enabled = recheckEnabled, onClick = onRecheck)
@@ -317,22 +313,22 @@ private fun ProxyStatusLine(
     }
 }
 
-/** Maps a settled main [ProbeState] to its status text resource (proxy design §6.1–§6.3). */
+
 private fun mainStatusTextRes(probe: ProbeState): Int = when (probe) {
     ProbeState.ProxyAvailable -> R.string.proxy_status_available
     ProbeState.ServiceReachable -> R.string.proxy_e2e_ok
     ProbeState.ServiceUnreachable -> R.string.proxy_e2e_failed
     is ProbeState.ProxyUnavailable ->
         if (probe.verifyFailed) R.string.proxy_check_fail_verify else R.string.proxy_status_unavailable
-    // None / Checking are filtered out before this is called.
+    
     else -> R.string.proxy_status_unavailable
 }
 
-/**
- * The "recheck" affordance: a compact, icon-only refresh button — deliberately low-emphasis
- * (neutral tint, never red). Triggers a fresh probe of the saved address. The 40dp button keeps an
- * adequate touch target while the glyph stays small.
- */
+
+
+
+
+
 @Composable
 private fun RecheckIconButton(enabled: Boolean, onClick: () -> Unit) {
     IconButton(
@@ -349,11 +345,11 @@ private fun RecheckIconButton(enabled: Boolean, onClick: () -> Unit) {
     }
 }
 
-/** Four lines of bodyMedium plus the 10dp content padding. */
+
 private val ADDRESS_MIN_HEIGHT = 100.dp
 private val FOOTER_GAP = 8.dp
 private val STATUS_LINE_GAP = 8.dp
 private val STATUS_INDICATOR_SLOT = 16.dp
 private val STATUS_DOT_SIZE = 10.dp
-/** Height of the recheck [IconButton]; the line keeps it even when the button is absent. */
+
 private val STATUS_LINE_MIN_HEIGHT = 40.dp

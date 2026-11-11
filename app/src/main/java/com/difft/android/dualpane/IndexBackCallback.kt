@@ -5,13 +5,13 @@ import com.difft.android.base.log.lumberjack.L
 
 internal enum class IndexBackAction { POP, POP_ROOT, EXPAND_LIST, LAYER_POP, LAYER_CLOSE, MOVE_TASK_TO_BACK }
 
-/**
- * IndexActivity's Back order once the visible top page's own callbacks (registered with
- * `detailBackOwner()`, so they outrank this one) have passed: pop a pushed detail page, then in
- * one-pane leave the root conversation for the list, then re-open a collapsed two-pane list (a 1 px
- * list is revealed before an invisible list-pane layer is closed), then pop the list-pane layer's
- * pushed page, then close the layer, and only then send the task to the back.
- */
+
+
+
+
+
+
+
 internal object IndexBackDecision {
     fun decide(depth: Int, dualPane: Boolean, listCollapsed: Boolean, layerDepth: Int = 0): IndexBackAction = when {
         depth > 1 -> IndexBackAction.POP
@@ -23,7 +23,7 @@ internal object IndexBackDecision {
     }
 }
 
-/** The single Activity-level Back callback; register it in `onCreate`, before any page registers. */
+
 internal class IndexBackCallback(
     private val navigator: PaneNavigator,
     private val listLayer: ListPaneLayer,

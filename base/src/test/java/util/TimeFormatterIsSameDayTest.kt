@@ -9,14 +9,10 @@ import java.util.Calendar
 import java.util.GregorianCalendar
 import java.util.TimeZone
 
-/**
- * Semantics guard for [TimeFormatter.isSameDay] as day-ordinal arithmetic.
- *
- * Deliberately standalone rather than folded into `ChatMessageViewModelDayHeaderTest`: that suite's
- * reference algorithm calls `isSameDay` itself, so both sides move together whenever the
- * implementation changes and it cannot detect semantic drift. The reference here is the previous
- * `Calendar`-based body, kept verbatim, so drift shows up as a failure.
- */
+
+
+
+
 class TimeFormatterIsSameDayTest {
 
     @After
@@ -59,11 +55,11 @@ class TimeFormatterIsSameDayTest {
         }
     }
 
-    /**
-     * 2026-03-08 in New York is 23 hours long: 02:00 EST jumps to 03:00 EDT, so the two halves of
-     * the day carry different UTC offsets. A single per-zone offset would push one of them across a
-     * midnight boundary.
-     */
+    
+
+
+
+
     @Test
     fun `a DST spring-forward day stays one day`() {
         withDefaultZone(NEW_YORK) { zone ->
@@ -81,10 +77,10 @@ class TimeFormatterIsSameDayTest {
         }
     }
 
-    /**
-     * 2026-11-01 in New York is 25 hours long and 01:30 local happens twice — once at UTC 05:30
-     * (EDT) and once at UTC 06:30 (EST). Both repetitions belong to the same local day.
-     */
+    
+
+
+
     @Test
     fun `a DST fall-back day stays one day including the repeated hour`() {
         val firstOneThirty = utcInstant(2026, 11, 1, 5, 30)
@@ -118,7 +114,7 @@ class TimeFormatterIsSameDayTest {
         }
     }
 
-    /** Pre-epoch timestamps: integer division would truncate towards zero and merge day -1 with day 0. */
+    
     @Test
     fun `negative timestamps keep their own days`() {
         withDefaultZone(UTC) { zone ->
@@ -136,11 +132,10 @@ class TimeFormatterIsSameDayTest {
         }
     }
 
-    /**
-     * Differential check against the previous implementation over a dense timestamp sweep: three
-     * zones (one fixed-offset, one hour-DST, one 45-minute offset with 30-minute DST) crossed with
-     * both 2026 DST transitions and the epoch boundary.
-     */
+    
+
+
+
     @Test
     fun `matches the Calendar implementation across a timestamp sweep`() {
         var comparisons = 0
@@ -169,13 +164,11 @@ class TimeFormatterIsSameDayTest {
             }
         }
 
-        // The sweep is only meaningful if it produced both outcomes in volume.
+        
         assertTrue("sweep ran: $comparisons", comparisons > 10_000)
         assertTrue("sweep produced same-day hits", sameDayResults > comparisons / 10)
         assertTrue("sweep produced different-day hits", sameDayResults < comparisons * 9 / 10)
     }
-
-    // --- helpers ---
 
     private fun assertReferenceAgrees(timestamp1: Long, timestamp2: Long) {
         assertEquals(
@@ -185,7 +178,7 @@ class TimeFormatterIsSameDayTest {
         )
     }
 
-    /** The pre-rewrite body, kept verbatim as the golden semantics. */
+    
     private fun calendarIsSameDay(timestamp1: Long, timestamp2: Long): Boolean {
         val calendar1 = Calendar.getInstance()
         val calendar2 = Calendar.getInstance()
@@ -240,17 +233,17 @@ class TimeFormatterIsSameDayTest {
         const val SHANGHAI = "Asia/Shanghai"
         const val NEW_YORK = "America/New_York"
 
-        /** +05:45, no DST: catches any assumption that offsets are whole hours. */
+        
         const val KATHMANDU = "Asia/Kathmandu"
 
-        /** +10:30 / +11:00: a 30-minute DST shift. */
+        
         const val LORD_HOWE = "Australia/Lord_Howe"
 
-        /** Spring-forward day, fall-back day, and the epoch boundary, all as UTC instants. */
+        
         val SWEEP_STARTS = listOf(
-            1_772_841_600_000L, // 2026-03-07T00:00:00Z
-            1_793_491_200_000L, // 2026-11-01T00:00:00Z
-            -86_400_000L, // 1969-12-31T00:00:00Z
+            1_772_841_600_000L, 
+            1_793_491_200_000L, 
+            -86_400_000L, 
         )
         const val SWEEP_SPAN_MS = 3 * 86_400_000L
         const val SWEEP_STEP_MS = 17 * 60 * 1000L

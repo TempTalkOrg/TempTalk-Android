@@ -5,11 +5,11 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * [CriticalAlertRoomRegistry] (#1387): alerts are recorded per room; ending a room hands back its
- * ids once, remembers the room as ended (for [CriticalAlertRoomRegistry.TTL_MS]) even when nothing
- * was recorded, and leaves other rooms alone. Both sets are bounded.
- */
+
+
+
+
+
 class CriticalAlertRoomRegistryTest {
 
     private var now = 1_000_000L

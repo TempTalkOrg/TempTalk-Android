@@ -41,19 +41,11 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 import livekit.LivekitTemptalk
 
-/**
- * Drives the call session startup sequence after the ViewModel is constructed:
- *  1. connect the room with failover, and in parallel
- *  2. await the server's `ttCallResp` from the first join and validate it,
- *  3. extract the room id and decrypt the E2EE key,
- *  4. for CALLER: start ringtone, persist local `CallData`, send start-call text,
- *  5. for CALLEE: send the join-sync control message and cancel incoming-call notification.
- *
- * Extracted from `LCallViewModel.launchConnectionFlow` /
- * `processStartCallResponse` / `startCallRingTone` / `addStartCallData` /
- * `sendStartCallTextMessage` / `sendJoinSyncControlMessage` to keep the
- * ViewModel within the 500-line project limit.
- */
+
+
+
+
+
 internal class CallSessionStarter(
     private val scope: CoroutineScope,
     private val room: Room,
@@ -72,23 +64,24 @@ internal class CallSessionStarter(
     private val createCallMsgConfig: Boolean,
     private val onRoomIdAssigned: (String) -> Unit,
     private val onE2eeKeyAssigned: (ByteArray) -> Unit,
-    // True once the session has started ending. Its teardown clears the pre-connect cancel latch
-    // before the room is released, so a late response must not be read as a live start.
+    
+    
     private val isSessionEnding: () -> Boolean,
     private val startCallResponses: () -> Flow<LivekitTemptalk.TTCallResponse?> = { room::ttCallResp.flow },
+    private val callerRingback: CallerRingback = CallerRingback(callRingtoneManager),
 ) {
     private val responseGate = Mutex()
     private var connectionFlowAborted = false
 
-    /**
-     * Launch the end-to-end startup flow on an IO dispatcher.
-     *
-     * The response is handled as soon as the first join delivers it, not after connect returns:
-     * `Room.connect` only returns once the first PeerConnection is up (up to 15s per attempt, longer
-     * across failover), and it emits `RoomEvent.Connected` just before returning — whose handler
-     * needs the room id assigned here. A later attempt's response belongs to the same call
-     * (same clientCallId), so only the first one is handled.
-     */
+    
+
+
+
+
+
+
+
+
     fun start() {
         scope.launch(Dispatchers.IO) {
             val response = async { startCallResponses().filterNotNull().first() }
@@ -123,7 +116,7 @@ internal class CallSessionStarter(
         }
     }
 
-    /** The response half of [start]; null = timed out. Separate so tests can drive it. */
+    
     internal suspend fun handleStartCallResponse(response: LivekitTemptalk.TTCallResponse?) {
         L.i { "[Call] CallSessionStarter start call response callback." }
         if (response == null) {
@@ -152,9 +145,9 @@ internal class CallSessionStarter(
         val callerId = callIntent.callerId
         val callType = CallType.fromString(callIntent.callType) ?: CallType.ONE_ON_ONE
 
-        // A user can exit before the server creates the room. If that response wins the race with
-        // teardown, use its authoritative room id only to re-issue the termination; do not restore
-        // local call state or run any start-call side effects.
+        
+        
+        
         if (
             callIntent.action == CallIntent.Action.START_CALL &&
             onGoingCallStateManager.isInitiatorPreConnectCancelled()
@@ -206,19 +199,17 @@ internal class CallSessionStarter(
         }
     }
 
-    /**
-     * START_CALL 成功响应后的副作用编排。抽出为独立方法（与 LiveKit [Room] 解耦）以便单元测试。
-     *
-     * 门闩命中时（主叫已在窗口 W 退出）：**确定性地**跳过响铃 / 建本地 CallData / 发始通话消息，
-     * 避免向对端发出与取消矛盾的"始通话"消息——这是本方法对该竞态提供的可靠保证；随后调用
-     * [reCancelAfterInitiatorExit] 做 **best-effort** 补发权威取消。远端止铃的最终保证在后端
-     * clientCallId 墓碑（见 [reCancelAfterInitiatorExit] 说明），本方法不承担该保证。
-     *
-     * 会话已在结束（[isSessionEnding]）时同样跳过副作用，但不补发：teardown 会先清空门闩、再由清理步骤
-     * 释放房间，此时无法区分窗口 W 退出与已连接群聊的 LEAVE，而群聊补发是全员挂断；结束信令由退出流程自己发。
-     *
-     * @return true = 已走正常主叫路径；false = 主叫已退出或会话在结束，跳过副作用。
-     */
+    
+
+
+
+
+
+
+
+
+
+
     internal suspend fun onStartCallSucceeded(
         forWhat: For,
         callerId: String,
@@ -227,8 +218,7 @@ internal class CallSessionStarter(
         createdAt: Long,
         systemShowTimestamp: Long,
     ): Boolean {
-        // 主叫已在窗口 W 退出：房间此刻才由服务端建出，不能再响铃/建本地数据/发始通话消息，
-        // 改为用权威 roomId 补发取消（1v1 cancel / group hangup），确保对端止铃。
+        
         if (onGoingCallStateManager.isInitiatorPreConnectCancelled()) {
             reCancelAfterInitiatorExit(callType, roomId ?: "", callerId)
             return false
@@ -245,17 +235,13 @@ internal class CallSessionStarter(
         return true
     }
 
-    /**
-     * best-effort 快路径：仅当建房响应（经房间信令 `ttCallResp` 下发）恰好赶在 teardown 释放房间之前
-     * 到达时，才用已知的权威 [roomId] 补发结束信令（1v1 cancel，group hangup=end-for-all；窗口 W 内
-     * 尚无远端加入，callUidList 为空）。语义与 [com.difft.android.call.handler.CallExitHandler.handleInitiatorPreConnectExit] 对齐。
-     *
-     * 注意：这**不是保证**。会话 main scope 要到清理的最后一步才取消，结束时并不立即取消；
-     * 拦住迟到响应的是清理步骤 `CallCleanupSteps` 中的 `roomCtl.disconnectAndRelease()`——房间断开并释放后，
-     * 响应不再经该房间信令到达，本方法不会执行、roomId 也无从得知（等待侧按 RESPONSE_TIMEOUT_MS 超时）。
-     * 该窗口的权威远端止铃由**后端**负责——把退出时携带 clientCallId 的取消当作墓碑，使后续用同一
-     * clientCallId 建房不再响铃。本路径只在能生效时缩短窗口，不承担正确性。
-     */
+    
+
+
+
+
+
+
     private suspend fun reCancelAfterInitiatorExit(callType: CallType, roomId: String, callerId: String) {
         L.w { "[Call] CallSessionStarter start response arrived after initiator exit -> re-cancel roomId:$roomId type:$callType" }
         val conversationId = callIntent.conversationId
@@ -285,7 +271,9 @@ internal class CallSessionStarter(
                 putExtra(LCallConstants.BUNDLE_KEY_CALL_TYPE, callType.type)
                 putExtra(LCallConstants.BUNDLE_KEY_CALL_ROLE, CallRole.CALLER.type)
             }
-            callRingtoneManager.startRingTone(ringIntent)
+            
+            
+            callerRingback.start { callRingtoneManager.startRingTone(ringIntent) }
         }
     }
 
@@ -298,12 +286,12 @@ internal class CallSessionStarter(
         createdAt: Long,
     ) {
         val callData = CallData(
-            // The type already in effect, not the pre-join one: this entry can be created either
-            // before or after `Connected` resolves the authoritative type, and CallExitHandler reads
-            // CallData.type to choose LEAVE vs END. Created first → the resolve writes back into this
-            // entry; created second → it picks the resolved value up here. Both orders converge.
-            // Deliberately scoped to this field: `callType` still drives `forWhat` (E2EE key routing)
-            // and the outgoing start-call message, neither of which may follow the server value.
+            
+            
+            
+            
+            
+            
             type = roomCtl.callType.value.ifEmpty { callType.type },
             version = 0,
             createdAt = createdAt,

@@ -4,15 +4,10 @@ import org.junit.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/**
- * Unit tests for the pure derivation function [computeTunnelHosts]
- * (`ProxyTunnelHostDerivation.kt`). Pure JVM — no Android dependencies, no
- * Robolectric runner required.
- *
- * The whitelist is the union of the EMBEDDED chat hosts and the EMBEDDED
- * call-service domains; there is no live/dynamic source and no hardcoded
- * baseline. Each test pins one observable property of the derivation contract.
- */
+
+
+
+
 class ComputeTunnelHostsTest {
 
     @Test
@@ -59,7 +54,7 @@ class ComputeTunnelHostsTest {
 
         assertTrue("chat.temptalk.net" in result)
         assertTrue("chat.chative.im" in result)
-        // blanks dropped, trailing dot stripped, case normalized → exactly 2 entries.
+        
         assertEquals(2, result.size)
     }
 

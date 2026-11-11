@@ -25,14 +25,14 @@ import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import java.util.concurrent.TimeUnit
 
-/**
- * [waitWhileVisibleTop] on a hosted page: the wait follows the page being the visible top, but
- * the Activity going to the background keeps the claim, so returning does not mount the dialog
- * again (a visible blink, as the group key reset's wait did).
- *
- * Collectors run on Main.immediate, so flow and lifecycle changes made from the test thread take
- * effect inline; the looper is never idled while the dialog's spinner keeps scheduling frames.
- */
+
+
+
+
+
+
+
+
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [33], qualifiers = "w840dp-h900dp")
 class VisibleTopWaitTest {
@@ -66,7 +66,7 @@ class VisibleTopWaitTest {
 
     private fun settle() = shadowOf(Looper.getMainLooper()).idleFor(1, TimeUnit.SECONDS)
 
-    /** Runs posted tasks one at a time until [done] (bounded). */
+    
     private fun runUntil(done: () -> Boolean) {
         val looper = shadowOf(Looper.getMainLooper())
         repeat(MAX_TASKS) {
@@ -93,7 +93,7 @@ class VisibleTopWaitTest {
     @Test
     fun `background and return keep the same dialog`() = backgroundAndReturn()
 
-    /** Below API 29 the Activity's ON_STOP comes from the framework fragment stop, before androidx's. */
+    
     @Test
     @Config(sdk = [28])
     fun `API 28 - background and return keep the same dialog`() = backgroundAndReturn()

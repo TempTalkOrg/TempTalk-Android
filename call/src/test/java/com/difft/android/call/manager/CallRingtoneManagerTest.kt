@@ -20,21 +20,21 @@ import org.junit.Test
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
-/**
- * State machine of [CallRingtoneManager] (issue #1313): a stop racing a `play()` must leave
- * exactly one `stop()` and no `play()` after it, stale requests are dropped whatever their
- * enqueue order, and the hangup tone survives the teardown stop and releases itself once.
- *
- * Every fake [Ringtone] reports `isPlaying == true` after `play()` and `false` after `stop()`,
- * as the framework does; a relaxed mock's constant `false` would make the loop replay without a
- * suspension point.
- */
+
+
+
+
+
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class CallRingtoneManagerTest {
 
     private lateinit var source: CallRingtoneSource
 
-    /** Ringtones handed out by [CallRingtoneSource.create] in order; a fresh fake once empty. */
+    
     private val queued = ArrayDeque<Ringtone?>()
 
     @Before
@@ -60,7 +60,7 @@ class CallRingtoneManagerTest {
 
     private fun queue(vararg rts: Ringtone?) = rts.forEach { queued.addLast(it) }
 
-    // ---- R1–R3: the field race and its regression checklist ----
+    
 
     @Test
     fun `R1 stop issued while play runs stops the tone once and never replays`() = runTest {
@@ -130,7 +130,7 @@ class CallRingtoneManagerTest {
         verify(exactly = 1) { source.create(R.raw.new_call_hangup) }
     }
 
-    // ---- R5–R9: preserved loop behaviour ----
+    
 
     @Test
     fun `R5 silent backoff polls once per second and stops polling after stop`() = runTest {
@@ -206,7 +206,7 @@ class CallRingtoneManagerTest {
 
     @Test
     fun `R9 1v1 loop replays after each natural completion`() = runTest {
-        // Reports playing for three polls after each play(), then completes.
+        
         val playing = AtomicBoolean(false)
         val reads = AtomicInteger(0)
         val rt = mockk<Ringtone>(relaxed = true)
@@ -231,7 +231,7 @@ class CallRingtoneManagerTest {
         verify(exactly = 0) { rt.stop() }
     }
 
-    // ---- R10–R14: cleanup, unknown type, error paths ----
+    
 
     @Test
     fun `R10a cleanup invalidates a queued play synchronously`() = runTest {
@@ -327,7 +327,7 @@ class CallRingtoneManagerTest {
         verify(exactly = 0) { rt.stop() }
     }
 
-    // ---- R16–R21: interleavings ----
+    
 
     @Test
     fun `R16a a stale stop enqueued after a newer play leaves the new tone alone`() = runTest {
@@ -482,6 +482,86 @@ class CallRingtoneManagerTest {
         advanceTimeBy(1_000)
 
         assertSingleCalleeTone(rtB)
+    }
+
+    
+
+    @Test
+    fun `R22 stopCallerRingback stops the caller ringback loop`() = runTest {
+        val rt = fakeRingtone()
+        queue(rt)
+        val m = manager()
+
+        m.playRingTone(ONE_ON_ONE, CALLER)
+        runCurrent()
+        m.stopCallerRingback("test")
+        advanceTimeBy(5_000)
+
+        verify(exactly = 1) { rt.stop() }
+        verify(exactly = 1) { rt.play() }
+    }
+
+    @Test
+    fun `R23 stopCallerRingback leaves another call's incoming tone ringing`() = runTest {
+        val ringback = fakeRingtone()
+        val incoming = fakeRingtone()
+        queue(ringback, incoming)
+        val m = manager()
+
+        m.playRingTone(ONE_ON_ONE, CALLER)
+        runCurrent()
+        m.playRingTone(ONE_ON_ONE, CALLEE)
+        runCurrent()
+        m.stopCallerRingback("test")
+        runCurrent()
+
+        verify(exactly = 1) { ringback.stop() }
+        verify(exactly = 1) { incoming.play() }
+        verify(exactly = 0) { incoming.stop() }
+    }
+
+    @Test
+    fun `R24 stopCallerRingback does not invalidate a queued play of another call`() = runTest {
+        val ringback = fakeRingtone()
+        val incoming = fakeRingtone()
+        queue(ringback, incoming)
+        val m = manager()
+
+        m.playRingTone(ONE_ON_ONE, CALLER)
+        runCurrent()
+        m.playRingTone(ONE_ON_ONE, CALLEE)
+        m.stopCallerRingback("test")
+        runCurrent()
+
+        verify(exactly = 1) { incoming.play() }
+        verify(exactly = 0) { incoming.stop() }
+    }
+
+    @Test
+    fun `R25 a ringback play issued before stopCallerRingback but enqueued after it never starts`() = runTest {
+        val m = manager()
+
+        val gen = m.issueTone("play", null, "")
+        m.stopCallerRingback("test")
+        m.submitPlay(gen, ONE_ON_ONE, CALLER, null)
+        advanceTimeBy(5_000)
+
+        verify(exactly = 0) { source.create(any()) }
+    }
+
+    @Test
+    fun `R26 a ringback of a later call still plays after an earlier stopCallerRingback`() = runTest {
+        val rt = fakeRingtone()
+        queue(rt)
+        val m = manager()
+
+        m.stopCallerRingback("earlier call")
+        runCurrent()
+        m.playRingTone(ONE_ON_ONE, CALLER)
+        runCurrent()
+
+        verify(exactly = 1) { source.create(R.raw.new_call_outgoing_1v1) }
+        verify(exactly = 1) { rt.play() }
     }
 
     private fun assertSingleCalleeTone(rtB: Ringtone) {

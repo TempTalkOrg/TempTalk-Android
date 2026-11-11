@@ -4,11 +4,11 @@ import org.junit.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/**
- * [shouldApplyInitiatorRotation], the gate of [GroupCryptoRepo.setRotatedRGroup]: the rotation
- * initiator's key is written over an equal version (server omitted keyVersion) but never over a
- * newer one received meanwhile, now that a rotation can finish after its page is gone.
- */
+
+
+
+
+
 class InitiatorRotationWriteTest {
 
     @Test

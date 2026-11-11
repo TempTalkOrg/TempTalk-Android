@@ -9,22 +9,11 @@ import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/**
- * Unit tests for the [needsIdentityKeyRelogin] pure predicate.
- *
- * Robolectric is used only so that L.i / L.e lazy lambdas don't fail on Timber/Log
- * access — the function under test itself is pure Kotlin.
- *
- * Covers the 4 branches required by design §3.9:
- *   (a) userData == null  → false
- *   (b) baseAuth empty    → false
- *   (c) both keys present → false
- *   (d) any one missing   → true  (3 sub-cases: public missing, private missing, both empty)
- *
- * The associated `cleanupLegacySqlCipherArtifacts` helper lives in
- * `StartupCleanup.kt` because `TempTalkApplication.onCreate` (not MainActivity)
- * drives the cleanup; its surface is pinned by [StartupCleanupOrderingTest].
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class)
 class StartupGuardTest {

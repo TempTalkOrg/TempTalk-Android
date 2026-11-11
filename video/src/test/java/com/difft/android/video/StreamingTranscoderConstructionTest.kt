@@ -17,19 +17,19 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
-/**
- * T36, T37 — [StreamingTranscoder] construction contract.
- *
- * [VideoSource] is mocked rather than backed by a shadowed codec stack: the two properties under
- * test (an unknown size must throw, a bind failure must keep its cause and still release the
- * retriever) are decided entirely by the constructor, so a fake codec would only add setup that
- * the assertions never touch.
- *
- * Robolectric because `MediaMetadataRetriever` is constructed here; the plain JVM android.jar stub
- * throws from its constructor.
- *
- * Run: :video:testDebugUnitTest
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 class StreamingTranscoderConstructionTest {
 
@@ -53,13 +53,13 @@ class StreamingTranscoderConstructionTest {
         every { scheme } returns "content"
     }
 
-    /**
-     * T36 — an unknown input size must throw instead of falling through. Trim options supply the
-     * duration so the failure is unambiguously the size check.
-     *
-     * The `createExtractor` verify is the "no transcode work started" assertion: `transcode()`
-     * cannot have run if no extractor was ever created.
-     */
+    
+
+
+
+
+
+
     @Test
     fun `unknown input size throws instead of silently skipping transcode`() {
         val source = source(sizeBytes = VideoSource.UNKNOWN_SIZE)
@@ -75,10 +75,10 @@ class StreamingTranscoderConstructionTest {
         verify(exactly = 0) { mediaInput.createExtractor() }
     }
 
-    /**
-     * T37 — a bind failure is wrapped but keeps its cause, and the retriever is released even on
-     * that path (it holds a descriptor the media provider handed us).
-     */
+    
+
+
+
     @Test
     fun `bind failure is wrapped with its cause and releases the retriever`() {
         val boom = RuntimeException("boom")

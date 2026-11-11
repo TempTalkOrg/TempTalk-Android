@@ -26,11 +26,11 @@ import util.TimeUtils
 import kotlin.math.abs
 import kotlin.time.Duration.Companion.seconds
 
-/**
- * [PasscodeTimeoutContent] and [passcodeTimeoutLabel] contract (issue #1223): zero reads as the
- * instant string and every other value as a duration, the six rows keep their stored order, a null
- * stored value marks no row, and every tap is reported — the page does not close on selection.
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34])
@@ -58,7 +58,7 @@ class PasscodeTimeoutContentTest {
     private fun duration(seconds: Int) =
         TimeUtils.millis2FitTimeSpan(seconds.seconds.inWholeMilliseconds, 3, false)
 
-    // P8
+    
     @Test
     fun `zero reads as the instant string and other values as durations`() {
         assertEquals(
@@ -70,7 +70,7 @@ class PasscodeTimeoutContentTest {
         assertEquals(duration(3600), passcodeTimeoutLabel(context, 3600))
     }
 
-    // P9
+    
     @Test
     fun `all timeouts render in order and a null stored value marks no row`() {
         setContent(null, mutableListOf())
@@ -90,7 +90,7 @@ class PasscodeTimeoutContentTest {
             .assertCountEquals(0)
     }
 
-    // P10
+    
     @Test
     fun `the checkmark sits on the stored timeout`() {
         setContent(PasscodeUtil.DEFAULT_TIMEOUT, mutableListOf())
@@ -109,7 +109,7 @@ class PasscodeTimeoutContentTest {
         )
     }
 
-    // P11
+    
     @Test
     fun `tapping the instant row reports zero seconds`() {
         val reported = mutableListOf<Int>()
@@ -120,7 +120,7 @@ class PasscodeTimeoutContentTest {
         assertEquals(listOf(0), reported)
     }
 
-    // P12
+    
     @Test
     fun `tapping the already-selected timeout still reports it`() {
         val reported = mutableListOf<Int>()

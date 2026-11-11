@@ -23,13 +23,13 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
-/**
- * [CallEndController]'s page-less leave and its exit fallback: an out-of-page hang-up or a leave
- * with no page runs the exit decision with LEAVE; when its signaling never settles the call ends
- * locally 10 s later, and a handler that throws ends it at once. The page's own exit arms the same
- * fallback, so a page that went away while its exit was pending still ends the call. The fallback
- * stays quiet once the call finished and never fires after it was cancelled at session end.
- */
+
+
+
+
+
+
+
 class CallEndControllerExitFallbackTest {
 
     private val testDispatcher = StandardTestDispatcher()

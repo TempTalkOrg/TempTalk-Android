@@ -1,34 +1,44 @@
 package com.difft.android.chat.ui.messageaction
 
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.graphics.Color
-import com.difft.android.base.ui.theme.tokens.ColorTokens
+import com.difft.android.base.ui.theme.DifftTheme
 
-/**
- * Forced-dark palette for the message action menu — independent of the app theme
- * (renders dark even under the Light theme). Shared by all five menu surfaces.
- *
- * Values source from [ColorTokens.Dark] + [ColorTokens.Error] (single source of truth,
- * not fresh literals). This is a feature-scoped dark-lock and deliberately does NOT go
- * through DifftColorAccessor, whose getters read the current theme.
- */
+
+
+
+
+
 object MessageActionMenuColors {
-    private const val PANEL_ALPHA = 0.97f
 
-    /** Panel background: bg3 #2B3139 @ 0.97 alpha. */
-    val panel: Color = ColorTokens.Dark.BackgroundTertiary.copy(alpha = PANEL_ALPHA)
+    
+    val panel: Color
+        @Composable @ReadOnlyComposable
+        get() = if (DifftTheme.colors.isDark) DifftTheme.colors.backgroundTertiary else DifftTheme.colors.background
 
-    /** Default content (icon + label) tint: tprimary #EAECEF. */
-    val contentDefault: Color = ColorTokens.Dark.TextPrimary
+    
+    val contentDefault: Color
+        @Composable @ReadOnlyComposable
+        get() = DifftTheme.colors.textPrimary
 
-    /** Destructive content tint: terror #F84135. */
-    val danger: Color = ColorTokens.Error
+    
+    val danger: Color
+        @Composable @ReadOnlyComposable
+        get() = DifftTheme.colors.error
 
-    /** Pressed-row pill on this panel: bg4 #474D57 (bg3 would vanish into the panel). */
-    val pressedPill: Color = ColorTokens.Dark.BackgroundQuaternary
+    
+    val pressedPill: Color
+        @Composable @ReadOnlyComposable
+        get() = if (DifftTheme.colors.isDark) DifftTheme.colors.backgroundQuaternary else DifftTheme.colors.backgroundTertiary
 
-    /** Add-reaction icon tint: tthird #848E9C. */
-    val reactionAddIcon: Color = ColorTokens.Dark.TextTertiary
+    
+    val reactionAddIcon: Color
+        @Composable @ReadOnlyComposable
+        get() = DifftTheme.colors.textTertiary
 
-    /** Grid divider line: rgba(255,255,255,0.07). */
-    val gridLine: Color = Color(0x12FFFFFF)
+    
+    val gridLine: Color
+        @Composable @ReadOnlyComposable
+        get() = DifftTheme.colors.dividerFloating
 }

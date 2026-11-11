@@ -16,15 +16,15 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
-/**
- * Tests for the off-main, serialised provider writes of [ProxySettingsViewModel] (#1400): the
- * switch and delete writes leave the tap thread, run in tap order, and lock the form until the
- * last queued write lands.
- */
+
+
+
+
+
 class ProxySettingsViewModelWriteQueueTest : ProxySettingsViewModelTestBase() {
 
-    // #1400: setEnabled evicts pooled connections, whose TLS close throws on the main thread,
-    // so the switch write must run off the thread that handled the tap.
+    
+    
     @Test
     fun `toggle writes run off the calling thread`() = runTest {
         every { provider.savedShareLink } returns "ytp://saved"
@@ -45,7 +45,7 @@ class ProxySettingsViewModelWriteQueueTest : ProxySettingsViewModelTestBase() {
         writeThreads.forEach { assertNotEquals(tapThread, it) }
     }
 
-    // #1400: deleting the saved address calls clear(), which also evicts connections.
+    
     @Test
     fun `delete saved address clears off the calling thread`() = runTest {
         every { provider.savedShareLink } returns "ytp://saved"
@@ -61,9 +61,9 @@ class ProxySettingsViewModelWriteQueueTest : ProxySettingsViewModelTestBase() {
         assertNotEquals(tapThread, clearThread.get())
     }
 
-    // #1400: OFF then ON in quick succession must both be applied, in tap order. The first
-    // write is held in flight so the ON tap lands while it is still running; it must queue
-    // behind it rather than be dropped or overtake it.
+    
+    
+    
     @Test
     fun `quick off then on taps both apply in order`() = runTest {
         every { provider.savedShareLink } returns "ytp://saved"
@@ -81,7 +81,7 @@ class ProxySettingsViewModelWriteQueueTest : ProxySettingsViewModelTestBase() {
         val vm = buildViewModel()
         vm.onUseProxyChange(false)
         assertTrue(firstWriteStarted.await(5, TimeUnit.SECONDS))
-        // The OFF write is still in flight; the switch already shows OFF, so ON is a real change.
+        
         assertEquals(false, vm.uiState.value.useProxy)
         vm.onUseProxyChange(true)
         verify(exactly = 0) { provider.setEnabled(true) }
@@ -96,8 +96,8 @@ class ProxySettingsViewModelWriteQueueTest : ProxySettingsViewModelTestBase() {
         assertTrue(state.useProxy)
     }
 
-    // #1400: while a switch write is pending the form is locked: edits and saves are ignored,
-    // and the reload that follows the write rebuilds the form from the provider.
+    
+    
     @Test
     fun `address edits and saves are ignored while a switch write is pending`() = runTest {
         every { provider.savedShareLink } returns "ytp://saved"
@@ -124,7 +124,7 @@ class ProxySettingsViewModelWriteQueueTest : ProxySettingsViewModelTestBase() {
         verify(exactly = 0) { provider.clear() }
     }
 
-    // #1400: a call that starts while a switch write is pending keeps the screen view-only.
+    
     @Test
     fun `a call starting during a pending switch write stays read only after the reload`() = runTest {
         every { provider.savedShareLink } returns "ytp://saved"
@@ -141,8 +141,8 @@ class ProxySettingsViewModelWriteQueueTest : ProxySettingsViewModelTestBase() {
         assertTrue(state.readOnly)
     }
 
-    // #1400: a switch tap during an in-flight address save shares the provider write lock, so
-    // it runs after the save instead of interleaving with it.
+    
+    
     @Test
     fun `a switch tap during an in-flight address save runs after it`() = runTest {
         every { provider.savedShareLink } returns "ytp://saved"
@@ -163,7 +163,7 @@ class ProxySettingsViewModelWriteQueueTest : ProxySettingsViewModelTestBase() {
         vm.save()
         assertTrue(saveStarted.await(5, TimeUnit.SECONDS))
         vm.onUseProxyChange(false)
-        Thread.sleep(200) // give a wrongly unserialised write the chance to run
+        Thread.sleep(200) 
         verify(exactly = 0) { provider.setEnabled(any()) }
 
         releaseSave.countDown()
@@ -173,8 +173,8 @@ class ProxySettingsViewModelWriteQueueTest : ProxySettingsViewModelTestBase() {
         assertEquals(listOf("save", "off"), order.toList())
     }
 
-    // Writes a left screen still has queued land before what a reopened screen writes, so the
-    // user's last choice wins: the queue is process-wide, not per screen.
+    
+    
     @Test
     fun `a reopened screen's tap lands after the writes a left screen still has queued`() = runTest {
         every { provider.savedShareLink } returns "ytp://saved"
@@ -189,7 +189,7 @@ class ProxySettingsViewModelWriteQueueTest : ProxySettingsViewModelTestBase() {
             order += target
             flag.set(target)
             if (order.size == 1) {
-                // The first write persists, then blocks in pool eviction.
+                
                 firstStarted.countDown()
                 check(releaseFirst.await(5, TimeUnit.SECONDS)) { "first write never released" }
             }
@@ -201,12 +201,12 @@ class ProxySettingsViewModelWriteQueueTest : ProxySettingsViewModelTestBase() {
             left.onUseProxyChange(false)
             assertTrue(firstStarted.await(5, TimeUnit.SECONDS))
             left.onUseProxyChange(true)
-            left.onUseProxyChange(false) // OFF, ON, OFF queued; the user leaves the screen
+            left.onUseProxyChange(false) 
 
-            val reopened = buildViewModel() // reads the persisted OFF
+            val reopened = buildViewModel() 
             reopened.onUseProxyChange(true)
         } finally {
-            // The write queue is process-wide: never leave a write parked for the next test.
+            
             releaseFirst.countDown()
         }
 
@@ -217,8 +217,8 @@ class ProxySettingsViewModelWriteQueueTest : ProxySettingsViewModelTestBase() {
         assertTrue(flag.get(), "the reopened screen's ON is the last write")
     }
 
-    // A screen reopened while a left screen's writes are queued holds its form, then reloads
-    // to what those writes stored instead of staying on the state it read when it opened.
+    
+    
     @Test
     fun `a reopened screen reloads once a left screen's queued writes land`() = runTest {
         every { provider.savedShareLink } returns "ytp://saved"
@@ -242,28 +242,28 @@ class ProxySettingsViewModelWriteQueueTest : ProxySettingsViewModelTestBase() {
             val left = buildViewModel()
             left.onUseProxyChange(false)
             assertTrue(firstStarted.await(5, TimeUnit.SECONDS))
-            left.onUseProxyChange(true) // OFF then ON queued; the user leaves the screen
+            left.onUseProxyChange(true) 
 
-            reopened = buildViewModel() // opens on the persisted OFF, while ON is still queued
+            reopened = buildViewModel() 
             val held = reopened.awaitState { it.isSaving }
             assertEquals(false, held.useProxy)
             reopened.onAddressChange("ytp://draft")
             assertEquals("ytp://saved", reopened.uiState.value.address, "edits are held while writes are queued")
         } finally {
-            // The write queue is process-wide: never leave a write parked for the next test.
+            
             releaseFirst.countDown()
         }
 
         val reloaded = reopened.awaitState { it.useProxy && !it.isSaving }
         assertTrue(reloaded.savedUseProxy)
-        // The enter probe the reload retired runs again for the landed ON state; the default
-        // checker stub reports the proxy unreachable.
+        
+        
         val probed = reopened.awaitState { it.probe is ProbeState.ProxyUnavailable }
         assertTrue(probed.useProxy)
     }
 
-    // A save that finishes while a switch write is still queued must not flash the switch back
-    // or unlock the form: its reload keeps the tapped value and the busy state.
+    
+    
     @Test
     fun `a save finishing before a queued switch write keeps the tapped switch and stays busy`() = runTest {
         every { provider.savedShareLink } returns "ytp://saved"
@@ -292,7 +292,7 @@ class ProxySettingsViewModelWriteQueueTest : ProxySettingsViewModelTestBase() {
         releaseSave.countDown()
         assertTrue(offStarted.await(5, TimeUnit.SECONDS))
 
-        // Saved is emitted after the save's reload; the OFF write is still running.
+        
         vm.events.test {
             assertEquals(UiEvent.Saved, awaitItem())
             cancelAndIgnoreRemainingEvents()

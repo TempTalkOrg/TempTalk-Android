@@ -15,11 +15,11 @@ import org.junit.Assert.assertSame
 import org.junit.Test
 import java.util.concurrent.atomic.AtomicBoolean
 
-/**
- * [CriticalAlertSoundPlayer.playSound] for an alert of the call being joined or already active
- * (#1381): refused before queuing, and a queued play that finds the alert matching once it runs
- * leaves every playback state, including another alert's ringtone, untouched.
- */
+
+
+
+
+
 class CriticalAlertSoundPlayerCurrentCallTest {
 
     private val stateManager = mockk<CriticalAlertStateManager>(relaxed = true)
@@ -33,7 +33,7 @@ class CriticalAlertSoundPlayerCurrentCallTest {
         var admitted = 0
 
         player.playSound(CONVERSATION, NOTIFICATION_ID, ROOM) { admitted++ }
-        // No room: matched on the conversation.
+        
         player.playSound(CONVERSATION, NOTIFICATION_ID) { admitted++ }
 
         assertEquals(0, admitted)
@@ -42,7 +42,7 @@ class CriticalAlertSoundPlayerCurrentCallTest {
 
     @Test
     fun `a queued play that matches once it runs keeps another alert's ringtone`() {
-        // Not matched before queuing, matched when the queued play runs.
+        
         val gate = mockk<CriticalAlertCallGate>()
         every { gate.shouldSilence(CONVERSATION, ROOM) } returnsMany listOf(false, true)
         val player = CriticalAlertSoundPlayer(mockk(relaxed = true), stateManager, vibrationManager, gate)
@@ -54,7 +54,7 @@ class CriticalAlertSoundPlayerCurrentCallTest {
 
         player.playSound(CONVERSATION, NOTIFICATION_ID, ROOM) { admitted.set(true) }
         verify(timeout = 5_000, exactly = 2) { gate.shouldSilence(CONVERSATION, ROOM) }
-        // Takes soundLock, so the queued play's locked section has finished.
+        
         player.stopSoundIfMatch(UNRELATED_NOTIFICATION_ID)
 
         assertFalse("the flashlight follows the sound's admission", admitted.get())

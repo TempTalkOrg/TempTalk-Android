@@ -24,10 +24,8 @@ class TooltipBackgroundDrawable : Drawable() {
 
         path.reset()
 
-        // 绘制圆角矩形
         path.addRoundRect(0f, 0f, width, height - triangleSize, cornerRadius.toFloat(), cornerRadius.toFloat(), Path.Direction.CW)
 
-        // 绘制三角形
         path.moveTo(width / 2 - triangleSize, height - triangleSize)
         path.lineTo(width / 2, height)
         path.lineTo(width / 2 + triangleSize, height - triangleSize)
@@ -45,4 +43,4 @@ class TooltipBackgroundDrawable : Drawable() {
     }
 
     override fun getOpacity(): Int = android.graphics.PixelFormat.TRANSLUCENT
-} 
+}

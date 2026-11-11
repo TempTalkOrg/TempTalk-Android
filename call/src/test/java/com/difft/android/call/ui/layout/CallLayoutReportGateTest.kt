@@ -29,7 +29,7 @@ class CallLayoutReportGateTest {
         assertTrue(gate.admit(false, report(400.0, 800.0)))
         assertFalse(gate.admit(true, report(400.0, 800.0)))
         assertFalse(gate.admit(true, report(200.0, 112.0)))
-        // The flag clears before the window has grown back.
+        
         assertFalse(gate.admit(false, report(200.0, 112.0)))
         assertTrue(gate.admit(false, report(420.0, 800.0)))
     }

@@ -8,7 +8,7 @@ import kotlin.test.assertTrue
 
 class DataCopyAndEdgeCaseTest {
 
-    // region Builder copy constructor (buildUpon)
+    
 
     @Test
     fun `buildUpon preserves existing data`() {
@@ -77,9 +77,9 @@ class DataCopyAndEdgeCaseTest {
         assertContentEquals(byteArrayOf(5, 6), copy.getByteArray("bya"))
     }
 
-    // endregion
+    
 
-    // region List helper methods
+    
 
     @Test
     fun `putStringListAsArray and getStringArrayAsList roundtrip`() {
@@ -119,9 +119,9 @@ class DataCopyAndEdgeCaseTest {
         }
     }
 
-    // endregion
+    
 
-    // region Multiple keys
+    
 
     @Test
     fun `multiple keys of same type are independent`() {
@@ -151,5 +151,5 @@ class DataCopyAndEdgeCaseTest {
         assertTrue(data.getBoolean("key"))
     }
 
-    // endregion
+    
 }

@@ -17,7 +17,7 @@ import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import java.util.concurrent.TimeUnit
 
-/** Every home tab keeps the current top on fold and only explicit opens present retained stacks. */
+
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [33])
 class MeStackRetentionTest {

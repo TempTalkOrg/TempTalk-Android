@@ -8,47 +8,46 @@ import difft.android.messageserialization.model.MENTIONS_TYPE_ALL
 import difft.android.messageserialization.model.MENTIONS_TYPE_ME
 import difft.android.messageserialization.model.MENTIONS_TYPE_NONE
 
-/** Everything one chat-list assembly reads; all of it comes from flows the list already observes. */
+
 internal data class ChatListInput(
-    /** The ViewModel's rooms (instant-call cache rows included), newest first. */
+    
     val rooms: List<RoomViewData>,
     val callingList: Map<String, CallData>?,
-    /** Instant-call rows synthesized by an earlier assembly; the result carries the updated cache. */
+    
     val instantCallCache: Map<String, RoomViewData>,
     val instantCallDefaultName: String,
     val myId: String,
     val now: Long,
     val focus: EffectiveFocus = EffectiveFocus.INACTIVE,
-    /** Stand-in for the focus group when it has no visible room row; ignored when one exists. */
+    
     val synthesizedFocusRoom: RoomViewData? = null,
-    /** Focus groups whose conversation the user deleted here: no stand-in row is added for them. */
+    
     val deletedFocusGids: Set<String> = emptySet(),
 )
 
 internal data class ChatListAssembly(
-    /** Main-list rows, without the search box and footer. */
+    
     val rows: List<ListItem>,
-    /** The folded groups as the folded list shows them: pinned first, then by time. Empty when not folding. */
+    
     val folded: List<RoomViewData>,
     val instantCallCache: Map<String, RoomViewData>,
 )
 
-/**
- * Builds the chat list (design §3/§4). Order: instant calls → rooms in a call → pinned → drafts →
- * the rest, each by `sortTime` descending. With focus inactive the output is exactly the order the
- * list had before group focus (pinned by `ChatListOrderCharacterizationTest`, PRD A17). With focus:
- *
- * - the focus group renders as [ListItem.FocusChat]; its pin is the stored one (written by
- *   `FocusPinCoordinator`), and a stand-in row without a room row sits in the pinned area;
- * - folding (`foldOthers`) moves every other group, pinned ones included, into one
- *   [ListItem.FoldedGroups] row sorted with the rest by its newest member; private chats,
- *   Note to Self, bots, instant calls and groups with an ongoing call stay in the main list;
- * - in the invalid state every group is "other" and there is no focus row;
- * - a stand-in row is not added for a focus group the user deleted ([ChatListInput.deletedFocusGids]); a
- *   real room row of that group still shows.
- *
- * Pure: no Android, DB or clock access, so the main list and the folded list share it.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 internal object ChatListAssembler {
 
     fun assemble(input: ChatListInput): ChatListAssembly {
@@ -73,7 +72,7 @@ internal object ChatListAssembler {
         (sections.instant + sections.meeting + sections.pinned + sections.draft).mapTo(rows) { it.toListItem(focus) }
         val rest = sections.rest.mapTo(ArrayList()) { it.toListItem(focus) }
         if (folded.isNotEmpty()) {
-            // The folded row sorts with the rest by its newest member; on a tie it goes after the room.
+            
             val summary = summarize(folded, focus, input.now)
             val index = sections.rest.indexOfFirst { it.sortTime < summary.sortTime }.takeIf { it >= 0 } ?: rest.size
             rest.add(index, ListItem.FoldedGroups(summary))
@@ -85,7 +84,7 @@ internal object ChatListAssembler {
         return ChatListAssembly(rows, foldedList, instantCache)
     }
 
-    /** Effective mute for a ViewModel row: null (= [RoomViewData.muteStatus] decides) unless focus is on and the room is a group. */
+    
     fun effectiveMuted(isGroup: Boolean, roomId: String, focus: EffectiveFocus): Boolean? =
         if (isGroup && focus.active) !focus.isFocusedGroup(roomId) else null
 
@@ -134,7 +133,7 @@ internal object ChatListAssembler {
         val rest: List<RoomViewData>,
     )
 
-    /** Splits [working] into the list sections; the filters are the pre-focus ones, unchanged. */
+    
     private fun sections(working: List<RoomViewData>, instantCache: Map<String, RoomViewData>): Sections {
         val pinnedRooms = working.filter { item -> item.isPinned && item.callData == null }
         val meetingRooms = working.filter { item -> item.callData != null && item.callData?.type != CallType.INSTANT.type }
@@ -154,12 +153,11 @@ internal object ChatListAssembler {
         )
     }
 
-    /**
-     * Binds the calling list to the rows (mutating the working copies) and returns the updated
-     * instant-call cache. Same rules as before group focus: a group call matches its
-     * conversation, a one-on-one call its caller (never myself), an instant call without a room
-     * gets a synthesized row, and call data whose call is gone is dropped.
-     */
+    
+
+
+
+
     private fun applyCalls(working: MutableList<RoomViewData>, input: ChatListInput): Map<String, RoomViewData> {
         val callingList = input.callingList
         val cache = input.instantCallCache.toMutableMap()

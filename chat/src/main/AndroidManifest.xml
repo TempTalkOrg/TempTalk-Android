@@ -58,8 +58,13 @@
             android:windowSoftInputMode="adjustNothing|stateHidden" />
 
         <activity
+            android:name=".contacts.groupcard.GroupCardActivity"
+            android:exported="false"
+            android:theme="@style/Theme.TT.TransparentActivity"
+            android:windowSoftInputMode="adjustNothing|stateHidden" />
+        <activity
             android:name=".contacts.contactsdetail.ContactDetailActivity"
-            android:screenOrientation="locked"
+            android:theme="@style/Theme.TT.TransparentActivity"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false"
             android:windowSoftInputMode="adjustResize" />
@@ -103,11 +108,17 @@
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false" />
         <activity
+            android:name=".focus.settings.FocusGroupPickerShellActivity"
+            android:screenOrientation="locked"
+            android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize|stateHidden" />
+        <activity
             android:name=".group.GroupMembersSearchActivity"
             android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false"
-            android:windowSoftInputMode="stateVisible|adjustResize" />
+            android:windowSoftInputMode="stateHidden|adjustResize" />
         <activity
             android:name=".group.GroupManagementActivity"
             android:screenOrientation="locked"
@@ -200,13 +211,13 @@
             android:name=".util.MessageNotificationUtil$NotificationDismissReceiver"
             android:exported="false" />
 
-        <!-- Clipboard clear receiver for auto-clearing sensitive content -->
+        
         <receiver
             android:name=".util.ClearClipboardAlarmReceiver"
             android:exported="false" />
 
-        <!-- Notification trampoline activity for routing based on app foreground state -->
-        <!-- Decides whether to use CLEAR_TASK flag when starting MainActivity -->
+        
+        
         <activity
             android:name=".util.NotificationTrampolineActivity"
             android:exported="false"
@@ -218,7 +229,7 @@
             android:name=".common.StopCriticalAlertSoundReceiver"
             android:exported="false" />
 
-        <!-- 系统启动广播接收器 -->
+        
         <receiver
             android:name=".messages.BootCompletedReceiver"
             android:enabled="true"
@@ -230,7 +241,7 @@
             </intent-filter>
         </receiver>
 
-        <!-- AlarmManager 定时检查接收器 -->
+        
         <receiver
             android:name=".messages.ServiceCheckReceiver"
             android:enabled="true"
@@ -243,22 +254,21 @@
             android:foregroundServiceType="remoteMessaging"
             android:stopWithTask="false" />
 
-        <!-- Streams decrypted attachment bytes on demand (no plaintext on disk). Not exported:
-             only this app and grantees of a per-uri read permission can read. -->
+        
         <provider
             android:name=".media.EncryptedAttachmentProvider"
             android:authorities="${applicationId}.encryptedattachment"
             android:exported="false"
             android:grantUriPermissions="true" />
 
-        <!-- Streams decrypted favorite-GIF bytes on demand (favorites analogue of the above). -->
+        
         <provider
             android:name=".media.FavoriteEncryptedAttachmentProvider"
             android:authorities="${applicationId}.favoriteattachment"
             android:exported="false"
             android:grantUriPermissions="true" />
 
-        <!-- Streams decrypted avatar-cache bytes on demand (avatar analogue of the above). -->
+        
         <provider
             android:name=".media.AvatarEncryptedProvider"
             android:authorities="${applicationId}.avatarcache"
@@ -268,11 +278,10 @@
     </application>
 
     <queries>
-        <!-- Xiaomi settings apps the auto-start and power-policy helpers probe;
-             API 30+ package visibility hides them from queryIntentActivities otherwise. -->
+        
         <package android:name="com.miui.securitycenter" />
         <package android:name="com.miui.powerkeeper" />
-        <!-- vivo permission manager; the notification fix resolves its per-app permission page. -->
+        
         <package android:name="com.vivo.permissionmanager" />
         <package android:name="com.iqoo.powersaving" />
         <intent>

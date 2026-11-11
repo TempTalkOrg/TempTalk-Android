@@ -1,10 +1,15 @@
 package com.difft.android.dualpane
 
+import com.difft.android.base.ui.topchrome.TopChromeHost
+import com.difft.android.base.utils.DualPaneHost
+import com.difft.android.base.ui.sidechrome.SideChromeOptOut
+import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import androidx.core.content.ContextCompat
 import androidx.core.os.bundleOf
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentManager
@@ -21,26 +26,52 @@ import com.difft.android.chat.recent.ConversationNavigationCallback
 import com.difft.android.chat.recent.DualPaneSelectionListener
 import com.difft.android.search.SearchSelectionPage
 
-/**
- * The list pane's layer inside IndexActivity's `list_layer`: its child FragmentManager holds the
- * layer's pages in stack order, root first (built by [Pages.layerRoot] for [root], which the
- * host's arguments carry so a recreation restores it), then the pages it pushes (message search,
- * More lists). Pushes add + hide + cap like [DetailTabHostFragment]; a pop at the root closes the
- * layer through [ListPaneLayer]. A row opens its conversation in the current tab's detail stack
- * ([ConversationNavigationCallback], router rule 1); the detail pane's selection comes back
- * through [DualPaneSelectionListener] and is forwarded to every page, so the visible one shows it.
- */
-internal class ListPaneLayerHostFragment : Fragment(), DetailStackHost, DualPaneSelectionListener {
 
-    /** Builds the layer's root page; kept out of the host so tests can use plain fragments. */
+
+
+
+
+
+
+
+
+internal class ListPaneLayerHostFragment : Fragment(), DetailStackHost, DualPaneSelectionListener, SideChromeOptOut {
+
+    
+    
+    override val keepsOwnChrome: Boolean get() = (activity as? DualPaneHost)?.isDualPaneMode == true
+
+    
     interface Pages {
         fun layerRoot(root: ListPaneLayerRoot): Fragment
+
+        
+        fun layerRoot(root: ListPaneLayerRoot, args: Bundle?): Fragment = layerRoot(root)
     }
 
-    /** The root kind this host was added with. */
+    
     val root: ListPaneLayerRoot
         get() = arguments?.getString(ARG_ROOT)?.let { name -> ListPaneLayerRoot.entries.firstOrNull { it.name == name } }
             ?: ListPaneLayerRoot.SEARCH
+
+    
+    val rootArgs: Bundle? get() = arguments?.getBundle(ARG_ROOT_ARGS)
+
+    
+    fun hasRootArgs(args: Bundle?): Boolean {
+        val mine = rootArgs
+        if (mine == null || args == null) return mine == null && args == null
+        if (mine.keySet() != args.keySet()) return false
+        return mine.keySet().all { key ->
+            val a = mine.get(key)
+            val b = args.get(key)
+            when (a) {
+                is Array<*> -> b is Array<*> && a.contentEquals(b)
+                is List<*> -> a == b
+                else -> a == b
+            }
+        }
+    }
 
     private val layer: ListPaneLayer?
         get() = (activity as? ListPaneLayer.Owner)?.listLayer
@@ -50,7 +81,10 @@ internal class ListPaneLayerHostFragment : Fragment(), DetailStackHost, DualPane
 
     private val pageCallbacks = object : FragmentManager.FragmentLifecycleCallbacks() {
         override fun onFragmentViewCreated(fm: FragmentManager, f: Fragment, v: View, savedInstanceState: Bundle?) {
-            if (f.id == R.id.list_layer_stack) forwardSelection(f)
+            if (f.id == R.id.list_layer_stack) {
+                forwardSelection(f)
+                onPageViewCreated(f, v)
+            }
             backOwners.refresh()
         }
         override fun onFragmentStarted(fm: FragmentManager, f: Fragment) = backOwners.refresh()
@@ -72,6 +106,7 @@ internal class ListPaneLayerHostFragment : Fragment(), DetailStackHost, DualPane
             }
             val next = destination.newFragment()
             PaneSubjects.setIdentity(next, destination.subjectId, destination.pageKey)
+            PageSlide.push(next, top)
             childFragmentManager.beginTransaction()
                 .setReorderingAllowed(true)
                 .add(R.id.list_layer_stack, next)
@@ -113,7 +148,7 @@ internal class ListPaneLayerHostFragment : Fragment(), DetailStackHost, DualPane
             layer?.close()
         }
 
-        /** The root closes the layer and a pushed page pops: both have somewhere to go back to. */
+        
         override fun canPop(from: Fragment): Boolean = true
     }
 
@@ -131,14 +166,14 @@ internal class ListPaneLayerHostFragment : Fragment(), DetailStackHost, DualPane
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        // A conversation already open when the layer opens (or restored with it) is highlighted at
-        // once, before any page view exists; later changes arrive through updateDualPaneSelection.
-        // Two-pane only, like the list. The navigator exists: the Activity attached it in onCreate.
+        
+        
+        
         val navigator = (activity as? PaneNavigator.Owner)?.paneNavigator
         if (navigator != null && navigator.isDualPane) selectedId = navigator.currentSelectedId
-        // A recreation restores the stack from the child FragmentManager; only a fresh host builds the root.
+        
         if (savedInstanceState == null && pages().isEmpty()) {
-            val page = (requireActivity() as ListPaneLayer.Owner).listLayer.pages.layerRoot(root)
+            val page = (requireActivity() as ListPaneLayer.Owner).listLayer.pages.layerRoot(root, rootArgs)
             childFragmentManager.beginTransaction().add(R.id.list_layer_stack, page).commitNow()
         }
     }
@@ -153,7 +188,7 @@ internal class ListPaneLayerHostFragment : Fragment(), DetailStackHost, DualPane
         super.onDestroy()
     }
 
-    /** The layer's pages, root first. Empty before the host is attached. */
+    
     fun pages(): List<Fragment> {
         if (!isAdded) return emptyList()
         return childFragmentManager.fragments.filter { it.id == R.id.list_layer_stack }
@@ -165,7 +200,7 @@ internal class ListPaneLayerHostFragment : Fragment(), DetailStackHost, DualPane
 
     fun topPage(): Fragment? = pages().lastOrNull()
 
-    /** Back on a pushed page: removes the top and reveals the page under it. False at the root. */
+    
     fun popTop(): Boolean {
         if (depth < 2) return false
         popToDepth(depth - 1)
@@ -178,9 +213,24 @@ internal class ListPaneLayerHostFragment : Fragment(), DetailStackHost, DualPane
         val top = stack.last()
         val revealed = stack[targetDepth - 1]
         val tx = childFragmentManager.beginTransaction().setReorderingAllowed(true)
-        stack.drop(targetDepth).filter { it !== top }.forEach { tx.remove(it) }
+        val between = stack.drop(targetDepth).filter { it !== top }
+        between.forEach { tx.remove(it) }
+        PageSlide.clear(between)
+        PageSlide.pop(top, revealed)
         tx.remove(top).show(revealed).setMaxLifecycle(revealed, Lifecycle.State.RESUMED).commitNow()
         backOwners.refresh()
+    }
+
+    
+
+
+
+
+    private fun onPageViewCreated(page: Fragment, view: View) {
+        (view as? ViewGroup)?.isTransitionGroup = true
+        TopChromeHost.adopt(page, view)
+        if (view.background != null || rootPage() === page) return
+        view.background = ColorDrawable(ContextCompat.getColor(view.context, com.difft.android.base.R.color.bg1))
     }
 
     override fun detailBackOwnerFor(fragment: Fragment): LifecycleOwner = backOwners.ownerFor(fragment)
@@ -190,7 +240,7 @@ internal class ListPaneLayerHostFragment : Fragment(), DetailStackHost, DualPane
         pages().forEach(::forwardSelection)
     }
 
-    /** Search pages show the selection through [SearchSelectionPage], chat-list pages through [DualPaneSelectionListener]. */
+    
     private fun forwardSelection(page: Fragment) {
         when (page) {
             is SearchSelectionPage -> page.showSelection(selectedId)
@@ -198,7 +248,7 @@ internal class ListPaneLayerHostFragment : Fragment(), DetailStackHost, DualPane
         }
     }
 
-    /** The page (direct child of this host) that [fragment] belongs to. */
+    
     private fun pageOf(fragment: Fragment): Fragment? {
         var current: Fragment? = fragment
         while (current != null) {
@@ -216,8 +266,11 @@ internal class ListPaneLayerHostFragment : Fragment(), DetailStackHost, DualPane
     companion object {
         const val TAG = "list_layer"
         private const val ARG_ROOT = "root"
+        private const val ARG_ROOT_ARGS = "root_args"
 
-        fun newInstance(root: ListPaneLayerRoot): ListPaneLayerHostFragment =
-            ListPaneLayerHostFragment().apply { arguments = bundleOf(ARG_ROOT to root.name) }
+        fun newInstance(root: ListPaneLayerRoot, args: Bundle? = null): ListPaneLayerHostFragment =
+            ListPaneLayerHostFragment().apply {
+                arguments = bundleOf(ARG_ROOT to root.name).also { if (args != null) it.putBundle(ARG_ROOT_ARGS, args) }
+            }
     }
 }

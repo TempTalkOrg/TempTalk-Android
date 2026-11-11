@@ -34,17 +34,17 @@ import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowSensor
 import org.robolectric.shadows.ShadowSensorManager
 
-/**
- * T4-8 … T4-12 — `ProximitySensorManager` as a pure sensor source.
- *
- * T4-8 is the C-3 regression guard and the enforcement point of the Single Global Route Writer
- * invariant: with `AudioManager.mode` pre-set to `MODE_IN_COMMUNICATION` (an ongoing call), a full
- * near/far/stop cycle must leave every piece of process-global communication state untouched. The
- * class holding no `AudioManager` reference at all is the compile-time half of that guard; this is
- * the runtime half, and it covers the whole listener chain down to the player.
- *
- * Verify: :chat:testDebugUnitTest
- */
+
+
+
+
+
+
+
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [33])
@@ -77,7 +77,7 @@ class ProximitySensorGlobalRouteIsolationTest {
         proximitySensor = ShadowSensor.newInstance(Sensor.TYPE_PROXIMITY)
         shadowOf(proximitySensor).setMaximumRange(MAX_RANGE)
 
-        // Object singletons survive across test methods inside one Robolectric sandbox.
+        
         ProximitySensorManager.stop()
         setMediaPlayer(null)
         nearFlips.clear()
@@ -107,7 +107,7 @@ class ProximitySensorGlobalRouteIsolationTest {
                 deviceOf(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER),
             ),
         )
-        audioManager.mode = AudioManager.MODE_IN_COMMUNICATION // an ongoing call owns the route
+        audioManager.mode = AudioManager.MODE_IN_COMMUNICATION 
         val player = mockk<MediaPlayer>(relaxed = true)
         every { player.setPreferredDevice(any()) } returns true
         setMediaPlayer(player)
@@ -123,7 +123,7 @@ class ProximitySensorGlobalRouteIsolationTest {
         assertEquals(AudioManager.MODE_IN_COMMUNICATION, audioManager.mode)
         assertNull(audioManager.communicationDevice)
         assertFalse(audioManager.isSpeakerphoneOn)
-        // The route was still applied — at the player, not globally.
+        
         assertEquals(listOf(true, false), nearFlips)
         verify(exactly = 1) { player.setPreferredDevice(match { it?.type == AudioDeviceInfo.TYPE_BUILTIN_EARPIECE }) }
         verify(exactly = 1) { player.setPreferredDevice(null) }
@@ -185,14 +185,14 @@ class ProximitySensorGlobalRouteIsolationTest {
 
     @Test
     fun `T4-20 a FAR reading below the advertised maximum is not near`() = runTest(testDispatcher) {
-        // #1252: sensors whose FAR value sits below maximumRange were permanently NEAR under `value < maximumRange`.
+        
         shadowOf(proximitySensor).setMaximumRange(10f)
         shadowOf(sensorManager).addSensor(proximitySensor)
 
         ProximitySensorManager.start()
         deliverProximityValue(5f)
         advanceUntilIdle()
-        // The first value still propagates (route reset contract, T4-9) — but as FAR, not NEAR.
+        
         assertEquals(listOf(false), nearFlips)
 
         deliverProximityValue(0f)
@@ -202,15 +202,15 @@ class ProximitySensorGlobalRouteIsolationTest {
 
     @Test
     fun `T4-21 a start while registered cycles the registration so the current value applies again`() = runTest(testDispatcher) {
-        // Auto-play: onPlayComplete stops, the next message starts, the phone never moved. The new
-        // player must still receive the (unchanged) NEAR decision.
+        
+        
         shadowOf(sensorManager).addSensor(proximitySensor)
 
         ProximitySensorManager.start()
         deliverProximity(near = true)
         advanceUntilIdle()
         ProximitySensorManager.stop()
-        ProximitySensorManager.start() // restartPending forces an unregister + register even if the stop's sync already ran
+        ProximitySensorManager.start() 
         advanceUntilIdle()
         deliverProximity(near = true)
         advanceUntilIdle()

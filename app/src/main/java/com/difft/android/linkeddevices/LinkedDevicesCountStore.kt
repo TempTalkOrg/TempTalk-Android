@@ -11,21 +11,21 @@ import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Process-scoped best-effort source of truth for the Settings "Linked Devices" count badge.
- * `count == null` means never fetched (badge hidden). Best-effort: swallows all non-cancellation
- * errors and keeps the last-known count. It never logs out directly; a 401/403 reaches
- * `SessionAuthGuard` through [DeviceRepository], which confirms before acting.
- *
- * [refresh] always issues a real fetch (lightweight, fired from the Settings tab onResume) but
- * coalesces: a call made while another fetch is in flight returns immediately and is satisfied by
- * that in-flight request.
- *
- * Concurrency: an unlocked [update] push must win over a slow in-flight [refresh]. A monotonic
- * [generation] counter, bumped by every [update], makes a fetch result stale the instant a push
- * lands — [refresh] captures [generation] before its round-trip and commits only if it is unchanged.
- * The capture-vs-commit read is fused with [update]'s bump under [writeLock].
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 @Singleton
 class LinkedDevicesCountStore @Inject constructor(
     private val deviceRepository: DeviceRepository,
@@ -33,21 +33,21 @@ class LinkedDevicesCountStore @Inject constructor(
     private val _count = MutableStateFlow<Int?>(null)
     val count: StateFlow<Int?> = _count.asStateFlow()
 
-    private val refreshMutex = Mutex()            // coalesces concurrent refresh() into one fetch
-    private val writeLock = Any()                 // fuses generation-check + _count write vs update()
-    private val generation = AtomicInteger(0)     // bumped by update(); invalidates in-flight fetches
+    private val refreshMutex = Mutex()            
+    private val writeLock = Any()                 
+    private val generation = AtomicInteger(0)     
 
-    /** Fetches the latest secondary-device count. Coalesced; best-effort. */
+    
     suspend fun refresh() {
         if (!refreshMutex.tryLock()) {
             L.i { "[LinkedDevices] badge count refresh coalesced; in-flight request will satisfy it" }
             return
         }
         try {
-            val genAtStart = generation.get()     // capture before the network round-trip
-            val secondaryCount = deviceRepository.getDevices().size // already primary-filtered
+            val genAtStart = generation.get()     
+            val secondaryCount = deviceRepository.getDevices().size 
             synchronized(writeLock) {
-                if (generation.get() != genAtStart) {   // a push landed mid-fetch → result is stale
+                if (generation.get() != genAtStart) {   
                     L.i { "[LinkedDevices] badge count fetch discarded (superseded by push)" }
                 } else {
                     _count.value = secondaryCount
@@ -63,10 +63,10 @@ class LinkedDevicesCountStore @Inject constructor(
         }
     }
 
-    /** Authoritative latest-wins push from LinkedDevicesViewModel after a successful getDevices(). */
+    
     fun update(count: Int) {
         synchronized(writeLock) {
-            generation.incrementAndGet()          // invalidate any in-flight refresh() result
+            generation.incrementAndGet()          
             _count.value = count
         }
         L.i { "[LinkedDevices] badge count pushed count=$count" }

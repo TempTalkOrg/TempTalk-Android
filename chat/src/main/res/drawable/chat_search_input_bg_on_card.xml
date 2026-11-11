@@ -1,9 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-    The @color/bg2 search-field fill used on a bg1 settings card
-    (e.g. GroupInfoActivity Card A). Same padding, radius and colour as
-    chat_fragment_search_input_bg_search_input.
--->
+
 <shape xmlns:android="http://schemas.android.com/apk/res/android">
     <padding
         android:bottom="8dp"

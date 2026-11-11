@@ -29,16 +29,16 @@ object FocusOthersNotifyContract {
     }
 }
 
-/**
- * "Other Groups Still Notify": three switches writing the focus options at once. A switch shows its
- * requested value while its write is in flight and falls back to the server value if the write fails.
- */
+
+
+
+
 @HiltViewModel
 class FocusOthersNotifyViewModel @Inject constructor(
     private val repository: GroupFocusRepository,
 ) : ViewModel() {
 
-    /** Requested values of writes still in flight. */
+    
     private val pending = MutableStateFlow<Map<StillNotifyItem, Boolean>>(emptyMap())
 
     val state: StateFlow<FocusOthersNotifyContract.State> = combine(repository.effective, pending) { focus, inFlight ->

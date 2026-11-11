@@ -36,25 +36,13 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/**
- * Cross-end sample generator. The container format is whatever [ContainerWriterImpl] writes;
- * this test is the executable spec the other platforms read against.
- *
- * Produces a FIXED, SYNTHETIC (no real user data) encrypted `sample.ttmig` plus a human-readable
- * `expected-manifest.md`, so the iOS / Desktop teams can implement a reader and verify they
- * decrypt + parse it correctly. This is NOT a behavioral assertion test in the usual sense — its
- * job is to emit two shareable artifact files and prove the shipped sample round-trips.
- *
- * Pure JVM: builds synthetic [NeutralRecord]s in code and writes them via the real
- * [ContainerWriterImpl] (PBKDF2 → AES-256-CTR → trailing HMAC → framed JSONL). No WCDB, no device,
- * deterministic. Robolectric is required only because the container code logs through `L`, which
- * needs an Android context on the JVM test classpath (same reason [NeutralRoundTripTest] uses it).
- *
- * All synthetic values are hardcoded constants documented in [expected-manifest.md]; the only
- * non-deterministic bytes in the output file are the random SALT + IV (by design — every export
- * is freshly salted), which is why the sample ships WITH the passphrase rather than relying on a
- * fixed ciphertext.
- */
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [33])
 class MigrationV2SampleGeneratorTest {
@@ -63,22 +51,16 @@ class MigrationV2SampleGeneratorTest {
     private val writer = ContainerWriterImpl(crypto)
     private val reader = ContainerReaderImpl(crypto)
 
-    /** FIXED passphrase shipped in plaintext with the sample. POC artifact only — NOT a secret. */
+    
     private val passphrase = "MIGRATION-V2-MINPOC-SAMPLE-PASSPHRASE-DONOTUSEINPROD-0001"
 
     private val conv = "room-cross-end-sample"
 
-    /**
-     * FIXED synthetic attachment bytes: a REAL, decodable 8×8 RGB PNG (189 bytes) carried as a
-     * base64 constant and decoded here. This is a genuine image (PNG signature ‖ IHDR ‖ IDAT ‖
-     * IEND, CRCs valid) — iOS / Desktop must be able to decrypt the byte frame AND open it as an
-     * image, proving image round-trip end-to-end (not just an opaque byte blob). The image is a
-     * small vertical/horizontal color gradient generated deterministically, so its SHA-256 is
-     * stable and documented in the manifest for byte-exact recovery verification.
-     *
-     * Pixel content: 8×8, 8-bit RGB, scanline filter 0; pixel(x,y) = (x*32 mod 256, y*32 mod 256,
-     * (x+y)*16 mod 256). Verified decodable by macOS Image I/O (`sips`) → `8 x 8, 8-bit RGB`.
-     */
+    
+
+
+
+
     private val attachmentPngBase64 =
         "iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAhElEQVR42g3I0QAEMRAD0CAswiAsQhCKEIQiBKEI" +
             "QViEQTiEQbm+zwcAhYco4TUYrIYG+/ZTVaxXRddKqWtPGeDtl6S4TIW76eEB9JZuL0nWjtw6owBmedG3t+34tDP" +
@@ -96,7 +78,7 @@ class MigrationV2SampleGeneratorTest {
         val sampleFile = File(outDir, "sample.ttmig")
         val manifestFile = File(outDir, "expected-manifest.md")
 
-        // 1. Write the encrypted container.
+        
         val manifest = writer.write(
             records = records.asFlow(),
             sink = FileArchiveSink(sampleFile),
@@ -106,8 +88,7 @@ class MigrationV2SampleGeneratorTest {
             sourceAppVersion = SAMPLE_SOURCE_APP_VERSION,
         )
 
-        // 2. Sanity round-trip: read it back and assert counts + attachment bytes match, so the
-        //    SHIPPED sample is provably valid before we hand it to iOS / Desktop.
+        
         val readBack = roundTripAndVerify(sampleFile)
 
         assertEquals(manifest.recordCount, readBack.recordCount, "record count must round-trip")
@@ -115,7 +96,7 @@ class MigrationV2SampleGeneratorTest {
         assertEquals(EXPECTED_RECORD_COUNT, readBack.recordCount, "fixed record count must be stable")
         assertEquals(EXPECTED_ATTACHMENT_COUNT, readBack.attachmentCount, "fixed attachment count must be stable")
 
-        // schema v2 §0.5 — the 4 self-describing identity fields must be written AND read back.
+        
         assertEquals(SAMPLE_SOURCE_ACCOUNT, manifest.sourceAccount, "writer recorded sourceAccount")
         assertEquals("android", manifest.sourcePlatform, "writer recorded sourcePlatform constant")
         assertEquals(SAMPLE_SOURCE_APP_VERSION, manifest.sourceAppVersion, "writer recorded sourceAppVersion")
@@ -127,40 +108,39 @@ class MigrationV2SampleGeneratorTest {
 
         val attachmentSha = sha256Hex(attachmentBytes)
 
-        // 3. Capture the REAL envelope JSON for each record straight from the production codec, so
-        //    the manifest documents the byte-accurate `{"type","value"}` shape the readers must
-        //    parse (not a hand-written approximation).
+        
+        
+        
         val envelopeJson = captureEnvelopeJson(records)
 
-        // 4. Emit the expected-manifest.md.
+        
         manifestFile.writeText(buildExpectedManifestMarkdown(manifest, attachmentSha, envelopeJson))
 
         assertTrue(sampleFile.exists() && sampleFile.length() > 0, "sample.ttmig must exist and be non-empty")
         assertTrue(manifestFile.exists() && manifestFile.length() > 0, "expected-manifest.md must exist")
 
-        // 5. Log absolute paths so the artifacts are easy to locate after the run.
+        
         println("[MigrationV2][Sample] sample.ttmig      -> ${sampleFile.absolutePath} (${sampleFile.length()} bytes)")
         println("[MigrationV2][Sample] expected-manifest -> ${manifestFile.absolutePath} (${manifestFile.length()} bytes)")
         println("[MigrationV2][Sample] attachment SHA-256 = $attachmentSha")
         println("[MigrationV2][Sample] passphrase         = $passphrase")
     }
 
-    // ── synthetic record set (all values FIXED + documented in the manifest) ──────────────────
+    
 
-    // Test code, length is inherent (fixed synthetic record set; splitting adds no value).
     @Suppress("LongMethod")
     private fun buildSyntheticRecords(): List<NeutralRecord> {
         val out = ArrayList<NeutralRecord>()
 
-        // §6 GroupKey
+        
         out += NeutralRecord.GroupKey(
             NeutralGroupKey(groupId = "gid-cross-end-0001", rGroup = "R0dST1VQS0VZTUFURVJJQUxfQjY0PT0=")
         )
 
-        // §5 ConversationLocal — pinned + read watermark + the account's own read ladder.
-        // The ladder is canonical: maxServerTime strictly increasing, readAt > 0 and non-decreasing,
-        // last row at or below the watermark. A message's ladder read time is the smallest readAt
-        // among the rows whose maxServerTime covers its serverAt.
+        
+        
+        
+        
         out += NeutralRecord.ConversationLocal(
             NeutralConversationLocal(
                 conversationRef = conv,
@@ -178,16 +158,16 @@ class MigrationV2SampleGeneratorTest {
             )
         )
 
-        // (1)-(4) four text messages; #4 carries a real newline in body to exercise JSONL escaping.
+        
         out += textMsg("m-text-0001", body = "Cross-end sample message one", sentAt = 1_780_400_001_000L, serverAt = 1_780_400_001_100L)
         out += textMsg("m-text-0002", body = "Second message with emoji 👍 and unicode café", sentAt = 1_780_400_002_000L, serverAt = 1_780_400_002_100L)
         out += textMsg("m-text-0003", body = "Third message", sentAt = 1_780_400_003_000L, serverAt = 1_780_400_003_100L)
-        // The newline case — body contains a real '\n' that JSONL framing must escape to "\\n".
+        
         out += textMsg("m-text-0004-newline", body = "hello\nworld", sentAt = 1_780_400_004_000L, serverAt = 1_780_400_004_100L)
 
-        // (8) tri-state expiry anchor, explicit 0: the source says this message's countdown has NOT
-        // started. It sits inside the watermark, so a reader that treats 0 as "absent" would let the
-        // ladder start its clock — it must persist "not started" distinguishably instead.
+        
+        
+        
         out += NeutralRecord.Message(
             baseMessage(
                 stableId = "m-anchor-0008-not-started",
@@ -197,8 +177,8 @@ class MigrationV2SampleGeneratorTest {
                 expireStartedAt = 0L,
             )
         )
-        // (9) tri-state expiry anchor, explicit value. Its serverAt is covered by the second ladder
-        // row, which would derive 1700000300000; the carried anchor differs, so the anchor wins.
+        
+        
         out += NeutralRecord.Message(
             baseMessage(
                 stableId = "m-anchor-0009-explicit",
@@ -209,13 +189,9 @@ class MigrationV2SampleGeneratorTest {
             )
         )
 
-        // (5) image message + (6) attachment carrying the REAL PNG bytes as a byte frame.
-        //
-        // contentKind = FILE (NOT IMAGE): the real Android deriver (`deriveContentKind`) maps every
-        // TYPE_ATTACHMENT message to ContentKind.FILE — IMAGE/VOICE refinement is a documented POC
-        // gap (ContentKindDeriver.kt:37). Using FILE here mirrors what the on-device exporter would
-        // actually emit for an image message; the contentType on the attachment (`image/png`) is
-        // what tells the reader it is an image.
+        
+
+        
         out += NeutralRecord.Message(
             baseMessage(
                 stableId = "m-image-0005",
@@ -227,11 +203,11 @@ class MigrationV2SampleGeneratorTest {
                 attachmentRefs = listOf(attachmentRef),
             )
         )
-        // Byte-carrying attachment, populated exactly as NeutralProjections.attachment(bytesPresent=true):
-        // the byte frame is named by stableId; serverAttachmentId/encryptionKey travel whenever
-        // the source has them (they are the attachment's identity/credentials), independent of
-        // byte presence;
-        // pointerOnly = false. width/height come from the real PNG (8×8); durationMs = null (image).
+        
+        
+        
+        
+        
         out += NeutralRecord.Attachment(
             NeutralAttachment(
                 stableId = attachmentRef,
@@ -249,7 +225,7 @@ class MigrationV2SampleGeneratorTest {
             )
         )
 
-        // (7) message with a quote (NeutralQuote {author, sentAt, textPreview}).
+        
         out += NeutralRecord.Message(
             baseMessage(
                 stableId = "m-quote-0006",
@@ -257,9 +233,9 @@ class MigrationV2SampleGeneratorTest {
                 sentAt = 1_780_400_006_000L,
                 serverAt = 1_780_400_006_100L,
             ).copy(
-                // Mirrors NeutralProjections.quote: {author, sentAt = quoted message's sentAt
-                // (composite identity), textPreview}. attachmentsMeta stays empty — the real quote
-                // projection does not fold quoted-attachment preview meta in the POC.
+                
+                
+                
                 quote = NeutralQuote(
                     author = "u-sender-0001",
                     sentAt = 1_780_400_001_000L,
@@ -269,8 +245,8 @@ class MigrationV2SampleGeneratorTest {
             )
         )
 
-        // (8) merged-forward (合并转发) with TWO PARALLEL top-level forwards (roots); root[0] holds a
-        //     nested child (>=2 levels deep). Mirrors NeutralProjections.forwardContext / forwardOf.
+        
+        
         out += NeutralRecord.Message(
             baseMessage(
                 stableId = "m-forward-0007",
@@ -278,10 +254,10 @@ class MigrationV2SampleGeneratorTest {
                 sentAt = 1_780_400_007_000L,
                 serverAt = 1_780_400_007_100L,
             ).copy(
-                // A merged-forward of N messages = N parallel top-level forwards. forwardContext.roots
-                // carries them all (NOT folded into one root). Each forward = {author,
-                // sentAt = the forwarded message's own sentAt, body, attachmentsMeta = emptyList() (the real forwardOf
-                // does NOT fold preview attachment meta in the POC), nested = [children]}.
+                
+                
+                
+                
                 contentKind = ContentKind.FORWARD,
                 forwardContext = NeutralForwardContext(
                     isFromGroup = true,
@@ -319,21 +295,15 @@ class MigrationV2SampleGeneratorTest {
     private fun textMsg(stableId: String, body: String, sentAt: Long, serverAt: Long): NeutralRecord.Message =
         NeutralRecord.Message(baseMessage(stableId, body, sentAt, serverAt))
 
-    /** One read-ladder rung. The sequence ids have no Android column and stay 0, as the schema allows. */
+    
     private fun ladderRow(maxServerTime: Long, readAt: Long): NeutralReadPosition =
         NeutralReadPosition(readAt = readAt, maxServerTime = maxServerTime, maxNotifySequenceId = 0L, maxSequenceId = 0L)
 
-    /**
-     * Mirrors [NeutralProjections.message] field population for an INCOMING text message:
-     * - `so the
-     *   real projection always emits null (NeutralProjections.kt: `senderDevice = null`).
-     * - `serverAt` = `systemShowTimestamp` (server-assigned), `receivedAt` = local receive time;
-     *   both populated like a normal received message.
-     * - optional sub-structures (quote/forward/mentions/reactions/recall) left at their model
-     *   defaults (absent), `expireStartedAt` absent (the ladder derives it), `platformExtras` empty —
-     *   exactly what `NeutralProjections.message` produces for a plain text message with no folded
-     *   FK rows.
-     */
+    
+
+
+
+
     private fun baseMessage(
         stableId: String,
         body: String?,
@@ -357,7 +327,7 @@ class MigrationV2SampleGeneratorTest {
             confidential = false,
         )
 
-    // ── round-trip verification of the shipped sample ─────────────────────────────────────────
+    
 
     private suspend fun roundTripAndVerify(sampleFile: File): ContainerManifest {
         val recovered = ByteArrayOutputStream()
@@ -368,7 +338,7 @@ class MigrationV2SampleGeneratorTest {
                 assertEquals(attachmentRef, ref, "only one attachment ref expected")
                 recovered
             },
-            onRecord = { /* records are validated via counts + manifest emission */ },
+            onRecord = {  },
         )
         assertEquals(
             sha256Hex(attachmentBytes),
@@ -386,11 +356,11 @@ class MigrationV2SampleGeneratorTest {
         }
     }
 
-    /**
-     * Encode each record with the SAME production [RecordJsonCodec] the writer uses, so the manifest
-     * can quote the byte-accurate `{"type","value"}` envelope per record type. Keyed by each record's
-     * natural identifier (message/attachment stableId, conversationRef, groupId, remark uid).
-     */
+    
+
+
+
+
     private fun captureEnvelopeJson(records: List<NeutralRecord>): Map<String, String> {
         val codec = RecordJsonCodec()
         return records.associate { record ->
@@ -407,9 +377,8 @@ class MigrationV2SampleGeneratorTest {
         }
     }
 
-    // ── expected-manifest.md ──────────────────────────────────────────────────────────────────
+    
 
-    // Test code, length is inherent (expected-manifest golden text; splitting adds no value).
     @Suppress("LongMethod")
     private fun buildExpectedManifestMarkdown(
         manifest: ContainerManifest,
@@ -605,17 +574,15 @@ class MigrationV2SampleGeneratorTest {
         appendLine("Your reader passes M1 when: it verifies the HMAC, decrypts, parses ${manifest.recordCount} records + ${manifest.attachmentCount} attachment byte-frame, and the printed field values match this table — especially the 4 text-message bodies (incl. the `\\n` case), the quote/forward structure, the attachment byte SHA-256, the 2-row `readPositions` ladder, and the two tri-state `expireStartedAt` cases (explicit 0 vs explicit value).")
     }
 
-    // ── helpers ───────────────────────────────────────────────────────────────────────────────
+    
 
     private fun sha256Hex(bytes: ByteArray): String =
         MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { byte -> String.format("%02x", byte.toInt() and 0xFF) }
 
-    /**
-     * Resolve the repo `tmp/migration-v2-poc/sample/` regardless of the test working dir.
-     * Gradle runs unit tests with `user.dir` = the module dir (`app/`) or the repo root depending
-     * on invocation, so walk up from `user.dir` until the dir containing `settings.gradle` (the
-     * repo root) is found, then anchor `tmp/` there.
-     */
+    
+
+
+
     private fun sampleOutputDir(): File {
         val userDir = System.getProperty("user.dir") ?: "."
         var dir: File? = File(userDir).absoluteFile
@@ -625,15 +592,15 @@ class MigrationV2SampleGeneratorTest {
             }
             dir = dir.parentFile
         }
-        // Fallback: relative to working dir (still lands under the repo in practice).
+        
         return File("tmp/migration-v2-poc/sample").absoluteFile
     }
 
     private companion object {
-        const val EXPECTED_RECORD_COUNT = 12 // 9 messages + 1 attachment + 1 conv + 1 groupKey
+        const val EXPECTED_RECORD_COUNT = 12 
         const val EXPECTED_ATTACHMENT_COUNT = 1
 
-        /** SYNTHETIC manifest identity values for the shipped sample — no real account / PII. */
+        
         const val SAMPLE_SOURCE_ACCOUNT = "u_sample"
         const val SAMPLE_SOURCE_APP_VERSION = "0.0.0-sample"
     }

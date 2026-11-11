@@ -20,28 +20,13 @@ import org.junit.Before
 import org.junit.Test
 import java.io.IOException
 
-/**
- * [TranslateEngine] decision order and result mapping.
- *
- * The engine's only outside surface is [FakeTranslateBackend]: the translation engine itself lives
- * in `:app` behind that interface, so these cases script identification and translation answers
- * directly instead of mocking ML Kit's static factories. Client caching and BCP-47 normalisation are
- * the backend's behaviour and are covered by the `:app` backend tests.
- *
- * What each case asserts:
- *  - T8   AUTO rejects a source outside the zh/en whitelist without calling the translator
- *  - T8b  MANUAL accepts any source language the backend can handle
- *  - T9   AUTO: source == target short-circuits to SameLanguage before the translator
- *  - T9b  MANUAL: source == target returns the original text as Translated, without the translator
- *  - T10  AUTO: a backend that echoes the input back is also SameLanguage
- *  - T10b MANUAL: an echo is Translated carrying the original text
- *  - T11  a missing model answers ModelNotReady BEFORE identification runs
- *  - T12  blank and over-cap bodies map to Unsupported(EMPTY) / Unsupported(TOO_LONG)
- *  - T13  a backend exception maps to Failed carrying the cause
- *  - T13b "no conclusion" from the backend falls back to the character ratio
- *  - T13c text with no conclusion at all: AUTO skips it, MANUAL assumes the pivot language (en)
- *  - T57  warmUp asks the backend for exactly the pair the target needs
- */
+
+
+
+
+
+
+
 class TranslateEngineTest {
 
     private lateinit var modelStore: TranslateModelStore
@@ -71,7 +56,6 @@ class TranslateEngineTest {
         unmockkAll()
     }
 
-    // --- T12 ----------------------------------------------------------------
 
     @Test
     fun `T12 a blank body is Unsupported EMPTY and never reaches the backend`() = runTest {
@@ -90,7 +74,6 @@ class TranslateEngineTest {
         assertEquals(0, backend.identifyCount)
     }
 
-    // --- T11 ----------------------------------------------------------------
 
     @Test
     fun `T11 a missing target model answers ModelNotReady before identification`() = runTest {
@@ -116,7 +99,6 @@ class TranslateEngineTest {
         }
     }
 
-    // --- T8 / T8b -----------------------------------------------------------
 
     @Test
     fun `T8 AUTO rejects a source outside the zh en whitelist`() = runTest {
@@ -138,7 +120,7 @@ class TranslateEngineTest {
 
         val result = engine.translate("guten tag", TranslateLang.ZH, TranslateMode.MANUAL)
 
-        // sourceCode is the identified source the engine actually built the pair from.
+        
         assertEquals(TranslateResult.Translated("你好", "de"), result)
         assertEquals(listOf("de-zh"), backend.translatedPairs)
     }
@@ -150,7 +132,7 @@ class TranslateEngineTest {
 
         val result = engine.translate("こんにちは", TranslateLang.ZH, TranslateMode.MANUAL)
 
-        // The caller waits for exactly this set before retrying, so it must be the source, not the target.
+        
         assertEquals(TranslateResult.ModelNotReady(setOf(ModelId("ja"))), result)
         assertTrue(backend.translatedPairs.isEmpty())
         verify(exactly = 1) { modelStore.ensureDownloaded(ModelId("ja"), any()) }
@@ -168,7 +150,6 @@ class TranslateEngineTest {
         assertEquals(TranslateResult.Translated("你好", TranslateLanguageCodes.PIVOT), result)
     }
 
-    // --- T9 / T10 -----------------------------------------------------------
 
     @Test
     fun `T9 an identified source equal to the target short-circuits to SameLanguage`() = runTest {
@@ -230,7 +211,6 @@ class TranslateEngineTest {
         assertEquals(TranslateResult.Translated("hello", TranslateLanguageCodes.EN), result)
     }
 
-    // --- T13 ----------------------------------------------------------------
 
     @Test
     fun `T13 a backend failure maps to Failed carrying the cause`() = runTest {
@@ -253,7 +233,6 @@ class TranslateEngineTest {
         assertEquals(TranslateResult.Translated("hi", TranslateLanguageCodes.ZH), result)
     }
 
-    // --- T13b ---------------------------------------------------------------
 
     @Test
     fun `T13b no conclusion from the backend falls back to the character ratio`() = runTest {
@@ -265,7 +244,6 @@ class TranslateEngineTest {
         assertEquals(TranslateResult.Translated("hi", TranslateLanguageCodes.ZH), result)
     }
 
-    // --- T13c ---------------------------------------------------------------
 
     @Test
     fun `T13c AUTO skips text with no zh or en letter`() = runTest {
@@ -284,7 +262,7 @@ class TranslateEngineTest {
     fun `T13c MANUAL treats undetermined text as the pivot language`() = runTest {
         backend.identifyResult = null
         backend.translateResult = "一二三"
-        // The pivot needs no source pack, so an absent source model must not gate it.
+        
         every { modelStore.isReady(any<ModelId>()) } returns false
 
         val result = engine.translate("123", TranslateLang.ZH, TranslateMode.MANUAL)
@@ -314,7 +292,6 @@ class TranslateEngineTest {
         assertTrue(backend.translatedPairs.isEmpty())
     }
 
-    // --- warmUp (T57) -------------------------------------------------------
 
     @Test
     fun `T57 warmUp asks the backend for exactly the pair the target needs`() = runTest {

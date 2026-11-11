@@ -27,10 +27,10 @@ interface ApplicationModule {
     fun bindAppExiter(appExiterImpl: AppExiterImpl): AppExiter
 
     companion object {
-        /**
-         * [TempTalkApplication] is the only component that tracks a resumed FragmentActivity, so
-         * the visibility seam reads through it rather than duplicating the tracking.
-         */
+        
+
+
+
         @Provides
         @Singleton
         fun provideAppVisibility(@ApplicationContext context: Context): AppVisibility =

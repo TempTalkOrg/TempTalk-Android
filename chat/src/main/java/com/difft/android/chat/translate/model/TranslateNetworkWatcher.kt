@@ -9,22 +9,15 @@ import android.os.Build
 import com.difft.android.base.log.lumberjack.L
 import java.util.concurrent.atomic.AtomicBoolean
 
-/**
- * Default-network watcher for the translation-model download.
- *
- * Deliberately separate from `chat/.../websocket/monitor/NetworkMonitor`: that one's NetworkRequest
- * is WIFI/CELLULAR/ETHERNET only and is owned by the WebSocket reconnect path, so adding
- * TRANSPORT_VPN there would change reconnect behaviour for every user. The model download is the
- * only consumer that cares about a VPN specifically — on a network where Google is unreachable the
- * download only becomes possible once a VPN interface comes up, and a VPN coming up *replaces* the
- * default network, which is exactly what `registerDefaultNetworkCallback` reports.
- *
- * Shape follows `call/.../receiver/NetworkConnectionListener` (including the pre-28 fallback, since
- * minSdk is 26 and `registerDefaultNetworkCallback` is API 24 — kept identical for consistency with
- * the existing listener) with one addition: the validated flag is reset per network handle, so each
- * newly-available validated default network produces exactly one callback carrying its own VPN flag
- * instead of only the very first one after a loss.
- */
+
+
+
+
+
+
+
+
+
 internal class TranslateNetworkWatcher(
     context: Context,
     private val onNetworkUsable: (isVpn: Boolean) -> Unit,
@@ -37,7 +30,7 @@ internal class TranslateNetworkWatcher(
     @Volatile
     private var currentNetwork: Network? = null
 
-    /** register/unregister are idempotent: a duplicate unregister throws IllegalArgumentException. */
+    
     private var registered = false
 
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {

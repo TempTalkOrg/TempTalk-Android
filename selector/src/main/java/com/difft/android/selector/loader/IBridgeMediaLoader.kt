@@ -22,19 +22,19 @@ abstract class IBridgeMediaLoader(context: Context, config: SelectorConfig) {
 
     protected fun getConfig(): SelectorConfig = mConfig
 
-    /**
-     * query album cover
-     */
+    
+
+
     abstract fun getAlbumFirstCover(bucketId: Long): String?
 
-    /**
-     * query album list
-     */
+    
+
+
     abstract fun loadAllAlbum(query: OnQueryAllAlbumListener<LocalMediaFolder>?)
 
-    /**
-     * page query specified contents
-     */
+    
+
+
     abstract fun loadPageMediaData(
         bucketId: Long,
         page: Int,
@@ -42,37 +42,37 @@ abstract class IBridgeMediaLoader(context: Context, config: SelectorConfig) {
         query: OnQueryDataResultListener<LocalMedia>?,
     )
 
-    /**
-     * query specified contents
-     */
+    
+
+
     abstract fun loadOnlyInAppDirAllMedia(query: OnQueryAlbumListener<LocalMediaFolder?>?)
 
-    /**
-     * A filter declaring which rows to return,
-     * formatted as an SQL WHERE clause (excluding the WHERE itself).
-     * Passing null will return all rows for the given URI.
-     */
+    
+
+
+
+
     protected abstract fun getSelection(): String?
 
-    /**
-     * You may include ?s in selection, which will be replaced by the values from selectionArgs,
-     * in the order that they appear in the selection. The values will be bound as Strings.
-     */
+    
+
+
+
     protected abstract fun getSelectionArgs(): Array<String>?
 
-    /**
-     * How to order the rows, formatted as an SQL ORDER BY clause (excluding the ORDER BY itself).
-     */
+    
+
+
     protected abstract fun getSortOrder(): String
 
-    /**
-     * parse LocalMedia
-     */
+    
+
+
     protected abstract fun parseLocalMedia(data: Cursor, isUsePool: Boolean): LocalMedia?
 
-    /**
-     * Get video (maximum or minimum time)
-     */
+    
+
+
     protected fun getDurationCondition(): String {
         val maxS =
             if (getConfig().filterVideoMaxSecond == 0) Long.MAX_VALUE else getConfig().filterVideoMaxSecond.toLong()
@@ -83,9 +83,9 @@ abstract class IBridgeMediaLoader(context: Context, config: SelectorConfig) {
         )
     }
 
-    /**
-     * Get media size (maxFileSize or miniFileSize)
-     */
+    
+
+
     protected fun getFileSizeCondition(): String {
         val maxS =
             if (getConfig().filterMaxFileSize == 0L) Long.MAX_VALUE else getConfig().filterMaxFileSize
@@ -165,9 +165,9 @@ abstract class IBridgeMediaLoader(context: Context, config: SelectorConfig) {
         internal const val COLUMN_ORIENTATION = "orientation"
         internal const val MAX_SORT_SIZE = 60
 
-        /**
-         * A list of which columns to return. Passing null will return all columns, which is inefficient.
-         */
+        
+
+
         internal val PROJECTION = arrayOf(
             MediaStore.Files.FileColumns._ID,
             MediaStore.MediaColumns.DATA,
@@ -183,9 +183,9 @@ abstract class IBridgeMediaLoader(context: Context, config: SelectorConfig) {
             COLUMN_ORIENTATION,
         )
 
-        /**
-         * A list of which columns to return. Passing null will return all columns, which is inefficient.
-         */
+        
+
+
         internal val ALL_PROJECTION = arrayOf(
             MediaStore.Files.FileColumns._ID,
             MediaStore.MediaColumns.DATA,

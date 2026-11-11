@@ -11,11 +11,11 @@ import com.difft.android.imageeditor.core.Bounds
 import com.difft.android.imageeditor.core.Renderer
 import com.difft.android.imageeditor.core.RendererContext
 
-/**
- * Renders an oval inside of the [Bounds].
- *
- * Hit tests outside of the bounds.
- */
+
+
+
+
+
 @Parcelize
 class OvalGuideRenderer(@ColorRes private val ovalGuideColor: Int) : Renderer {
 

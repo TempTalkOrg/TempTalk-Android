@@ -27,8 +27,7 @@
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 
-    <!-- Scrolls when the window is too short for the whole form (split screen); fillViewport keeps
-         the tips at the bottom otherwise -->
+    
     <androidx.core.widget.NestedScrollView
         android:id="@+id/sv_content"
         android:layout_width="match_parent"

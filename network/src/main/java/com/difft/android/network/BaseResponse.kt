@@ -5,7 +5,7 @@ data class BaseResponse<T>(
     val status: Int,
     val reason: String?,
     var data: T?,
-//    var networkException: NetworkException? = null,
+
 
     val account: String? = null,
     val vcode: String? = null,

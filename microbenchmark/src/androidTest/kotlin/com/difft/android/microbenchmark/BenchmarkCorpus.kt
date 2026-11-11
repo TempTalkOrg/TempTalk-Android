@@ -3,12 +3,12 @@ package com.difft.android.microbenchmark
 import org.difft.app.database.WCDB
 import org.difft.app.database.test.builders.ChildRowCorpus
 
-/**
- * Writes every corpus list into its real table. Schema and indexes come for free: each WCDB
- * table accessor runs `CREATE TABLE IF NOT EXISTS` (plus the generated index bindings) on
- * first touch. Explicit databaseIds survive insertion because the generated ORM gates
- * auto-increment on `databaseId == 0`.
- */
+
+
+
+
+
+
 fun WCDB.seed(corpus: ChildRowCorpus) {
     message.insertObjects(corpus.messages)
     if (corpus.attachments.isNotEmpty()) attachment.insertObjects(corpus.attachments)

@@ -21,11 +21,10 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/**
- * Full decision matrix for [callStatusNotification] — the single resolver behind the floating
- * status pill. Priority contract under test: connecting/reconnecting states always outrank the
- * media-send issue (doc rule), and a healthy connected call shows nothing.
- */
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [30])
 class CallStatusNotificationLogicTest {
@@ -44,8 +43,7 @@ class CallStatusNotificationLogicTest {
         action: CallIntent.Action = CallIntent.Action.START_CALL,
         callTimerRunning: Boolean = false,
         mediaSendIssue: MediaSendIssueState = MediaSendIssueState.NONE,
-        // Defaulted so every pre-existing case below keeps exercising the untouched decision path:
-        // with NONE the resolver must behave exactly as it did before the weak-network slot existed.
+        
         weakNetwork: WeakNetworkBanner = WeakNetworkBanner.NONE,
     ): CallStatusNotification? = callStatusNotification(
         callStatus = callStatus,
@@ -58,15 +56,15 @@ class CallStatusNotificationLogicTest {
 
     @Test
     fun `one-on-one CALLING stays out of the pill - the title owns waiting-for-answer`() {
-        // Call progress, not connection health: the title renders "等待接听…" with the E2EE
-        // crossfade (Mac parity), and the pill slot stays free for the critical-alert banner.
+        
+        
         assertNull(resolve(CallStatus.CALLING))
     }
 
     @Test
     fun `one-on-one callee in CALLING also keeps the pill empty`() {
-        // Without the explicit CALLING guard, a callee's JOIN intent would satisfy the
-        // loading clause and double-render as "Connecting…" next to the title's crossfade.
+        
+        
         assertNull(resolve(CallStatus.CALLING, action = CallIntent.Action.JOIN_CALL))
     }
 
@@ -85,8 +83,7 @@ class CallStatusNotificationLogicTest {
 
     @Test
     fun `switching server shows the connecting label even for a one-on-one caller`() {
-        // Sustained mid-call unhealthy state — must surface like RECONNECTING; the legacy title
-        // gate omitted it, leaving a 1v1 caller with no feedback during the switch.
+        
         val result = resolve(CallStatus.SWITCHING_SERVER)
         assertEquals(ResUtils.getString(R.string.call_connecting_title), result?.text)
         assertTrue(result!!.spinning)
@@ -103,8 +100,7 @@ class CallStatusNotificationLogicTest {
 
     @Test
     fun `reconnect failed for a one-on-one caller stays hidden`() {
-        // Pre-existing shouldShowLoadingStatus behavior, deliberately preserved: a 1v1 caller's
-        // START_CALL intent satisfies none of the loading clauses.
+        
         assertNull(resolve(CallStatus.RECONNECT_FAILED))
     }
 
@@ -121,8 +117,7 @@ class CallStatusNotificationLogicTest {
 
     @Test
     fun `connected with uplink-only degradation shows the media send issue label`() {
-        // Doc acceptance: RECOVERING and FAILED both map to SEND_RECOVERING and share this one
-        // presentation (spinner kept) — no distinct no-recovery failure state exists anymore.
+        
         val result = resolve(
             CallStatus.CONNECTED, callTimerRunning = true, mediaSendIssue = MediaSendIssueState.SEND_RECOVERING,
         )
@@ -132,9 +127,8 @@ class CallStatusNotificationLogicTest {
 
     @Test
     fun `connected with whole-link recovery shows the connecting label`() {
-        // Doc acceptance (network loss): SDK ROOM_RECOVERING arrives while the room status flow
-        // still says CONNECTED — the pill must show the connection presentation, never the
-        // media-send hint.
+        
+        
         val result = resolve(
             CallStatus.CONNECTED, callTimerRunning = true, mediaSendIssue = MediaSendIssueState.CONNECTION_RECOVERING,
         )
@@ -144,8 +138,7 @@ class CallStatusNotificationLogicTest {
 
     @Test
     fun `media-ready gate outranks the media send issue`() {
-        // Doc rule: any connecting state beats "send issue" — while the timer hasn't started,
-        // the pill says connecting even if the uplink already reports a problem.
+        
         val result = resolve(
             CallStatus.CONNECTED, callTimerRunning = false, mediaSendIssue = MediaSendIssueState.SEND_RECOVERING,
         )
@@ -162,9 +155,9 @@ class CallStatusNotificationLogicTest {
         assertNull(resolve(CallStatus.DISCONNECTED, action = CallIntent.Action.JOIN_CALL))
     }
 
-    // ---------------------------------------------------------------------------------
-    // Weak network — the pill's two new statuses and their place in the priority chain.
-    // ---------------------------------------------------------------------------------
+    
+    
+    
 
     @Test
     fun `connected with a bad local link shows the local weak-network hint without spinning`() {
@@ -184,8 +177,8 @@ class CallStatusNotificationLogicTest {
 
     @Test
     fun `the media send issue outranks the local weak-network hint`() {
-        // A real uplink failure the peer already hears beats a hint that quality "may" be
-        // affected — and a weak local link is often this state's own cause.
+        
+        
         val result = resolve(
             CallStatus.CONNECTED,
             callTimerRunning = true,
@@ -197,8 +190,8 @@ class CallStatusNotificationLogicTest {
 
     @Test
     fun `the media send issue outranks the remote weak-network hint too`() {
-        // Arbitration case 1, peer side: the uplink tier wins over either weak-network tier, so the
-        // pill can never be talked out of reporting a failure the peer already hears.
+        
+        
         val result = resolve(
             CallStatus.CONNECTED,
             callTimerRunning = true,
@@ -210,11 +203,8 @@ class CallStatusNotificationLogicTest {
 
     @Test
     fun `the weak-network hint takes over the pill the moment the uplink recovers`() {
-        // Arbitration case 2. The uplink tier merely OUTRANKS the weak-network tier; it does not
-        // gate, delay or reset it. So the frame in which the uplink issue clears — with the link
-        // still weak — must already carry the weak-network copy, with no second 3 s wait. The
-        // verdict behind it is kept alive throughout because an uplink issue is not a suppression
-        // input (see `an uplink-only issue does not suppress the verdict`).
+        
+        
         val duringIssue = resolve(
             CallStatus.CONNECTED,
             callTimerRunning = true,
@@ -259,8 +249,8 @@ class CallStatusNotificationLogicTest {
 
     @Test
     fun `one-on-one CALLING keeps the pill empty even with a bad local link`() {
-        // The waiting-for-answer early return wins: media isn't established yet and the slot is
-        // reserved for the critical-alert banner during that phase.
+        
+        
         assertNull(resolve(CallStatus.CALLING, weakNetwork = WeakNetworkBanner.LOCAL))
     }
 

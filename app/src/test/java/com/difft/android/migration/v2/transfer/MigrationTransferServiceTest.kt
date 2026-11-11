@@ -46,22 +46,12 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import io.mockk.slot
 
-/**
- * I5 T-SM1c — [MigrationTransferService] cancel + action plumbing (design §7).
- *
- * Strategy: the service is `@AndroidEntryPoint` and the `:app`
- * module registers no Hilt test runner, so `Robolectric.buildService(...).create()` can't drive the
- * Hilt-generated `onCreate`. Instead we construct the service via reflection (bypassing Hilt onCreate),
- * attach a base context, inject relaxed mocks into the `lateinit` fields, and exercise the test seams:
- *   - `ACTION_CANCEL` → holder = [TransferState.Cancelled] (no exception; children cancelled, teardown).
- *   - unknown action → safe no-op (stopSelf), holder untouched.
- *   - companion-constant alignment with [MigrationTransferNotificationHelper].
- *   - [MigrationTransferCancelReceiver] forwards the cancel broadcast without throwing.
- *
- * The happy-path receive/send drive real sockets + native WCDB (constructed inside `runReceiver`/
- * `runSender`), covered end-to-end by `P2pContainerFusionTest` / `RestoreOrchestratorStreamingTest`
- * and the on-device matrix — not feasible at this method-level JVM seam.
- */
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [34])
 class MigrationTransferServiceTest {
@@ -120,12 +110,12 @@ class MigrationTransferServiceTest {
         service.onStartCommand(intent, 0, 1)
     }
 
-    // ── terminal-notification reason localization ────────────────────────────────────────────
-    //
-    // `TransferState.Failed.reason` is a DIAGNOSTIC string (a handshake wire token embedded in a 403
-    // message, the local pairing-timeout marker, or an arbitrary transport error), so the mapping is
-    // substring/equality based with a raw-string fallback — an unrecognized reason must still reach
-    // the user rather than being swallowed into a generic message.
+    
+
+    
+    
+    
+    
 
     @Test
     fun `known reject wire tokens map to the existing localized strings`() {
@@ -159,7 +149,7 @@ class MigrationTransferServiceTest {
         assertEquals(raw, service.localizedFailureReason(raw), "the only diagnostic must not be swallowed")
     }
 
-    // ── T35: the reverse-pair request's guards ──────────────────────────────────────────────
+    
 
     private fun startReversePair(raw: String) {
         service.onStartCommand(
@@ -170,7 +160,7 @@ class MigrationTransferServiceTest {
         )
     }
 
-    /** A code with no transfer key is not a migration code at all: ignored, with no state written. */
+    
     @Test
     fun `a reverse-pair request carrying no migration payload is ignored`() {
         startReversePair("not-a-migration-code")
@@ -178,10 +168,10 @@ class MigrationTransferServiceTest {
         assertEquals(TransferState.Idle, MigrationTransferStateHolder.state.value)
     }
 
-    /**
-     * Nothing would ever consume the request with no receiver up, so the screen is told rather than
-     * left on "preparing" for ever.
-     */
+    
+
+
+
     @Test
     fun `a reverse-pair request with no receiver up fails the transfer`() {
         startReversePair(QrPayloadCodec.encodeText(desktopExportQr()))
@@ -192,7 +182,7 @@ class MigrationTransferServiceTest {
         )
     }
 
-    /** A receiver that is up consumes it: the holder is left alone for the pairing controller. */
+    
     @Test
     fun `a reverse-pair request while a receiver is listening writes no failure`() {
         val listening = TransferState.WaitingForPeer("192.168.1.5", 53317, "123456")
@@ -209,13 +199,13 @@ class MigrationTransferServiceTest {
         fp = "ab".repeat(32),
         pin = "654321",
         alias = "desk",
-        // A real 32-byte key: the QR codec refuses anything else.
+        
         transferKey = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
     )
 
     @Test
     fun `ACTION_CANCEL sets Cancelled and tears down without throwing`() {
-        // Pre-set an in-flight state so the cancel transition is observable.
+        
         MigrationTransferStateHolder.update(TransferState.Transferring(TransferState.Role.RECEIVER, -1f))
 
         onStart(MigrationTransferService.ACTION_CANCEL)
@@ -228,11 +218,10 @@ class MigrationTransferServiceTest {
         assertTornDown()
     }
 
-    /**
-     * T-SM1c: cancel-from-each-in-flight-state. The design wants ACTION_CANCEL to land the holder on the
-     * terminal Cancelled state AND tear the FGS down (stopForeground + stopSelf) regardless of which
-     * non-terminal state the transfer was in when the user/notification cancelled.
-     */
+    
+
+
+
     @Test
     fun `ACTION_CANCEL from Starting writes Cancelled and tears down`() {
         MigrationTransferStateHolder.update(TransferState.Starting)
@@ -249,7 +238,7 @@ class MigrationTransferServiceTest {
         assertTornDown()
     }
 
-    /** Robolectric `ShadowService` records `stopForeground` + `stopSelf` — assert the FGS torn down. */
+    
     private fun assertTornDown() {
         val shadow = Shadows.shadowOf(service)
         assertTrue(shadow.isForegroundStopped, "ACTION_CANCEL must call stopForeground(REMOVE)")
@@ -296,7 +285,7 @@ class MigrationTransferServiceTest {
         val receiver = MigrationTransferCancelReceiver()
         val ctx: Application = ApplicationProvider.getApplicationContext()
         receiver.onReceive(ctx, Intent(MigrationTransferNotificationHelper.ACTION_CANCEL))
-        // No Hilt root → startService is recorded but the service never starts; pass = no exception.
+        
     }
 
     @Test
@@ -310,12 +299,10 @@ class MigrationTransferServiceTest {
         ip = "192.168.1.7", port = 53317, fp = "fp", pin = "123456", alias = "Pixel", transferKey = "tk",
     )
 
-    /**
-     * G3 / T-IT1 — `runSender(PRODUCTION)` selects the PRODUCTION controller
-     * ([MigrationP2pSendController], real account/env) and writes [TransferState.Sent] on success. The
-     * controller is intercepted with `mockkConstructor` so no native socket / WCDB is touched — the test
-     * asserts the SELECTOR routes PRODUCTION to the production controller's `sendRealExport`.
-     */
+    
+
+
+
     @Test
     fun `runSender PRODUCTION selects the production controller and writes Sent on success`() = runTest {
         mockkConstructor(MigrationP2pSendController::class)
@@ -333,9 +320,9 @@ class MigrationTransferServiceTest {
             coVerify(exactly = 1) {
                 anyConstructed<MigrationP2pSendController>().sendRealExport(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
             }
-            // The old device stays signed in: whether its session ends is the receiver's registration
-            // and the app-wide kick-out detection's business (a desktop receiver links as a secondary
-            // device and this one remains the primary). The terminal notification is posted as usual.
+            
+            
+            
             verify(exactly = 1) { notificationHelper.showTerminal(any(), any()) }
         } finally {
             unmockkConstructor(MigrationP2pSendController::class)
@@ -358,7 +345,7 @@ class MigrationTransferServiceTest {
         }
     }
 
-    // ── same-device handoff: the sender wipes only on an explicit "installed" acknowledgment ──
+    
 
     private fun handoffCollaborators(): Pair<MigrationHandoffCompleter, MigrationHandoffReconciler> {
         val completer = mockk<MigrationHandoffCompleter>(relaxed = true)
@@ -389,7 +376,7 @@ class MigrationTransferServiceTest {
         }
     }
 
-    /** A receiver that never understood the handoff answers a plain 200: the sender must keep its session. */
+    
     @Test
     fun `handoff answered 200 without the acknowledgment keeps this session and reconciles`() = runTest {
         val (completer, reconciler) = handoffCollaborators()

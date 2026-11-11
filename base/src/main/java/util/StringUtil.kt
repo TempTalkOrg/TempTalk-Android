@@ -8,47 +8,47 @@ import java.util.regex.Pattern
 object StringUtil {
 
     private val WHITESPACE: Set<Char> = SetUtil.newHashSet(
-        '\u200E', // left-to-right mark
-        '\u200F', // right-to-left mark
-        '\u2007', // figure space
-        '\u200B', // zero-width space
-        '\u2800'  // braille blank
+        '\u200E', 
+        '\u200F', 
+        '\u2007', 
+        '\u200B', 
+        '\u2800'  
     )
 
     private val ALL_ASCII_PATTERN: Pattern = Pattern.compile("^[\\x00-\\x7F]*$")
 
     private object Bidi {
-        /** Override text direction */
+        
         val OVERRIDES: Set<Int> = SetUtil.newHashSet(
-            "\u202A".codePointAt(0), /* LRE */
-            "\u202B".codePointAt(0), /* RLE */
-            "\u202D".codePointAt(0), /* LRO */
-            "\u202E".codePointAt(0)  /* RLO */
+            "\u202A".codePointAt(0), 
+            "\u202B".codePointAt(0), 
+            "\u202D".codePointAt(0), 
+            "\u202E".codePointAt(0)  
         )
 
-        /** Set direction and isolate surrounding text */
+        
         val ISOLATES: Set<Int> = SetUtil.newHashSet(
-            "\u2066".codePointAt(0), /* LRI */
-            "\u2067".codePointAt(0), /* RLI */
-            "\u2068".codePointAt(0)  /* FSI */
+            "\u2066".codePointAt(0), 
+            "\u2067".codePointAt(0), 
+            "\u2068".codePointAt(0)  
         )
 
-        /** Closes things in [OVERRIDES] */
+        
         val PDF = "\u202C".codePointAt(0)
 
-        /** Closes things in [ISOLATES] */
+        
         val PDI = "\u2069".codePointAt(0)
 
-        /** Auto-detecting isolate */
+        
         val FSI = "\u2068".codePointAt(0)
     }
 
-    /**
-     * Trims a name string to fit into the byte length requirement.
-     *
-     * This method treats a surrogate pair and a grapheme cluster a single character
-     * See examples in tests defined in StringUtilText_trimToFit.
-     */
+    
+
+
+
+
+
     @JvmStatic
     fun trimToFit(name: String?, maxByteLength: Int): String {
         if (name.isNullOrEmpty()) {
@@ -77,10 +77,10 @@ object StringUtil {
         }
     }
 
-    /**
-     * @return A charsequence with no leading or trailing whitespace. Only creates a new charsequence
-     *         if it has to.
-     */
+    
+
+
+
     @JvmStatic
     fun trim(charSequence: CharSequence): CharSequence {
         if (charSequence.isEmpty()) {
@@ -105,10 +105,10 @@ object StringUtil {
         }
     }
 
-    /**
-     * @return True if the string is empty, or if it contains nothing but whitespace characters.
-     *         Accounts for various unicode whitespace characters.
-     */
+    
+
+
+
     @JvmStatic
     fun isVisuallyEmpty(value: String?): Boolean {
         if (value.isNullOrEmpty()) {
@@ -118,10 +118,10 @@ object StringUtil {
         return indexOfFirstNonEmptyChar(value) == -1
     }
 
-    /**
-     * @return String without any leading or trailing whitespace.
-     *         Accounts for various unicode whitespace characters.
-     */
+    
+
+
+
     @JvmStatic
     fun trimToVisualBounds(value: String): String {
         val start = indexOfFirstNonEmptyChar(value)
@@ -156,26 +156,26 @@ object StringUtil {
         return -1
     }
 
-    /**
-     * @return True if the character is invisible or whitespace. Accounts for various unicode
-     *         whitespace characters.
-     */
+    
+
+
+
     @JvmStatic
     fun isVisuallyEmpty(c: Char): Boolean {
         return Character.isWhitespace(c) || WHITESPACE.contains(c)
     }
 
-    /**
-     * @return A string representation of the provided unicode code point.
-     */
+    
+
+
     @JvmStatic
     fun codePointToString(codePoint: Int): String {
         return String(Character.toChars(codePoint))
     }
 
-    /**
-     * @return True if the provided text contains a mix of LTR and RTL characters, otherwise false.
-     */
+    
+
+
     @JvmStatic
     fun hasMixedTextDirection(text: CharSequence?): Boolean {
         if (text == null) {
@@ -204,27 +204,27 @@ object StringUtil {
         return false
     }
 
-    /**
-     * @return True if the text is null or has a length of 0, otherwise false.
-     */
+    
+
+
     @JvmStatic
     fun isEmpty(text: String?): Boolean {
         return text == null || text.isEmpty()
     }
 
-    /**
-     * Isolates bi-directional text from influencing surrounding text. You should use this whenever
-     * you're injecting user-generated text into a larger string.
-     *
-     * You'd think we'd be able to trust `BidiFormatter`, but unfortunately it just misses some
-     * corner cases, so here we are.
-     *
-     * The general idea is just to balance out the opening and closing codepoints, and then wrap the
-     * whole thing in FSI/PDI to isolate it.
-     *
-     * For more details, see:
-     * https://www.w3.org/International/questions/qa-bidi-unicode-controls
-     */
+    
+
+
+
+
+
+
+
+
+
+
+
+
     @JvmStatic
     fun isolateBidi(text: String?): String {
         if (text == null) {
@@ -294,10 +294,10 @@ object StringUtil {
         return text.replace("\u200F", "")
     }
 
-    /**
-     * Trims a [CharSequence] of starting and trailing whitespace. Behavior matches
-     * [String.trim] to preserve expectations around results.
-     */
+    
+
+
+
     @JvmStatic
     fun trimSequence(text: CharSequence): CharSequence {
         var length = text.length
@@ -312,14 +312,14 @@ object StringUtil {
         return if (startIndex > 0 || length < text.length) text.subSequence(startIndex, length) else text
     }
 
-    /**
-     * If the [text] exceeds the [maxChars] it is trimmed in the middle so that the result is exactly [maxChars] long including an added
-     * ellipsis character.
-     *
-     * Otherwise the string is returned untouched.
-     *
-     * When [maxChars] is even, one more character is kept from the end of the string than the start.
-     */
+    
+
+
+
+
+
+
+
     @JvmStatic
     fun abbreviateInMiddle(text: CharSequence?, maxChars: Int): CharSequence? {
         if (text == null || text.length <= maxChars) {
@@ -331,9 +331,9 @@ object StringUtil {
         return text.subSequence(0, start).toString() + "…" + text.subSequence(text.length - end, text.length)
     }
 
-    /**
-     * @return The number of graphemes in the provided string.
-     */
+    
+
+
     @JvmStatic
     fun getGraphemeCount(text: CharSequence): Int {
         val iterator = BreakIteratorCompat.getInstance()

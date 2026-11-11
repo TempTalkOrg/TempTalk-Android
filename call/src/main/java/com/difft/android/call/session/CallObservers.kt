@@ -14,18 +14,11 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
-/**
- * Registers the session's background Flow collectors (contacts / groups /
- * speaker change) so the session graph does not carry three near-identical
- * `registerX()` methods.
- *
- * NOTE: Intentionally does NOT collect `roomCtl.error` here. That stream is a
- * `Channel.receiveAsFlow()` — a single-subscriber fan-out — and must be
- * consumed exclusively by the session's own collector ([CallSession.start]),
- * which delegates to `CallErrorHandler`. Adding a second collector would cause
- * errors to race between the logger and the real handler, silently dropping
- * user-facing error UI. See fix commit `8563529e`.
- */
+
+
+
+
+
 object CallObservers {
     fun register(
         scope: CoroutineScope,

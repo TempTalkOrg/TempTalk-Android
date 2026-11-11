@@ -1,12 +1,14 @@
 package com.difft.android.chat.ui
 
 import android.annotation.SuppressLint
+import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.Outline
 import android.graphics.RenderEffect
 import android.graphics.Shader
 import android.os.Build
 import android.text.TextUtils
+import android.util.TypedValue
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
@@ -14,6 +16,7 @@ import androidx.annotation.RequiresApi
 import androidx.appcompat.widget.AppCompatTextView
 import androidx.core.content.ContextCompat
 import androidx.core.view.doOnPreDraw
+import androidx.core.widget.TextViewCompat
 import com.difft.android.base.utils.TextSizeUtil
 import com.difft.android.base.utils.dp
 import com.difft.android.chat.attachment.AttachmentPathResolver
@@ -33,12 +36,16 @@ import com.difft.android.chat.widget.VoiceMessageView
 import com.difft.android.messageserialization.db.store.formatBase58Id
 import com.difft.android.messageserialization.db.store.getDisplayNameWithoutRemarkForUI
 import difft.android.messageserialization.model.isLongText
+import kotlin.math.roundToInt
 
-/** High blur for image/video (rich content needs stronger blur), low blur for others (preserve content outline) */
+
 private const val BLUR_RADIUS_HIGH = 80f
 private const val BLUR_RADIUS_LOW = 16f
 
-/** Rendered diameter of the shared-contact card avatar in `chat_item_content_contact.xml`. */
+
+private const val CONFIDENTIAL_COVER_RADIUS_DP = 16f
+
+
 private const val CONTACT_CARD_AVATAR_SIZE_DP = 40
 private val CONTACT_CARD_AVATAR_LETTER_TEXT_SIZE_DP = AvatarView.letterTextSizeDpFor(CONTACT_CARD_AVATAR_SIZE_DP)
 
@@ -63,21 +70,48 @@ private fun View.clearConfidentialBlur() {
     }
 }
 
+
 private fun View.setupConfidentialCover(isBlurred: Boolean) {
     visibility = View.VISIBLE
     if (isBlurred) {
         setBackgroundColor(Color.TRANSPARENT)
     } else {
-        setBackgroundResource(R.drawable.chat_message_confidential_bg)
+        background = android.graphics.drawable.GradientDrawable().apply {
+            cornerRadius = CONFIDENTIAL_COVER_RADIUS_DP * resources.displayMetrics.density
+            setColor(bubblePalette().fill)
+        }
     }
 }
 
-/**
- * 文本内容绑定器
- *
- * 从 TextContentAdapter 简化而来，只保留核心的文本渲染逻辑
- */
+
+
+
+private const val BODY_TEXT_SP = 16f
+private const val LARGE_TEXT_SP = 24f
+private const val BODY_LINE_HEIGHT_SP = 24f
+private const val LARGE_LINE_HEIGHT_SP = 36f
+
+
+
+
+
+
+private fun bindBubbleText(textView: TextView, message: TextChatMessage, rawText: String) {
+    val palette = textView.bubblePalette()
+    textView.setTextColor(palette.text)
+    textView.setLinkTextColor(palette.link)
+    val lineHeightSp = if (TextSizeUtil.isLarger) LARGE_LINE_HEIGHT_SP else BODY_LINE_HEIGHT_SP
+    TextViewCompat.setLineHeight(
+        textView,
+        TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, lineHeightSp, textView.resources.displayMetrics).roundToInt(),
+    )
+    LinkTextUtils.setMarkdownToTextview(textView.context, rawText, textView, message.mentions, palette.link, palette.linkMedium)
+}
+
 object TextContentBinder : ContentBinder {
+
+    override fun rebindForWidth(contentFrame: ViewGroup, message: ChatMessage, contactorCache: com.difft.android.chat.MessageContactsCacheUtil, shouldSaveToPhotos: Boolean, containerWidth: Int) =
+        bind(contentFrame, message, contactorCache, shouldSaveToPhotos, containerWidth)
 
     override fun bind(contentFrame: ViewGroup, message: ChatMessage, contactorCache: com.difft.android.chat.MessageContactsCacheUtil, shouldSaveToPhotos: Boolean, containerWidth: Int) {
         val textMessage = message as TextChatMessage
@@ -87,14 +121,14 @@ object TextContentBinder : ContentBinder {
         val rawText = textMessage.message.toString()
 
         textView.autoLinkMask = 0
-        textView.textSize = if (TextSizeUtil.isLarger) 24f else 16f
+        textView.textSize = if (TextSizeUtil.isLarger) LARGE_TEXT_SP else BODY_TEXT_SP
 
         val isConfidential = textMessage.isConfidential()
         val messageId = textMessage.id
         val effectiveMaxLines = if (isConfidential) TextTruncationUtil.CONFIDENTIAL_MAX_LINES else TextTruncationUtil.DEFAULT_MAX_LINES
 
         textView.setTag(R.id.tag_truncation_message_id, messageId)
-        LinkTextUtils.setMarkdownToTextview(textView.context, rawText, textView, textMessage.mentions)
+        bindBubbleText(textView, textMessage, rawText)
         textView.maxLines = effectiveMaxLines + 1
         textView.ellipsize = null
 
@@ -143,20 +177,16 @@ object TextContentBinder : ContentBinder {
 
 }
 
-/**
- * 图片/视频内容绑定器
- *
- * 从 ImageContentAdapter 简化而来
- */
+
+
+
 object ImageContentBinder : ContentBinder {
-    override fun bind(contentFrame: ViewGroup, message: ChatMessage, contactorCache: com.difft.android.chat.MessageContactsCacheUtil, shouldSaveToPhotos: Boolean, containerWidth: Int) {
-        val textMessage = message as TextChatMessage
-        val imageMessageView = contentFrame.findViewById<ImageAndVideoMessageView>(R.id.imageMessageView)
-        val textView = contentFrame.findViewById<TextView>(R.id.textView)
-        val coverView = contentFrame.findViewById<View>(R.id.v_cover)
+    override fun rebindForWidth(contentFrame: ViewGroup, message: ChatMessage, contactorCache: com.difft.android.chat.MessageContactsCacheUtil, shouldSaveToPhotos: Boolean, containerWidth: Int) {
+        bindCaption(contentFrame.findViewById(R.id.textView), message as TextChatMessage)
+    }
 
-        imageMessageView.setupImageView(textMessage, shouldSaveToPhotos, containerWidth)
-
+    
+    private fun bindCaption(textView: TextView, textMessage: TextChatMessage) {
         if (!TextUtils.isEmpty(textMessage.message)) {
             textView.visibility = View.VISIBLE
 
@@ -168,7 +198,7 @@ object ImageContentBinder : ContentBinder {
             val effectiveMaxLines = if (isConfidential) TextTruncationUtil.CONFIDENTIAL_MAX_LINES else TextTruncationUtil.DEFAULT_MAX_LINES
 
             textView.setTag(R.id.tag_truncation_message_id, messageId)
-            LinkTextUtils.setMarkdownToTextview(textView.context, rawText, textView, textMessage.mentions)
+            bindBubbleText(textView, textMessage, rawText)
             textView.maxLines = effectiveMaxLines + 1
             textView.ellipsize = null
 
@@ -195,10 +225,20 @@ object ImageContentBinder : ContentBinder {
         } else {
             textView.visibility = View.GONE
         }
+    }
+
+    override fun bind(contentFrame: ViewGroup, message: ChatMessage, contactorCache: com.difft.android.chat.MessageContactsCacheUtil, shouldSaveToPhotos: Boolean, containerWidth: Int) {
+        val textMessage = message as TextChatMessage
+        val imageMessageView = contentFrame.findViewById<ImageAndVideoMessageView>(R.id.imageMessageView)
+        val textView = contentFrame.findViewById<TextView>(R.id.textView)
+        val coverView = contentFrame.findViewById<View>(R.id.v_cover)
+
+        imageMessageView.setupImageView(textMessage, shouldSaveToPhotos, containerWidth)
+        bindCaption(textView, textMessage)
 
         if (textMessage.isConfidential()) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                contentFrame.findViewById<View>(R.id.ll_content)?.applyConfidentialBlur(BLUR_RADIUS_HIGH, 6.dp.toFloat())
+                contentFrame.findViewById<View>(R.id.ll_content)?.applyConfidentialBlur(BLUR_RADIUS_HIGH, CONFIDENTIAL_COVER_RADIUS_DP.dp.toFloat())
                 coverView.setupConfidentialCover(isBlurred = true)
 
             } else {
@@ -214,11 +254,9 @@ object ImageContentBinder : ContentBinder {
     }
 }
 
-/**
- * 语音消息内容绑定器
- *
- * 从 AudioContentAdapter 简化而来
- */
+
+
+
 object AudioContentBinder : ContentBinder {
     override fun bind(contentFrame: ViewGroup, message: ChatMessage, contactorCache: com.difft.android.chat.MessageContactsCacheUtil, shouldSaveToPhotos: Boolean, containerWidth: Int) {
         val textMessage = message as TextChatMessage
@@ -227,33 +265,10 @@ object AudioContentBinder : ContentBinder {
 
         voiceMessageView.setAudioMessage(textMessage)
 
-        if (textMessage.playStatus == AudioMessageManager.PLAY_STATUS_NOT_PLAY) {
-            voiceMessageView.setProgressColor(
-                ContextCompat.getColor(
-                    voiceMessageView.context,
-                    com.difft.android.base.R.color.t_info
-                )
-            )
-            voiceMessageView.setCursorColor(
-                ContextCompat.getColor(
-                    voiceMessageView.context,
-                    com.difft.android.base.R.color.t_info
-                )
-            )
-        } else {
-            voiceMessageView.setProgressColor(
-                ContextCompat.getColor(
-                    voiceMessageView.context,
-                    com.difft.android.base.R.color.icon
-                )
-            )
-            voiceMessageView.setCursorColor(
-                ContextCompat.getColor(
-                    voiceMessageView.context,
-                    com.difft.android.base.R.color.icon
-                )
-            )
-        }
+        
+        val palette = voiceMessageView.bubblePalette()
+        val unheard = textMessage.playStatus == AudioMessageManager.PLAY_STATUS_NOT_PLAY
+        voiceMessageView.applyPalette(palette, highlight = palette.link.takeIf { unheard })
 
         if (textMessage.isConfidential()) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -282,12 +297,13 @@ object AudioContentBinder : ContentBinder {
     }
 }
 
-/**
- * 附件内容绑定器
- *
- * 从 AttachContentAdapter 简化而来
- */
+
+
+
 object AttachContentBinder : ContentBinder {
+    override fun rebindForWidth(contentFrame: ViewGroup, message: ChatMessage, contactorCache: com.difft.android.chat.MessageContactsCacheUtil, shouldSaveToPhotos: Boolean, containerWidth: Int) =
+        bind(contentFrame, message, contactorCache, shouldSaveToPhotos, containerWidth)
+
     override fun bind(contentFrame: ViewGroup, message: ChatMessage, contactorCache: com.difft.android.chat.MessageContactsCacheUtil, shouldSaveToPhotos: Boolean, containerWidth: Int) {
         val textMessage = message as TextChatMessage
         val attachContentView = contentFrame.findViewById<com.difft.android.chat.widget.AttachMessageView>(
@@ -299,7 +315,7 @@ object AttachContentBinder : ContentBinder {
 
         val attachment = textMessage.attachment
 
-        // Handle long text attachment - check if file is downloaded
+        
         val longTextAttachment = attachment?.takeIf { it.isLongText() }
         val isLongText = longTextAttachment != null
         var longTextPath: String? = null
@@ -307,8 +323,8 @@ object AttachContentBinder : ContentBinder {
 
         if (longTextAttachment != null) {
             longTextPath = AttachmentPathResolver.fileFor(longTextAttachment)
-            // A complete ".encrypt" alone counts as downloaded (see longTextReady); the status/progress
-            // signal only gates legacy plaintext — forwarded long text never flips status to SUCCESS.
+            
+            
             isLongTextDownloaded = longTextReady(textMessage, longTextPath)
 
             if (isLongTextDownloaded) {
@@ -316,13 +332,15 @@ object AttachContentBinder : ContentBinder {
             } else {
                 attachContentView.visibility = View.VISIBLE
                 attachContentView.setupAttachmentView(textMessage)
+            attachContentView.applyPalette(attachContentView.bubblePalette())
             }
         } else {
             attachContentView.visibility = View.VISIBLE
             attachContentView.setupAttachmentView(textMessage)
+            attachContentView.applyPalette(attachContentView.bubblePalette())
         }
 
-        // Text rendering (confidential messages also render normally; coverView handles masking)
+        
         if (!TextUtils.isEmpty(textMessage.message)) {
             textView.visibility = View.VISIBLE
             textView.autoLinkMask = 0
@@ -333,7 +351,7 @@ object AttachContentBinder : ContentBinder {
             val effectiveMaxLines = if (isConfidential) TextTruncationUtil.CONFIDENTIAL_MAX_LINES else TextTruncationUtil.DEFAULT_MAX_LINES
 
             textView.setTag(R.id.tag_truncation_message_id, messageId)
-            LinkTextUtils.setMarkdownToTextview(textView.context, rawText, textView, textMessage.mentions)
+            bindBubbleText(textView, textMessage, rawText)
             textView.maxLines = effectiveMaxLines + 1
             textView.ellipsize = null
 
@@ -348,12 +366,12 @@ object AttachContentBinder : ContentBinder {
                     messageId = messageId,
                     maxLines = effectiveMaxLines,
                     enableInteraction = !isConfidential,
-                    // Long-text body is only a 2KB preview — always expose Read More (aligns with iOS/Mac).
+                    
                     alwaysShowReadMore = isLongText
                 ) {
-                    // Recompute readiness at click time (not bind time): forwarded long text
-                    // auto-downloads on first view and the row may not rebind, so a bind-time value
-                    // would stay stale and keep showing the 2KB preview even after ".encrypt" lands.
+                    
+                    
+                    
                     if (longTextReady(textMessage, longTextPath)) {
                         TextTruncationUtil.showFullTextDialogFromFile(
                             textView,
@@ -376,7 +394,7 @@ object AttachContentBinder : ContentBinder {
             textView.visibility = View.GONE
         }
 
-        // Confidential cover (unified handling for all attach types including long text)
+        
         if (textMessage.isConfidential()) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 llContent?.applyConfidentialBlur()
@@ -400,18 +418,18 @@ object AttachContentBinder : ContentBinder {
             coverView.setOnClickListener(null)
             coverView.setOnLongClickListener(null)
         }
-        // Long text renders as body text and opens through the text dialog, so its attachment
-        // status is not surfaced on the cover; every other file type gets the shared status layer.
+        
+        
         val statusLayer = contentFrame.findViewById<ConfidentialAttachmentStatusView>(R.id.confidential_status_scrim)
         if (isLongText) statusLayer?.hide() else statusLayer?.bind(textMessage, stacked = false)
     }
 
-    /**
-     * Long-text "fully downloaded" gate: the file decides (see [EncryptedAttachmentAccess.isLongTextReady]).
-     * Neither the row's status nor the message's direction is consulted — forwarded long text keeps
-     * its attachment inside the serialized forwardContext and never flips its status to SUCCESS, and
-     * a forward copy's message id says nothing about who wrote the bytes here.
-     */
+    
+
+
+
+
+
     private fun longTextReady(message: TextChatMessage, longTextPath: String?): Boolean {
         if (longTextPath == null) return false
         val attachment = message.attachment ?: return false
@@ -420,11 +438,9 @@ object AttachContentBinder : ContentBinder {
 
 }
 
-/**
- * 联系人卡片内容绑定器
- *
- * 从 ContactContentAdapter 简化而来
- */
+
+
+
 object ContactContentBinder : ContentBinder {
     override fun bind(contentFrame: ViewGroup, message: ChatMessage, contactorCache: com.difft.android.chat.MessageContactsCacheUtil, shouldSaveToPhotos: Boolean, containerWidth: Int) {
         val chatMessage = message as TextChatMessage
@@ -439,13 +455,16 @@ object ContactContentBinder : ContentBinder {
         val id = sharedContact.phone?.firstOrNull()?.value ?: ""
         val name = sharedContact.name?.displayName
         tvName.text = name
+        val palette = contentFrame.bubblePalette()
+        tvName.setTextColor(palette.text)
+        contentFrame.findViewById<View>(R.id.ll_content).backgroundTintList = ColorStateList.valueOf(palette.blockFill)
 
-        // Get contact info from cache
+        
         val contactor = contactorCache.getContactor(id)
         if (contactor != null) {
             avatarView.setAvatar(contactor, letterTextSizeDp = CONTACT_CARD_AVATAR_LETTER_TEXT_SIZE_DP)
         } else {
-            // Cache miss, show default avatar
+            
             avatarView.setAvatar(
                 null,
                 null,
@@ -473,13 +492,9 @@ object ContactContentBinder : ContentBinder {
     }
 }
 
-/**
- * 通知消息内容绑定器
- *
- * 从 NotifyContentAdapter 简化而来
- *
- * 注意：由于通知消息有交互（按钮点击），需要传入回调
- */
+
+
+
 class NotifyContentBinder() : ContentBinder {
     override fun bind(contentFrame: ViewGroup, message: ChatMessage, contactorCache: com.difft.android.chat.MessageContactsCacheUtil, shouldSaveToPhotos: Boolean, containerWidth: Int) {
         val textChatMessage = message as com.difft.android.chat.message.NotifyChatMessage
@@ -491,11 +506,9 @@ class NotifyContentBinder() : ContentBinder {
     }
 }
 
-/**
- * 截屏消息内容绑定器
- *
- * 复用 notify 布局，显示截屏通知文本
- */
+
+
+
 object ScreenShotContentBinder : ContentBinder {
     override fun bind(contentFrame: ViewGroup, message: ChatMessage, contactorCache: com.difft.android.chat.MessageContactsCacheUtil, shouldSaveToPhotos: Boolean, containerWidth: Int) {
         val textMessage = message as TextChatMessage
@@ -507,12 +520,10 @@ object ScreenShotContentBinder : ContentBinder {
     }
 }
 
-/**
- * Content binder for confidential message placeholder.
- *
- * Reuses notify layout (centered gray text). Shown to sender after recipient reads; batch-deleted when sender leaves the page.
- * Change to a dedicated layout if placeholder style needs to diverge from notify later.
- */
+
+
+
+
 object ConfidentialPlaceholderContentBinder : ContentBinder {
     override fun bind(contentFrame: ViewGroup, message: ChatMessage, contactorCache: com.difft.android.chat.MessageContactsCacheUtil, shouldSaveToPhotos: Boolean, containerWidth: Int) {
         val textViewContent = contentFrame.findViewById<TextView>(R.id.tv_content)
@@ -522,11 +533,12 @@ object ConfidentialPlaceholderContentBinder : ContentBinder {
     }
 }
 
-/**
- * 合并转发消息内容绑定器
- *
- * 处理多条消息的合并转发显示
- */
+
+
+
+
+private const val HISTORY_PREVIEW_LINES = 3
+
 object MultiForwardContentBinder : ContentBinder {
     @SuppressLint("ClickableViewAccessibility")
     override fun bind(contentFrame: ViewGroup, message: ChatMessage, contactorCache: com.difft.android.chat.MessageContactsCacheUtil, shouldSaveToPhotos: Boolean, containerWidth: Int) {
@@ -538,7 +550,11 @@ object MultiForwardContentBinder : ContentBinder {
         val rvForwardHistory = contentFrame.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.rv_forward_history)
         val vCover = contentFrame.findViewById<View>(R.id.v_cover)
 
-        // Set title
+        val palette = contentFrame.bubblePalette()
+        tvMultiTitle.setTextColor(palette.text)
+        contentFrame.findViewById<View>(R.id.ll_content).backgroundTintList = ColorStateList.valueOf(palette.blockFill)
+
+        
         val context = contentFrame.context
         if (forwards.firstOrNull()?.isFromGroup == true) {
             tvMultiTitle.text = context.getString(R.string.group_chat_history)
@@ -552,14 +568,14 @@ object MultiForwardContentBinder : ContentBinder {
             }
         }
 
-        // Set preview list
-        val adapter = ForwardMessagesAdapter(contactorCache)
+        
+        val adapter = ForwardMessagesAdapter(contactorCache, palette.secondaryText)
         rvForwardHistory.adapter = adapter
         rvForwardHistory.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(context)
         rvForwardHistory.setOnTouchListener { view, event ->
             LinkTextUtils.findParentChatMessageItemView(view)?.onTouchEvent(event) ?: false
         }
-        adapter.submitList(forwards.take(5))
+        adapter.submitList(forwards.take(HISTORY_PREVIEW_LINES))
 
         if (textMessage.isConfidential()) {
             val llContent = contentFrame.findViewById<View>(R.id.ll_content)

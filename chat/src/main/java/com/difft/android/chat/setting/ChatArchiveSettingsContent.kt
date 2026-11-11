@@ -23,13 +23,13 @@ import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.chat.R
 import com.difft.android.chat.setting.archive.toArchiveTimeDisplayText
 
-/**
- * Stateless body of the disappearing-messages screen.
- *
- * [options] is the server-configured list as it stands. A conversation may already carry a value
- * the configuration no longer offers (an older option, or one set from another client), so such a
- * [selected] value is appended as the last row instead of leaving the screen with no selection.
- */
+
+
+
+
+
+
+
 @Composable
 fun ChatArchiveSettingsContent(
     options: List<Long>,

@@ -26,16 +26,16 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * The notifications slot's system-permission flow, offer identity, failed writes and stale answers
- * (#1355), on the shared coordinator harness.
- */
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class StartupPromptCoordinatorFlowTest : StartupPromptCoordinatorTestBase() {
 
     @Test
     fun `upgrader with a permanent denial gets the app dialog in the same session, then directly`() = runTest {
-        // No state is carried over from older versions, while the permission was denied for good.
+        
         eligible(PromptId.NOTIFICATIONS, ReadinessIssue.APP_NOTIFICATIONS_OFF, requestable = true)
         val c = coordinator()
         startSession(c)
@@ -43,7 +43,7 @@ class StartupPromptCoordinatorFlowTest : StartupPromptCoordinatorTestBase() {
         assertTrue(system.viaSystemRequest)
         c.onShown(system)
         assertTrue(c.onActionTaken(system, rationaleBefore = false))
-        // The system answers without a dialog.
+        
         c.onNotificationRequestResult(granted = false, rationaleAfter = false)
         val dialog = c.current.value!!
         assertEquals(PromptId.NOTIFICATIONS, dialog.id)
@@ -59,8 +59,8 @@ class StartupPromptCoordinatorFlowTest : StartupPromptCoordinatorTestBase() {
         assertFalse("system route exhausted: the app dialog directly", c.current.value!!.viaSystemRequest)
         c.onDeclined(c.current.value!!)
 
-        // Permission reset to "ask every time": the system can show its dialog again. The host
-        // pauses before the session ends and reports the fresh rationale when it is back.
+        
+        
         c.setHostState(false, false)
         runCurrent()
         endSession()
@@ -78,7 +78,7 @@ class StartupPromptCoordinatorFlowTest : StartupPromptCoordinatorTestBase() {
         c.onShown(system)
         c.onActionTaken(system, rationaleBefore = true)
 
-        // A fresh coordinator (new process) receives the result: a second, visible denial.
+        
         val revived = coordinator()
         revived.onNotificationRequestResult(granted = false, rationaleAfter = false)
         val after = record(PromptId.NOTIFICATIONS)!!
@@ -142,7 +142,7 @@ class StartupPromptCoordinatorFlowTest : StartupPromptCoordinatorTestBase() {
         c.onShown(system)
         c.onActionTaken(system, rationaleBefore = false)
 
-        // The request is outstanding when a 451 raises the inactive-device gate.
+        
         gates.value = setOf(GateId.INACTIVE_DEVICE)
         runCurrent()
         c.onNotificationRequestResult(granted = false, rationaleAfter = false)
@@ -208,7 +208,7 @@ class StartupPromptCoordinatorFlowTest : StartupPromptCoordinatorTestBase() {
         failing.fail = false
         assertEquals(0L, failingStore.read()[PromptId.NOTIFICATIONS]?.pendingActionAt ?: 0L)
 
-        // Second, visible denial: rationale true before, false after.
+        
         c.onNotificationRequestResult(granted = false, rationaleAfter = false)
         assertNull("not mistaken for a silent result", c.current.value)
         val after = failingStore.read()[PromptId.NOTIFICATIONS]!!
@@ -257,7 +257,7 @@ class StartupPromptCoordinatorFlowTest : StartupPromptCoordinatorTestBase() {
         val again = c.current.value!!
         assertEquals(PromptId.BACKGROUND_CONNECTION, again.id)
         assertTrue(again.seq > ticket.seq)
-        // The recreated host settles and reports again: nothing is reconciled as a return unfixed.
+        
         c.setHostState(true, false)
         runCurrent()
         assertEquals(again, c.current.value)
@@ -265,7 +265,7 @@ class StartupPromptCoordinatorFlowTest : StartupPromptCoordinatorTestBase() {
         assertEquals(0L, record.pendingActionAt)
         assertEquals(0, record.declines)
 
-        // A second abort for the same ticket changes nothing.
+        
         c.onActionAborted(ticket)
         assertEquals(again, c.current.value)
     }

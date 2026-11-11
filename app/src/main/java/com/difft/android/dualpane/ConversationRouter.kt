@@ -12,15 +12,15 @@ import com.difft.android.base.utils.pane.ConversationTarget
 import com.difft.android.chat.recent.ConversationNavigationCallback
 import com.difft.android.chat.ui.ConversationShells
 
-/**
- * Where a conversation opens (design: foldable detail stacks, §3.5). Installed as the
- * Application's `ConversationOpener`, so every `ChatActivity.startActivity` /
- * `GroupChatContentActivity.startActivity` call and `ShellNavigation.openConversation` lands here:
- * 1. the context is the home screen: open in its current tab's detail stack;
- * 2. another Activity in a two-pane window: bring the home screen forward with [EXTRA_OPEN_CONVERSATION]
- *    (singleTask finishes the launching page), so the conversation opens in the detail pane;
- * 3. otherwise (one-pane, or no Activity): the full-window shell, so Back returns to the launcher.
- */
+
+
+
+
+
+
+
+
+
 object ConversationRouter {
 
     enum class Route { HOME_STACK, BRING_HOME, SHELL }
@@ -46,7 +46,7 @@ object ConversationRouter {
         }
     }
 
-    /** A removed conversation closes on the home screen (see [ConversationOpener.closeConversation]). */
+    
     fun close(conversationId: String) = PaneNavigator.closeConversationEverywhere(conversationId)
 
     private fun Context.findActivity(): Activity? {
@@ -59,17 +59,17 @@ object ConversationRouter {
     }
 }
 
-/** The conversation an IndexActivity launch asks to open (router rule 2). */
+
 const val EXTRA_OPEN_CONVERSATION = "com.difft.android.extra.OPEN_CONVERSATION"
 
 internal object OpenConversationExtra {
 
     fun put(intent: Intent, target: ConversationTarget): Intent = intent.putExtra(EXTRA_OPEN_CONVERSATION, target)
 
-    /**
-     * Takes the request out of [intent] so it is handled once. A recreation (fold, language) keeps
-     * the launch intent and already restored that conversation, so it is dropped there (#1395).
-     */
+    
+
+
+
     fun consume(intent: Intent, isRecreation: Boolean): ConversationTarget? {
         if (!intent.hasExtra(EXTRA_OPEN_CONVERSATION)) return null
         val target = IntentCompat.getParcelableExtra(intent, EXTRA_OPEN_CONVERSATION, ConversationTarget::class.java)

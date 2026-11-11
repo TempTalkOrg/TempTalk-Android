@@ -30,7 +30,7 @@ kotlin {
 dependencies {
     implementation(project(":base"))
 
-    // Test dependencies
+    
     testImplementation(libs.junit)
     testImplementation(libs.kotlin.test)
     testImplementation(libs.kotlinx.coroutines.test)

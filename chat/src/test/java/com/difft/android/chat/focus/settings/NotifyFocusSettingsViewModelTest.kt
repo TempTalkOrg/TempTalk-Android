@@ -25,7 +25,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** State mapping of the Me > Notifications focus block and the paused global group notification row. */
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class NotifyFocusSettingsViewModelTest {
 

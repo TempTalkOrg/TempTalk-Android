@@ -29,10 +29,10 @@ import androidx.compose.ui.unit.dp
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.call.R
 
-/**
- * The controls a bar layout arranges. Each lambda renders exactly one round control (no
- * caption); the layouts decide placement, gaps and captions.
- */
+
+
+
+
 class ActionBarSlots(
     val mic: @Composable () -> Unit,
     val video: @Composable () -> Unit,
@@ -44,7 +44,7 @@ class ActionBarSlots(
     val end: @Composable () -> Unit,
 )
 
-/** Captions for [TwoRowActionBar]. */
+
 data class ActionBarLabels(
     val mic: String,
     val video: String,
@@ -54,14 +54,14 @@ data class ActionBarLabels(
     val end: String,
 )
 
-/** Two-row 1v1 bar backplate: page ground at 72% (backdrop blur is not available in Compose). */
+
 private const val TWO_ROW_PLATE_ALPHA = 0.72f
 
-/**
- * 1v1 portrait phones: Mute / Video / Speaker over Emoji / More / End, captions under each,
- * three equal columns inside a 343dp-max container. [showPlate] adds the rounded ground
- * behind the rows while either side's camera is on, so captions stay legible over video.
- */
+
+
+
+
+
 @Composable
 fun TwoRowActionBar(
     slots: ActionBarSlots,
@@ -77,8 +77,8 @@ fun TwoRowActionBar(
     ) {
         Column(
             modifier = Modifier
-                // Cap first, then fill: the other order lets fillMaxWidth fix the constraints
-                // before the cap is seen, which would stretch the rows past 343dp.
+                
+                
                 .widthIn(max = CallActionBarPlanner.TWO_ROW_MAX_WIDTH_DP.dp)
                 .fillMaxWidth()
                 .testTag("call_action_bar_two_row")
@@ -110,10 +110,10 @@ fun TwoRowActionBar(
     }
 }
 
-/**
- * Wide windows: Emoji pinned to the start inset, End pinned to the end inset, the control
- * group (Mute Video Speaker Invite [People] More) centred on the window.
- */
+
+
+
+
 @Composable
 fun SplitActionBar(
     plan: ActionBarPlan,
@@ -147,10 +147,10 @@ fun SplitActionBar(
     }
 }
 
-/**
- * One centred row. Emoji leads the row when [ActionBarPlan.emojiInline]; otherwise it lives in
- * [OutsideEmojiButton] above the row and the row starts at Mute.
- */
+
+
+
+
 @Composable
 fun SingleRowActionBar(
     plan: ActionBarPlan,
@@ -178,24 +178,20 @@ fun SingleRowActionBar(
     }
 }
 
-/** Inner hairline that lifts the outside Emoji pill off a dark ground. */
+
 private val OUTSIDE_EMOJI_RING = Color(0xE65E6673)
 private const val OUTSIDE_EMOJI_BG_ALPHA = 0.9f
 
-/**
- * Emoji entry for [ActionBarLayout.EMOJI_OUTSIDE] / [ActionBarLayout.COMPACT]: a 40dp pill at
- * the start inset, floating above the row.
- */
+
+
+
+
 @Composable
 fun OutsideEmojiButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .size(CallActionBarPlanner.OUTSIDE_EMOJI_SIZE_DP.dp)
-            .actionButtonShadow()
-            .background(
-                color = DifftTheme.colors.backgroundSecondary.copy(alpha = OUTSIDE_EMOJI_BG_ALPHA),
-                shape = CircleShape,
-            )
+            .actionButtonSurface(DifftTheme.colors.backgroundSecondary.copy(alpha = OUTSIDE_EMOJI_BG_ALPHA))
             .border(width = 1.dp, color = OUTSIDE_EMOJI_RING, shape = CircleShape)
             .testTag("call_btn_emoji_outside")
             .clickable(

@@ -22,19 +22,19 @@ import io.mockk.mockkStatic
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlin.reflect.KProperty0
 
-/**
- * Member stubs for the collaborators Phase B builds inline. `mockkConstructor` runs the real
- * constructor (none of these touches `android.*` while constructing) and then swaps member
- * dispatch, so ordering and side effects can be verified on the plain JVM.
- */
+
+
+
+
+
 internal object PhaseBCollaboratorStubs {
 
-    /** The network-quality coordinator handed out by the stubbed factory (its real `start` asserts the main Looper). */
+    
     lateinit var networkQuality: NetworkQualityCoordinator
         private set
 
     fun install() {
-        // LiveKit's @FlowObservable delegates do not exist on a mock Room: hand out typed flows by property name.
+        
         mockkStatic("io.livekit.android.util.FlowDelegateKt")
         every { any<KProperty0<Any?>>().flow } answers {
             when (firstArg<KProperty0<*>>().name) {

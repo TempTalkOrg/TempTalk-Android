@@ -4,10 +4,10 @@ import android.content.Intent
 import android.net.Uri
 import android.provider.MediaStore
 
-/**
- * Keys mirror the UCrop library's UCrop class keys — do not rename when using the
- * bundled crop library.
- */
+
+
+
+
 object Crop {
     const val REQUEST_EDIT_CROP = 696
 

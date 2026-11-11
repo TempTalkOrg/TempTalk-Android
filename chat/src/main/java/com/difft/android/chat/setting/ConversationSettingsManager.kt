@@ -4,13 +4,11 @@ import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.RoomChangeTracker
 import com.difft.android.base.utils.appScope
 import org.difft.app.database.wcdb
+import com.difft.android.chat.setting.sync.ConversationConfigFetcher
 import com.difft.android.chat.setting.sync.ConversationSettingsApplier
 import com.difft.android.chat.setting.sync.ServerConfigSnapshot
 import com.difft.android.chat.setting.sync.SnapshotSource
 import com.difft.android.messageserialization.db.store.DBRoomStore
-import com.difft.android.network.ChativeHttpClient
-import com.difft.android.network.di.ChativeHttpClientModule
-import com.difft.android.network.requests.GetConversationSetRequestBody
 import com.difft.android.network.responses.ConversationSetResponseBody
 import dagger.Lazy
 import kotlinx.coroutines.CoroutineScope
@@ -24,65 +22,64 @@ import org.difft.app.database.models.RoomModel
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Special value to indicate "set saveToPhotos to null (default/follow global)"
- * Used to distinguish between "no change" (null) and "set to default" (-1)
- */
+
+
+
+
 const val SAVE_TO_PHOTOS_SET_DEFAULT = -1
 
-/** Min interval between full syncs; repeated triggers within this window are skipped. */
+
 private const val MIN_BULK_SYNC_INTERVAL_MS = 60_000L
 
-/**
- * Conversation setting update event
- * null indicates the field has not changed
- */
+
+
+
+
 data class ConversationSettingUpdate(
     val conversationId: String,
-    // Type 4 related: muteStatus, blockStatus, confidentialMode
+    
     val muteStatus: Int? = null,
     val blockStatus: Int? = null,
     val confidentialMode: Int? = null,
-    // Type 5 related: messageExpiry, messageClearAnchor (always appear together)
+    
     val messageExpiry: Long? = null,
     val messageClearAnchor: Long? = null,
-    // Save to photos setting (null: no change, -1: set to default, 0: disabled, 1: enabled)
+    
     val saveToPhotos: Int? = null,
-    // Auto-translate target (null: no change, 0: off, 1: Chinese, 2: English). The value is
-    // non-null in the model, so null alone already means "not changed" — no sentinel needed.
+    
+    
     val translateSetting: Int? = null,
-    // Mute sub-options (null: no change)
+    
     val allowMentionMe: Boolean? = null,
     val allowMentionAll: Boolean? = null,
     val allowGroupCall: Boolean? = null
 )
 
-// All wcdb calls in this class run on Dispatchers.IO.
+
 @Suppress("BlockingWcdbInSuspend")
 @Singleton
 class ConversationSettingsManager @Inject constructor(
-    @param:ChativeHttpClientModule.Chat
-    private val httpClient: ChativeHttpClient,
+    private val fetcher: ConversationConfigFetcher,
     private val dbRoomStore: DBRoomStore,
-    // Lazy: the applier emits through this manager, so the two reference each other.
+    
     private val applier: Lazy<ConversationSettingsApplier>
 ) : CoroutineScope by appScope {
 
     private val _conversationSettingUpdate = MutableSharedFlow<ConversationSettingUpdate>(extraBufferCapacity = 1)
     val conversationSettingUpdate: SharedFlow<ConversationSettingUpdate> = _conversationSettingUpdate.asSharedFlow()
 
-    // Full-sync throttle, shared by cold start and every foreground (guarded by bulkSyncLock).
-    // The window is stamped only AFTER a successful sync, so a failed/empty attempt does not burn
-    // it and the next foreground can retry. bulkSyncInFlight dedups the near-simultaneous
-    // cold-start IndexActivity + onForeground triggers.
+    
+    
+    
+    
     private var lastBulkSyncSuccessAtMs = 0L
     private var bulkSyncInFlight = false
     private val bulkSyncLock = Any()
 
     init {
-        // Refetch a single conversation's config when its room is (re)created, so delete + recreate
-        // recovers immediately even when the full sync is throttled. roomCreated has a replay buffer
-        // so events emitted just before this collector subscribes at startup are not lost.
+        
+        
+        
         launch(Dispatchers.IO) {
             RoomChangeTracker.roomCreated.collect { roomIds ->
                 syncSettingsForRooms(roomIds)
@@ -90,8 +87,8 @@ class ConversationSettingsManager @Inject constructor(
         }
     }
 
-    // Claims the single in-flight slot; check + claim must be locked, otherwise cold start's
-    // near-simultaneous IndexActivity + onForeground triggers both pass.
+    
+    
     private fun tryBeginBulkSync(force: Boolean): Boolean = synchronized(bulkSyncLock) {
         if (bulkSyncInFlight) return false
         if (!force && System.currentTimeMillis() - lastBulkSyncSuccessAtMs < MIN_BULK_SYNC_INTERVAL_MS) return false
@@ -104,15 +101,15 @@ class ConversationSettingsManager @Inject constructor(
         if (success) lastBulkSyncSuccessAtMs = System.currentTimeMillis()
     }
 
-    /**
-     * 通知会话配置已更新
-     * @param conversationId 会话ID
-     * @param muteStatus 静音状态 (null = 未变化)
-     * @param blockStatus 屏蔽状态 (null = 未变化)
-     * @param confidentialMode 机密模式 (null = 未变化)
-     * @param messageExpiry 消息过期时间 (null = 未变化)
-     * @param messageClearAnchor 消息清除锚点 (null = 未变化)
-     */
+    
+
+
+
+
+
+
+
+
     fun emitConversationSettingUpdate(
         conversationId: String,
         muteStatus: Int? = null,
@@ -137,14 +134,14 @@ class ConversationSettingsManager @Inject constructor(
         _conversationSettingUpdate.tryEmit(update)
     }
 
-    /**
-     * Emit save to photos setting update
-     * @param conversationId Conversation ID
-     * @param saveToPhotos Save to photos setting (null: follow global, 0: disabled, 1: enabled)
-     */
+    
+
+
+
+
     fun emitSaveToPhotosUpdate(conversationId: String, saveToPhotos: Int?) {
-        // Use SAVE_TO_PHOTOS_SET_DEFAULT (-1) to indicate "set to null (default)"
-        // This distinguishes from null which means "no change"
+        
+        
         val updateValue = saveToPhotos ?: SAVE_TO_PHOTOS_SET_DEFAULT
         val update = ConversationSettingUpdate(
             conversationId = conversationId,
@@ -154,11 +151,11 @@ class ConversationSettingsManager @Inject constructor(
         _conversationSettingUpdate.tryEmit(update)
     }
 
-    /**
-     * Emit auto-translate setting update
-     * @param conversationId Conversation ID
-     * @param translateSetting Auto-translate target (0: off, 1: Chinese, 2: English)
-     */
+    
+
+
+
+
     fun emitTranslateSettingUpdate(conversationId: String, translateSetting: Int) {
         val update = ConversationSettingUpdate(
             conversationId = conversationId,
@@ -167,13 +164,13 @@ class ConversationSettingsManager @Inject constructor(
         L.i { "[Translate] emitTranslateSettingUpdate: $update" }
         _conversationSettingUpdate.tryEmit(update)
     }
-    /**
-     * Full sync of all rooms' server config. Called on cold start and every foreground,
-     * throttled by [MIN_BULK_SYNC_INTERVAL_MS]. Delete + recreate of a single conversation is
-     * handled instantly by [syncSettingsForRooms], so no startup delay is needed here.
-     *
-     * @param force bypass the throttle.
-     */
+    
+
+
+
+
+
+
     fun syncConversationSettings(force: Boolean = false) {
         launch(Dispatchers.IO) {
             if (!tryBeginBulkSync(force)) {
@@ -185,88 +182,64 @@ class ConversationSettingsManager @Inject constructor(
                 val roomModels = getRoomModels()
                 if (roomModels.isEmpty()) {
                     L.i { "[ConversationSettingsManager] No rooms found for conversation settings sync" }
-                    success = true // nothing to sync is a stable outcome — keep the throttle window
+                    success = true 
                     return@launch
                 }
-                success = fetchAndApply(roomModels)
-                if (!success) {
-                    L.i { "[ConversationSettingsManager] No conversation settings received from server" }
-                }
+                success = fetchAndApply(roomModels, source = "bulk")
             } catch (e: Exception) {
                 L.e { "[ConversationSettingsManager] syncConversationSettings error: ${e.stackTraceToString()}" }
             } finally {
-                // Only a successful sync arms the throttle; a failure lets the next foreground retry.
+                
                 endBulkSync(success)
             }
         }
     }
 
-    /**
-     * Refetch server config for the given rooms (delete + recreate and similar incremental cases).
-     * Not throttled: room-created events are inherently sparse (only a genuine new/recreated room
-     * fires one), and a recreated room always needs a fresh fetch since its row starts at defaults.
-     */
+    
+
+
+
+
     private suspend fun syncSettingsForRooms(roomIds: List<String>) {
         try {
             val ids = roomIds.filter { it.isNotEmpty() && it != "server" }
             if (ids.isEmpty()) return
 
-            // Only rooms still present (an event may arrive after the room was deleted again).
+            
             val roomModels = wcdb.room.getAllObjects(DBRoomModel.roomId.`in`(ids))
             if (roomModels.isEmpty()) return
 
             L.i { "[ConversationSettingsManager] sync settings for newly created rooms: ${roomModels.map { it.roomId }}" }
-            fetchAndApply(roomModels)
+            fetchAndApply(roomModels, source = "roomCreated")
         } catch (e: Exception) {
             L.e { "[ConversationSettingsManager] syncSettingsForRooms error: ${e.stackTraceToString()}" }
         }
     }
 
-    /** Shared fetch → apply core. Returns true if settings were fetched and applied. */
-    private suspend fun fetchAndApply(roomModels: List<RoomModel>): Boolean {
+    
+
+
+
+    private suspend fun fetchAndApply(roomModels: List<RoomModel>, source: String): Boolean {
         if (roomModels.isEmpty()) return false
-        val conversationSettings = fetchConversationSettings(roomModels.map { it.roomId })
-        if (conversationSettings.isEmpty()) return false
-        updateRoomSettings(roomModels, conversationSettings)
+        val conversationSettings = fetcher.fetch(roomModels.map { it.roomId }, source) ?: return false
+        if (conversationSettings.isNotEmpty()) updateRoomSettings(roomModels, conversationSettings)
         return true
     }
 
-    /**
-     * Every room the server may hold config for. The conversation list hides rows whose name is not
-     * resolved yet; the config fetch keys on the id alone, so those rows (a migration import lands
-     * every room unnamed until contacts arrive) are synced too.
-     */
+    
+
+
+
+
     private suspend fun getRoomModels(): List<RoomModel> {
         return wcdb.room.getAllObjects(DBRoomModel.roomId.notEq("server"))
     }
 
-    /**
-     * 从服务器获取会话设置
-     */
-    private suspend fun fetchConversationSettings(conversationIds: List<String>): List<ConversationSetResponseBody> {
-        if (conversationIds.isEmpty()) {
-            return emptyList()
-        }
+    
 
-        val response = httpClient.httpService.fetchGetConversationSet(
-            GetConversationSetRequestBody(conversationIds)
-        )
 
-        if (response.status != 0) {
-            L.e { "[ConversationSettingsManager] Server error: ${response.status} - ${response.reason}" }
-            return emptyList()
-        }
 
-        val conversations = response.data?.conversations ?: emptyList()
-        L.i { "[ConversationSettingsManager] Received ${conversations.size} conversation settings from server" }
-
-        return conversations
-    }
-
-    /**
-     * Applies each pulled config through [ConversationSettingsApplier], which owns the version gate
-     * and the local-first gating of the confidential field.
-     */
     private suspend fun updateRoomSettings(
         roomModels: List<RoomModel>,
         conversationSettings: List<ConversationSetResponseBody>
@@ -278,8 +251,7 @@ class ConversationSettingsManager @Inject constructor(
                     L.w { "[ConversationSettingsManager] Room not found for conversation: ${setting.conversation}" }
                     return@forEach
                 }
-                // Silent like the previous bulk write: open screens read the row, a burst of
-                // events would overflow the update flow.
+                
                 applier.get().applyServerSnapshot(ServerConfigSnapshot.fromPull(setting), SnapshotSource.Pull, announce = false)
             } catch (e: Exception) {
                 L.e { "[ConversationSettingsManager] Error processing setting for conversation ${setting.conversation}: ${e.message}" }

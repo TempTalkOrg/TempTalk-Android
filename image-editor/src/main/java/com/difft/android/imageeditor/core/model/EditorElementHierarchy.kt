@@ -18,39 +18,39 @@ import com.difft.android.imageeditor.core.renderers.TrashRenderer
 import kotlin.math.abs
 import kotlin.math.sqrt
 
-/**
- * Creates and handles a strict EditorElement Hierarchy.
- *
- * ```
- * root - always square, contains only temporary zooms for editing. e.g. when the whole editor zooms out for cropping
- * |
- * |- view - contains persisted adjustments for crops
- * |  |
- * |  |- flipRotate - contains persisted adjustments for flip and rotate operations, ensures operations are centered within the current view
- * |     |
- * |     |- imageRoot
- * |     |  |- mainImage
- * |     |     |- stickers/drawings/text
- * |     |
- * |     |- overlay - always square
- * |     |  |- imageCrop - a crop to match the aspect of the main image
- * |     |  |  |- cropEditorElement - user crop, not always square, but upright, the area of the view
- * |     |  |  |  |  All children do not move/scale or rotate.
- * |     |  |  |  |- blackout
- * |     |  |  |  |- fade
- * |     |  |  |  |- thumbs
- * |     |  |  |  |  |- Center left thumb
- * |     |  |  |  |  |- Center right thumb
- * |     |  |  |  |  |- Top center thumb
- * |     |  |  |  |  |- Bottom center thumb
- * |     |  |  |  |  |- Top left thumb
- * |     |  |  |  |  |- Top right thumb
- * |     |  |  |  |  |- Bottom left thumb
- * |     |  |  |  |  |- Bottom right thumb
- * |     |  |- selection - matches the aspect and overall matrix of the selected item's selectedBounds
- * |     |  |  |- Selection thumbs
- * ```
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 internal class EditorElementHierarchy private constructor(val root: EditorElement) {
 
     private val view: EditorElement = root.getChild(0)
@@ -69,19 +69,19 @@ internal class EditorElementHierarchy private constructor(val root: EditorElemen
         private set
 
     private enum class CropStyle {
-        /**
-         * A rectangular overlay with 8 thumbs, corners and edges.
-         */
+        
+
+
         RECTANGLE,
 
-        /**
-         * Cropping with a circular template overlay with Corner thumbs only.
-         */
+        
+
+
         CIRCLE,
 
-        /**
-         * No overlay and no thumbs. Cropping achieved through pinching and panning.
-         */
+        
+
+
         PINCH_AND_PAN
     }
 
@@ -133,9 +133,9 @@ internal class EditorElementHierarchy private constructor(val root: EditorElemen
 
     fun getTrash(): EditorElement = trash
 
-    /**
-     * The main image, null if not yet set.
-     */
+    
+
+
     fun getMainImage(): EditorElement? = if (imageRoot.getChildCount() > 0) imageRoot.getChild(0) else null
 
     fun getCropEditorElement(): EditorElement = cropEditorElement
@@ -162,10 +162,10 @@ internal class EditorElementHierarchy private constructor(val root: EditorElemen
         invalidate.run()
     }
 
-    /**
-     * @param scaleIn Use 1 for no scale in, use less than 1 and it will zoom the image out
-     *                so user can see more of the surrounding image while cropping.
-     */
+    
+
+
+
     fun startCrop(invalidate: Runnable, scaleIn: Float) {
         val editor = Matrix()
 
@@ -218,11 +218,11 @@ internal class EditorElementHierarchy private constructor(val root: EditorElemen
         return matrix
     }
 
-    /**
-     * Returns a matrix that maps points from the crop on to the visible image.
-     *
-     * i.e. if a mapped point is in bounds, then the point is on the visible image.
-     */
+    
+
+
+
+
     fun imageMatrixRelativeToCrop(): Matrix? {
         val mainImage = getMainImage() ?: return null
 
@@ -263,9 +263,9 @@ internal class EditorElementHierarchy private constructor(val root: EditorElemen
         updateViewToCrop(visibleViewPort, invalidate)
     }
 
-    /**
-     * The full matrix for the [getMainImage] from [root] down.
-     */
+    
+
+
     fun getMainImageFullMatrix(): Matrix {
         val matrix = Matrix()
 
@@ -275,9 +275,9 @@ internal class EditorElementHierarchy private constructor(val root: EditorElemen
         return matrix
     }
 
-    /**
-     * The full matrix for the [getMainImage] from [flipRotate] down.
-     */
+    
+
+
     fun getMainImageFullMatrixFromFlipRotate(): Matrix {
         val matrix = Matrix()
 
@@ -292,12 +292,12 @@ internal class EditorElementHierarchy private constructor(val root: EditorElemen
         return matrix
     }
 
-    /**
-     * Calculates the exact output size based upon the crops/rotates and zooms in the hierarchy.
-     *
-     * @param inputSize Main image size
-     * @return Size after applying all zooms/rotates and crops
-     */
+    
+
+
+
+
+
     fun getOutputSize(inputSize: Point): PointF {
         val matrix = Matrix()
 
@@ -461,9 +461,9 @@ internal class EditorElementHierarchy private constructor(val root: EditorElemen
             return element
         }
 
-        /**
-         * Extract the x scale from a matrix, which is the length of the first column.
-         */
+        
+
+
         @JvmStatic
         fun xScale(matrix: Matrix): Float {
             val values = FloatArray(9)

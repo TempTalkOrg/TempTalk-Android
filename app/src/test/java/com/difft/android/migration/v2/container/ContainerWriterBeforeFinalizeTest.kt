@@ -16,10 +16,10 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
-/**
- * The writer's `beforeFinalize` hook, the migration message pause's commit marker (#1382): it runs
- * once after the last record, and a hook that throws leaves a container no receiver can commit.
- */
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = android.app.Application::class, sdk = [33])
 class ContainerWriterBeforeFinalizeTest {
@@ -69,7 +69,7 @@ class ContainerWriterBeforeFinalizeTest {
         assertFailsWith<Exception> { write(sink) { error("commit marker not written") } }
 
         assertTrue(sink.aborted)
-        // Whatever reached the wire has no end marker and no trailing HMAC: a receiver refuses it.
+        
         assertFailsWith<Exception> { readBack(sink.bytes.toByteArray()) }
     }
 }

@@ -7,14 +7,14 @@ import java.util.Objects
 
 @WCDBTableCoding
 class SharedContactPhoneModel {
-    // Int (not Long): WCDB-KSP generates `== 0` autoincrement guard which does not
-    // compile for Long primary keys. Column type stays ColumnType.Integer — no schema
-    // change. Local rowid never exceeds 2^31 and is never externally serialized. #901
+    
+    
+    
     @WCDBField(isPrimary = true, isAutoIncrement = true)
     var databaseId: Int = 0
 
-    // Faithful 1:1: source field was primitive `long` (non-null column, no null guard
-    // in the generated binding), so it stays non-null Long — NOT a boxed FK. #901
+    
+    
     @WCDBIndex
     @WCDBField
     var sharedContactDatabaseId: Long = 0L

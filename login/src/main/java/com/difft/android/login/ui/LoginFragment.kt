@@ -10,7 +10,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.ViewModelProvider
 import com.difft.android.base.user.UserManager
-import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.ValidatorUtil
 import com.difft.android.base.utils.dp
 import com.difft.android.login.R
@@ -39,10 +38,10 @@ class LoginFragment : Fragment() {
 
     private val binding: FragmentLogInBinding by viewbind()
 
-    /**
-     * The next button's own wait dialog: only the account request may raise or release it, and the
-     * view lifecycle releases it on destruction.
-     */
+    
+
+
+
     private lateinit var nextWait: WaitDialogHandle
 
     @Inject
@@ -89,8 +88,8 @@ class LoginFragment : Fragment() {
                 }
             }
         }
-        // Equivalence note: today's empty branch only disables the button — clPhone stays as-is
-        // after a clear (it only changes on the next non-empty input). Do NOT hide it here.
+        
+        
         binding.account.onClear = { disableNext() }
 
         binding.clPhone.setOnClickListener {
@@ -120,7 +119,7 @@ class LoginFragment : Fragment() {
     }
 
     private val countryPickerActivityLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        // Activity-result callbacks fire after view destruction; guard binding access.
+        
         if (!isAdded || view == null) return@registerForActivityResult
         if (result.resultCode != Activity.RESULT_OK) return@registerForActivityResult
         val code = result.data?.getStringExtra("code") ?: return@registerForActivityResult
@@ -139,7 +138,7 @@ class LoginFragment : Fragment() {
         binding.btnNext.isEnabled = false
     }
 
-    /** Input validity only: a keystroke must never release a dialog the request raised. */
+    
     private fun enableNext() {
         binding.btnNext.isEnabled = true
     }
@@ -154,7 +153,7 @@ class LoginFragment : Fragment() {
         observeVerifyEmail()
     }
 
-    // Local validation error: input is neither a valid email nor a phone number.
+    
     private fun observeAccountInvalid() =
         viewModel.accountInvalidLiveData.observe(viewLifecycleOwner) {
             it ?: return@observe
@@ -169,8 +168,8 @@ class LoginFragment : Fragment() {
             when (it.status) {
                 Status.LOADING -> loadingNext()
                 Status.SUCCESS -> {
-                    // Request settled: release the non-cancelable modal before the code screen
-                    // covers this one.
+                    
+                    
                     nextWait.dismiss()
                     enableNext()
                     val bundle = VerifyCodeActivity.createBundle(true, VerifyCodeActivity.TYPE_BIND_PHONE, it.data ?: "")
@@ -190,8 +189,8 @@ class LoginFragment : Fragment() {
             when (it.status) {
                 Status.LOADING -> loadingNext()
                 Status.SUCCESS -> {
-                    // Request settled: release the non-cancelable modal before the code screen
-                    // covers this one.
+                    
+                    
                     nextWait.dismiss()
                     enableNext()
                     val bundle = VerifyCodeActivity.createBundle(true, VerifyCodeActivity.TYPE_BIND_EMAIL, it.data ?: "")
@@ -208,12 +207,12 @@ class LoginFragment : Fragment() {
 
     private fun showSignInErrorView(errorMessage: String?) {
         if (!errorMessage.isNullOrEmpty()) {
-            binding.clAccount.background = ResUtils.getDrawable(R.drawable.login_account_error_border)
+            binding.clAccount.setBackgroundResource(R.drawable.login_account_error_border)
             binding.errorHint.text = errorMessage
             binding.errorHint.visibility = View.VISIBLE
             binding.btnNext.setTopMargin(20.dp)
         } else {
-            binding.clAccount.background = ResUtils.getDrawable(R.drawable.login_account_border)
+            binding.clAccount.setBackgroundResource(R.drawable.login_account_border)
             binding.errorHint.visibility = View.GONE
             binding.btnNext.setTopMargin(16.dp)
         }

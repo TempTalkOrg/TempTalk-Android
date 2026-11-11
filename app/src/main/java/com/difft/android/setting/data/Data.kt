@@ -11,9 +11,8 @@ data class GetProfileResponse(
     val passkeysSwitch: Int
 )
 
-//    "searchFlag":0 // 0x1: phone, 0x2: email, 0x3: phone&email
 data class SetStatusRequestBody(
-    // 0：表示关闭，1 表示打开
+    
     val searchByPhone: Int? = null,
     val searchByEmail: Int? = null,
     val searchByCustomUid: Int? = null,
@@ -34,6 +33,6 @@ data class CheckUpdateResponse(
 )
 
 data class ResetPasscodeRequestBody(
-    val passcode: String, //hash:salt
-    val screenLockTimeout: Int,//in seconds 0:instant -1:invalid
+    val passcode: String, 
+    val screenLockTimeout: Int,
 )

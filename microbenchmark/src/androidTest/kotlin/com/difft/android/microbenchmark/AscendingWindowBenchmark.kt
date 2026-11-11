@@ -20,17 +20,17 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/**
- * Full-window re-query cost at the pagination window tiers (issue #1162; the controlled-environment
- * companion of the PR #1148 P1 probe `observer window re-query rows=.. cost=..ms`).
- *
- * The query is re-expressed over `:database`'s public API rather than calling
- * `WcdbChatMessageWindowSource.ascendingFrom` — that class is `internal` to `:chat` and its own
- * KDoc certifies each expression as a verbatim, byte-identical migration, so this copy is faithful
- * by construction (drift risk noted in the PR). Both production branches are measured: the
- * absorbing branch issues `systemShowTimestamp >= fromTs` (upper bound null), the frozen branch
- * `BETWEEN fromTs AND toTs` — at both window tiers (180 = trim floor, 270 = trim ceiling).
- */
+
+
+
+
+
+
+
+
+
+
+
 @RunWith(AndroidJUnit4::class)
 class AscendingWindowBenchmark {
 
@@ -40,7 +40,7 @@ class AscendingWindowBenchmark {
     private val context: Context = InstrumentationRegistry.getInstrumentation().targetContext
     private lateinit var wcdb: WCDB
 
-    // Mirrors WcdbChatMessageWindowSource.roomCondition for a 1:1 room (For.Account typeValue 0).
+    
     private val roomCondition =
         DBMessageModel.roomType.eq(0).and(DBMessageModel.roomId.eq(DEFAULT_ROOM_ID))
 
@@ -58,7 +58,7 @@ class AscendingWindowBenchmark {
         context.deleteDatabase(WCDB.DATABASE_NAME)
     }
 
-    /** buildMessageSequence stamps message i with timestamp START_TS + i * STEP_MS. */
+    
     private fun fromTsFor(rows: Int): Long = START_TS + (SEEDED - rows) * STEP_MS
 
     private fun ascendingFrom(fromTs: Long, toTs: Long?): List<MessageModel> {
@@ -95,7 +95,7 @@ class AscendingWindowBenchmark {
     fun frozen_between_270rows() = measureCase(rows = 270, bounded = true)
 
     private companion object {
-        // Window tiers sit inside a larger room so the predicate really filters.
+        
         const val SEEDED = 400
         const val START_TS = 1_000L
         const val STEP_MS = 1_000L

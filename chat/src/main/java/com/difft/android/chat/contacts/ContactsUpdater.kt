@@ -21,7 +21,7 @@ import com.difft.android.websocket.api.messages.TTNotifyMessage
 import javax.inject.Inject
 import javax.inject.Singleton
 
-// All wcdb calls in this class run on Dispatchers.IO.
+
 @Suppress("BlockingWcdbInSuspend")
 @OptIn(ExperimentalCoroutinesApi::class)
 @Singleton
@@ -34,7 +34,7 @@ class ContactsUpdater @Inject constructor(
     private data class PendingContactMessage(
         val message: TTNotifyMessage,
         val directoryVersion: Int,
-        // Retained from the envelope's receive ticket; closed once the batch is handled (#1382).
+        
         val held: MessagingTicket?,
     )
 
@@ -49,17 +49,17 @@ class ContactsUpdater @Inject constructor(
     @OptIn(ExperimentalCoroutinesApi::class)
     private suspend fun processNotifyMessages() {
         while (true) {
-            delay(3000) // Wait for 3 seconds before processing the next batch
+            delay(3000) 
 
-            // Fail-soft: the cipher key is unavailable (one-way flag that never clears in-process),
-            // so no batch can ever be processed again this process. Log once and BREAK to stop the
-            // 3s poll entirely (rather than re-logging every 3s forever). Incoming notifies are
-            // dropped by the producer guard in updateBySignalNotifyMessage so nothing strands in the
-            // channel; contacts are re-fetched from the server directory on the next cold start.
+            
+            
+            
+            
+            
             if (wcdb.isDbInaccessible) {
                 L.w { "[ContactsUpdater] DB inaccessible, stopping notify poll for this process" }
-                // Nothing will process the queued items; release their tickets so a migration pause
-                // does not wait for them.
+                
+                
                 while (true) {
                     val dropped = notifyMessageChannel.tryReceive().getOrNull() ?: break
                     dropped.held?.close()
@@ -68,7 +68,7 @@ class ContactsUpdater @Inject constructor(
             }
 
             val batch = mutableListOf<PendingContactMessage>()
-            // Drain the channel and collect messages into the batch
+            
             while (!notifyMessageChannel.isEmpty) {
                 val message = notifyMessageChannel.receive()
                 batch.add(message)
@@ -115,14 +115,14 @@ class ContactsUpdater @Inject constructor(
             L.w { "[ContactsUpdater] processContactNotifyMessage members is null or empty" }
             return
         }
-        
+
         members.forEach { member ->
             val memberId = member.number
             val action = member.action
             when (action) {
                 0 -> {
-                    // action=0 is add AND restore. Only read the prior row when the notify omits the
-                    // type, so it can be carried forward instead of demoting a known OFFICIAL.
+                    
+                    
                     val notifyType = member.publicConfigs?.publicAccountType
                     val prior = if (notifyType == null) {
                         wcdb.contactor.getFirstObject(DBContactorModel.id.eq(member.number.toString()))
@@ -133,15 +133,15 @@ class ContactsUpdater @Inject constructor(
                     try {
                         wcdb.contactor.deleteObjects(DBContactorModel.id.eq(member.number.toString()))
                         wcdb.contactor.insertObject(newContact)
-                        // Only after a successful insert, so a failed write never mutates membership.
+                        
                         OfficialAccountCache.put(member.number.toString(), newContact.publicAccountType == PublicAccountType.OFFICIAL)
                     } catch (e: Exception) {
                         L.e(e) { "[ContactsUpdater] action=0(Add) failed id:$memberId, next full sync will recover" }
                     }
                     ContactorUtil.emitContactsUpdate(listOf(member.number.toString()))
                     ContactorUtil.updateContactRequestStatus(member.number.toString(), isDelete = true)
-                    // Friend restored via directory action=0 (ct=1 no longer fires for restores).
-                    // Drop placeholder but keep the conversation.
+                    
+                    
                     weakContactReconciler.clearWeakOnFriendRestored(member.number.toString())
                 }
 
@@ -155,7 +155,7 @@ class ContactsUpdater @Inject constructor(
                         try {
                             wcdb.contactor.deleteObjects(DBContactorModel.id.eq(contact.id))
                             wcdb.contactor.insertObject(contact)
-                            // Only after a successful insert, so a failed write never mutates membership.
+                            
                             OfficialAccountCache.put(contact.id, contact.publicAccountType == PublicAccountType.OFFICIAL)
                         } catch (e: Exception) {
                             L.e(e) { "[ContactsUpdater] action=1(Update) failed id:$memberId, next full sync will recover" }
@@ -166,8 +166,8 @@ class ContactsUpdater @Inject constructor(
                     }
                 }
 
-                // action=2 (deleted by me) and action=3 (peer deregistered) both mean hard delete here.
-                // Weak state is handled independently by notifyType=25 and does not affect this path.
+                
+                
                 2, 3 -> {
                     L.i { "[ContactsUpdater] action=$action(Delete) id:$memberId — hard delete (weak state handled independently by notifyType=25)" }
                     wcdb.contactor.deleteObjects(DBContactorModel.id.eq(member.number.toString()))
@@ -184,13 +184,13 @@ class ContactsUpdater @Inject constructor(
         }
     }
 
-    /**
-     * Queues the notify for the batched consumer, handing it a ticket retained from [admission] so
-     * the migration pause waits until the directory change is stored (#1382).
-     */
+    
+
+
+
     suspend fun updateBySignalNotifyMessage(message: TTNotifyMessage, admission: MessagingTicket) {
-        // Fail-soft: the consumer loop breaks once DB is inaccessible, so drop the enqueue to avoid
-        // filling the buffered channel with messages nothing will ever drain (back-pressure guard).
+        
+        
         if (wcdb.isDbInaccessible) {
             L.w { "[ContactsUpdater] skip enqueue, DB inaccessible" }
             return
@@ -243,7 +243,7 @@ class ContactsUpdater @Inject constructor(
         member.publicConfigs?.let {
             meetingVersion = it.meetingVersion
             publicName = it.publicName
-            publicAccountType = it.publicAccountType ?: publicAccountType   // skip-if-null: don't clobber
+            publicAccountType = it.publicAccountType ?: publicAccountType   
         }
         member.customUid?.let { customUid = it }
     }

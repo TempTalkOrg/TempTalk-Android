@@ -71,26 +71,26 @@ class VoiceRecorderView @JvmOverloads constructor(
 
     var recordingCallback: ((RecordingState) -> Unit)? = null
 
-    /**
-     * Fired synchronously on the main thread the instant a recording stops (finger lifted,
-     * [cancelHold], focus loss, max duration, abort) — before any async recording finalization.
-     * Use this to hide the recording overlay / background immediately. Not fired on detach.
-     */
+    
+
+
+
+
     var onRecordingDismissed: (() -> Unit)? = null
 
-    /**
-     * Fired on every path that ends a hold session (release, cancel, focus loss, max duration,
-     * abort, detach). Owned by the input that drives the hold, separate from the host's
-     * [onRecordingDismissed].
-     */
+    
+
+
+
+
     var onHoldSessionEnded: (() -> Unit)? = null
 
     private var holdAnchor: View? = null
     private var recordBarPlaced = false
-    // Pre-draw (not global layout): the overlay turns visible in the same frame the hold starts,
-    // so the first correct position is only known after that layout. Only that first stale frame
-    // is skipped (returning false cancels the whole window's draw); later moves, e.g. a closing
-    // panel, are applied with a one-frame lag instead of freezing the window.
+    
+    
+    
+    
     private val anchorPreDrawListener = ViewTreeObserver.OnPreDrawListener {
         val changed = syncRecordBarToAnchor()
         if (changed && !recordBarPlaced) {
@@ -156,11 +156,11 @@ class VoiceRecorderView @JvmOverloads constructor(
         L.i { "[VoiceRecorder] View detached, cleanup dispatched to appScope" }
     }
 
-    /**
-     * Starts a hold-to-record session driven by the unified input. Returns true only when the
-     * recording is actually running after the synchronous start path (permission granted, no
-     * previous session still finalizing, audio focus granted).
-     */
+    
+
+
+
+
     fun beginHold(anchor: View): Boolean {
         if (isRecording) return false
         if (stopJob?.isActive == true) {
@@ -193,10 +193,10 @@ class VoiceRecorderView @JvmOverloads constructor(
         stopRecording()
     }
 
-    /**
-     * Lays the record bar exactly over the anchor (the input field) wherever it currently is, so
-     * it follows multi-line input and a closing panel. Returns true when the layout changed.
-     */
+    
+
+
+
     private fun syncRecordBarToAnchor(): Boolean {
         val anchor = holdAnchor ?: return false
         if (!anchor.isAttachedToWindow || !isAttachedToWindow || anchor.height == 0) return false
@@ -239,6 +239,7 @@ class VoiceRecorderView @JvmOverloads constructor(
         outputDir = File(FileUtil.getFilePath(FileUtil.DRAFT_ATTACHMENTS_DIRECTORY))
 
         tvEffectLabel.text = "✨ ${context.getString(R.string.chat_voice_add_effect)}"
+        tvEffectLabel.setTextColor(ContextCompat.getColor(context, com.difft.android.base.R.color.t_white))
 
         llActionButtons.visibility = View.VISIBLE
         btnCancel.setBackgroundResource(R.drawable.chat_voice_pill_bg_gray)
@@ -251,7 +252,8 @@ class VoiceRecorderView @JvmOverloads constructor(
 
         recordButton.text = context.getString(R.string.chat_voice_release_to_send)
         recordView.setBackgroundResource(R.drawable.chat_voice_record_blue_bg)
-        recordButton.setTextColor(ContextCompat.getColor(context, com.difft.android.base.R.color.t_primary_night))
+        recordButton.setTextColor(ContextCompat.getColor(context, com.difft.android.base.R.color.on_primary))
+        waveformView.setBarColor(ContextCompat.getColor(context, com.difft.android.base.R.color.on_primary))
 
         recordingCallback?.invoke(RecordingState.Started)
 
@@ -407,36 +409,35 @@ class VoiceRecorderView @JvmOverloads constructor(
 
         if (gestureTarget == previousTarget) return
 
+        val onPrimary = ContextCompat.getColor(context, com.difft.android.base.R.color.on_primary)
+        recordButton.setTextColor(onPrimary)
+        waveformView.setBarColor(onPrimary)
+        recordView.setBackgroundResource(R.drawable.chat_voice_record_blue_bg)
+        val effectTextColor = if (gestureTarget == GestureTarget.ADD_EFFECT) {
+            com.difft.android.base.R.color.on_primary
+        } else {
+            com.difft.android.base.R.color.t_white
+        }
+        tvEffectLabel.setTextColor(ContextCompat.getColor(context, effectTextColor))
+
         when (gestureTarget) {
             GestureTarget.CANCEL -> {
                 btnCancel.setBackgroundResource(R.drawable.chat_voice_pill_bg_red)
                 btnAddEffect.setBackgroundResource(R.drawable.chat_voice_pill_bg_gray)
                 tvCancelHint.visibility = View.VISIBLE
                 tvEffectHint.visibility = View.INVISIBLE
-                recordButton.text = context.getString(R.string.chat_voice_release_to_send)
-                recordButton.setTextColor(ContextCompat.getColor(context, com.difft.android.base.R.color.t_disable))
-                waveformView.setBarColor(ContextCompat.getColor(context, com.difft.android.base.R.color.t_disable))
-                recordView.setBackgroundResource(R.drawable.chat_msg_input_bg)
             }
             GestureTarget.ADD_EFFECT -> {
                 btnCancel.setBackgroundResource(R.drawable.chat_voice_pill_bg_gray)
-                btnAddEffect.setBackgroundResource(R.drawable.chat_voice_pill_bg_gradient)
+                btnAddEffect.setBackgroundResource(R.drawable.chat_voice_pill_bg_primary)
                 tvCancelHint.visibility = View.INVISIBLE
                 tvEffectHint.visibility = View.VISIBLE
-                recordButton.text = context.getString(R.string.chat_voice_release_to_send)
-                recordButton.setTextColor(ContextCompat.getColor(context, com.difft.android.base.R.color.t_disable))
-                waveformView.setBarColor(ContextCompat.getColor(context, com.difft.android.base.R.color.t_disable))
-                recordView.setBackgroundResource(R.drawable.chat_msg_input_bg)
             }
             GestureTarget.NONE -> {
                 btnCancel.setBackgroundResource(R.drawable.chat_voice_pill_bg_gray)
                 btnAddEffect.setBackgroundResource(R.drawable.chat_voice_pill_bg_gray)
                 tvCancelHint.visibility = View.INVISIBLE
                 tvEffectHint.visibility = View.INVISIBLE
-                recordButton.text = context.getString(R.string.chat_voice_release_to_send)
-                recordButton.setTextColor(ContextCompat.getColor(context, com.difft.android.base.R.color.t_primary_night))
-                waveformView.setBarColor(ContextCompat.getColor(context, com.difft.android.base.R.color.t_primary_night))
-                recordView.setBackgroundResource(R.drawable.chat_voice_record_blue_bg)
             }
         }
     }
@@ -452,9 +453,9 @@ class VoiceRecorderView @JvmOverloads constructor(
         amplitudeUpdateJob?.cancel()
         countdownJob?.cancel()
 
-        // Reset UI immediately so the user gets instant visual feedback on
-        // finger release. Recording finalization (encoder EOS drain, pipeline
-        // release) can take 1-3 s and must not block the UI.
+        
+        
+        
         resetButton()
         onRecordingDismissed?.invoke()
         endHoldSession()
@@ -483,11 +484,11 @@ class VoiceRecorderView @JvmOverloads constructor(
                 null
             } finally {
                 voiceRecorder = null
-                // Ensure the recorder's internal scope is cancelled so the
-                // AudioRecord is released even if awaitResult() timed out.
-                // releaseAndJoin() is idempotent: if cleanup() already ran
-                // (normal path), the join returns immediately and cancel is a
-                // no-op on an already-idle scope.
+                
+                
+                
+                
+                
                 try { rec?.releaseAndJoin() } catch (_: Exception) {}
                 try { releaseAudioFocus() } catch (e: Exception) {
                     L.i { "[VoiceRecorder] release audio focus failed: ${e.message}" }
@@ -555,22 +556,22 @@ class VoiceRecorderView @JvmOverloads constructor(
                     L.i { "[VoiceRecorder] View detached, skip callback" }
                     return@withContext
                 }
-                // Defensive: ensure dismiss even if onRecordingDismissed was not
-                // set by the host (the synchronous call already fired, so this
-                // is a no-op for well-behaved callers). Skipped once a newer
-                // session is recording so its overlay is not hidden.
+                
+                
+                
+                
                 if (!isRecording) onRecordingDismissed?.invoke()
                 recordingCallback?.invoke(terminalState)
             }
         }
     }
 
-    /**
-     * Pick a candidate based on the user's gesture:
-     * - [GestureTarget.ADD_EFFECT] → prefer denoise+effect candidate
-     * - [GestureTarget.NONE] → prefer denoise-only candidate (original voice)
-     * Falls back through usable candidates if the preferred one is missing.
-     */
+    
+
+
+
+
+
     private fun pickCandidateByGesture(
         gesture: GestureTarget,
         candidates: List<VoiceMessageRecordingCandidate>,
@@ -626,11 +627,12 @@ class VoiceRecorderView @JvmOverloads constructor(
 
     private fun resetButton() {
         recordButton.text = context.getString(R.string.chat_voice_release_to_send)
-        recordButton.setTextColor(ContextCompat.getColor(context, com.difft.android.base.R.color.t_primary_night))
-        waveformView.setBarColor(ContextCompat.getColor(context, com.difft.android.base.R.color.t_primary_night))
+        recordButton.setTextColor(ContextCompat.getColor(context, com.difft.android.base.R.color.on_primary))
+        waveformView.setBarColor(ContextCompat.getColor(context, com.difft.android.base.R.color.on_primary))
         recordView.setBackgroundResource(R.drawable.chat_msg_input_bg)
 
         llActionButtons.visibility = View.INVISIBLE
+        tvEffectLabel.setTextColor(ContextCompat.getColor(context, com.difft.android.base.R.color.t_white))
         btnCancel.setBackgroundResource(R.drawable.chat_voice_pill_bg_gray)
         btnAddEffect.setBackgroundResource(R.drawable.chat_voice_pill_bg_gray)
         tvCancelHint.visibility = View.INVISIBLE

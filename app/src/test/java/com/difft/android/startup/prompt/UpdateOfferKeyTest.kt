@@ -5,7 +5,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
-/** Offer identity `apkHash ?: url`, and a new offer restarting the OPTIONAL_UPDATE record (#1355 §5). */
+
 class UpdateOfferKeyTest {
 
     private val now = 1_000_000_000L

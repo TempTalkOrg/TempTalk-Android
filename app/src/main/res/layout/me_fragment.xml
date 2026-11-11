@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- CoordinatorLayout + AppBarLayout like the Chats and Contacts pages: on a short window
-     (HomeHeaderCollapser) the title row collapses with the page's nested scroll; elsewhere it has no scroll flag and the layout behaves like a plain column. -->
+
 <androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
@@ -13,32 +12,8 @@
         android:layout_height="wrap_content"
         android:background="@android:color/transparent"
         app:elevation="0dp"
-        app:liftOnScroll="false">
+        app:liftOnScroll="false" />
 
-        <!-- Title row, the same as the Chats and Contacts headers. Shown in the two-pane list and
-             on a foldable (MeFragment decides); other phones keep no header. -->
-        <androidx.constraintlayout.widget.ConstraintLayout
-            android:id="@+id/home_header"
-            android:layout_width="match_parent"
-            android:layout_height="52dp"
-            android:visibility="gone">
-
-            <androidx.appcompat.widget.AppCompatTextView
-                android:id="@+id/tv_title"
-                android:layout_width="wrap_content"
-                android:layout_height="match_parent"
-                android:layout_marginStart="16dp"
-                android:gravity="center_vertical"
-                android:text="@string/chat_me"
-                android:textColor="@color/t.primary"
-                android:textSize="20sp"
-                android:textStyle="bold"
-                app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toTopOf="parent" />
-        </androidx.constraintlayout.widget.ConstraintLayout>
-    </com.google.android.material.appbar.AppBarLayout>
-
-    <!-- Nested scrolling so the coordinator can collapse the title with it. -->
     <androidx.core.widget.NestedScrollView
         android:id="@+id/scrollView2"
         android:layout_width="match_parent"
@@ -88,7 +63,7 @@
                         app:layout_constraintEnd_toStartOf="@+id/iv_profile_arrow"
                         app:layout_constraintStart_toEndOf="@+id/avatar"
                         app:layout_constraintTop_toTopOf="parent"
-                        tools:text="nate nate nate" />
+                        tools:text="Display name" />
 
                     <androidx.appcompat.widget.AppCompatTextView
                         android:id="@+id/tv_profile"
@@ -117,7 +92,7 @@
 
                 <View
                     android:layout_width="match_parent"
-                    android:layout_height="1dp"
+                    android:layout_height="@dimen/hairline"
                     android:background="@color/divider" />
 
                 <androidx.constraintlayout.widget.ConstraintLayout
@@ -212,7 +187,7 @@
 
                 <View
                     android:layout_width="match_parent"
-                    android:layout_height="1dp"
+                    android:layout_height="@dimen/hairline"
                     android:background="@color/divider" />
 
                 <androidx.constraintlayout.widget.ConstraintLayout
@@ -245,7 +220,7 @@
 
                 <View
                     android:layout_width="match_parent"
-                    android:layout_height="1dp"
+                    android:layout_height="@dimen/hairline"
                     android:background="@color/divider" />
 
                 <androidx.constraintlayout.widget.ConstraintLayout
@@ -278,7 +253,7 @@
 
                 <View
                     android:layout_width="match_parent"
-                    android:layout_height="1dp"
+                    android:layout_height="@dimen/hairline"
                     android:background="@color/divider" />
 
                 <androidx.constraintlayout.widget.ConstraintLayout
@@ -361,7 +336,7 @@
 
                 <View
                     android:layout_width="match_parent"
-                    android:layout_height="1dp"
+                    android:layout_height="@dimen/hairline"
                     android:background="@color/divider" />
 
                 <androidx.constraintlayout.widget.ConstraintLayout
@@ -374,24 +349,12 @@
                         android:id="@+id/tv_theme_title"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="@string/me_theme"
+                        android:text="@string/me_appearance"
                         android:textColor="@color/t.primary"
                         android:textSize="16sp"
                         app:layout_constraintBottom_toBottomOf="parent"
                         app:layout_constraintLeft_toLeftOf="parent"
                         app:layout_constraintTop_toTopOf="parent" />
-
-                    <androidx.appcompat.widget.AppCompatTextView
-                        android:id="@+id/tv_theme"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginEnd="8dp"
-                        android:textColor="@color/t.third"
-                        android:textSize="16sp"
-                        app:layout_constraintBottom_toBottomOf="parent"
-                        app:layout_constraintRight_toLeftOf="@+id/iv_theme_arrow"
-                        app:layout_constraintTop_toTopOf="parent"
-                        tools:text="@string/language_english" />
 
                     <androidx.appcompat.widget.AppCompatImageView
                         android:id="@+id/iv_theme_arrow"
@@ -406,7 +369,7 @@
 
                 <View
                     android:layout_width="match_parent"
-                    android:layout_height="1dp"
+                    android:layout_height="@dimen/hairline"
                     android:background="@color/divider" />
 
                 <androidx.constraintlayout.widget.ConstraintLayout
@@ -449,50 +412,6 @@
 
                 </androidx.constraintlayout.widget.ConstraintLayout>
 
-                <View
-                    android:layout_width="match_parent"
-                    android:layout_height="1dp"
-                    android:background="@color/divider" />
-
-                <androidx.constraintlayout.widget.ConstraintLayout
-                    android:id="@+id/cl_text_size"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:padding="16dp">
-
-                    <androidx.appcompat.widget.AppCompatTextView
-                        android:id="@+id/tv_text_size_title"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/me_text_size"
-                        android:textColor="@color/t.primary"
-                        android:textSize="16sp"
-                        app:layout_constraintBottom_toBottomOf="parent"
-                        app:layout_constraintLeft_toLeftOf="parent"
-                        app:layout_constraintTop_toTopOf="parent" />
-
-                    <androidx.appcompat.widget.AppCompatTextView
-                        android:id="@+id/tv_text_size"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginEnd="8dp"
-                        android:text="@string/me_text_size_default"
-                        android:textColor="@color/t.third"
-                        android:textSize="16sp"
-                        app:layout_constraintBottom_toBottomOf="parent"
-                        app:layout_constraintRight_toLeftOf="@+id/iv_text_size_arrow"
-                        app:layout_constraintTop_toTopOf="parent" />
-
-                    <androidx.appcompat.widget.AppCompatImageView
-                        android:id="@+id/iv_text_size_arrow"
-                        android:layout_width="16dp"
-                        android:layout_height="16dp"
-                        android:src="@drawable/base_ic_chevron_right"
-                        app:layout_constraintBottom_toBottomOf="parent"
-                        app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintTop_toTopOf="parent" />
-
-                </androidx.constraintlayout.widget.ConstraintLayout>
             </LinearLayout>
 
             <LinearLayout
@@ -539,7 +458,7 @@
 
                     <View
                         android:layout_width="match_parent"
-                        android:layout_height="1dp"
+                        android:layout_height="@dimen/hairline"
                         android:background="@color/divider" />
 
                     <androidx.constraintlayout.widget.ConstraintLayout
@@ -574,7 +493,7 @@
 
                 <View
                     android:layout_width="match_parent"
-                    android:layout_height="1dp"
+                    android:layout_height="@dimen/hairline"
                     android:background="@color/divider" />
 
                 <androidx.constraintlayout.widget.ConstraintLayout

@@ -1,7 +1,7 @@
 package com.difft.android.chat.invite
 
 data class GetInviteCodeRequest(
-    val regenerate: Int?  //可选；重新生成时，置为1；默认置0
+    val regenerate: Int?  
 )
 
 data class GetInviteCodeResponse(

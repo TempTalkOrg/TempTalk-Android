@@ -6,7 +6,7 @@ import com.difft.android.selector.entity.LocalMediaFolder
 import java.util.Collections
 
 object SortUtils {
-    /** Sort by the number of files. */
+    
     @JvmStatic
     fun sortFolder(imageFolders: MutableList<LocalMediaFolder>) {
         Collections.sort(imageFolders) { lhs, rhs ->
@@ -18,7 +18,7 @@ object SortUtils {
         }
     }
 
-    /** Sort by the added time of files. */
+    
     @JvmStatic
     fun sortLocalMediaAddedTime(list: MutableList<LocalMedia>) {
         Collections.sort(list) { lhs, rhs ->

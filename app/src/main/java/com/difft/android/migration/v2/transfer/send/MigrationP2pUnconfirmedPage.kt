@@ -16,14 +16,14 @@ import com.difft.android.migration.ui.component.MigrationResultTone
 import com.difft.android.migration.ui.component.MigrationTextButton
 import com.difft.android.migration.v2.transfer.send.MigrationP2pSendState.Unconfirmed.Phase
 
-/**
- * The sender's "result unconfirmed" page. Not a failure page: nothing here says the migration
- * failed, and nothing offers to try again, because the one thing this device does not know is
- * whether the new device finished — and starting over while it did would put two devices on one
- * account. The page waits with the receiver while it is still being polled, offers one more
- * question once it is not, and otherwise sends the user to look at the new device. The only way to
- * a fresh start is the explicit "start over" the user takes after looking there.
- */
+
+
+
+
+
+
+
+
 @Composable
 internal fun UnconfirmedPage(state: MigrationP2pSendState.Unconfirmed, onIntent: (MigrationP2pSendIntent) -> Unit) {
     val waiting = state.phase == Phase.WAITING

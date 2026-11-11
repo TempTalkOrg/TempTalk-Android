@@ -2,7 +2,7 @@
 <SmellBaseline>
   <ManuallySuppressedIssues/>
   <CurrentIssues>
-    <ID>LargeClass:IndexActivity.kt:IndexActivity : BaseActivityConversationNavigationCallbackChatMessageListProviderChatInputFocusableOwnerOwnerListPaneLayerOpener</ID>
+    <ID>LargeClass:IndexActivity.kt:IndexActivity : BaseActivityConversationNavigationCallbackContactCardHostGroupCardNavigationCallbackChatMessageListProviderChatInputFocusableOwnerOwnerListPaneLayerOpener</ID>
     <ID>LongMethod:DialogTestActivity.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun DialogTestScreen</ID>
     <ID>LongMethod:SetCustomIdActivity.kt:@Composable fun SetOwnIdScreen</ID>
   </CurrentIssues>

@@ -26,7 +26,7 @@ import org.whispersystems.signalservice.internal.push.SignalServiceProtos.Envelo
 import javax.inject.Inject
 import javax.inject.Singleton
 
-// All wcdb calls in this class run on Dispatchers.IO.
+
 @Suppress("BlockingWcdbInSuspend")
 @Singleton
 class IncomingEnvelopMessageProcessor @Inject constructor(
@@ -42,7 +42,7 @@ class IncomingEnvelopMessageProcessor @Inject constructor(
     private val powerSampler: BackgroundPowerSampler,
     private val messagingGate: MessagingGate,
 ) {
-    /** [queuedAt] is `elapsedRealtime`, so the wait includes time the CPU spent suspended. */
+    
     internal data class QueuedEnvelope(val envelope: Envelope, val requestId: Long, val queuedAt: Long, val seq: Long)
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -54,38 +54,24 @@ class IncomingEnvelopMessageProcessor @Inject constructor(
                 .launchIn(appScope)
         }
 
-    /**
-     * Process one batch under a top-level safety net so that an unexpected
-     * throw (DB corruption, NPE in an inner helper, etc.) does NOT kill the
-     * SharedFlow collector. The collector is the only consumer of incoming
-     * messages: if it dies, the buffer fills (cap 30) and subsequent
-     * messages stop being ACK'd — server eventually pauses pushing and the
-     * pipeline is blocked. We accept losing one batch's processing rather
-     * than risking the whole channel.
-     *
-     * `CancellationException` is rethrown — coroutine cancellation (logout
-     * / scope shutdown) must propagate so the scope actually shuts down.
-     */
+    
     private suspend fun processBatch(batch: List<QueuedEnvelope>) {
         try {
             doProcessBatch(batch)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {
-            // Includes Error (OOM/SOF): logging + continue is safer than
-            // killing the collector. If the process is truly out of memory
-            // the next allocation will OOM again and Android's LMK will
-            // recover; we just don't compound that with a dead pipeline.
+            
             L.e { "[Message] batch processing crashed (collector preserved): ${e.stackTraceToString()}" }
         } finally {
             wakeLock.onProcessed(batch.maxOf { it.seq })
         }
     }
 
-    /**
-     * Admits the batch before its ACK (#1382): a batch refused by the message pause is neither
-     * ACKed nor processed, so the server keeps it queued; an admitted batch runs to completion.
-     */
+    
+
+
+
     internal suspend fun doProcessBatch(batch: List<QueuedEnvelope>) {
         wakeLock.onBatchStart()
         val admission = messagingGate.tryAdmit(AdmissionKind.RECEIVE, "ws")
@@ -98,30 +84,26 @@ class IncomingEnvelopMessageProcessor @Inject constructor(
 
     private suspend fun processAdmittedBatch(batch: List<QueuedEnvelope>, admission: MessagingTicket) {
         if (batch.size > 1) L.i { "[Message] processing batch size=${batch.size}" }
-        // Eager ACK — see issue #754 design §1.5. ACK first so a late
-        // processing failure can't block the server's push pipeline;
-        // recovery for transient failures is owned by FailedMessageProcessor.
+        
         val now = SystemClock.elapsedRealtime()
         batch.forEach { (envelop, requestId, queuedAt, _) ->
             val acked = sendAck(requestId, envelop.timestamp)
             val queuedMs = now - queuedAt
             L.i { "[Message] recv type=${envelop.type} ts=${envelop.timestamp} requestId=$requestId acked=$acked queuedMs=$queuedMs" }
-            // Telemetry must never interrupt the ACK loop.
+            
             runCatching { powerSampler.onEvent(BackgroundPowerModel.queueWaitEvent(queuedMs)) }
         }
 
         val failedEnvelopes = mutableListOf<Envelope>()
 
-        // Sort batch by systemShowTimestamp to ensure chronological order.
+        
         val sortedBatch = batch.sortedBy { it.envelope.systemShowTimestamp }
 
         sortedBatch.forEach { (envelope) ->
             when (val processRes = envelopToMessageProcessor.process(envelope, "message", admission)) {
                 is EnvelopeProcessResult.Success -> {
                     val result = processRes.result
-                    // G-3: WebSocket re-deliver dedup. If a previous attempt
-                    // failed transiently for this ts, the retry queue still
-                    // has a row — purge it now that we've succeeded.
+                    
                     runCatching {
                         wcdb.failedMessage.deleteObjects(
                             DBFailedMessageModel.timestamp.eq(envelope.timestamp)
@@ -150,12 +132,12 @@ class IncomingEnvelopMessageProcessor @Inject constructor(
                 is EnvelopeProcessResult.TransientFailure -> {
                     failedEnvelopes.add(envelope)
                 }
-                // Unreachable while this batch holds its ticket; nothing was stored.
+                
                 EnvelopeProcessResult.Paused -> Unit
             }
         }
 
-        // Save failed messages to database for retry (Mutex-serialized UPSERT).
+        
         if (failedEnvelopes.isNotEmpty()) {
             L.w { "[Message] ${failedEnvelopes.size} messages failed transient, saving for retry" }
             failedMessageProcessor.saveTransient(failedEnvelopes)
@@ -172,7 +154,7 @@ class IncomingEnvelopMessageProcessor @Inject constructor(
         _incomingMessagesFlow.emit(QueuedEnvelope(envelope, requestId, SystemClock.elapsedRealtime(), seq))
     }
 
-    /** @return whether the ack was written to the socket; the failure is logged here. */
+    
     private fun sendAck(requestId: Long, timestamp: Long): Boolean =
         kotlin.runCatching { webSocket.sendAckToChatDataWebSocketWithoutLog(requestId) }.onFailure {
             L.e { "[Message] sendAck error, requestId:$requestId timestamp:$timestamp exception:${it.stackTraceToString()}" }

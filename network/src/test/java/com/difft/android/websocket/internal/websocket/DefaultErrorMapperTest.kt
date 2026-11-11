@@ -26,7 +26,7 @@ class DefaultErrorMapperTest {
 
     private val mapper = DefaultErrorMapper.getDefault()
 
-    // --- 401/403: AuthorizationFailedException ---
+    
 
     @Test
     fun `401 returns AuthorizationFailedException`() {
@@ -42,7 +42,7 @@ class DefaultErrorMapperTest {
         assertEquals(403, error.code)
     }
 
-    // --- 402: CaptchaRequiredException ---
+    
 
     @Test
     fun `402 returns CaptchaRequiredException`() {
@@ -50,7 +50,7 @@ class DefaultErrorMapperTest {
         assertIs<CaptchaRequiredException>(error)
     }
 
-    // --- 404: AccountOfflineException / NotFoundException ---
+    
 
     @Test
     fun `404 with account offline status 10105 returns AccountOfflineException`() {
@@ -88,7 +88,7 @@ class DefaultErrorMapperTest {
         assertIs<NotFoundException>(error)
     }
 
-    // --- 409: MismatchedDevicesException ---
+    
 
     @Test
     fun `409 with valid body returns MismatchedDevicesException`() {
@@ -105,7 +105,7 @@ class DefaultErrorMapperTest {
         assertIs<MalformedResponseException>(error)
     }
 
-    // --- 410: StaleDevicesException ---
+    
 
     @Test
     fun `410 with valid body returns StaleDevicesException`() {
@@ -121,7 +121,7 @@ class DefaultErrorMapperTest {
         assertIs<MalformedResponseException>(error)
     }
 
-    // --- 411: DeviceLimitExceededException ---
+    
 
     @Test
     fun `411 with valid body returns DeviceLimitExceededException`() {
@@ -138,7 +138,7 @@ class DefaultErrorMapperTest {
         assertIs<MalformedResponseException>(error)
     }
 
-    // --- 413/429: RateLimitException ---
+    
 
     @Test
     fun `413 with Retry-After header returns RateLimitException with millis`() {
@@ -165,7 +165,7 @@ class DefaultErrorMapperTest {
         assertEquals(Optional.empty<Long>(), error.retryAfterMilliseconds)
     }
 
-    // --- 417: ExpectationFailedException ---
+    
 
     @Test
     fun `417 returns ExpectationFailedException`() {
@@ -173,7 +173,7 @@ class DefaultErrorMapperTest {
         assertIs<ExpectationFailedException>(error)
     }
 
-    // --- 423: LockedException ---
+    
 
     @Test
     fun `423 with credentials returns LockedException`() {
@@ -199,7 +199,7 @@ class DefaultErrorMapperTest {
         assertIs<MalformedResponseException>(error)
     }
 
-    // --- 428: ProofRequiredException ---
+    
 
     @Test
     fun `428 with valid body returns ProofRequiredException`() {
@@ -229,7 +229,7 @@ class DefaultErrorMapperTest {
         assertIs<MalformedResponseException>(error)
     }
 
-    // --- 499: DeprecatedVersionException ---
+    
 
     @Test
     fun `499 returns DeprecatedVersionException`() {
@@ -237,7 +237,7 @@ class DefaultErrorMapperTest {
         assertIs<DeprecatedVersionException>(error)
     }
 
-    // --- 508: ServerRejectedException ---
+    
 
     @Test
     fun `508 returns ServerRejectedException`() {
@@ -245,7 +245,7 @@ class DefaultErrorMapperTest {
         assertIs<ServerRejectedException>(error)
     }
 
-    // --- Success status codes return null ---
+    
 
     @Test
     fun `200 returns null`() {
@@ -265,7 +265,7 @@ class DefaultErrorMapperTest {
         assertNull(error)
     }
 
-    // --- Unknown error status returns NonSuccessfulResponseCodeException ---
+    
 
     @Test
     fun `500 returns NonSuccessfulResponseCodeException`() {
@@ -281,7 +281,7 @@ class DefaultErrorMapperTest {
         assertEquals(503, error.code)
     }
 
-    // --- Builder / extend ---
+    
 
     @Test
     fun `extend creates Builder`() {
@@ -291,7 +291,7 @@ class DefaultErrorMapperTest {
         assertNotNull(errorMapper)
     }
 
-    // --- Custom error mappers override defaults ---
+    
 
     @Test
     fun `custom 409 mapper is called instead of default`() {
@@ -346,7 +346,7 @@ class DefaultErrorMapperTest {
             .withCustom(409, ErrorMapper { _, _, _ -> RuntimeException("custom") })
             .build()
 
-        // 401 should still use default behavior
+        
         val error = customMapper.parseError(401, "") { "" }
         assertIs<AuthorizationFailedException>(error)
         assertEquals(401, error.code)

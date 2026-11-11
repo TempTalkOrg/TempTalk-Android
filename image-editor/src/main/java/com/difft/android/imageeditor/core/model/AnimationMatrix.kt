@@ -7,9 +7,9 @@ import android.view.animation.DecelerateInterpolator
 import android.view.animation.Interpolator
 import com.difft.android.imageeditor.core.CanvasMatrix
 
-/**
- * Animation Matrix provides a matrix that animates over time down to the identity matrix.
- */
+
+
+
 internal class AnimationMatrix {
 
     private val invalidate: Runnable?
@@ -51,18 +51,18 @@ internal class AnimationMatrix {
         animator?.cancel()
     }
 
-    /**
-     * Append the current animation value.
-     */
+    
+
+
     fun preConcatValueTo(onTo: Matrix) {
         if (!canAnimate) return
 
         onTo.preConcat(buildTemp())
     }
 
-    /**
-     * Append the current animation value.
-     */
+    
+
+
     fun preConcatValueTo(canvasMatrix: CanvasMatrix) {
         if (!canAnimate) return
 
@@ -114,9 +114,9 @@ internal class AnimationMatrix {
             }
         }
 
-        /**
-         * Animate applying a matrix and then animate removing.
-         */
+        
+
+
         fun singlePulse(pulse: Matrix, invalidate: Runnable?): AnimationMatrix {
             if (invalidate == null) {
                 return NULL

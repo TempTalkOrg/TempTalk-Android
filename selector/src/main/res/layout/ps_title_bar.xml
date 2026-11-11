@@ -18,7 +18,7 @@
             android:layout_height="wrap_content"
             android:layout_centerVertical="true"
             android:scaleType="centerInside"
-            android:src="@drawable/ps_ic_back" />
+            android:src="@drawable/chative_ic_back" />
 
         <RelativeLayout
             android:id="@+id/ps_rl_album_bg"
@@ -52,10 +52,11 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_centerVertical="true"
+                android:layout_marginStart="4dp"
                 android:layout_toEndOf="@id/ps_tv_title"
                 android:importantForAccessibility="no"
                 android:scaleType="centerInside"
-                android:src="@drawable/ps_ic_default_arrow" />
+                android:src="@drawable/ps_ic_title_arrow" />
         </RelativeLayout>
 
 

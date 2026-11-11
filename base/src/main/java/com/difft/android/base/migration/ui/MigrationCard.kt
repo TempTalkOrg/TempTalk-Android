@@ -12,11 +12,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import com.difft.android.base.ui.theme.DifftTheme
 
-/**
- * A grouped card. Cells inside carry their own inset and are separated by a divider; a card holding
- * prose rather than cells sets [padded] instead. Lives in `:base` so the scanner in `:chat` draws the
- * same card as the migration pages.
- */
+
+
+
+
+
 @Composable
 fun MigrationCard(
     modifier: Modifier = Modifier,
@@ -33,7 +33,7 @@ fun MigrationCard(
     )
 }
 
-/** A padded card holding one paragraph of guidance in the secondary text colour. */
+
 @Composable
 fun MigrationNoteCard(text: String, modifier: Modifier = Modifier) {
     MigrationCard(modifier = modifier, padded = true) {

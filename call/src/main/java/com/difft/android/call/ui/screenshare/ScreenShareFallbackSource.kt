@@ -8,11 +8,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.stateIn
 
-/**
- * Holds the explicit screen-share fallback participant as a hot [StateFlow]
- * with the local participant as the initial value. Extracted from the VM to
- * keep the field + Flow plumbing out of the VM body.
- */
+
+
+
+
+
 class ScreenShareFallbackSource(
     scope: CoroutineScope,
     localParticipant: Participant,

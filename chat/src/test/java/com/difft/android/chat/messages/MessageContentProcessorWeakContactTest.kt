@@ -33,27 +33,27 @@ import org.robolectric.annotation.Config
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos.Envelope
 import kotlin.test.assertEquals
 
-/**
- * Integration tests for the `notifyType == NOTIFY_MESSAGE_TYPE_WEAK_CONTACT (25)` dispatch branch
- * of [MessageContentProcessor.handleNotifyMessage].
- *
- * Verifies that the dispatch reads the **already-parsed** `message.data` fields directly (no
- * rawDataJson second parse) and routes to [WeakContactReconciler]:
- * - changeType=0 → `enterWeak(uid, expireAt, reason, serverTimestamp, snapshot[name/avatar])`
- * - changeType=1 → `removeWeak(uid)`
- * - missing/blank uid → warn + skip (no reconciler call)
- *
- * Reuses the [MessageContentProcessor] construction harness from the ForwardNotice tests; the
- * reconciler is a verifiable MockK fake. The weak-contact branch does NOT evaluate
- * `content.conversation`, so a minimal envelope + null Content + the [TTNotifyMessage] as the
- * 3rd `SignalServiceDataClass` arg routes straight into `handleNotifyMessage`.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28])
 class MessageContentProcessorWeakContactTest {
 
-    // An open receive ticket (#1382); deferred notify work retains its own from it.
+    
     private val admission = requireNotNull(TestMessagingPause().open().gate.tryAdmit(AdmissionKind.RECEIVE, "test"))
 
     private val testDispatcher = UnconfinedTestDispatcher()
@@ -126,7 +126,7 @@ class MessageContentProcessorWeakContactTest {
         serverTimestamp: Long = 0L,
         deleteTime: Long = 0L,
     ): Data = Data(actionType = 0, serverTimestamp = serverTimestamp).apply {
-        // uid/name/avatar/expireTime/reason/changeType/deleteTime are vars on Data (notifyType=25 fields).
+        
         this.uid = uid
         this.changeType = changeType
         this.name = name
@@ -143,11 +143,11 @@ class MessageContentProcessorWeakContactTest {
             notifyType = TTNotifyMessage.NOTIFY_MESSAGE_TYPE_WEAK_CONTACT,
         )
 
-    // ---- changeType=0 → enterWeak with parsed fields ------------------------------------
+    
 
     @Test
     fun `T6 changeType 0 dispatches enterWeak with parsed data fields (deleteTime falls back to serverTimestamp)`() = runTest {
-        // deleteTime omitted (0) → enterWeak's deleteTime arg falls back to serverTimestamp (12_345L).
+        
         val data = weakData(
             uid = "peer-1",
             changeType = 0,
@@ -165,18 +165,18 @@ class MessageContentProcessorWeakContactTest {
         coVerify(exactly = 1) {
             weakContactReconciler.enterWeak("peer-1", 99_000L, 0, 12_345L, capture(snapSlot))
         }
-        // Snapshot carries the server-supplied name/avatar (no rawDataJson second parse).
+        
         assertEquals("peer-1", snapSlot.captured.id)
         assertEquals("Server Name", snapSlot.captured.name)
         assertEquals("""{"attachmentId":"a1"}""", snapSlot.captured.avatar)
         coVerify(exactly = 0) { weakContactReconciler.removeWeak(any()) }
     }
 
-    // ---- deleteTime: explicit server value preferred; 0 falls back to serverTimestamp ----
+    
 
     @Test
     fun `T6b changeType 0 uses explicit deleteTime when server provides it`() = runTest {
-        // deleteTime > 0 → used directly as enterWeak's deleteTime arg, NOT serverTimestamp.
+        
         val data = weakData(
             uid = "peer-1b",
             changeType = 0,
@@ -193,7 +193,7 @@ class MessageContentProcessorWeakContactTest {
         }
     }
 
-    // ---- changeType=1 → removeWeak ------------------------------------------------------
+    
 
     @Test
     fun `T6 changeType 1 dispatches removeWeak`() = runTest {
@@ -206,7 +206,7 @@ class MessageContentProcessorWeakContactTest {
         coVerify(exactly = 0) { weakContactReconciler.enterWeak(any(), any(), any(), any(), any()) }
     }
 
-    // ---- missing uid → warn + skip, no reconciler call ----------------------------------
+    
 
     @Test
     fun `T6 missing uid skips reconciler entirely`() = runTest {
@@ -219,7 +219,7 @@ class MessageContentProcessorWeakContactTest {
         coVerify(exactly = 0) { weakContactReconciler.removeWeak(any()) }
     }
 
-    // ---- unknown changeType → no enter/remove -------------------------------------------
+    
 
     @Test
     fun `T6 unknown changeType does not call enter or remove`() = runTest {

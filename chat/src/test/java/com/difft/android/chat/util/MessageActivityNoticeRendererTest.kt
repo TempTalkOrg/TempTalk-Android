@@ -13,15 +13,10 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.util.Locale
 
-/**
- * Unit tests for [MessageActivityNoticeRenderer].
- *
- * Locale forced per test for deterministic plurals selection.
- *
- * PRD coverage:
- *   §5.4.1 (copy variants — main-conv UNKNOWN/CONTAINS/ALL collapse; SUB diverges)
- *   §5.3.4 (locale-aware author list cap & overflow)
- */
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28])
 class MessageActivityNoticeRendererTest {
@@ -40,7 +35,7 @@ class MessageActivityNoticeRendererTest {
         carol to "Carol",
         dave to "Dave",
         eve to "Eve",
-        myId to "SHOULD_NOT_BE_USED_FOR_ME"  // myId path must return "You"
+        myId to "SHOULD_NOT_BE_USED_FOR_ME"  
     )
 
     private val resolver: (String) -> String = { id ->
@@ -60,13 +55,11 @@ class MessageActivityNoticeRendererTest {
         context.resources.updateConfiguration(config, context.resources.displayMetrics)
     }
 
-    // ---------- Basic COPY rendering (UNKNOWN mode = legacy callers) ----------
+    
 
     @Test
     fun `COPY count 1 — self is operator and only author — self-only variant`() {
-        // PRD v2.0: when the source list (OUTER authors) is all-self, drop the redundant "from You".
-        // Reachable e.g. when I copy my own single-forward bubble whose inner is someone else's:
-        // gating (inner author) traces it, but the source list (outer author = me) → short form.
+        
         val result = MessageActivityNoticeRenderer.render(
             operatorId = myId, myId = myId,
             notice = MessageActivityNoticeData(Type.COPY, listOf(myId), 1),
@@ -125,7 +118,7 @@ class MessageActivityNoticeRendererTest {
         assertEquals("\"Alice\" copied 2 messages from Bob and Carol.", result)
     }
 
-    // ---------- Self-only shortcut conditions ----------
+    
 
     @Test
     fun `self-only — operator is me but author is someone else — full form not self-only`() {
@@ -147,7 +140,7 @@ class MessageActivityNoticeRendererTest {
         assertEquals("\"You\" copied 2 messages from You and Alice.", result)
     }
 
-    // ---------- 5-author cap & overflow ----------
+    
 
     @Test
     fun `exactly 5 authors — all spelled out`() {
@@ -189,7 +182,7 @@ class MessageActivityNoticeRendererTest {
         assertEquals("\"Alice\" copied 3 messages from Bob.", result)
     }
 
-    // ---------- Defensive coercion ----------
+    
 
     @Test
     fun `messageCount 0 coerced to 1`() {
@@ -201,7 +194,7 @@ class MessageActivityNoticeRendererTest {
         assertEquals("\"Alice\" copied a message from Bob.", result)
     }
 
-    // ---------- PRD §5.4.1 mode × useSelfOnly matrix ----------
+    
 
     @Test
     fun `case 1 — UNKNOWN count 1 — others`() {
@@ -229,7 +222,7 @@ class MessageActivityNoticeRendererTest {
 
     @Test
     fun `case 3 — CONTAINS count 1 — others — collapses to main-conv key`() {
-        // Per PRD §5.4.1: main-conv copy (UNKNOWN/CONTAINS/ALL) all use chat_copy_notice.
+        
         val result = MessageActivityNoticeRenderer.render(
             operatorId = alice, myId = myId,
             notice = MessageActivityNoticeData(
@@ -383,8 +376,7 @@ class MessageActivityNoticeRendererTest {
 
     @Test
     fun `case 15 — SUB count 3 — others — Mac-only but Android renders sensibly`() {
-        // Per PRD §5.4.3.1 detail-view multi-copy is Mac only; Android still selects
-        // a valid plural key (from_chat_history `other`) for safety.
+        
         val result = MessageActivityNoticeRenderer.render(
             operatorId = alice, myId = myId,
             notice = MessageActivityNoticeData(
@@ -407,7 +399,7 @@ class MessageActivityNoticeRendererTest {
         assertEquals("\"You\" copied 3 messages from a chat history.", result)
     }
 
-    // ---------- Locale: Chinese ----------
+    
 
     @Test
     fun `chinese locale — UNKNOWN — uses 、 separator`() {

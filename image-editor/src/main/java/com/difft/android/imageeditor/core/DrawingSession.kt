@@ -5,9 +5,9 @@ import android.graphics.PointF
 import com.difft.android.imageeditor.core.model.EditorElement
 import com.difft.android.imageeditor.core.renderers.BezierDrawingRenderer
 
-/**
- * Passes touch events into a [BezierDrawingRenderer].
- */
+
+
+
 internal class DrawingSession private constructor(
     selected: EditorElement,
     inverseMatrix: Matrix,

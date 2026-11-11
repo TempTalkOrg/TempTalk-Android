@@ -26,7 +26,7 @@ import java.io.File
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
-/** The focus group's name is kept while it is valid, survives the group's deletion and goes when focus ends. */
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class FocusGroupNameCacheTest {
 
@@ -52,7 +52,7 @@ class FocusGroupNameCacheTest {
 
     private fun invalid(gid: String) = valid(gid).copy(invalid = true, invalidReason = 0, version = 4)
 
-    /** DataStore IO is real-threaded: poll the cache until [expected] shows or the budget runs out. */
+    
     private suspend fun FocusGroupNameCache.awaitName(gid: String, expected: String?): String? {
         repeat(200) {
             val now = nameFor(gid)
@@ -69,9 +69,9 @@ class FocusGroupNameCacheTest {
 
         effective.value = valid("A")
         assertEquals("Launch Room", cache.awaitName("A", "Launch Room"))
-        assertNull(cache.nameFor("B")) // another gid has no cached name
+        assertNull(cache.nameFor("B")) 
 
-        names.clear() // the dismissed group is deleted locally
+        names.clear() 
         effective.value = invalid("A")
         assertEquals("Launch Room", cache.awaitName("A", "Launch Room"))
 
@@ -84,7 +84,7 @@ class FocusGroupNameCacheTest {
         val store = PreferenceDataStoreFactory.create(scope = backgroundScope) { File(folder.root, "names2.preferences_pb") }
         val cache = newCache(store)
 
-        effective.value = valid("Z") // no GroupModel for Z
+        effective.value = valid("Z") 
         assertNull(cache.nameFor("Z"))
 
         names["B"] = "Design Review"
@@ -103,12 +103,12 @@ class FocusGroupNameCacheTest {
         renames.emit("A" to "Launch Room 2")
         assertEquals("Launch Room 2", cache.awaitName("A", "Launch Room 2"))
 
-        renames.emit("B" to "Not Focused") // another group
+        renames.emit("B" to "Not Focused") 
         assertNull(cache.nameFor("B"))
         assertEquals("Launch Room 2", cache.nameFor("A"))
 
         effective.value = invalid("A")
-        renames.emit("A" to "Renamed While Gone") // the group is gone: the remembered name stays
+        renames.emit("A" to "Renamed While Gone") 
         assertEquals("Launch Room 2", cache.nameFor("A"))
     }
 
@@ -119,20 +119,20 @@ class FocusGroupNameCacheTest {
             it[AppStateKeys.FOCUS_GROUP_NAME_GID] = "someone-else|A"
             it[AppStateKeys.FOCUS_GROUP_NAME] = "Other Account Room"
         }
-        names.clear() // no local name to remember: the pre-seeded cache entry is what is under test
-        effective.value = valid("A") // a valid focus does not clear the cache
+        names.clear() 
+        effective.value = valid("A") 
         val cache = newCache(store)
-        assertNull(cache.nameFor("A")) // not this account's, even for the same gid
+        assertNull(cache.nameFor("A")) 
 
         account = null
         store.edit { it[AppStateKeys.FOCUS_GROUP_NAME_GID] = "me|A" }
-        assertNull(cache.nameFor("A")) // no known account: nothing is returned
+        assertNull(cache.nameFor("A")) 
 
         account = "me"
-        assertEquals("Other Account Room", cache.nameFor("A")) // stamped for this account
+        assertEquals("Other Account Room", cache.nameFor("A")) 
 
         names["A"] = "Launch Room"
-        effective.value = valid("A").copy(version = 4) // a new emission: remembered under this account's stamp
+        effective.value = valid("A").copy(version = 4) 
         assertEquals("Launch Room", cache.awaitName("A", "Launch Room"))
         assertEquals("me|A", store.data.first()[AppStateKeys.FOCUS_GROUP_NAME_GID])
     }

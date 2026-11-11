@@ -1,6 +1,8 @@
 package com.difft.android.login
 
 import android.app.Activity
+import com.difft.android.base.widget.floatAsTopBarTextButton
+import com.difft.android.base.widget.floatAsTopBarButton
 import android.content.Intent
 import android.os.Bundle
 import com.difft.android.base.utils.pane.dismissWhenLeavingVisibleTop
@@ -62,9 +64,9 @@ class ContactProfileSettingFragment : Fragment(), SettingsIdiomPage {
     companion object {
         private const val ARG_FROM = "ARG_FROM"
 
-        const val FROM_REGISTER = 1 //已经注册账号的新用户
-        const val FROM_CONTACT = 2 //me页面
-        const val FROM_SIGN_UP = 3 //未注册的用户
+        const val FROM_REGISTER = 1
+        const val FROM_CONTACT = 2
+        const val FROM_SIGN_UP = 3
 
         fun newInstance(from: Int): ContactProfileSettingFragment {
             return ContactProfileSettingFragment().apply {
@@ -79,11 +81,11 @@ class ContactProfileSettingFragment : Fragment(), SettingsIdiomPage {
     private var _binding: ActivityContactProfileSettingBinding? = null
     private val binding get() = _binding!!
 
-    /**
-     * This screen's own claim on the wait dialog: profile save and the sign-in that precedes it are
-     * one flow, and in dual-pane mode a sibling Fragment shares the Activity. Bound to the view
-     * lifecycle, so it is released when this view goes away.
-     */
+    
+
+
+
+
     private lateinit var profileWait: WaitDialogHandle
 
     private val editViewModel: ProfileEditViewModel by viewModels()
@@ -105,15 +107,15 @@ class ContactProfileSettingFragment : Fragment(), SettingsIdiomPage {
         onPicturePermissionForAvatarResult(it)
     }
 
-    /**
-     * ActivityResultLauncher for PictureSelector to avoid callback holding stale Fragment reference.
-     * Must use forResult(ActivityResultLauncher) instead of forResult(OnResultCallbackListener).
-     */
+    
+
+
+
     private val pictureSelectorLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         if (from == FROM_CONTACT) editViewModel.dispatch(ProfileEditContract.Intent.SetPickerPending(false))
-        // Re-engage the lock immediately on selector return (OK or cancel both land here).
+        
         ScreenLockUtil.temporarilyDisabled = false
                 if (result.resultCode == Activity.RESULT_OK) {
             val selectedMedia = PictureSelector.obtainSelectorList(result.data)
@@ -122,8 +124,8 @@ class ContactProfileSettingFragment : Fragment(), SettingsIdiomPage {
                 val selectedPath = localMedia.compressPath ?: localMedia.realPath
                 if (from == FROM_CONTACT) editViewModel.dispatch(ProfileEditContract.Intent.SelectAvatar(selectedPath))
                 else mAvatarFilePath = selectedPath
-                // Remove the plaintext crop output (files/Pictures/CROP_*.jpg) right away —
-                // upload/preview use compressPath/realPath, never the crop file.
+                
+                
                 AvatarPickTempCleaner.deleteCropTemp(localMedia, keepPath = selectedPath)
                 _binding?.ivAvatar?.setAvatar(selectedPath.orEmpty())
             }
@@ -140,7 +142,7 @@ class ContactProfileSettingFragment : Fragment(), SettingsIdiomPage {
     ): View {
         restoringContactDraft = true
         _binding = ActivityContactProfileSettingBinding.inflate(inflater, container, false)
-        // Hosted, the page does not open the keyboard on entry (detailKeyboard below).
+        
         if (isInDetailStack()) binding.etName.autoFocus = false
         return binding.root
     }
@@ -148,8 +150,8 @@ class ContactProfileSettingFragment : Fragment(), SettingsIdiomPage {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         profileWait = waitDialogHandle()
-        // The name has one restoration owner, this page (its saved key or the editor's draft): the
-        // field must not replay a stale hierarchy value over it.
+        
+        
         binding.etName.isSaveFromParentEnabled = false
         applyDetailPageInsets(view, ime = true)
         detailKeyboard(showOnFirstOpen = false, focus = {}, savedInstanceState = savedInstanceState)
@@ -164,6 +166,8 @@ class ContactProfileSettingFragment : Fragment(), SettingsIdiomPage {
 
     private fun initView() {
         setupBackButton(binding.ibBack)
+        binding.ivRefresh.floatAsTopBarButton(leading = false)
+        binding.tvSkip.floatAsTopBarTextButton(leading = false)
 
         when (from) {
             FROM_REGISTER -> {
@@ -206,7 +210,7 @@ class ContactProfileSettingFragment : Fragment(), SettingsIdiomPage {
         }
         binding.etName.onQueryChanged = ::onNameEdited
         binding.etName.onClear = { onNameEdited("") }
-        // Same eligibility as tapping Done: an empty name keeps the button, and the key, inert.
+        
         binding.etName.onImeAction = { if (binding.btnDone.isEnabled) binding.btnDone.performClick() }
         refreshDoneButton()
 
@@ -225,13 +229,13 @@ class ContactProfileSettingFragment : Fragment(), SettingsIdiomPage {
         }
 
         binding.clAvatar.setOnClickListener {
-            // Open directly when media is already usable (full/partial); else request.
+            
             onPicturePermissionForAvatar.launchMediaSelectionOrOpen { createPictureSelector() }
         }
     }
 
     private fun generateRandomAvatarAndName() {
-        // 在 IO 操作之前获取 context，避免在 IO 线程调用 requireContext()
+        
         val context = context ?: return
         viewLifecycleOwner.lifecycleScope.launch {
             try {
@@ -241,7 +245,7 @@ class ContactProfileSettingFragment : Fragment(), SettingsIdiomPage {
                     val randomName = RandomNameUtil.getRandomName(context)
                     avatarPath to randomName
                 }
-                // 检查 Fragment 状态，避免在 View 销毁后更新 UI
+                
                 if (!isAdded || view == null) return@launch
                 mAvatarFilePath = path
                 if (File(path).exists()) {
@@ -283,7 +287,7 @@ class ContactProfileSettingFragment : Fragment(), SettingsIdiomPage {
         refreshDoneButton()
     }
 
-    /** Shows a name set from code; the field's setter is silent, so the button is refreshed here. */
+    
     private fun showName(name: String) {
         binding.etName.query = name
         refreshDoneButton()
@@ -341,8 +345,8 @@ class ContactProfileSettingFragment : Fragment(), SettingsIdiomPage {
 
                 Status.SUCCESS -> {
                     profileWait.dismiss()
-                    // Avatar is on the server now — drop the plaintext compress/crop temp
-                    // used for upload (no-op for random-avatar files or gallery originals).
+                    
+                    
                     context?.let { ctx -> AvatarPickTempCleaner.deleteUploadedTemp(ctx, mAvatarFilePath) }
                     if (from == FROM_REGISTER || from == FROM_SIGN_UP) {
                         gotoIndexActivity()
@@ -359,7 +363,7 @@ class ContactProfileSettingFragment : Fragment(), SettingsIdiomPage {
                     it.exception?.errorMsg?.let { error ->
                         ToastUtil.show(error)
                     }
-                    //如果是一键注册，即便是头像信息上传失败，也进入首页
+                    
                     if (from == FROM_SIGN_UP) {
                         gotoIndexActivity()
                         detailNavigation().pop(this@ContactProfileSettingFragment)
@@ -373,8 +377,8 @@ class ContactProfileSettingFragment : Fragment(), SettingsIdiomPage {
             when (it.status) {
                 Status.LOADING -> profileWait.show()
                 Status.SUCCESS -> {
-                    // No release here: setProfile is the next leg of the same flow and its loading
-                    // state reaches the same handle, so the modal stays up instead of blinking.
+                    
+                    
                     mViewModel.setProfile(
                             filePath = mAvatarFilePath,
                         name = binding.etName.query.trim(),
@@ -398,9 +402,6 @@ class ContactProfileSettingFragment : Fragment(), SettingsIdiomPage {
             }
         }
 
-    /**
-     * 显示不同账号登录提示框
-     */
     private fun showDifferentAccountLoginDialog() {
         val pageDialog = dismissWithView(ComposeDialogManager.showMessageDialog(
             context = requireContext(),
@@ -423,7 +424,7 @@ class ContactProfileSettingFragment : Fragment(), SettingsIdiomPage {
     }
 
     private fun gotoIndexActivity() {
-        // 使用Intent标志清除整个Activity栈，确保登录流程的所有Activity都被关闭
+        
         val intent = Intent(
             requireContext(),
             activityProvider.getActivityClass(ActivityType.INDEX)

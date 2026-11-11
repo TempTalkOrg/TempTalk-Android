@@ -33,13 +33,13 @@ class SlideSelectTouchListener : RecyclerView.OnItemTouchListener {
         }
     }
 
-    // Definitions for touch auto scroll regions
+    
     private var mTopBoundFrom = 0
     private var mTopBoundTo = 0
     private var mBottomBoundFrom = 0
     private var mBottomBoundTo = 0
 
-    // User settings - default values
+    
     private val mMaxScrollDistance = 16
     private val mAutoScrollDistance = (Resources.getSystem().displayMetrics.density * 56).toInt()
     private val mTouchRegionTopOffset = 0
@@ -52,19 +52,19 @@ class SlideSelectTouchListener : RecyclerView.OnItemTouchListener {
         reset()
     }
 
-    /** Recyclerview header item count */
+    
     fun setRecyclerViewHeaderCount(count: Int): SlideSelectTouchListener {
         this.mHeaderViewCount = count
         return this
     }
 
-    /** sets the listener that will be notified when items are (un)selected */
+    
     fun withSelectListener(selectListener: OnSlideSelectListener?): SlideSelectTouchListener {
         this.mSelectListener = selectListener
         return this
     }
 
-    /** start the drag selection at the given first-selected item index */
+    
     fun startSlideSelection(position: Int) {
         isActive = true
         mStart = position

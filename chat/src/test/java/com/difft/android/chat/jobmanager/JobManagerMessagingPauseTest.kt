@@ -22,13 +22,13 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
-/**
- * [JobManager] under the migration message pause (#1382): a held send job runs once messaging
- * opens, and is dropped, never run, when the login that held it ends.
- *
- * Tech mirrors [JobManagerWakeUpTest]: Robolectric for the Debouncer's main-looper Handler, real
- * dispatchers because the management dispatcher is a real thread pool.
- */
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 class JobManagerMessagingPauseTest {
 
@@ -38,9 +38,9 @@ class JobManagerMessagingPauseTest {
 
     @Before
     fun setUp() {
-        // Submitting a job reaches JobSchedulerScheduler on a background executor; a relaxed
-        // Application answers getSystemService with a bare Object, and the resulting
-        // ClassCastException leaks into the next runTest of this JVM as UncaughtExceptionsBeforeTest.
+        
+        
+        
         every { application.getSystemService(JobScheduler::class.java) } returns mockk(relaxed = true)
         every { jobStorage.getAllJobSpecs() } answers { synchronized(pending) { pending.toList() } }
         every { jobStorage.getConstraintSpecs(any()) } returns emptyList()
@@ -93,7 +93,7 @@ class JobManagerMessagingPauseTest {
         assertNull(ran.poll(HELD_MILLIS, TimeUnit.MILLISECONDS), "a dropped send must never run")
     }
 
-    // -- Helpers --
+    
 
     private fun buildJobManager(
         pause: TestMessagingPause,
@@ -146,7 +146,7 @@ class JobManagerMessagingPauseTest {
         const val AWAIT_SECONDS = 5L
         const val HELD_MILLIS = 500L
 
-        /** A job that does not send, so the pause neither holds nor drops it. */
+        
         const val OTHER_KEY = "NotASendJob"
     }
 }

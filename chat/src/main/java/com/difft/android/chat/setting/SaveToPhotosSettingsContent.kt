@@ -22,26 +22,26 @@ import com.difft.android.base.ui.compose.settings.DifftSettingsOptionRow
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.chat.R
 
-/**
- * The three conversation-level save-to-photos values, in display order. `null` means the
- * conversation follows the global setting, `1` always saves, `0` never does.
- */
+
+
+
+
 private val SaveToPhotosOptions: List<Int?> = listOf(null, 1, 0)
 
-/** Label for an explicit option; the `null` option's label is dynamic and comes from the host. */
+
 private fun saveToPhotosLabelRes(value: Int): Int = if (value == 1) {
     R.string.save_to_photos_always
 } else {
     R.string.save_to_photos_never
 }
 
-/**
- * Stateless body of the conversation save-to-photos screen.
- *
- * [selected] is the stored value, so `null` is a real selection ("follow the global setting") and
- * not "nothing selected" — the row comparison must stay value equality, never a null check.
- * [defaultLabel] carries the global on/off state the host resolved, which this body cannot read.
- */
+
+
+
+
+
+
+
 @Composable
 fun SaveToPhotosSettingsContent(
     selected: Int?,

@@ -26,10 +26,10 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * Choice, budget, gates and outcomes of the startup prompt coordinator (#1355 §4-§5), against the
- * real store over an in-memory DataStore and a controlled clock.
- */
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class StartupPromptCoordinatorTest : StartupPromptCoordinatorTestBase() {
 
@@ -185,7 +185,7 @@ class StartupPromptCoordinatorTest : StartupPromptCoordinatorTestBase() {
         c.onActionTaken(ticket)
         endSession()
 
-        // Back from Settings: notifications unreadable for now, another prompt is eligible.
+        
         now += 5 * 60_000
         answers[PromptId.NOTIFICATIONS] = ProviderAnswer.UNKNOWN
         eligible(PromptId.BACKGROUND_CONNECTION)
@@ -193,7 +193,7 @@ class StartupPromptCoordinatorTest : StartupPromptCoordinatorTestBase() {
         assertNull(c.current.value)
         assertTrue(record(PromptId.NOTIFICATIONS)!!.pendingActionAt != 0L)
 
-        // Process died in Settings: a fresh coordinator reads the persisted pending action.
+        
         endSession()
         val revived = coordinator()
         startSession(revived)
@@ -208,7 +208,7 @@ class StartupPromptCoordinatorTest : StartupPromptCoordinatorTestBase() {
         val ticket = c.current.value!!
         c.onShown(ticket)
         c.onActionTaken(ticket)
-        // Back without fixing: one ladder step (D2).
+        
         c.setHostState(true, false)
         runCurrent()
         val declined = record(PromptId.NOTIFICATIONS)!!
@@ -337,7 +337,7 @@ class StartupPromptCoordinatorTest : StartupPromptCoordinatorTestBase() {
         assertEquals(PromptId.BACKGROUND_CONNECTION, c.current.value?.id)
     }
 
-    // ---------- A lower prompt waits for a higher UNKNOWN one, capped at 15 s ----------
+    
 
     @Test
     fun `background connection unknown holds the full-screen prompt`() = runTest {

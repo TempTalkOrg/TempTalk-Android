@@ -26,11 +26,11 @@ import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
-/**
- * The address race over loopback (§1.2 of the pairing proposal): the candidate that completes
- * TCP + TLS + pin wins, one that stops at TCP does not, a wrong certificate does not, and the
- * budget ends the race with nothing left open.
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 class EndpointRaceTest {
     @get:Rule val tempFolder = TemporaryFolder()
@@ -50,7 +50,7 @@ class EndpointRaceTest {
         plainSockets.forEach { runCatching { it.close() } }
     }
 
-    /** A real pinned receiver on an ephemeral loopback port. */
+    
     private fun pinnedReceiver(): Int {
         val srv = ReceiverHttpServer(
             cert = cert,
@@ -64,14 +64,14 @@ class EndpointRaceTest {
         return srv.start(0)
     }
 
-    /** A plain TCP listener that accepts and never speaks TLS: the candidate that stops at TCP. */
+    
     private fun tcpOnlyListener(): Int {
         val socket = ServerSocket().apply { bind(InetSocketAddress("127.0.0.1", 0)) }
         plainSockets += socket
         return socket.localPort
     }
 
-    /** A port with no listener: refused at once. */
+    
     private fun refusedPort(): Int = ServerSocket(0).use { it.localPort }
 
     private fun payload(port: Int, vararg ips: String, fp: String = cert.sha256Fingerprint) =
@@ -86,7 +86,7 @@ class EndpointRaceTest {
     @Test
     fun `the pinned receiver wins over a refused port, and the result names only the winner`() = runBlocking {
         val port = pinnedReceiver()
-        val target = payload(port, "127.0.0.2", "127.0.0.1") // 127.0.0.2 refuses on this port
+        val target = payload(port, "127.0.0.2", "127.0.0.1") 
         val settled = EndpointRace.resolve(target, budgetMs = 5_000)
         assertEquals("127.0.0.1", settled?.ip)
         assertEquals(listOf("127.0.0.1"), settled?.ips)
@@ -102,18 +102,18 @@ class EndpointRaceTest {
     @Test
     fun `a candidate that stops at TCP loses to one that completes TLS`() = runBlocking {
         val tlsPort = pinnedReceiver()
-        // Both candidates share one port number in a real code; here the TCP-only listener sits on
-        // its own port, so the race is run directly with the addresses mapped onto it.
+        
+        
         val tcpPort = tcpOnlyListener()
         val started = System.nanoTime()
-        // Two races: TCP-only alone must run into the budget; TLS alone must win quickly.
+        
         assertNull(EndpointRace.race(listOf("127.0.0.1"), tcpPort, cert.sha256Fingerprint, budgetMs = 1_500))
         val onlyTcpMs = (System.nanoTime() - started) / 1_000_000
         assertTrue("budget should have ended the race, took ${onlyTcpMs}ms", onlyTcpMs in 1_000..6_000)
         assertEquals("127.0.0.1", EndpointRace.race(listOf("127.0.0.1"), tlsPort, cert.sha256Fingerprint, budgetMs = 3_000))
     }
 
-    /** No upload ever reaches this receiver in these tests; the sink only has to exist. */
+    
     private object NullSink : FileSink {
         override fun openWrite(meta: FileMetadata): Sink = okio.blackholeSink()
         override fun finalizeFile(meta: FileMetadata, expectedSha256: String?): Result<String> = Result.success("")

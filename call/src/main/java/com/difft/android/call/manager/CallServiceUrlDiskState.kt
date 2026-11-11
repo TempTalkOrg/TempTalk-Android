@@ -5,9 +5,9 @@ import com.difft.android.base.call.UrlInfo
 import com.difft.android.base.utils.time.ServerTimeProvider
 import kotlinx.serialization.Serializable
 
-/**
- * Encrypted disk + in-memory snapshot of call service configuration (complete [ServiceUrls], not flat URLs).
- */
+
+
+
 @Serializable
 internal data class CallServiceUrlDiskState(
     val expiresAtMillis: Long = 0L,
@@ -61,14 +61,14 @@ internal fun StoredUrlInfo.toUrlInfo(): UrlInfo = UrlInfo(
     region = region,
 )
 
-/**
- * Absolute expiration time: serverTimestamp (seconds or milliseconds) + ttl (seconds).
- */
+
+
+
 internal fun computeExpiresAtMillis(serverTimestamp: Long?, ttlSeconds: Int): Long {
     val ttlMs = ttlSeconds.coerceAtLeast(0).toLong() * 1000L
     val st = serverTimestamp
     val baseMillis = when {
-        st == null -> ServerTimeProvider.nowMillis() // share one axis with isExpired()'s default arg
+        st == null -> ServerTimeProvider.nowMillis() 
         st > 1_000_000_000_000L -> st
         else -> st * 1000L
     }

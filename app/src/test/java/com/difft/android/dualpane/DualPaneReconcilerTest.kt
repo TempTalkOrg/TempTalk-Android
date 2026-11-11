@@ -19,13 +19,13 @@ import org.robolectric.Shadows
 import org.robolectric.annotation.Config
 import java.util.concurrent.TimeUnit
 
-/**
- * [DualPaneReconciler] against the real `activity_index.xml`, inflated on a vanilla
- * [FragmentActivity] (IndexActivity is `@AndroidEntryPoint` and the app's Robolectric tests
- * deliberately never boot it). `@Config(qualifiers)` picks the layout variant the way a device
- * configuration does; `RuntimeEnvironment.setQualifiers` mid-test is the window-size change the
- * OS did not relaunch us for — the ColorOS fold and the floating-window resize.
- */
+
+
+
+
+
+
+
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [33])
 class DualPaneReconcilerTest {
@@ -36,8 +36,8 @@ class DualPaneReconcilerTest {
     fun setUp() {
         DualPaneReconciler.resetProcessStateForTest()
         relaunches.clear()
-        // Robolectric starts elapsedRealtime() near 0 and the throttle compares against a reset
-        // stamp of 0, so without this the first rebuild of every case would be throttled.
+        
+        
         idleFor(2_000)
     }
 
@@ -58,8 +58,8 @@ class DualPaneReconcilerTest {
         return host
     }
 
-    // The band marker is stamped on list_pane at inflation (@string/dual_pane_band); a tree
-    // inflated under another dimens band carries a different string.
+    
+    
     private fun Host.staleTheChrome() {
         val listPane = checkNotNull(activity.findViewById<View>(R.id.list_pane)) { "needs the dual-pane tree" }
         listPane.tag = "other-band"
@@ -70,7 +70,7 @@ class DualPaneReconcilerTest {
         listPane.tag = activity.resources.getString(R.string.dual_pane_band)
     }
 
-    /** One reconcile per throttle window, so this measures the breaker and not the throttle. */
+    
     private fun Host.spendRebuildBudget(attempts: Int): Int {
         val before = relaunches.size
         repeat(attempts) {
@@ -88,7 +88,7 @@ class DualPaneReconcilerTest {
         relaunches.clear()
     }
 
-    // ---------------------------------------------------------------- the fold nobody relaunched
+    
 
     @Test
     @Config(qualifiers = "w400dp-h800dp")
@@ -98,7 +98,7 @@ class DualPaneReconcilerTest {
         host.settleFirstTraversal()
         assertNull("precondition: the folded qualifier inflates the phone layout", host.activity.findViewById(R.id.list_pane))
 
-        // ColorOS fold/unfold: the configuration moves to the inner display, the activity stays.
+        
         RuntimeEnvironment.setQualifiers("w763dp-h691dp")
         host.reconciler.reconcile("onStart")
 
@@ -134,7 +134,7 @@ class DualPaneReconcilerTest {
         assertEquals("gate == tree with fresh chrome is the fixed point; nothing may relaunch", 0, relaunches.size)
     }
 
-    // ---------------------------------------------------------------- lifecycle guards
+    
 
     @Test
     @Config(qualifiers = "w673dp-h480dp")
@@ -175,7 +175,7 @@ class DualPaneReconcilerTest {
         val host = host(started = true)
         host.reconciler.attach()
         host.staleTheChrome()
-        // The first traversal itself is the 0x0 -> WxH frame: it must not schedule a reconcile.
+        
         idleFor(2_000)
         assertEquals("inflation is not a resize; onStart owns the first reconcile of an instance", 0, relaunches.size)
     }

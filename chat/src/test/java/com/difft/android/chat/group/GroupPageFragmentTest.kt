@@ -79,13 +79,13 @@ class GroupPageTestActivity : FragmentActivity() {
     }
 }
 
-/** Drives the actual Hilt fragment/VM and real row checkbox, including restored selection. */
+
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltAndroidTest
 @RunWith(RobolectricTestRunner::class)
 @Config(application = GroupTestApplication_Application::class, sdk = [33])
 class GroupPageFragmentTest {
-    // App-owned bindings absent from the chat library test component.
+    
     @BindValue @JvmField val logoutBoundary: com.difft.android.base.user.LogoutManager = mockk(relaxed = true)
     @BindValue @JvmField val environmentBoundary: com.difft.android.base.utils.EnvironmentHelper = mockk(relaxed = true)
     @BindValue @JvmField val activityBoundary: com.difft.android.base.activity.ActivityProvider = mockk(relaxed = true)
@@ -135,7 +135,7 @@ class GroupPageFragmentTest {
         vm.dispatch(Intent.Select("alice"))
         pumpUntil("selected member rendered") { vm.state.value.selectedIds == setOf("alice") }
         assertEquals(setOf("alice"), vm.state.value.selectedIds)
-        // Search does not discard eligible selections that are outside the filtered rows.
+        
         vm.dispatch(Intent.Search("nobody"))
         pumpUntil("empty search rendered") { vm.state.value.query == "nobody" }
         assertEquals(setOf("alice"), vm.state.value.selectedIds)
@@ -144,14 +144,14 @@ class GroupPageFragmentTest {
             fragment.requireView().findViewById<com.difft.android.base.widget.DifftClearableInputView>(R.id.search_input).query == "alice"
         }
         assertTrue(vm.state.value.rows.single { it.uid == "alice" }.isSelected)
-        // Simulate older hierarchy text than the authoritative SavedStateHandle query.
+        
         fragment.requireView().findViewById<com.difft.android.base.widget.DifftClearableInputView>(R.id.search_input).query = "stale hierarchy"
         assertEquals("alice", vm.state.value.query)
         controller.recreate()
         pumpUntil("restored query rendered") {
             controller.get().findViewById<com.difft.android.base.widget.DifftClearableInputView>(R.id.search_input)?.query == "alice"
         }
-        // Drain a posted barrier so captured hierarchy callbacks cannot escape the assertions.
+        
         val restoredCallbacksDrained = java.util.concurrent.atomic.AtomicBoolean(false)
         android.os.Handler(Looper.getMainLooper()).post { restoredCallbacksDrained.set(true) }
         pumpUntil("restored main callbacks drained") { restoredCallbacksDrained.get() }
@@ -266,7 +266,7 @@ class GroupPageFragmentTest {
             coEvery { groups.addMembersWithBindings(any(), any(), any()) } returns com.difft.android.network.BaseResponse(1, 10125, null,
                 com.difft.android.network.group.CreateGroupResp("group", listOf(com.difft.android.network.group.Stranger("Zed", "zed"))))
             pumpUntil("page reloaded") { !vm.state.value.busy && vm.state.value.loaded }
-            // A rejection keeps the selection, so the retry submits the same member.
+            
             assertEquals(setOf("new"), vm.state.value.selectedIds)
             vm.dispatch(Intent.Submit)
             pumpUntil("stranger rejection shown") { shown.size == 2 }
@@ -365,7 +365,7 @@ class GroupPageFragmentTest {
             )
         } answers {
             confirmation = arg(10)
-            callOriginal() // Keep the production Compose mount and Android Dialog.
+            callOriginal() 
         }
         try {
             for (covered in listOf(false, true)) {
@@ -400,7 +400,7 @@ class GroupPageFragmentTest {
                     assertSame(retainedView, fragment.requireView())
                     pumpUntil("transfer dialog dismissed when covered=$covered") { !dialog.isShowing }
                     assertFalse(dialog.isShowing, "Transfer dialog must close when covered=$covered")
-                    // Simulate a queued click captured before the page lost its visible owner.
+                    
                     lateConfirm()
                     assertFalse(vm.state.value.busy)
                     assertEquals(setOf("alice"), vm.state.value.selectedIds)
@@ -416,7 +416,7 @@ class GroupPageFragmentTest {
         }
     }
 
-    /** Main collectors must run on the SDK main thread, even when real IO resumes them. */
+    
     private fun pumpUntil(description: String, condition: () -> Boolean) {
         check(Looper.myLooper() == Looper.getMainLooper()) { "UI pump must run on the SDK main thread" }
         val deadline = java.time.Clock.systemUTC().millis() + 5_000L
@@ -426,7 +426,7 @@ class GroupPageFragmentTest {
             shadowOf(Looper.getMainLooper()).runOneTask()
             dispatcher.testDispatcher.scheduler.runCurrent()
             if (condition()) return
-            Thread.sleep(1) // Yield real time to production IO; Robolectric advances its own clock.
+            Thread.sleep(1) 
         } while (java.time.Clock.systemUTC().millis() < deadline)
         assertTrue(condition(), "Timed out after 5 seconds: $description")
     }
@@ -434,7 +434,7 @@ class GroupPageFragmentTest {
     private fun row(id: String, role: Int) = GroupMemberModel(id, id, null, null, id.take(1), role)
 }
 
-/** Public detail-host lifecycle contract with actual retained child hide/cover transactions. */
+
 class GroupTransferVisibilityHost : Fragment(), DetailStackHost {
     companion object { const val CONTENT = 0x012304ff }
     private val owner = object : LifecycleOwner {

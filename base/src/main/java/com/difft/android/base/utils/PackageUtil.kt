@@ -35,9 +35,6 @@ object PackageUtil {
 
     private fun getPackageInfo(): PackageInfo? {
         return try {
-            // FIX: https://bugly.qq.com/v2/crash-reporting/crashes/900003077/18477?pid=1
-            // see https://developer.android.com/reference/android/content/pm/PackageManager.html
-            // #getPackageInfo(java.lang.String, int)
             val context: Context = com.difft.android.base.utils.application
             context.packageManager.getPackageInfo(context.packageName, 0)
         } catch (e: PackageManager.NameNotFoundException) {
@@ -46,9 +43,9 @@ object PackageUtil {
         }
     }
 
-    /**
-     * isAppInstalled("com.android.vending")
-     */
+    
+
+
     fun isAppInstalled(packageName: String): Boolean {
         val pm = com.difft.android.base.utils.application.packageManager
         return try {
@@ -59,10 +56,5 @@ object PackageUtil {
         }
     }
 
-//    fun isAppInstalled(packageName: String): Boolean {
-//        val packageManager: PackageManager = application.packageManager
-//        val intent = packageManager.getLaunchIntentForPackage(packageName)
-//        return intent != null
-//    }
 
 }

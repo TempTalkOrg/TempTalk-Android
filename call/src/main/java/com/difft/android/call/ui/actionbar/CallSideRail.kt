@@ -25,14 +25,14 @@ import com.difft.android.base.log.lumberjack.L
 import com.difft.android.call.R
 import com.difft.android.call.ui.tabletop.TabletopGeometry
 
-/**
- * The rail on the window's end edge (#1451): minimize at the top (level with the title bar outside
- * a screen share) and the controls stacked at the bottom. [composed] and [alpha] are the shared
- * fade state, so the toggle, screen-share auto-hide and PiP behave like the bar; open sheets do
- * not fade the rail. Nothing
- * here is clickable except the controls: taps on empty rail area reach the root, which toggles
- * the chrome.
- */
+
+
+
+
+
+
+
+
 @Composable
 fun CallSideRailOverlay(
     rail: SideRail,
@@ -55,10 +55,10 @@ fun CallSideRailOverlay(
     }
 }
 
-/**
- * Minimize below [SideRail.topInset], a flexible gap of at least 8dp, then the controls top to
- * bottom in [order], 12dp apart.
- */
+
+
+
+
 @Composable
 fun CallSideRail(
     rail: SideRail,
@@ -104,7 +104,7 @@ private fun ActionBarSlots.forRail(slot: RailSlot): @Composable () -> Unit = whe
     RailSlot.END -> end
 }
 
-/** Minimize on the rail: a regular rail control; the title bar drops its own while the rail shows. */
+
 @Composable
 fun RailMinimizeButton(onClick: () -> Unit) {
     CallActionButton(
@@ -116,10 +116,10 @@ fun RailMinimizeButton(onClick: () -> Unit) {
     )
 }
 
-/**
- * Group End on the rail and the tabletop dock: one red control that opens the end menu (end for
- * all / leave / cancel). Neither has room for the bar's leave + chevron split control.
- */
+
+
+
+
 @Composable
 fun RailGroupEndButton(onShowEndMenu: () -> Unit, size: Dp = CallSideRailSpec.BUTTON_DP.dp) {
     CallActionButton(
@@ -135,11 +135,11 @@ fun RailGroupEndButton(onShowEndMenu: () -> Unit, size: Dp = CallSideRailSpec.BU
     )
 }
 
-/**
- * One line on first composition, on each switch between the bottom bar, the rail and the tabletop
- * dock, and when the rail's top or bottom inset or its seven-control fit changes, with the window
- * size (whole dp).
- */
+
+
+
+
+
 @Composable
 fun ControlsPlacementLog(rail: SideRail?, isGroup: Boolean, dock: TabletopGeometry? = null) {
     val window = rememberCallWindowSizeDp()

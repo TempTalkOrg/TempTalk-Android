@@ -115,18 +115,18 @@ class LateDeliveryTrackerTest {
 
     @Test
     fun `time spent without a validated network is not counted as late`() {
-        // 10 minutes old, online for only 2 minutes of it.
+        
         onlineMs = 2 * minute
         deliver(10 * minute)
         assertEquals(0, count())
         onlineMs = 0L
         deliver(10 * minute)
         assertEquals(0, count())
-        // Online for 6 of the 10 minutes: the late part is still over 5 minutes.
+        
         onlineMs = 6 * minute
         deliver(10 * minute)
         assertEquals(1, count())
-        // No network reading yet: the delay may have been offline, so it is skipped.
+        
         onlineMs = null
         deliver(10 * minute)
         assertEquals(1, count())
@@ -144,11 +144,12 @@ class LateDeliveryTrackerTest {
         wall += 3 * day
         deliver(10 * minute)
         assertEquals(2, days(), "the second day counts before it is written")
+        assertEquals(setOf(100L, 103L), tracker.lateDayKeys())
         tracker.flushPending()
         assertEquals(3, newTracker().lateCount())
         assertEquals(2, newTracker().lateDays())
 
-        // Day 100 leaves the window on day 107; day 103 stays until day 109.
+        
         wall = 106 * day
         assertEquals(3, newTracker().lateCount())
         wall = 107 * day
@@ -160,10 +161,10 @@ class LateDeliveryTrackerTest {
     @Test
     fun `days are local calendar days, so a backlog across UTC midnight stays one day`() = runBlocking {
         tracker.zoneOffsetMs = { 8 * 60 * minute }
-        wall = 101 * day - 30 * minute // 23:30 UTC = 07:30 local, day 101 locally
+        wall = 101 * day - 30 * minute 
         deliver(10 * minute)
         tracker.flushPending()
-        wall = 101 * day + 30 * minute // 00:30 UTC = 08:30 local, still day 101
+        wall = 101 * day + 30 * minute 
         deliver(10 * minute)
         tracker.flushPending()
         assertEquals("d101:2", store.data.first()[AppStateKeys.BG_LATE_DELIVERY_DAYS])

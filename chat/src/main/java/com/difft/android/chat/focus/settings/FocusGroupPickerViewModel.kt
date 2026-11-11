@@ -27,24 +27,24 @@ object FocusGroupPickerContract {
 
     data class State(
         val loading: Boolean = true,
-        /** Groups matching the search, in name order. */
+        
         val groups: List<FocusGroupItem> = emptyList(),
         val query: String = "",
         val selectedGid: String? = null,
-        /** "Done" is enabled once a group other than the current focus group is selected. */
+        
         val canConfirm: Boolean = false,
     )
 
     sealed interface Effect {
-        /** Close the picker; [gid] is the chosen group, null when cancelled. */
+        
         data class Finish(val gid: String?) : Effect
     }
 }
 
-/**
- * Single-select list of the active groups (status 0) with a name search. While a valid focus runs, its
- * group starts selected (switching from Me > Notifications), and choosing it again is not a change.
- */
+
+
+
+
 @HiltViewModel
 class FocusGroupPickerViewModel @Inject constructor(
     private val directory: FocusGroupDirectory,
@@ -57,10 +57,10 @@ class FocusGroupPickerViewModel @Inject constructor(
     private val _effect = Channel<FocusGroupPickerContract.Effect>(Channel.BUFFERED)
     val effect = _effect.receiveAsFlow()
 
-    /** The full list; the state holds the filtered view of it. */
+    
     private val allGroups = MutableStateFlow<List<FocusGroupItem>>(emptyList())
 
-    /** The valid focus group right now (followed while the picker is open); null when focus is off or invalid. */
+    
     private var currentGid: String? = null
     private var observingFocus = false
 
@@ -85,7 +85,7 @@ class FocusGroupPickerViewModel @Inject constructor(
         if (_state.value.selectedGid == null) _state.update { it.copy(selectedGid = currentGid) }
         if (!observingFocus) {
             observingFocus = true
-            // Focus can end or move while the picker is open: the preselected group may become choosable.
+            
             viewModelScope.launch {
                 repository.effective.collect { focus ->
                     currentGid = validFocusGid(focus)

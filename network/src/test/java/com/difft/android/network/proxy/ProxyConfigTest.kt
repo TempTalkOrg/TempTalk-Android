@@ -48,7 +48,7 @@ class ProxyConfigTest {
     fun `encrypted link decodes only with the correct passphrase`() {
         val link = ProxyLinkCodec.encodeEncrypted(full, "river-amber-pencil")
 
-        // Plain parser refuses an encrypted link.
+        
         assertNull(ProxyConfig.parse(link))
         assertEquals(ProxyLinkCodec.Mode.ENCRYPTED, ProxyLinkCodec.inspect(link))
 
@@ -83,25 +83,25 @@ class ProxyConfigTest {
 
     @Test
     fun `outerSni falls back to decoy hostname when sni is null`() {
-        // H-2: ProxyConnectivityChecker.check() now uses config.outerSni() instead
-        // of config.host (an IP literal), so the probe matches TlsTunnelSocket's
-        // real handshake and avoids IllegalArgumentException from SNIHostName.
+        
+        
+        
         val cfg = ProxyConfig(host = "1.2.3.4", port = 443, spkiPinBase64 = "x", sni = null)
         assertEquals("www.bing.com", cfg.outerSni())
     }
 
     @Test
     fun `toString masks turnSecret and spkiPin`() {
-        // L-1: the auto-generated data-class toString() would otherwise expose
-        // the coturn static-auth-secret and full SPKI pin to any future log
-        // statement that accidentally interpolates the config object.
+        
+        
+        
         val rendered = full.toString()
         assertTrue("deadbeef" !in rendered, "turnSecret literal must not appear: $rendered")
         assertTrue("<set>" in rendered, "must mark turn as <set>: $rendered")
-        // Pin prefix kept for diagnostic disambiguation; full value masked.
+        
         assertTrue("AbC123+/" in rendered, "pin prefix should be visible: $rendered")
         assertTrue("AbC123+/=" !in rendered, "trailing pin chars must be masked: $rendered")
-        // Non-secret fields still rendered.
+        
         assertTrue("203.0.113.7" in rendered, "host should be visible: $rendered")
         assertTrue("8443" in rendered, "port should be visible: $rendered")
     }
@@ -126,8 +126,8 @@ class ProxyConfigTest {
 
     @Test
     fun `quicEnabled round-trips through encode and parse`() {
-        // q is the runtime gate for the whole QUIC-over-proxy feature; guard both
-        // the encode (put "q",1) and parse (optInt "q") branches against regression.
+        
+        
         val cfg = ProxyConfig(host = "1.2.3.4", port = 443, spkiPinBase64 = "pin", quicEnabled = true)
         val parsed = ProxyConfig.parse(cfg.toShareLink())
         requireNotNull(parsed)
@@ -144,8 +144,8 @@ class ProxyConfigTest {
 
     @Test
     fun `explicit q=1 in wire payload parses to quicEnabled true`() {
-        // Pin the WIRE contract directly (literal "q":1), not just an encode→parse
-        // round-trip — a symmetric bug on both ends could otherwise cancel out.
+        
+        
         val json = """{"v":1,"h":"203.0.113.7","p":443,"f":"pin","q":1}"""
             .toByteArray(Charsets.UTF_8)
         val blob = byteArrayOf(0x01, 0x00) + json
@@ -159,7 +159,7 @@ class ProxyConfigTest {
 
     @Test
     fun `rejects payload missing required fields`() {
-        // Hand-craft a plain envelope whose JSON lacks the required fingerprint.
+        
         val json = """{"v":1,"h":"203.0.113.7","p":443}""".toByteArray(Charsets.UTF_8)
         val blob = byteArrayOf(0x01, 0x00) + json
         val d = android.util.Base64.encodeToString(

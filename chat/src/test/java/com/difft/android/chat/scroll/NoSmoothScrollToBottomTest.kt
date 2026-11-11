@@ -7,15 +7,15 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * Case #13 — FRAMEWORK ASSUMPTION test for `RecyclerView.noSmoothScrollToBottom()`
- * (base `ViewExtensions.kt`), the primitive behind the call-header compensation and every
- * auto-snap-to-bottom path in the chat list.
- *
- * Two-step by design: `scrollToPosition` first, then a `doOnNextLayout` fine-tune that uses
- * post-layout dimensions. This pins both halves — the last row must end up fully inside the
- * viewport, and getting there must not look like a drag.
- */
+
+
+
+
+
+
+
+
+
 class NoSmoothScrollToBottomTest : RecyclerViewScrollHarness() {
 
     @Test

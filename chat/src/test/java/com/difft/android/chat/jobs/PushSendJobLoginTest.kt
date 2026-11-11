@@ -20,11 +20,11 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/**
- * A send job only sends for the login that created it (#1382 A04): a job of another login, or one
- * with no creator login, fails before any network work, whether or not the upgrade sweep ran; with
- * no login signed in the job waits.
- */
+
+
+
+
+
 class PushSendJobLoginTest {
 
     @Before
@@ -99,7 +99,7 @@ class PushSendJobLoginTest {
         job.closeRunResources()
     }
 
-    /** A real job with a catch-all around its send: the refusal still fails it without a network call. */
+    
     @Test
     fun `a real send job of another login never calls the sender`() = runTest {
         val sender = mockk<NewSignalServiceMessageSender>()

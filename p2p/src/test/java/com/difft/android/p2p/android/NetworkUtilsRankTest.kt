@@ -5,7 +5,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** The address order a pairing code advertises (§1.1 of the pairing proposal). */
+
 class NetworkUtilsRankTest {
 
     private fun wlan(ip: String, site: Boolean = true) = Candidate("wlan0", ip, site)
@@ -37,7 +37,7 @@ class NetworkUtilsRankTest {
         val many = (1..6).map { Candidate("eth$it", "10.0.0.$it", true) } + wlan("10.0.0.1")
         val ranked = NetworkUtils.rank(many)
         assertEquals(NetworkUtils.MAX_CANDIDATES, ranked.size)
-        assertEquals("10.0.0.1", ranked.first()) // wlan outranks eth even when listed last
+        assertEquals("10.0.0.1", ranked.first()) 
         assertEquals(ranked.distinct(), ranked)
     }
 

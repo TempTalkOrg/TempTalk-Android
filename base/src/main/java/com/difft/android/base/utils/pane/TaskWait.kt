@@ -6,16 +6,16 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 
-/**
- * One task's claim on the shared wait dialog, for utilities that may run from a hosted page or
- * from a plain Activity: the page's [PageWait] when the caller passes one (so the wait also goes
- * with the page's view), else a token claim on the Activity. [release] lets go of this claim
- * only, never another flow's: after the first release it no longer touches the page's wait, so a
- * later claim of that wait (the same flow started again) stays up. Main thread.
- */
+
+
+
+
+
+
+
 class TaskWait private constructor(private var wait: PageWait?, private var token: Int) {
 
-    /** Releases this claim; later calls do nothing. */
+    
     fun release() {
         wait?.let {
             wait = null
@@ -38,7 +38,7 @@ class TaskWait private constructor(private var wait: PageWait?, private var toke
     }
 }
 
-/** Runs [block] behind a [TaskWait] that is released on every path, cancellation included. */
+
 suspend fun <T> withTaskWait(context: Context, wait: PageWait?, block: suspend () -> T): T {
     val claim = withContext(Dispatchers.Main.immediate) { TaskWait.claim(context, wait) }
     try {

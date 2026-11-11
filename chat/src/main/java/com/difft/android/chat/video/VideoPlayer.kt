@@ -252,9 +252,9 @@ class VideoPlayer @JvmOverloads constructor(
         this.playerPositionDiscontinuityCallback = playerPositionDiscontinuityCallback
     }
 
-    /**
-     * Resumes a paused video, or restarts if at end of video.
-     */
+    
+
+
     fun play() {
         exoPlayer?.let {
             it.playWhenReady = true

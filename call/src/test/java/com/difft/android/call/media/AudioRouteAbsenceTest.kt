@@ -25,16 +25,16 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
-/**
- * Absence debounce, parking and failure classification (design inventory rows #33, #34 and group F
- * rows #118, #119, #120, #123, #125).
- *
- * These rows exist because the library's scanner mirrors `AudioManager.getDevices()` verbatim: ANY
- * Bluetooth disconnect+reconnect pair — a cross-host handover, a link twitch — produces at least one
- * poll where the target kind is missing. Treating a single poll as removal reports DEVICE_GONE for a
- * device that is coming back; latching "was ever missing" across the attempt does the mirror-image
- * damage, misclassifying a genuine TIMEOUT and disarming the retry loop guard.
- */
+
+
+
+
+
+
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class AudioRouteAbsenceTest {
 
@@ -53,7 +53,7 @@ class AudioRouteAbsenceTest {
     private val absent = listOf(spk)
 
     @Before
-    @Suppress("DEPRECATION") // the legacy readings are the applier's primary judgement
+    @Suppress("DEPRECATION") 
     fun setUp() {
         every { audioManager.isBluetoothScoOn } answers { scoOn }
         every { audioManager.isSpeakerphoneOn } returns false
@@ -80,28 +80,28 @@ class AudioRouteAbsenceTest {
         ).also { it.start() }
     }
 
-    /**
-     * Sets the list the *next* poll will read, then lets exactly that poll run.
-     *
-     * `runCurrent()` is required: `advanceTimeBy` does not run a task scheduled at exactly the
-     * moment it lands on, and a poll is scheduled exactly one interval out.
-     */
+    
+
+
+
+
+
     private fun TestScope.poll(devices: List<AudioDevice>) {
         host.setDevices(devices)
         advanceTimeBy(500)
         runCurrent()
     }
 
-    // ── #34 ─────────────────────────────────────────────────────────────────────
+    
     @Test
     fun `an empty device list parks the attempt without spending the budget`() = runTest {
         startApplier()
         host.emit(applyingSnapshot(bt, devices = emptyList()))
         advanceTimeBy(10_000)
 
-        // An empty list means no live AudioSwitch, so every selectDevice would be dropped silently.
-        // Burning the budget here would produce a fake Failed that arms the loop guard against the
-        // next generation's own pick.
+        
+        
+        
         assertTrue(selectCalls.isEmpty())
         assertEquals(0, host.terminalCount)
 
@@ -115,7 +115,7 @@ class AudioRouteAbsenceTest {
         assertEquals(listOf(bt to AudioRouteFailure.TIMEOUT), host.failed)
     }
 
-    // ── #33 ─────────────────────────────────────────────────────────────────────
+    
     @Test
     fun `a target that stays missing ends the attempt as DEVICE_GONE`() = runTest {
         startApplier()
@@ -129,24 +129,24 @@ class AudioRouteAbsenceTest {
         assertTrue("well inside the 5000ms budget", currentTime < 5_000)
     }
 
-    // ── #119 ────────────────────────────────────────────────────────────────────
+    
     @Test
     fun `DEVICE_GONE is declared on the third consecutive missing poll`() = runTest {
         startApplier()
         host.emit(applyingSnapshot(bt, present))
         runCurrent()
 
-        poll(absent) // 1st missing poll, t=500
+        poll(absent) 
         assertTrue(host.failed.isEmpty())
-        poll(absent) // 2nd, t=1000
+        poll(absent) 
         assertTrue(host.failed.isEmpty())
-        poll(absent) // 3rd, t=1500 → confirmed removal
+        poll(absent) 
 
         assertEquals(listOf(bt to AudioRouteFailure.DEVICE_GONE), host.failed)
         assertEquals(1_500, currentTime)
     }
 
-    // ── #118 ────────────────────────────────────────────────────────────────────
+    
     @Test
     fun `a single missing poll is a twitch, not a removal`() = runTest {
         startApplier()
@@ -164,32 +164,32 @@ class AudioRouteAbsenceTest {
         assertTrue("driving resumed once the target came back", selectCalls.size > callsBeforeGap)
     }
 
-    // ── #120 ────────────────────────────────────────────────────────────────────
+    
     @Test
     fun `a twitch that recovers and then fails to route is a TIMEOUT, not DEVICE_GONE`() = runTest {
         startApplier()
         host.emit(applyingSnapshot(bt, present))
         runCurrent()
 
-        poll(absent)  // one transient gap…
-        poll(present) // …then present for the rest of the budget
+        poll(absent)  
+        poll(present) 
         advanceTimeBy(5_000)
 
-        // Classifying by history instead of by the final reading would say DEVICE_GONE here, which
-        // does not arm the loop guard — and the library's next automatic pick would reopen the
-        // attempt, forever, with no real device removal involved.
+        
+        
+        
         assertEquals(listOf(bt to AudioRouteFailure.TIMEOUT), host.failed)
     }
 
-    // ── #125 ────────────────────────────────────────────────────────────────────
+    
     @Test
     fun `intermittent absence that is still missing at the deadline is DEVICE_GONE`() = runTest {
         startApplier()
         host.emit(applyingSnapshot(bt, present))
         runCurrent()
 
-        // Two-missing / one-present cycles: never three in a row, so the debounce never fires and
-        // the classification falls to the final reading.
+        
+        
         repeat(3) {
             poll(absent)
             poll(absent)
@@ -203,7 +203,7 @@ class AudioRouteAbsenceTest {
         assertEquals(listOf(bt to AudioRouteFailure.DEVICE_GONE), host.failed)
     }
 
-    // ── #123 ────────────────────────────────────────────────────────────────────
+    
     @Test
     fun `a twitch does not interrupt an attempt that later succeeds`() = runTest {
         startApplier()

@@ -9,22 +9,21 @@ import androidx.core.view.isVisible
 import androidx.core.view.updateLayoutParams
 import com.difft.android.chat.R
 
-/** XML size of textview_missed_number (18dp, padding 3dp); restored after a dot render. */
+
 private const val UNREAD_BADGE_SIZE_DP = 18
 private const val UNREAD_BADGE_PADDING_DP = 3
 
-/** Manual-unread indicator: a dot with no number. */
+
 private const val UNREAD_DOT_SIZE_DP = 10
 
-/** A focus card shows at most this many previews. */
+
 internal const val FOCUS_CARD_LINES = 3
 
-/**
- * Unread badge of a chat-list row: red, or grey when [isMuted]. [isDot]: a manual "mark as
- * unread" with no real unread renders as a plain dot (no number), per the chat-list gesture
- * design; the same view shrinks to [UNREAD_DOT_SIZE_DP] and grows back to the XML badge size for
- * a count, since holders are recycled between the two.
- */
+
+
+
+
+
 internal fun applyUnreadBadge(badge: TextView, missedNumber: Int, isMuted: Boolean, isDot: Boolean) {
     if (missedNumber == 0) {
         badge.visibility = View.GONE
@@ -47,22 +46,22 @@ internal fun applyUnreadBadge(badge: TextView, missedNumber: Int, isMuted: Boole
     if (isDot) badge.text = ""
 }
 
-/**
- * Preview lines of the focus card, top to bottom. The latest previews come oldest first, so the
- * newest message sits at the bottom; a draft takes the first line (where the `[Draft]` tag is)
- * and the two newest previews follow. Without prefetched previews (synthesized row) the card
- * falls back to the one-line preview.
- */
+
+
+
+
+
+
 internal fun focusCardLines(draft: CharSequence?, previews: List<String>, fallback: CharSequence?): List<CharSequence?> = when {
     previews.isEmpty() -> listOf(draft ?: fallback)
     draft != null -> listOf(draft) + previews.takeLast(FOCUS_CARD_LINES - 1)
     else -> previews.takeLast(FOCUS_CARD_LINES)
 }
 
-/**
- * The swipe button between pin and delete: "Focus" or "End Focus" on a white-on-bgspace button.
- * "End Focus" falls back to "End" when it does not fit the button (PRD 7.4.4).
- */
+
+
+
+
 internal fun bindFocusSwipeAction(container: View, icon: ImageView, label: TextView, action: FocusRowAction) {
     container.isVisible = action != FocusRowAction.NONE
     if (action == FocusRowAction.NONE) return

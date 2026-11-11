@@ -5,9 +5,9 @@ import kotlin.math.min
 internal object ConnectionBackoff {
     private const val MAX_DELAY_MS = 30_000L
 
-    /**
-     * @param failureIndex cumulative failure count (1 = already failed once; delay before the 2nd attempt)
-     */
+    
+
+
     fun delayMsBeforeRetryAfterFailure(failureIndex: Int): Long {
         if (failureIndex <= 0) return 0L
         return when (failureIndex) {

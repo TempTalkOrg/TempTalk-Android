@@ -43,12 +43,12 @@ import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * The monitor is also responsible for sending heartbeats/keep-alive messages to prevent
- * timeouts, if timeout then disconnect the websocket connection. and then the connection will be reconnected inside [checkUnconnectedStateAndReconnect].
- *
- * The monitor lifecycle is same to the application, it will only be destroyed when the application is destroyed.
- */
+
+
+
+
+
+
 @Singleton
 class WebSocketHealthMonitor
 @Inject constructor(
@@ -64,35 +64,35 @@ class WebSocketHealthMonitor
     @Volatile
     private var lastHeartbeatResponseTime: Long = System.currentTimeMillis()
 
-    // Elapsed-clock twin of lastHeartbeatResponseTime for the stale-probe math: wall clock
-    // can step (NTP) right after a Doze wake — exactly when the probe runs — while
-    // elapsedRealtime is monotonic across sleep.
+    
+    
+    
     @Volatile
     private var lastHeartbeatResponseElapsed: Long = SystemClock.elapsedRealtime()
 
     @Volatile
     private var lastHeartbeatSendTime: Long = System.currentTimeMillis()
 
-    // Elapsed time of the last keep-alive sent, or 0 before the first one; compared with
-    // lastHeartbeatResponseElapsed by the missed-response check.
+    
+    
     @Volatile
     private var lastHeartbeatSendElapsed: Long = 0L
 
-    // Bumped on every settled state change, so a response deadline whose expiry is still queued
-    // can tell that the socket it was armed for is gone.
+    
+    
     @Volatile
     private var socketGeneration = 0L
 
-    /** Count of keep-alives sent; drives the sampled keep-alive log line. */
+    
     @Volatile
     private var keepAliveTicks = 0L
 
-    /**
-     * Broadcasts wake events (network change, foreground, service alarm, keep-alive alarm)
-     * to every suspended wait point in the monitor. A shared flow drops emissions
-     * that find no collector, which is what every wait point wants: a wake is only meaningful
-     * while someone is waiting.
-     */
+    
+
+
+
+
+
     private val notificationFlow = MutableSharedFlow<WakeReason>(
         replay = 0,
         extraBufferCapacity = 1
@@ -103,10 +103,10 @@ class WebSocketHealthMonitor
         extraBufferCapacity = 1
     )
 
-    /**
-     * Emits on every health-check loop wake-up. After a vendor freeze this is often the
-     * only liveness signal, so subscribers (alarm-chain healing) piggyback on it.
-     */
+    
+
+
+
     val monitorWakeTicks: SharedFlow<Unit> = _monitorWakeTicks
 
     private var staleProbeJob: Job? = null
@@ -121,7 +121,7 @@ class WebSocketHealthMonitor
 
     private var networkMonitor: NetworkMonitor? = null
 
-    // Kept so stopMonitoring() can unregister it.
+    
     private var foregroundListener: AppForegroundObserver.Listener? = null
 
     private suspend fun waitForNetworkFine(websocketName: String) {
@@ -131,13 +131,13 @@ class WebSocketHealthMonitor
                 waitStart = SystemClock.elapsedRealtime()
                 L.i { "$websocketName [ws]monitor network unavailable, waiting ${NetworkUtils.unavailabilityDiagnostics(context)}" }
             }
-            // Timeout guards against a network change that lands before first() collects.
+            
             try {
                 withTimeout(NETWORK_WAIT_TIMEOUT) {
                     notificationFlow.first()
                 }
             } catch (_: TimeoutCancellationException) {
-                // Re-check the network state.
+                
             }
         }
         if (waitStart != 0L) {
@@ -171,7 +171,7 @@ class WebSocketHealthMonitor
         AppForegroundObserver.addListener(foregroundListener!!)
 
         networkMonitor = NetworkMonitor(context) {
-            // The host ranking may predate the outage; throttled inside.
+            
             coordinator.onNetworkAvailable()
             if (isMonitoring) {
                 L.i { "[ws]monitor: Network changed, notifying all receivers" }
@@ -219,15 +219,15 @@ class WebSocketHealthMonitor
         }
     }
 
-    /**
-     * Called on every `ServiceCheckReceiver` alarm. Resets the retry count so the next reconnect
-     * skips its backoff, and wakes every waiting point (health check, backoff, network wait).
-     * Runs regardless of [isMonitoring]: the alarm exists to keep the background connection
-     * alive even when the monitor state is off; `tryEmit` never blocks.
-     */
+    
+
+
+
+
+
     fun onAlarmTriggered() {
-        // The normal case is visible through the externally triggered keep-alive line;
-        // an alarm arriving while nothing monitors is the anomaly worth a line.
+        
+        
         if (isMonitoring) L.d { "[ws]monitor: alarm" } else L.w { "[ws]monitor: alarm fired while not monitoring" }
         attempts = 0
         powerSampler.onEvent(PowerEvent.WAKE_SERVICE)
@@ -242,7 +242,7 @@ class WebSocketHealthMonitor
 
             if (state is WebSocketConnectionState.CONNECTING) {
                 timeoutJob?.cancel()
-                // Start the timeout coroutine only for CONNECTING state
+                
                 timeoutJob = launch {
                     delay(CONNECTING_TIMEOUT)
                     if (isMonitoring) {
@@ -274,34 +274,34 @@ class WebSocketHealthMonitor
                 powerSampler.onTick()
                 if (wakeReason == WakeReason.KEEP_ALIVE_ALARM) powerSampler.onEvent(PowerEvent.WAKE_KEEP_ALIVE)
 
-                // A fresh socket only needs the wait re-entered so the wake alarm covers it;
-                // its first keep-alive follows one cadence later as usual.
+                
+                
                 if (wakeReason == WakeReason.CONNECTED) continue
 
                 val triggeredByExternalEvent = wakeReason != null && wakeReason != WakeReason.KEEP_ALIVE_ALARM
                 if (webSocketConnection.webSocketConnectionState.value == WebSocketConnectionState.CONNECTED) {
                     val previousSend = lastHeartbeatSendElapsed
-                    // Probed rather than dropped at once: right after a thaw the timer can resume
-                    // before the reader thread has consumed a response already in the buffer.
+                    
+                    
                     val unanswered = keepAliveUnansweredForCadence(wakeReason, previousSend, lastHeartbeatResponseElapsed)
                     if (unanswered) {
                         L.w { "${webSocketConnection.name} [ws]monitor: keep-alive unanswered for a cadence, probing sinceSend=${SystemClock.elapsedRealtime() - previousSend}ms" }
                     }
-                    //why use lastHeartbeatSendTime instead of System.currentTimeMillis()? in case of App may be frozen in background
+                    
                     if (lastHeartbeatSendTime - lastHeartbeatResponseTime > MAX_TIME_SINCE_SUCCESSFUL_KEEP_ALIVE) {
                         L.w { "${webSocketConnection.name} [ws]monitor: missed keep-alives, disconnecting lastSend=$lastHeartbeatSendTime lastResponse=$lastHeartbeatResponseTime" }
                         powerSampler.onEvent(PowerEvent.KEEP_ALIVE_MISSED)
                         webSocketConnection.disconnectWhenConnected(LocalDisconnectReason.HEARTBEAT_LOST)
                     } else {
                         val sinceLastResponse = SystemClock.elapsedRealtime() - lastHeartbeatResponseElapsed
-                        // Out-of-cadence sends (service alarm/network/foreground) are always
-                        // logged; the regular timer and wake-alarm cadence is sampled to keep
-                        // the file readable. The wake field shows which clock drove the send.
+                        
+                        
+                        
                         val tick = ++keepAliveTicks
                         if (triggeredByExternalEvent || tick % KEEP_ALIVE_LOG_EVERY == 0L) {
                             L.i { "${webSocketConnection.name} [ws]monitor: keep alive n=$tick wake=${wakeReason ?: "timer"} sinceResponse=${sinceLastResponse}ms" }
                         }
-                        // Armed before the send so an immediate response can cancel it.
+                        
                         val deadlineArmed = armResponseDeadline(webSocketConnection)
                         lastHeartbeatSendElapsed = SystemClock.elapsedRealtime()
                         webSocketConnection.sendKeepAlive()
@@ -309,9 +309,9 @@ class WebSocketHealthMonitor
                         powerSampler.onEvent(PowerEvent.KEEP_ALIVE_SENT)
                         val longSilence = wakeReason != null && sinceLastResponse > keepAliveCadence() * STALE_PROBE_SILENCE_CADENCES
                         if (unanswered || (!deadlineArmed && longSilence)) {
-                            // Any wake (routine alarm included) after a long response silence:
-                            // likely a vendor freeze or a late alarm with a possibly-zombie socket;
-                            // probe the keep-alive just sent instead of waiting for miss accounting.
+                            
+                            
+                            
                             armStaleProbe(webSocketConnection)
                         }
                     }
@@ -321,20 +321,20 @@ class WebSocketHealthMonitor
         monitoringJobs.add(job)
     }
 
-    /**
-     * Waits one keep-alive cadence, or less if a wake event arrives; `null` means the uptime
-     * timeout elapsed. While the socket is connected in keep-alive mode an elapsed-realtime
-     * alarm is armed as well, because the coroutine timeout runs on the uptime clock and stalls
-     * whenever the CPU suspends (issue #1325); whichever fires first ends the wait and the
-     * alarm is disarmed.
-     */
+    
+
+
+
+
+
+
     private suspend fun awaitKeepAliveTick(webSocketConnection: WebSocketConnection): WakeReason? {
         val stateFlow = webSocketConnection.webSocketConnectionState
         val connected = stateFlow.value == WebSocketConnectionState.CONNECTED
         val armed = connected && keepAliveWakeAlarm.arm { notificationFlow.tryEmit(WakeReason.KEEP_ALIVE_ALARM) }
-        // Not connected yet: also end the wait once the socket connects, so the next iteration
-        // arms the wake alarm for it. The state flow's replay cache makes this race-free: a
-        // CONNECTED that lands before first() subscribes is still observed.
+        
+        
+        
         val wakes = if (connected) {
             notificationFlow
         } else {
@@ -354,20 +354,20 @@ class WebSocketHealthMonitor
         }
     }
 
-    /**
-     * Uptime cadence of the wait: 30 s in the foreground, the 60 s background cadence otherwise
-     * (Signal-Android's split), so a backgrounded app whose CPU stays awake (charging, screen on in
-     * another app) sends no more often than a sleeping one.
-     */
+    
+
+
+
+
     private fun keepAliveCadence(): Long =
         if (AppForegroundObserver.isForegrounded()) KEEP_ALIVE_SEND_CADENCE else KeepAliveWakeAlarm.CADENCE_MS
 
-    /**
-     * Keep-alive mode only: arms the suspend-proof response deadline for the keep-alive about
-     * to be sent (see [KeepAliveWakeAlarm.armResponseDeadline]). On expiry with no response
-     * since the send, the socket is force-disconnected and the reconnect pipeline takes over.
-     * Returns false in FCM mode, where [armStaleProbe] remains the post-wake check.
-     */
+    
+
+
+
+
+
     private fun armResponseDeadline(webSocketConnection: WebSocketConnection): Boolean {
         val sentElapsed = SystemClock.elapsedRealtime()
         val generation = socketGeneration
@@ -384,20 +384,20 @@ class WebSocketHealthMonitor
         }
     }
 
-    /**
-     * One-shot probe on the keep-alive just sent: no response within [STALE_PROBE_TIMEOUT]
-     * → force-disconnect so the reconnect pipeline re-establishes. Single probe in flight;
-     * a re-freeze only delays the probe (worst case: one redundant reconnect).
-     */
+    
+
+
+
+
     private fun armStaleProbe(webSocketConnection: WebSocketConnection) {
         if (staleProbeJob?.isActive == true) return
         val probeStartedElapsed = SystemClock.elapsedRealtime()
         L.i { "${webSocketConnection.name} [ws]monitor: arming stale-connection probe (${STALE_PROBE_TIMEOUT}ms)" }
         staleProbeJob = launch {
-            // Watch the state instead of a blind delay: if the socket leaves CONNECTED during
-            // the window, the probed (zombie) socket is gone and the reconnect pipeline owns
-            // recovery — a blind delay would kill the freshly reconnected healthy socket
-            // (keep-alive responses are only credited on server frames, never on connect).
+            
+            
+            
+            
             val leftConnected = try {
                 withTimeout(STALE_PROBE_TIMEOUT) {
                     webSocketConnection.webSocketConnectionState.first { it != WebSocketConnectionState.CONNECTED }
@@ -421,9 +421,9 @@ class WebSocketHealthMonitor
             if (!isMonitoring) return@onEach
 
             L.i { "${webSocketConnection.name} [ws]monitor: state=$state" }
-            // Keep-alive bookkeeping belongs to one socket: a deadline or an unanswered send
-            // left by the previous socket must not judge the next one, which is only credited
-            // a response once it answers its own first keep-alive.
+            
+            
+            
             if (state != WebSocketConnectionState.CONNECTING) {
                 socketGeneration++
                 keepAliveWakeAlarm.cancelResponseDeadline()
@@ -437,14 +437,14 @@ class WebSocketHealthMonitor
             when (policy) {
                 ReconnectPolicy.RECONNECT_SWITCH_HOST -> {
                     coordinator.onWsFailure()
-                    // Only a connection-level failure switches host for the next attempt.
+                    
                     switchHost(webSocketConnection)
                     handleRedoConnect(webSocketConnection)
                 }
 
                 ReconnectPolicy.RECONNECT_KEEP_HOST -> {
                     if (webSocketConnection.closedByServer) {
-                        // Routine: the server's idle timeout closes quiet sockets.
+                        
                         L.i { "${webSocketConnection.name} [ws]monitor: closed by server, reconnect without host switch" }
                     } else if (state == WebSocketConnectionState.DISCONNECTED) {
                         L.i { "${webSocketConnection.name} [ws]monitor: local disconnect reason=${webSocketConnection.localDisconnectReason}, reconnect without host switch" }
@@ -456,10 +456,10 @@ class WebSocketHealthMonitor
 
                 ReconnectPolicy.CONNECTED -> {
                     coordinator.onWsConnected()
-                    // The host it connected to answers: lift any mark an earlier failure left on it.
+                    
                     urlManager.recordChatWebsocketConnected()
                     powerSampler.onEvent(PowerEvent.RECONNECTED)
-                    attempts = 0 // reset attempts when connected
+                    attempts = 0 
                 }
 
                 ReconnectPolicy.IGNORE -> Unit
@@ -485,7 +485,7 @@ class WebSocketHealthMonitor
     private suspend fun prepareForConnecting(
         webSocketConnection: WebSocketConnection,
     ) {
-        if (didNotLogin()) { //do connect only when current app is login status
+        if (didNotLogin()) { 
             L.i { "${webSocketConnection.name} wait until login status" }
             waitUntilLoginStatus()
             L.i { "${webSocketConnection.name} login status, go on do connect" }
@@ -495,11 +495,11 @@ class WebSocketHealthMonitor
         waitUntilMessagingOpen(webSocketConnection.name)
     }
 
-    /**
-     * Second line of the migration message pause (#1382), last before the connect: no connect
-     * while messaging is closed, whichever path started the monitor. The pause itself stops
-     * monitoring, which cancels this wait.
-     */
+    
+
+
+
+
     private suspend fun waitUntilMessagingOpen(websocketName: String) {
         if (messagingGate.isOpen) return
         L.i { "$websocketName [MigrationPause] event=connect_deferred state=${messagingGate.state.javaClass.simpleName}" }
@@ -514,7 +514,7 @@ class WebSocketHealthMonitor
 
     private suspend fun delayWhenRetry(webSocketConnection: WebSocketConnection) {
         if (++attempts > 1) {
-            // Exponential backoff (see reconnectBackoffCapMs), cut short by any wake event.
+            
             val backoff = BackoffUtil.exponentialBackoff(attempts, reconnectBackoffCapMs(AppForegroundObserver.isForegrounded()))
 
             L.w { "${webSocketConnection.name} [ws]monitor: backoff attempts=$attempts delay=${backoff}ms" }
@@ -525,7 +525,7 @@ class WebSocketHealthMonitor
                 }
                 L.i { "${webSocketConnection.name} [ws]monitor: backoff interrupted by external trigger" }
             } catch (_: TimeoutCancellationException) {
-                // Backoff elapsed; continue reconnecting.
+                
             }
         }
     }
@@ -536,29 +536,29 @@ class WebSocketHealthMonitor
     }
 
     companion object {
-        // Connect deadline: long enough for a normal handshake (3-5 s), short enough to
-        // fail fast and move on to the next host.
+        
+        
         private const val CONNECTING_TIMEOUT = 10_000L
 
-        // Re-check interval while waiting for the network, in case the change notification
-        // landed before the wait started.
+        
+        
         private const val NETWORK_WAIT_TIMEOUT = 5_000L
 
         private val KEEP_ALIVE_SEND_CADENCE =
             TimeUnit.SECONDS.toMillis(WebSocketConnection.KEEP_ALIVE_TIMEOUT_SECONDS.toLong())
         private val MAX_TIME_SINCE_SUCCESSFUL_KEEP_ALIVE = KEEP_ALIVE_SEND_CADENCE * 3
 
-        // Post-wake stale-connection probe deadline: generous for a slow-network round-trip,
-        // far shorter than regular keep-alive miss accounting (up to 2 cadences).
+        
+        
         private const val STALE_PROBE_TIMEOUT = 10_000L
 
-        // Minimum response silence before a probe may arm, in cadences of the current wait: a
-        // healthy quiet connection sits at ~1 cadence + RTT (phase jitter can cross 1x and cause
-        // spurious probes), while a real freeze leaves minutes of silence; a late wake crosses
-        // it and buys one cheap probe. Keep-alive mode uses the response deadline alarm instead.
+        
+        
+        
+        
         private const val STALE_PROBE_SILENCE_CADENCES = 2
 
-        /** Log every Nth in-cadence keep-alive (20 × 30-60 s = one line per 10-20 min). */
+        
         private const val KEEP_ALIVE_LOG_EVERY = 20L
     }
 }

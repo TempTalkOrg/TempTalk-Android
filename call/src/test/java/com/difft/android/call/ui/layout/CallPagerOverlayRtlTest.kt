@@ -23,7 +23,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/** The page indicator keeps the plan's absolute positions in an RTL locale, like the cards (guide §5.1). */
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [30], qualifiers = "w400dp-h800dp-xhdpi")

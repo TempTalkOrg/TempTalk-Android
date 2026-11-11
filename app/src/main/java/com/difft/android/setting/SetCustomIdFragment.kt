@@ -53,12 +53,12 @@ class SetCustomIdFragment : Fragment(), SettingsIdiomPage {
         waitWhileVisibleTop(model.state.map { it.busy }, PageWait(this))
         (view as ComposeView).setContent {
             val state by model.state.collectAsState()
-            // Synchronous IME echo; SavedStateHandle owns the draft across view recreation.
+            
             var input by remember(model) { mutableStateOf(model.state.value.input) }
             DifftTheme(applyWindowBackground = ownsWindow()) {
                 Column(Modifier.fillMaxSize().background(DifftTheme.colors.bg).detailPageInsets(containerPadsBottom(), ime = true)) {
                     TitleBar(stringResource(R.string.settings_contact_ID_title), onBackClick = { detailNavigation().pop(this@SetCustomIdFragment) }, showBackButton = showsDetailBackButton())
-                    // Top inset as padding, not a spacer: spacedBy would add the group gap after a spacer.
+                    
                     Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = DifftSettingsDefaults.PageInset).padding(top = DifftSettingsDefaults.FirstGroupSpacing), verticalArrangement = Arrangement.spacedBy(DifftSettingsDefaults.GroupSpacing)) {
                         DifftClearableTextField(
                             value = input, enabled = !state.busy && !state.completed,

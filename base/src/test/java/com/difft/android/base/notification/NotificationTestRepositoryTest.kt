@@ -12,7 +12,7 @@ import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
-/** Token-aware CALL publication: success is signalled only after a conditional durable write. */
+
 class NotificationTestRepositoryTest {
     private lateinit var store: NotificationTestStore
     private lateinit var repository: NotificationTestRepository

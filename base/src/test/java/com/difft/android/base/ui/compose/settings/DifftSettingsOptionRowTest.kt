@@ -11,6 +11,7 @@ import androidx.compose.ui.test.assertWidthIsEqualTo
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -26,10 +27,10 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import kotlin.math.abs
 
-/**
- * [DifftSettingsOptionRow] contract (issue #1223): a 24dp checkmark exactly while selected, no
- * placeholder slot when unselected, an optional description line, and the whole row tappable.
- */
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34])
@@ -57,7 +58,7 @@ class DifftSettingsOptionRowTest {
         }
     }
 
-    // T15
+    
     @Test
     fun `a selected row shows a 24dp checkmark`() {
         setRow(selected = true)
@@ -69,7 +70,7 @@ class DifftSettingsOptionRowTest {
             .assertHeightIsEqualTo(DifftSettingsDefaults.CheckmarkSize)
     }
 
-    // T16
+    
     @Test
     fun `an unselected row shows neither checkmark nor chevron`() {
         setRow(selected = false)
@@ -82,7 +83,7 @@ class DifftSettingsOptionRowTest {
             .assertDoesNotExist()
     }
 
-    // T17
+    
     @Test
     fun `a description renders when passed`() {
         setRow(selected = false, description = DESCRIPTION)
@@ -91,7 +92,7 @@ class DifftSettingsOptionRowTest {
         composeTestRule.onNodeWithText(LABEL, useUnmergedTree = true).assertIsDisplayed()
     }
 
-    // T17
+    
     @Test
     fun `no description line exists without one`() {
         setRow(selected = false)
@@ -99,7 +100,7 @@ class DifftSettingsOptionRowTest {
         composeTestRule.onNodeWithText(DESCRIPTION, useUnmergedTree = true).assertDoesNotExist()
     }
 
-    // T18
+    
     @Test
     fun `a tap far from the trailing edge fires onClick once`() {
         var clicks = 0
@@ -109,21 +110,21 @@ class DifftSettingsOptionRowTest {
         assertEquals(1, clicks)
     }
 
-    // T19
+    
     @Test
     fun `selection does not change the row height`() {
         setRow(selected = true)
         composeTestRule.onNodeWithTag(TAG).assertHeightIsEqualTo(DifftSettingsDefaults.RowMinHeight)
     }
 
-    // T19
+    
     @Test
     fun `an unselected row is the same 52dp as a selected one`() {
         setRow(selected = false)
         composeTestRule.onNodeWithTag(TAG).assertHeightIsEqualTo(DifftSettingsDefaults.RowMinHeight)
     }
 
-    // T19
+    
     @Test
     fun `a described row grows past the row minimum`() {
         setRow(selected = true, description = DESCRIPTION)
@@ -136,7 +137,7 @@ class DifftSettingsOptionRowTest {
         )
     }
 
-    // T20
+    
     @Test
     fun `the label starts at the same edge whether selected or not`() {
         composeTestRule.setContent {
@@ -168,7 +169,7 @@ class DifftSettingsOptionRowTest {
         )
     }
 
-    // T21
+    
     @Test
     fun `a group of option rows keeps one checkmark and 1dp hairlines`() {
         composeTestRule.setContent {
@@ -193,13 +194,16 @@ class DifftSettingsOptionRowTest {
         assertGap("row_1", "row_2")
     }
 
+    
+    private val hairline: Dp get() = with(composeTestRule.density) { 1f.toDp() }
+
     private fun assertGap(topTag: String, bottomTag: String) {
         val top = composeTestRule.onNodeWithTag(topTag).getBoundsInRoot()
         val bottom = composeTestRule.onNodeWithTag(bottomTag).getBoundsInRoot()
         val gap = bottom.top.value - top.bottom.value
         assertTrue(
-            "expected a ${DifftSettingsDefaults.SeparatorThickness} hairline, measured ${gap}dp",
-            abs(gap - DifftSettingsDefaults.SeparatorThickness.value) <= 0.5f,
+            "expected a $hairline hairline, measured ${gap}dp",
+            abs(gap - hairline.value) <= 0.5f,
         )
     }
 

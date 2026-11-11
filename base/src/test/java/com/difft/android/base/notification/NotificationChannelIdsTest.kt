@@ -17,7 +17,7 @@ class NotificationChannelIdsTest {
         NotificationChannelIds.OBSOLETE.forEach { assertNull(NotificationChannelIds.nameRes(it), "id=$it") }
     }
 
-    // No kept id is ever deleted, and the sets are exactly as designed.
+    
     @Test
     fun `the keep and obsolete sets never overlap`() {
         assertEquals(emptySet(), NotificationChannelIds.KEEP.toSet() intersect NotificationChannelIds.OBSOLETE.toSet())
@@ -27,8 +27,8 @@ class NotificationChannelIdsTest {
         assertTrue(NotificationChannelIds.OBSOLETE_BACKGROUND in NotificationChannelIds.OBSOLETE)
     }
 
-    // No production source outside NotificationChannelIds spells an obsolete id, so
-    // nothing can post to (or re-create) a channel the migration deletes.
+    
+    
     @Test
     fun `obsolete ids appear as literals only in NotificationChannelIds`() {
         val root = File("..").canonicalFile

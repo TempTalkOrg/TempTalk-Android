@@ -18,17 +18,17 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/**
- * The deferred #971 justification: the same fsync-sensitive ingestion cases as
- * [IngestionBenchmark], but with `PRAGMA synchronous=FULL` — the pre-#971 mode. The
- * NORMAL/FULL ratio of the matching cases is the measured value of that fix.
- *
- * The override is test-side only: a low-priority per-handle config registered after the
- * production NORMAL config (config priorities run highest→lowest, so this executes last on
- * every handle). Production code is untouched; [setUp] read-back-asserts FULL (SQLite: 2)
- * actually applied to the write handle, mirroring WCDB.verifySynchronousApplied's caveat
- * that a PRAGMA can report without taking effect on the handle that matters.
- */
+
+
+
+
+
+
+
+
+
+
+
 @RunWith(AndroidJUnit4::class)
 class IngestionSynchronousFullBenchmark {
 
@@ -42,9 +42,9 @@ class IngestionSynchronousFullBenchmark {
     fun setUp() {
         context.deleteDatabase(WCDB.DATABASE_NAME)
         wcdb = WCDB(context, CoroutineScope(SupervisorJob()))
-        // Same config name as IngestionBenchmark's NORMAL pin: WCDB's config registry is
-        // per-path process-global, so reusing the name REPLACES a leaked sibling pin
-        // instead of racing it.
+        
+        
+        
         wcdb.db.setConfig(
             "bench_synchronous_pin",
             { handle -> handle.execute("PRAGMA synchronous=2") },
@@ -56,9 +56,9 @@ class IngestionSynchronousFullBenchmark {
 
     @After
     fun tearDown() {
-        // The pin lives in WCDB's process-global per-path registry, so it would outlive this
-        // class and leak FULL into any later test that opens the same path without its own
-        // pin. Re-register the same name back to production's NORMAL before leaving.
+        
+        
+        
         wcdb.db.setConfig(
             "bench_synchronous_pin",
             { handle -> handle.execute("PRAGMA synchronous=1") },

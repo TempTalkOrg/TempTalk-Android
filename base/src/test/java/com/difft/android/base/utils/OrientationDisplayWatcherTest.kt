@@ -15,11 +15,11 @@ import org.robolectric.Shadows
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowDisplayManager
 
-/**
- * [OrientationDisplayWatcher] against Robolectric's DisplayManager: `changeDisplay` is the
- * fold/unfold the window manager never reported to the activity, `addDisplay` is an external
- * monitor that must never decide the activity's orientation.
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33], application = Application::class)
 class OrientationDisplayWatcherTest {
@@ -31,7 +31,7 @@ class OrientationDisplayWatcherTest {
         val watcher = OrientationDisplayWatcher(activity) { delivered += it }
         watcher.start()
         idle()
-        delivered.clear() // drop the start() snapshot; the cases below assert on later events
+        delivered.clear() 
         return activity to watcher
     }
 

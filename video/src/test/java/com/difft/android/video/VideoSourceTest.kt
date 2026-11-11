@@ -21,14 +21,10 @@ import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
-/**
- * T29-T32 — [VideoSource] dispatch.
- *
- * Robolectric because every row touches `Uri` / `ContentResolver`; on the plain JVM `Uri.parse`
- * returns a stub and the scheme assertions would pass vacuously.
- *
- * Run: :video:testDebugUnitTest
- */
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 class VideoSourceTest {
 
@@ -42,8 +38,8 @@ class VideoSourceTest {
 
     @After
     fun tearDown() {
-        // Both are static injection tables: openFileCalls accumulates across tests and the
-        // registered provider table leaks into the next one.
+        
+        
         FakeFileProvider.reset()
         ShadowContentResolver.reset()
         temps.forEach { it.delete() }
@@ -56,11 +52,7 @@ class VideoSourceTest {
             temps += it
         }
 
-    /**
-     * T29 — a file:// URI keeps the native file path and must not reach ContentResolver at all.
-     * The context handed in fails loudly if the resolver is touched, so this is a structural
-     * assertion rather than a call count.
-     */
+    
     @Test
     fun `file uri resolves to the native file input without touching ContentResolver`() {
         val file = tempVideo(1_024)
@@ -76,10 +68,7 @@ class VideoSourceTest {
         assertEquals(file.length(), source.sizeBytes)
     }
 
-    /**
-     * T30 — a content:// URI is sized through the descriptor the provider hands back, opened
-     * exactly once. Pins that the size comes from a real `statSize` and not from File.length().
-     */
+    
     @Test
     fun `content uri is sized from the provider file descriptor`() {
         val file = tempVideo(1_500_000)
@@ -95,18 +84,15 @@ class VideoSourceTest {
         assertEquals(1, FakeFileProvider.openFileCalls)
     }
 
-    /**
-     * T31 — a failed open reports an unknown size instead of throwing, and never 0. The throw
-     * decision belongs to the caller that actually needs the bytes.
-     */
+    
     @Test
     fun `failed descriptor open yields unknown size without throwing`() {
         val uri = Uri.parse("content://${FakeFileProvider.AUTHORITY}/video/missing")
         Robolectric.setupContentProvider(FakeFileProvider::class.java, FakeFileProvider.AUTHORITY)
         val captured = CopyOnWriteArrayList<String>()
         val logged = CountDownLatch(1)
-        // A planted tree, not a mocked L: L's warn entry point is a @JvmStatic bridge, so call
-        // sites are dispatched statically and an object mock never sees them.
+        
+        
         val tree = object : Timber.Tree() {
             override fun log(priority: Int, tag: String?, message: String, t: Throwable?) {
                 captured += message
@@ -119,7 +105,7 @@ class VideoSourceTest {
 
             assertEquals(VideoSource.UNKNOWN_SIZE, source.sizeBytes)
             assertTrue(source.mediaInput is UriMediaInput)
-            // L dispatches onto its own logging thread; bounded wait, never an unbounded sleep.
+            
             assertTrue("no log line emitted", logged.await(10, TimeUnit.SECONDS))
             val message = captured.single()
             assertTrue(message, message.contains("[MediaAccess]"))
@@ -129,10 +115,7 @@ class VideoSourceTest {
         }
     }
 
-    /**
-     * T32 — the File entry point and a file:// URI produce the same source. This is what makes
-     * removing the old File constructor safe: the native path did not move, only its name.
-     */
+    
     @Test
     fun `File entry point and file uri produce equivalent sources`() {
         val file = tempVideo(2_048)

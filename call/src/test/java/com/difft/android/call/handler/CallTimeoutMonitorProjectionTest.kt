@@ -28,11 +28,11 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/**
- * [CallTimeoutMonitor] reading call presence from `OnGoingCallStateManager`: the 1v1 ongoing-call
- * timeout callback fires once for the live room and not once the call is ending, and the remote-left
- * timer is armed only while the call is up. Rows: T5-10, T5-11.
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [33])
 class CallTimeoutMonitorProjectionTest {

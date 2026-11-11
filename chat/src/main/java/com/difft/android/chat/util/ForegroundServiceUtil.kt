@@ -23,23 +23,23 @@ import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 import kotlin.time.Duration.Companion.minutes
 
-/**
- * Helps start foreground services from the background.
- */
+
+
+
 object ForegroundServiceUtil {
     private val updateMutex: ReentrantLock = ReentrantLock()
     private var activeLatch: CountDownLatch? = null
 
     private val DEFAULT_TIMEOUT: Long = 1.minutes.inWholeMilliseconds
 
-    /**
-     * A simple wrapper around [ContextCompat.startForegroundService], but makes the possible failure part of the contract by forcing the caller to handle the
-     * [UnableToStartException].
-     *
-     * Not started at all, and false returned, when no notification channel can carry the foreground
-     * notification ([NotificationChannelSpecs.preflightForegroundChannel], #1354): the service
-     * could only crash the app. True once the start was issued.
-     */
+    
+
+
+
+
+
+
+
     @JvmStatic
     @Throws(UnableToStartException::class)
     fun start(context: Context, intent: Intent): Boolean {
@@ -62,12 +62,12 @@ object ForegroundServiceUtil {
         return true
     }
 
-    /**
-     * Does its best to start a foreground service, including possibly blocking and waiting until we are able to.
-     * However, it is always possible that the attempt will fail, so be sure to handle the [UnableToStartException].
-     *
-     * @param timeout The maximum time you're willing to wait to create the conditions for a foreground service to start.
-     */
+    
+
+
+
+
+
     @JvmOverloads
     @JvmStatic
     @Throws(UnableToStartException::class)
@@ -82,12 +82,12 @@ object ForegroundServiceUtil {
         }
     }
 
-    /**
-     * Identical to [startWhenCapable], except in this case we just throw if we're unable to start the service. Should only be used if there's no good way
-     * to gracefully handle the exception (or if you know for sure it won't get thrown).
-     *
-     * @param timeout The maximum time you're willing to wait to create the conditions for a foreground service to start.
-     */
+    
+
+
+
+
+
     @JvmOverloads
     @JvmStatic
     @WorkerThread
@@ -99,11 +99,11 @@ object ForegroundServiceUtil {
         }
     }
 
-    /**
-     * Waits until we're capable of starting a foreground service.
-     * @return True if you should expect to be able to start a foreground service, otherwise false. Please note that this isn't *guaranteed*, just what we believe
-     *         given the information we have.
-     */
+    
+
+
+
+
     private fun blockUntilCapable(context: Context, timeout: Long = DEFAULT_TIMEOUT): Boolean {
         val alarmManager = ServiceUtil.getAlarmManager(context)
 

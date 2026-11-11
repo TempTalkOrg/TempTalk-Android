@@ -16,22 +16,14 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import kotlin.test.assertEquals
 
-/**
- * M8 (issue #1127, family F dead code twin): [TextSelectionMenuPopup] has zero production
- * call sites today, but shares [TextPreviewSelectionPopup]'s exact structural shape (single
- * `show()` entry point, `ComposeView` added directly onto the host Activity's content root, no
- * popup/non-popup duality) — migrated in the same commit so it is already correct the moment it
- * gets wired up. Proves `DifftTheme(applyWindowBackground = false)` never touches the host
- * window background.
- *
- * Uses `Robolectric.buildActivity(...).setup()` (not `ActivityScenario.launch`, which requires
- * a manifest-resolvable Activity) — same pattern as `TextPreviewSelectionPopupWindowBackgroundTest`.
- * The activity must call `setContentView` once before `show()` — a real host Activity always has
- * by the time a popup is shown, and `ComponentActivity` only installs the ViewTree owners on the
- * decor once a content view has actually been set (see `ComposeActivityMount`'s KDoc).
- * `TestScopeApplication` initializes `ApplicationHelper.instance`, required by
- * `calculatePosition`'s `dp` extension.
- */
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(application = TestScopeApplication::class, sdk = [34])

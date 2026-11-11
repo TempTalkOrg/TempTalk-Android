@@ -10,19 +10,19 @@ import org.junit.Before
 import org.junit.Test
 import kotlin.test.assertEquals
 
-/**
- * Proxy-active forcing on [UrlManager]: while the proxy is enabled, the request
- * HOST must come from the embedded assets config (deterministic, whitelist-aligned),
- * with WS/HTTP failover preserved via [DomainSpeedTestCoordinator.firstAvailableHost].
- * Service PATHS always come from the live GlobalConfig (path is not part of the
- * host-based tunnel decision). When disabled, the original speed-test / live-config
- * host selection is restored.
- */
+
+
+
+
+
+
+
+
 class UrlManagerProxyEmbeddedTest {
 
-    // Primary host matches the production single-host embedded config
-    // (default_global_config.json); the second is a synthetic placeholder kept
-    // only to exercise the multi-host failover path.
+    
+    
+    
     private val embeddedHosts = listOf("chat.chative.im", "chat.failover.example")
 
     private val environmentHelper = mockk<EnvironmentHelper>(relaxed = true)
@@ -40,8 +40,8 @@ class UrlManagerProxyEmbeddedTest {
         every { environmentHelper.isThatEnvironment("dev") } returns false
 
         every { globalConfigsManager.getProxyTunnelChatDomains() } returns embeddedHosts
-        // Live config absent → service paths fall back to the hardcoded defaults
-        // ("/chat", "/call", "/fileshare") regardless of proxy state.
+        
+        
         every { globalConfigsManager.getNewGlobalConfigs() } returns null
 
         urlManager = UrlManager(
@@ -63,7 +63,7 @@ class UrlManagerProxyEmbeddedTest {
     @Test
     fun `chat url fails over to next embedded host when first is unavailable`() {
         every { proxyProvider.isEnabled } returns true
-        // Simulates first embedded host marked unavailable → coordinator returns the next.
+        
         every { coordinator.firstAvailableHost(embeddedHosts) } returns "chat.failover.example"
 
         assertEquals("https://chat.failover.example/chat/", urlManager.chat)

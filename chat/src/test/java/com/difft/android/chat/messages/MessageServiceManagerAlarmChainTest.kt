@@ -5,6 +5,7 @@ import android.content.Context
 import com.difft.android.base.monitor.FgsStartFailure
 import com.difft.android.base.monitor.ForegroundServiceFailureRecorder
 import com.difft.android.base.monitor.KeepAliveHealthCounters
+import com.difft.android.base.monitor.StallDayTracker
 import com.difft.android.base.notification.NotificationChannelSpecs
 import com.difft.android.base.user.UserData
 import com.difft.android.base.user.UserManager
@@ -33,16 +34,12 @@ import org.robolectric.shadows.ShadowSystemClock
 import util.AppForegroundObserver
 import java.time.Duration
 
-/**
- * Tests for [MessageServiceManager.ensureAlarmChainAlive] — the alarm-chain
- * self-healing added for vendor ROMs that swallow alarm broadcasts (issue #1157).
- *
- * The chain is one-shot + re-arm-on-trigger; one swallowed broadcast kills it.
- * Healing must re-arm ONLY when keep-alive is enabled AND the chain has been
- * silent past the stale window for the active alarm mode: 4x alarm interval
- * (20 min) with exact-alarm permission, 2h + interval without (Doze legitimately
- * defers inexact delivery 30 min - 2 hr).
- */
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [31])
 class MessageServiceManagerAlarmChainTest {
@@ -54,6 +51,7 @@ class MessageServiceManagerAlarmChainTest {
     private lateinit var manager: MessageServiceManager
     private lateinit var healthCounters: KeepAliveHealthCounters
     private lateinit var fgsFailureRecorder: ForegroundServiceFailureRecorder
+    private lateinit var stallDayTracker: StallDayTracker
 
     @Before
     fun setUp() {
@@ -71,14 +69,15 @@ class MessageServiceManagerAlarmChainTest {
 
         healthCounters = mockk(relaxed = true)
         fgsFailureRecorder = mockk(relaxed = true)
-        manager = MessageServiceManager(context, userManager, monitor, fgsFailureRecorder, healthCounters)
+        stallDayTracker = mockk(relaxed = true)
+        manager = MessageServiceManager(context, userManager, monitor, fgsFailureRecorder, healthCounters, stallDayTracker)
     }
 
     @After
     fun tearDown() {
-        // The manager's init registers a listener on the global AppForegroundObserver
-        // object with no removal path; clear it so leaked listeners bound to cleared
-        // mocks cannot fire into unrelated tests sharing the Robolectric sandbox.
+        
+        
+        
         val listenersField = AppForegroundObserver::class.java.getDeclaredField("listeners")
         listenersField.isAccessible = true
         (listenersField.get(AppForegroundObserver) as MutableSet<*>).clear()
@@ -125,7 +124,7 @@ class MessageServiceManagerAlarmChainTest {
     @Test
     fun `ensure does nothing while chain is fresh`() {
         every { userData.keepAliveEnabled } returns true
-        advanceMinutes(16) // below 20 min stale window (covers the legit ~15 min Doze stretch)
+        advanceMinutes(16) 
 
         manager.ensureAlarmChainAlive("test")
 
@@ -135,7 +134,7 @@ class MessageServiceManagerAlarmChainTest {
     @Test
     fun `ensure re-arms alarm when chain is stale`() {
         every { userData.keepAliveEnabled } returns true
-        advanceMinutes(21) // past 20 min stale window
+        advanceMinutes(21) 
 
         manager.ensureAlarmChainAlive("test")
 
@@ -148,7 +147,7 @@ class MessageServiceManagerAlarmChainTest {
         advanceMinutes(21)
         manager.ensureAlarmChainAlive("disabled")
         every { userData.keepAliveEnabled } returns true
-        manager.ensureAlarmChainAlive("stale") // the stall spans the 21 min since construction
+        manager.ensureAlarmChainAlive("stale") 
         advanceMinutes(16)
         manager.ensureAlarmChainAlive("fresh")
 
@@ -176,7 +175,7 @@ class MessageServiceManagerAlarmChainTest {
         every { failingContext.getSystemService(Context.ALARM_SERVICE) } returns failingAlarms
         val monitor = mockk<WebSocketHealthMonitor>(relaxed = true)
         every { monitor.monitorWakeTicks } returns MutableSharedFlow()
-        val failing = MessageServiceManager(failingContext, userManager, monitor, fgsFailureRecorder, healthCounters)
+        val failing = MessageServiceManager(failingContext, userManager, monitor, fgsFailureRecorder, healthCounters, stallDayTracker)
         every { userData.keepAliveEnabled } returns true
         advanceMinutes(21)
 
@@ -192,14 +191,14 @@ class MessageServiceManagerAlarmChainTest {
         ShadowAlarmManager.setCanScheduleExactAlarms(false)
         every { userData.keepAliveEnabled } returns true
 
-        advanceMinutes(60) // way past the exact window, below the 2h+5min inexact window
+        advanceMinutes(60) 
         manager.ensureAlarmChainAlive("test")
         assertNull(
             "must not re-arm within the legit inexact Doze deferral (30min-2h)",
             shadowAlarmManager.nextScheduledAlarm
         )
 
-        advanceMinutes(70) // 130 min total, past 2h + 5 min
+        advanceMinutes(70) 
         manager.ensureAlarmChainAlive("test")
         assertNotNull("must re-arm past the inexact stale window", shadowAlarmManager.nextScheduledAlarm)
     }
@@ -211,9 +210,8 @@ class MessageServiceManagerAlarmChainTest {
         manager.scheduleAlarmCheck()
         val originalTrigger = shadowAlarmManager.nextScheduledAlarm!!.triggerAtMs
 
-        // Advancing time may fire-and-remove the due alarm in Robolectric; the invariant
-        // under test is only that ensure() arms nothing NEW while the chain is fresh.
-        advanceMinutes(16) // below 20 min stale window
+        
+        advanceMinutes(16) 
         manager.ensureAlarmChainAlive("test")
 
         assertTrue(
@@ -230,10 +228,130 @@ class MessageServiceManagerAlarmChainTest {
         manager.ensureAlarmChainAlive("first")
         val firstTrigger = shadowAlarmManager.nextScheduledAlarm!!.triggerAtMs
 
-        advanceMinutes(21) // swallowed again — no ServiceCheckReceiver re-arm happened
+        advanceMinutes(21) 
         manager.ensureAlarmChainAlive("second")
         val secondTrigger = shadowAlarmManager.nextScheduledAlarm!!.triggerAtMs
 
         assertEquals("healed alarm must be re-armed relative to the new now", firstTrigger + 21 * 60_000L, secondTrigger)
+    }
+
+    @Test
+    fun `an arm more than two hours after an exact arm records one stall day`() {
+        every { userData.keepAliveEnabled } returns true
+        manager.scheduleAlarmCheck()
+        advanceMinutes(121)
+
+        manager.scheduleAlarmCheck() 
+        manager.ensureAlarmChainAlive("monitor-tick")
+
+        verify(exactly = 1) { stallDayTracker.onStall() }
+    }
+
+    @Test
+    fun `gaps up to two hours or after an inexact arm are no stall day`() {
+        every { userData.keepAliveEnabled } returns true
+        manager.scheduleAlarmCheck()
+        advanceMinutes(120)
+        manager.scheduleAlarmCheck()
+
+        ShadowAlarmManager.setCanScheduleExactAlarms(false)
+        manager.scheduleAlarmCheck() 
+        ShadowAlarmManager.setCanScheduleExactAlarms(true)
+        advanceMinutes(180)
+        manager.scheduleAlarmCheck()
+
+        verify(exactly = 0) { stallDayTracker.onStall() }
+    }
+
+    @Test
+    fun `the first arm of a process only sets the baseline`() {
+        every { userData.keepAliveEnabled } returns true
+        advanceMinutes(300)
+
+        manager.scheduleAlarmCheck()
+
+        verify(exactly = 0) { stallDayTracker.onStall() }
+    }
+
+    @Test
+    fun `time with keep-alive switched off is no stall day`() {
+        every { userData.keepAliveEnabled } returns true
+        manager.scheduleAlarmCheck()
+        every { userData.keepAliveEnabled } returns false
+        manager.stopService()
+        advanceMinutes(300)
+        every { userData.keepAliveEnabled } returns true
+
+        manager.startService()
+
+        verify(exactly = 0) { stallDayTracker.onStall() }
+    }
+
+    @Test
+    fun `an arm that completes after keep-alive was switched off leaves no baseline`() {
+        every { userData.keepAliveEnabled } returns true
+        manager.scheduleAlarmCheck()
+        every { userData.keepAliveEnabled } returns false
+        manager.scheduleAlarmCheck() 
+        advanceMinutes(300)
+        every { userData.keepAliveEnabled } returns true
+
+        manager.scheduleAlarmCheck()
+
+        verify(exactly = 0) { stallDayTracker.onStall() }
+    }
+
+    @Test
+    fun `a short stale heal before a long freeze still records the stall day`() {
+        every { userData.keepAliveEnabled } returns true
+        manager.scheduleAlarmCheck()
+        advanceMinutes(21)
+        manager.ensureAlarmChainAlive("swallowed") 
+        advanceMinutes(150)
+
+        manager.ensureAlarmChainAlive("thaw")
+
+        verify(exactly = 1) { stallDayTracker.onStall() }
+    }
+
+    @Test
+    fun `a failing arm records nothing and keeps the baseline`() {
+        val failingAlarms = mockk<AlarmManager>(relaxed = true)
+        every { failingAlarms.canScheduleExactAlarms() } returns true
+        every { failingAlarms.setExactAndAllowWhileIdle(any(), any(), any()) } throws IllegalStateException("arm")
+        every { failingAlarms.setAndAllowWhileIdle(any(), any(), any()) } throws IllegalStateException("arm")
+        val failingContext = spyk(context)
+        every { failingContext.getSystemService(Context.ALARM_SERVICE) } returns failingAlarms
+        val monitor = mockk<WebSocketHealthMonitor>(relaxed = true)
+        every { monitor.monitorWakeTicks } returns MutableSharedFlow()
+        val failing = MessageServiceManager(failingContext, userManager, monitor, fgsFailureRecorder, healthCounters, stallDayTracker)
+        every { userData.keepAliveEnabled } returns true
+        advanceMinutes(300)
+
+        failing.scheduleAlarmCheck()
+
+        verify(exactly = 0) { stallDayTracker.onStall() }
+    }
+
+    @Test
+    fun `only an off-to-on switch records the keep-alive day`() {
+        every { userData.keepAliveEnabled } returns false
+        manager.startService()
+        every { userData.keepAliveEnabled } returns true
+        manager.startService() 
+
+        verify(exactly = 1) { stallDayTracker.onKeepAliveEnabled() }
+    }
+
+    @Test
+    fun `a throwing stall day tracker does not fail the arm`() {
+        every { userData.keepAliveEnabled } returns true
+        every { stallDayTracker.onStall() } throws IllegalStateException("boom")
+        manager.scheduleAlarmCheck()
+        advanceMinutes(121)
+
+        manager.scheduleAlarmCheck()
+
+        assertNotNull(shadowAlarmManager.nextScheduledAlarm)
     }
 }

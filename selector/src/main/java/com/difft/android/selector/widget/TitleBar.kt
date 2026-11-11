@@ -9,6 +9,8 @@ import android.widget.ImageView
 import android.widget.RelativeLayout
 import android.widget.TextView
 import androidx.core.content.ContextCompat
+import com.difft.android.base.widget.floatAsTopBarButton
+import com.difft.android.base.widget.floatAsTopBarTextButton
 import com.difft.android.selector.R
 import com.difft.android.selector.config.SelectMimeType
 import com.difft.android.selector.config.SelectorConfig
@@ -17,6 +19,10 @@ import com.difft.android.selector.style.PictureSelectorStyle
 import com.difft.android.selector.style.TitleBarStyle
 import com.difft.android.selector.utils.DensityUtil
 import com.difft.android.selector.utils.StyleUtils
+import kotlin.math.roundToInt
+
+private const val FLOATING_ROW_DP = 56f
+private const val FLOATING_BUTTON_DP = 44f
 
 open class TitleBar : RelativeLayout, View.OnClickListener {
 
@@ -67,11 +73,11 @@ open class TitleBar : RelativeLayout, View.OnClickListener {
         rlAlbumBg.setOnClickListener(this)
         titleBarLayout.setOnClickListener(this)
         viewAlbumClickArea.setOnClickListener(this)
-        // Default to the project page bg so the title bar matches the status bar /
-        // windowBackground in both light and dark modes. Required for PreviewTitleBar
-        // which floats over a (usually black) image and must paint its own surface so
-        // text/icons stay readable. Explicit override still possible via
-        // TitleBarStyle.titleBackgroundColor in setTitleBarStyle().
+        
+        
+        
+        
+        
         setBackgroundColor(ContextCompat.getColor(context, com.difft.android.base.R.color.bg))
         handleLayoutUI()
         if (TextUtils.isEmpty(config.defaultAlbumName)) {
@@ -185,6 +191,24 @@ open class TitleBar : RelativeLayout, View.OnClickListener {
         } else {
             ivDelete.setBackgroundResource(R.drawable.ps_ic_delete)
         }
+        floatButtons(titleBarStyle)
+    }
+
+    
+
+
+
+    private fun floatButtons(titleBarStyle: TitleBarStyle) {
+        val density = resources.displayMetrics.density
+        if (!StyleUtils.checkSizeValidity(titleBarStyle.titleBarHeight)) {
+            titleBarLayout.layoutParams.height = (FLOATING_ROW_DP * density).roundToInt()
+        }
+        if (!StyleUtils.checkStyleValidity(titleBarStyle.titleLeftBackResource)) {
+            ivLeftBack.setImageResource(com.difft.android.base.R.drawable.chative_ic_back)
+        }
+        ivLeftBack.layoutParams.height = (FLOATING_BUTTON_DP * density).roundToInt()
+        ivLeftBack.floatAsTopBarButton(leading = true)
+        tvCancel.floatAsTopBarTextButton(leading = false)
     }
 
     override fun onClick(view: View) {

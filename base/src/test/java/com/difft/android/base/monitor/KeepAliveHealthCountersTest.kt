@@ -49,7 +49,7 @@ class KeepAliveHealthCountersTest {
 
     @Test
     fun `latency is skipped in foreground and without a trusted clock`() {
-        counters.lastFlushElapsed = elapsed // keep counts in memory for drain()
+        counters.lastFlushElapsed = elapsed 
         foreground = true
         counters.onEnvelopeDelivered(serverTimestamp = 90_000L, DeliveryChannel.WS)
         foreground = false
@@ -79,7 +79,7 @@ class KeepAliveHealthCountersTest {
         counters.lastFlushElapsed = elapsed
         val now = 10 * 60 * 60_000L
         serverNow = now
-        foreground = true // transit is counted regardless of foreground state
+        foreground = true 
         listOf(10_000L, 60_000L, 5 * 60_000L, 30 * 60_000L, 2 * 60 * 60_000L, 2 * 60 * 60_000L + 1)
             .forEach { counters.onFcmReceived(deprioritized = false, highPrioritySentTimeMs = now - it) }
         assertEquals(
@@ -90,7 +90,7 @@ class KeepAliveHealthCountersTest {
             counters.drain()
         )
 
-        serverNow = null // cold FCM-woken process: offset-corrected wall clock instead of dropping the sample
+        serverNow = null 
         counters.offsetCorrectedNow = { now }
         counters.onFcmReceived(deprioritized = false, highPrioritySentTimeMs = now - 3 * 60 * 60_000L)
         counters.onFcmReceived(deprioritized = false, highPrioritySentTimeMs = 0L)
@@ -103,7 +103,7 @@ class KeepAliveHealthCountersTest {
         counters.onAppStall(durationMs = 21 * 60_000L)
         counters.onAppStall(durationMs = 30 * 60_000L)
         counters.onAppStall(durationMs = 2 * 60 * 60_000L)
-        counters.onAppStall(durationMs = 9_645_000L) // the 2.7 h night freeze from the #1328 field log
+        counters.onAppStall(durationMs = 9_645_000L) 
         assertEquals(
             mapOf("stall_30m" to 2, "stall_2h" to 1, "stall_more" to 1, "stall_min" to 21 + 30 + 120 + 160),
             counters.drain()
@@ -162,10 +162,10 @@ class KeepAliveHealthCountersTest {
     @Test
     fun `an isolated fcm wake persists its pull result seconds after the first-event flush`() = runTest {
         counters.drain()
-        counters.onFcmReceived(deprioritized = false) // first event: flushes at once
+        counters.onFcmReceived(deprioritized = false) 
         assertEquals("fcm_recv:1", awaitPersisted { it == "fcm_recv:1" })
 
-        elapsed += 10_000L // far below the 5 min interval; no alarm tick
+        elapsed += 10_000L 
         counters.onPullResult(success = true)
         assertEquals(
             mapOf("fcm_recv" to 1, "pull_ok" to 1),
@@ -194,7 +194,7 @@ class KeepAliveHealthCountersTest {
 
         elapsed += KeepAliveHealthCounters.PULL_FLUSH_FLOOR_MS - 1
         counters.onPullResult(success = false)
-        assertEquals(mapOf("pull_fail" to 1), counters.drain()) // still in memory, not written
+        assertEquals(mapOf("pull_fail" to 1), counters.drain()) 
 
         counters.onPullResult(success = false)
         elapsed += 1
@@ -213,7 +213,7 @@ class KeepAliveHealthCountersTest {
 
     @Test
     fun `first event persists at once, later ones wait for the flush interval`() = runTest {
-        counters.drain() // the startup report drain must not delay the first-event flush
+        counters.drain() 
         counters.onFcmReceived(deprioritized = false)
         assertEquals(mapOf("fcm_recv" to 1), KeepAliveHealthCodec.decode(awaitPersisted { it == "fcm_recv:1" }))
 
@@ -233,7 +233,7 @@ class KeepAliveHealthCountersTest {
     fun `uptime accrues across ticks and is persisted when the service stops`() = runTest {
         counters.lastFlushElapsed = elapsed
         counters.onServiceStarted()
-        counters.onServiceStarted() // onCreate only once per instance; a repeat must not reset the start
+        counters.onServiceStarted() 
         elapsed += 90_000L
         assertEquals(mapOf("fgs_starts" to 1, "fgs_alive_s" to 90), counters.drain())
         elapsed += 30_500L

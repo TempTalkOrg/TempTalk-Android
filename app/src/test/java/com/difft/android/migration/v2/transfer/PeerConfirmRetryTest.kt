@@ -9,11 +9,10 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Test
 
-/**
- * The account-switch wait (登录时导入由手机决定 §5.4): transport failures retry every 5 s for 5 minutes and
- * announce the wait once; a 401 in this branch is the Desktop's cancel, not a stale code; any other
- * typed rejection is passed through untouched.
- */
+
+
+
+
 class PeerConfirmRetryTest {
 
     private var now = 0L

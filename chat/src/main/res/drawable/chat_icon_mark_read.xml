@@ -3,7 +3,7 @@
     android:height="20dp"
     android:viewportWidth="20"
     android:viewportHeight="20">
-  <!-- Tabler "message-circle" (chat-list gesture design: Read). -->
+  
   <group
       android:scaleX="0.833333"
       android:scaleY="0.833333">
@@ -12,7 +12,7 @@
       android:strokeLineJoin="round"
       android:strokeWidth="1.8"
       android:fillColor="@color/transparent"
-      android:strokeColor="@color/gray_200"
+      android:strokeColor="@color/icon"
       android:strokeLineCap="round"/>
   </group>
 </vector>

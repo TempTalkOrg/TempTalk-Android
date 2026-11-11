@@ -1,14 +1,10 @@
 package com.difft.android.network.responses
 
-/**
- * GIF trending/search response payload (inside the BaseResponse envelope's `data` field).
- * Ported from difft-android; structure is the cross-platform contract (GIPHY proxied
- * through the server `/gifs/` endpoint). See cross-platform-alignment.md §1.
- *
- * - `original` / `preview` carry both `gif` and `webp` URLs: display uses `webp`,
- *   send uses `gif` (animated on legacy/cross-platform receivers).
- * - Pagination uses dual cursors: `pagination` (count/offset/total_count) and `next`.
- */
+
+
+
+
+
 data class GifListResponse(
     val `data`: List<GifData>?,
     val next: String?,

@@ -5,15 +5,15 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 
-/**
- * Pure JVM unit tests for the 3 ImageEditor preference fields introduced in PR 1
- * (replacements for the deleted SignalStore.imageEditorValues entries).
- *
- * Exercises:
- *   - defaults
- *   - round-trip via FakeUserManager.update {} (the write path used by ImageEditorHudV2)
- *   - copy / equals semantics (data class contract preservation)
- */
+
+
+
+
+
+
+
+
+
 class UserDataImageEditorFieldsTest {
 
     @Test

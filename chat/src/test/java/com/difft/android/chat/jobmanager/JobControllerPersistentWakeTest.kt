@@ -14,10 +14,10 @@ import org.junit.Before
 import org.junit.Test
 import kotlin.test.assertEquals
 
-/**
- * Covers [JobController.pendingWakeUpIds] and [JobController.cancelIdleWakeUps] only. Kept apart
- * from `JobControllerTest` so neither file grows past the project's file-size limit.
- */
+
+
+
+
 class JobControllerPersistentWakeTest {
 
     private val application = mockk<Application>(relaxed = true)
@@ -51,7 +51,7 @@ class JobControllerPersistentWakeTest {
         )
     }
 
-    // -- pendingWakeUpIds --
+    
 
     @Test
     fun `pendingWakeUpIds is empty once storage is drained`() {
@@ -62,8 +62,8 @@ class JobControllerPersistentWakeTest {
 
     @Test
     fun `pendingWakeUpIds counts a constraint-less spec that is already running`() {
-        // The pending-jobs query would drop this spec, which is exactly the killed-mid-run state
-        // the persisted wake-up has to survive.
+        
+        
         every { jobStorage.getAllJobSpecs() } returns
             listOf(buildJobSpec("wake-running", isRunning = true))
         every { jobStorage.getConstraintSpecs("wake-running") } returns emptyList()
@@ -78,8 +78,8 @@ class JobControllerPersistentWakeTest {
         every { jobStorage.getAllJobSpecs() } returns listOf(spec)
         stubNetworkConstraint("wake-waiting")
 
-        // Only network work remains, so the constraint-less wake-up is not kept alive for it and
-        // stops re-running at its backoff for as long as the network stays down.
+        
+        
         assertEquals(setOf(networkJobId), controller.pendingWakeUpIds())
     }
 
@@ -106,8 +106,8 @@ class JobControllerPersistentWakeTest {
 
     @Test
     fun `pendingWakeUpIds ignores a memory-only spec in every group`() {
-        // Nothing about a memory-only spec survives the process, so a wake-up the framework
-        // brought back would find no trace of it.
+        
+        
         every { jobStorage.getAllJobSpecs() } returns
             listOf(buildJobSpec("wake-volatile", isMemoryOnly = true))
         every { jobStorage.getConstraintSpecs("wake-volatile") } returns emptyList()
@@ -115,7 +115,7 @@ class JobControllerPersistentWakeTest {
         assertEquals(emptySet(), controller.pendingWakeUpIds())
     }
 
-    // -- cancelIdleWakeUps --
+    
 
     @Test
     fun `cancelIdleWakeUps keeps nothing once storage is drained`() {
@@ -128,8 +128,8 @@ class JobControllerPersistentWakeTest {
 
     @Test
     fun `cancelIdleWakeUps keeps only the group that still owns work`() {
-        // A spec waiting on its next attempt keeps its own wake-up — the method deliberately
-        // ignores constraint state.
+        
+        
         every { jobStorage.getAllJobSpecs() } returns
             listOf(buildJobSpec("release-waiting", nextRunAttemptTime = System.currentTimeMillis()))
         stubNetworkConstraint("release-waiting")
@@ -153,8 +153,8 @@ class JobControllerPersistentWakeTest {
 
     @Test
     fun `cancelIdleWakeUps keeps nothing when only memory-only specs remain`() {
-        // Keeping a wake-up alive and cancelling it read the same predicate, so a spec that cannot
-        // survive the process must not hold the wake-up open either.
+        
+        
         every { jobStorage.getAllJobSpecs() } returns
             listOf(buildJobSpec("release-volatile", isMemoryOnly = true))
         every { jobStorage.getConstraintSpecs("release-volatile") } returns emptyList()
@@ -164,7 +164,7 @@ class JobControllerPersistentWakeTest {
         verify(exactly = 1) { persistentScheduler.cancelAllExcept(emptySet()) }
     }
 
-    // -- Helpers --
+    
 
     private fun stubNetworkConstraint(specId: String) {
         every { jobStorage.getConstraintSpecs(specId) } returns
@@ -195,7 +195,7 @@ class JobControllerPersistentWakeTest {
         const val NETWORK_KEY = "NetworkConstraint"
         const val UNKNOWN_KEY = "GoneConstraint"
 
-        /** Derived exactly as the scheduler derives the id it registers each group under. */
+        
         val plainJobId = persistentJobId(emptyList())
         val networkJobId = persistentJobId(listOf(TestNetworkConstraint()))
     }

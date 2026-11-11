@@ -5,17 +5,17 @@ import androidx.recyclerview.widget.RecyclerView
 import com.difft.android.chat.translate.VisibleReason
 import com.difft.android.chat.ui.ChatMessageAdapter
 
-/**
- * Fragment-side wiring for auto-translate: reports which messages the user can actually see, at the
- * three moments that can change it.
- *
- * Deliberately NOT on every list commit: read receipts, reactions and send-status updates commit a
- * list every few hundred milliseconds, and reporting each one would restart the visible-range batch
- * continuously. A commit only counts when it actually brought new ids into the window.
- *
- * Owned by the Fragment's view lifecycle — it nulls its reference in `onDestroyView`, so a late
- * RecyclerView callback can never touch a destroyed view tree.
- */
+
+
+
+
+
+
+
+
+
+
+
 internal class ChatTranslateListBinder(
     private val recyclerView: RecyclerView,
     private val adapter: ChatMessageAdapter,
@@ -39,10 +39,10 @@ internal class ChatTranslateListBinder(
         if (ids.isNotEmpty()) onVisibleRange(ids, reason)
     }
 
-    /**
-     * The first COMPLETELY visible row through the last partially visible one: a half-scrolled top
-     * row that grows by a translate block would push the viewport down under the user's finger.
-     */
+    
+
+
+
     private fun visibleIds(): List<String> {
         val layoutManager = recyclerView.layoutManager as? LinearLayoutManager ?: return emptyList()
         val first = layoutManager.findFirstCompletelyVisibleItemPosition()

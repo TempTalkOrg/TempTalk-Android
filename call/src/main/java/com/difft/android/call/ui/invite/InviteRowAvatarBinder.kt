@@ -14,14 +14,14 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/**
- * Avatar slot of a meeting-invite row. Owns the single reusable avatar View added to the row
- * container once at holder creation, binds an immediate value synchronously on every bind, and
- * replaces it with the participant cache's record when that arrives.
- *
- * Collaborators are constructor parameters so the recycling rules can be tested without Hilt;
- * production rows use [create].
- */
+
+
+
+
+
+
+
+
 internal class InviteRowAvatarBinder(
     container: ViewGroup,
     private val scope: CoroutineScope,
@@ -43,11 +43,11 @@ internal class InviteRowAvatarBinder(
     private var job: Job? = null
     private var boundUid: String? = null
 
-    /**
-     * Binds the row to [uid]. [immediate] renders synchronously from the data the row already
-     * holds; the cached record replaces it when it arrives, unless the holder was rebound to
-     * another participant meanwhile. On failure the immediate value stays on screen.
-     */
+    
+
+
+
+
     fun bind(uid: String, immediate: AvatarData) {
         job?.cancel()
         boundUid = uid
@@ -62,14 +62,14 @@ internal class InviteRowAvatarBinder(
                 null
             } ?: return@launch
             withContext(Dispatchers.Main) {
-                // An equal record would only restart the load the immediate bind already started
-                // (a duplicate download while the first is still in flight); skip it here only.
+                
+                
                 if (boundUid == uid && data != immediate) avatarBinder.bind(data)
             }
         }
     }
 
-    /** Call from `onViewRecycled`: stops the pending fetch and forgets the bound uid so a late result can never land on a pooled row. */
+    
     fun cancel() {
         job?.cancel()
         job = null
@@ -77,7 +77,7 @@ internal class InviteRowAvatarBinder(
     }
 
     companion object {
-        /** Wires the binder to the app's avatar chain and the participant cache. */
+        
         fun create(container: ViewGroup, scope: CoroutineScope, logTag: String): InviteRowAvatarBinder {
             val entryPoint = EntryPointAccessors.fromApplication<LCallManager.EntryPoint>(
                 ApplicationHelper.instance,

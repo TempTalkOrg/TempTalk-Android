@@ -10,16 +10,16 @@ import androidx.core.graphics.get
 import kotlin.math.abs
 
 object FontUtil {
-  private const val SAMPLE_EMOJI = "\uD83C\uDF0D" // 🌍
+  private const val SAMPLE_EMOJI = "\uD83C\uDF0D" 
 
-  /**
-   * Certain platforms cannot render emoji above a certain font size.
-   *
-   * This will attempt to render an emoji at the specified font size and tell you if it's possible.
-   * It does this by rendering an emoji into a 1x1 bitmap and seeing if the resulting pixel is non-transparent.
-   *
-   * https://stackoverflow.com/a/50988748
-   */
+  
+
+
+
+
+
+
+
   @JvmStatic
   fun canRenderEmojiAtFontSize(size: Float): Boolean {
     val bitmap: Bitmap = createBitmap(1, 1)

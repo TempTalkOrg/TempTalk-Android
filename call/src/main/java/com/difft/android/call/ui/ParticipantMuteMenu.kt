@@ -27,20 +27,23 @@ import com.difft.android.call.util.StringUtil
 import io.livekit.android.room.participant.LocalParticipant
 import io.livekit.android.room.participant.Participant
 
-/** Character budget shared by the name pill, the panel row and the mute menu before ellipsising. */
+
 internal const val PARTICIPANT_NAME_MAX_LENGTH = 14
 
-/** Display name for in-app UI: remark/name from the contact cache, else the base58 id, else the raw identity. */
+
+internal const val NAME_MEASURE_CAP = 64
+
+
 fun participantDisplayName(identity: String?, displayName: String?): String =
     displayName ?: IdUtil.convertToBase58UserName(identity) ?: identity ?: ""
 
 fun participantDisplayName(participant: Participant, displayName: String?): String =
     participantDisplayName(participant.identity?.value, displayName)
 
-/**
- * [participantDisplayName] cached per (identity, name): the base58 encode — and the L.e it logs
- * for a malformed identity — must not re-run on every recomposition of every tile.
- */
+
+
+
+
 @Composable
 fun rememberParticipantDisplayName(identity: String?, displayName: String?): String =
     remember(identity, displayName) { participantDisplayName(identity, displayName) }
@@ -49,20 +52,20 @@ fun rememberParticipantDisplayName(identity: String?, displayName: String?): Str
 fun rememberParticipantDisplayName(participant: Participant, displayName: String?): String =
     rememberParticipantDisplayName(participant.identity?.value, displayName)
 
-/**
- * The local device cannot mute itself over RTM; another device of the same user is a
- * RemoteParticipant and stays mutable.
- */
+
+
+
+
 fun Participant.isMuteMenuTarget(muteOtherEnabled: Boolean): Boolean = muteOtherEnabled && this !is LocalParticipant
 
-/**
- * Places a popup at the finger the way the conversation-list long-press menu does
- * (`ChativePopupWindow.showAtTouchPosition`): horizontally centred on the touch point, top edge on
- * the touch point, both clamped so the popup stays fully inside the window.
- *
- * [touchInAnchor] is the touch position in the anchor composable's local pixels; the provider adds
- * the anchor's window offset itself, so callers only forward what `detectTapGestures` hands them.
- */
+
+
+
+
+
+
+
+
 class TouchPointPopupPositionProvider(private val touchInAnchor: IntOffset) : PopupPositionProvider {
     override fun calculatePosition(
         anchorBounds: IntRect,
@@ -81,22 +84,22 @@ class TouchPointPopupPositionProvider(private val touchInAnchor: IntOffset) : Po
     }
 }
 
-/**
- * Tap target that opens the mute menu for [participant]. Unlike `detectTapGestures`, the up event
- * is consumed only when the menu will actually open, so a tap on a muted participant's name pill
- * still falls through to the tile's own tap handler (overlay toggle) instead of dying in a dead
- * zone.
- *
- * Returns the receiver unchanged when the participant is not a mute target, so the pointer-input
- * node is dropped entirely. The node is keyed on the participant so a composition slot reused for
- * someone else never keeps the previous participant's closures.
- *
- * @param yieldToLongPress true only where a parent owns a long-press entry to the same menu (the
- *   grid tile): a press held past the long-press timeout is then not a tap here, otherwise the
- *   release would open the menu a second time. Surfaces without a long-press fallback (the
- *   screen-share panel) must leave this false, or a slow press becomes a dead zone.
- * @param onTap receives the touch position in this composable's local pixels.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 fun Modifier.muteMenuTapTarget(
     participant: Participant,
     muteOtherEnabled: Boolean,
@@ -110,7 +113,7 @@ fun Modifier.muteMenuTapTarget(
         } else {
             waitForUpOrCancellation()
         } ?: return@awaitEachGesture
-        // Mic state is a LiveKit property, not Compose state, so it is read at tap time.
+        
         if (participant.isMicrophoneEnabled) {
             up.consume()
             onTap(down.position)
@@ -118,19 +121,19 @@ fun Modifier.muteMenuTapTarget(
     }
 }
 
-/**
- * Single-item "Mute" menu shared by the grid tile and the screen-share participants panel. Drawn by
- * the shared menu shell (`DifftDropdownMenuPanel`/`Item`) and positioned at the finger via
- * [TouchPointPopupPositionProvider].
- *
- * A [Popup] (own window, focusable) so an outside tap dismisses it and is swallowed, matching the
- * View-based menu; the call surface is forced dark, so the panel resolves to the dark token.
- *
- * @param onOpenChanged true while the menu is showing, false when it leaves composition (mute,
- *   dismiss, or the participant disappearing). Hosts forward it to
- *   `CallUiController.setParticipantMenuOpen` so the screen-share auto-hide timer counts an open
- *   menu as interaction.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
 @Composable
 fun ParticipantMuteMenu(
     visible: Boolean,
@@ -154,8 +157,7 @@ fun ParticipantMuteMenu(
         properties = PopupProperties(focusable = true),
     ) {
         DifftDropdownMenuPanel(modifier = Modifier.testTag("call_participant_mute_menu")) {
-            // Text only, per the product spec (no icon, so the item matches iOS / Desktop). It names
-            // its target so a crowded grid never mutes the wrong person.
+            
             DifftDropdownMenuItem(
                 text = stringResource(
                     id = R.string.call_mute_participant_menu_item,

@@ -29,12 +29,12 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.util.Collections
 
-/**
- * [CallInviteExecutor.inviteCall]: each invite reads one [CallConfig] snapshot at its entry and
- * uses it for both the INVITE envelope and the success callback's local-record decision, so a
- * server flip of `createCallMsg` in a warm process reaches the next invite, and a flip while the
- * invite request is in flight does not split the current one (#1395).
- */
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = CallJoinStarterTest.TestApplication::class, sdk = [33])
 class CallInviteExecutorTest {
@@ -117,7 +117,7 @@ class CallInviteExecutorTest {
         conversationId = "group-1",
     )
 
-    /** The success callback records on `appScope`, so the check waits for it. */
+    
     private fun verifyRecorded(createCallMsg: Boolean) {
         verify(timeout = TIMEOUT_MS) {
             LCallManager.sendOrLocalCallTextMessage(any(), any(), any(), any(), any(), any(), any(), any(), createCallMsg, any())

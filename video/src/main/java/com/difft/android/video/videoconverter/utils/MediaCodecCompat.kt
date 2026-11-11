@@ -18,7 +18,7 @@ object MediaCodecCompat {
 
   const val MEDIA_FORMAT_KEY_MAX_BIT_RATE = "max-bitrate"
 
-  // https://developer.android.com/reference/android/media/MediaCodec#CSD
+  
   const val MEDIA_FORMAT_KEY_CODEC_SPECIFIC_DATA_0 = "csd-0"
   const val MEDIA_FORMAT_KEY_CODEC_SPECIFIC_DATA_1 = "csd-1"
   const val MEDIA_FORMAT_KEY_CODEC_SPECIFIC_DATA_2 = "csd-2"
@@ -50,20 +50,20 @@ object MediaCodecCompat {
     throw IOException("Can't create decoder for $mimeType!")
   }
 
-  /**
-   * Find backup decoder for a [MediaFormat] object with a MIME type of Dolby Vision.
-   *
-   * Dolby Vision is implemented as a two-layer stream in a video file: a "base layer" and an "enhancement layer".
-   * Both are (usually) standards-compliant video bitstreams that proprietary decoders combine to form the high-quality Dolby Vision stream.
-   * On devices where Dolby Vision is not supported, they should still be able to read the base layer stream if they can send it to the appropriate decoder.
-   *
-   * This function mutates the input [MediaFormat] so that the appropriate decoder is selected for the base layer.
-   *
-   * More information can be found here: [Dolby Vision Knowledge Base](https://professionalsupport.dolby.com/s/article/What-is-Dolby-Vision-Profile?language=en_US)
-   *
-   * @param mediaFormat
-   * @return the mutated [MediaFormat] to signal to the decoder to read only the base layer.
-   */
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
   private fun findBackupDecoderForDolbyVision(mediaFormat: MediaFormat): Pair<MediaCodec, MediaFormat>? {
     if (MediaFormat.MIMETYPE_VIDEO_DOLBY_VISION != mediaFormat.getString(MediaFormat.KEY_MIME)) {
       throw IllegalStateException("Must supply Dolby Vision MediaFormat!")
@@ -73,7 +73,7 @@ object MediaCodecCompat {
       when (mediaFormat.getInteger(MediaFormat.KEY_PROFILE)) {
         CodecProfileLevel.DolbyVisionProfileDvheDtr,
         CodecProfileLevel.DolbyVisionProfileDvheSt -> {
-          // dolby vision profile 04/08: Base layer is H.265 Main10 High Profile, Rec709/HLG/HDR10
+          
           mediaFormat.setString(MediaFormat.KEY_MIME, MediaFormat.MIMETYPE_VIDEO_HEVC)
           mediaFormat.setInteger(MediaFormat.KEY_PROFILE, CodecProfileLevel.HEVCProfileMain10)
           mediaFormat.setBaseCodecLevelFromDolbyVisionLevel()
@@ -81,7 +81,7 @@ object MediaCodecCompat {
         }
 
         CodecProfileLevel.DolbyVisionProfileDvavSe -> {
-          // dolby vision profile 09: Base layer is H.264 High/Progressive/Constrained Profile, Rec 709
+          
           mediaFormat.setString(MediaFormat.KEY_MIME, MediaFormat.MIMETYPE_VIDEO_AVC)
           mediaFormat.setInteger(MediaFormat.KEY_PROFILE, CodecProfileLevel.AVCProfileHigh)
           mediaFormat.setBaseCodecLevelFromDolbyVisionLevel()

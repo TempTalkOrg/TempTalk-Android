@@ -19,10 +19,10 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
-/**
- * The chat list has no fixed first row, so a conversation that moves to the top must stay
- * visible when the list was at its top, and must not yank a list the user scrolled down.
- */
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33])
 class ChatListTopAnchorTest {
@@ -54,7 +54,7 @@ class ChatListTopAnchorTest {
         adapter.submitListKeepingTop(list, moved)
         settle(list)
 
-        // Every visible row shifted down by one, so the same rows are on screen one index later.
+        
         assertEquals(before + 1, (list.layoutManager as LinearLayoutManager).findFirstVisibleItemPosition())
     }
 
@@ -64,7 +64,7 @@ class ChatListTopAnchorTest {
         adapter.submitListKeepingTop(list, ROWS)
         settle(list)
 
-        // Submitted at the top; the differ's commit is still queued on the main looper.
+        
         val moved = listOf("row 39") + ROWS.filter { it != "row 39" }
         adapter.submitListKeepingTop(list, moved)
         list.scrollToPosition(15)

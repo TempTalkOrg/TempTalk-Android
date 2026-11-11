@@ -20,12 +20,12 @@ abstract class GroupInfoMemberAdapter : ListAdapter<GroupMemberModel, GroupInfoM
         return GroupInfoMemberViewHolder(parent)
     }
 
-//    companion object {
-//        const val VIEW_TYPE_MEMBER = 1
-//        const val VIEW_TYPE_ADD = 2
-//        const val VIEW_TYPE_REMOVE = 3
-//    }
-//
+
+
+
+
+
+
 
     override fun onBindViewHolder(holder: GroupInfoMemberViewHolder, position: Int) {
         val data = getItem(position)

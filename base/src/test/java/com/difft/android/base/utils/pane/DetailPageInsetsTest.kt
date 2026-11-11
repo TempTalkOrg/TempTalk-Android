@@ -21,12 +21,12 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import java.util.concurrent.TimeUnit
 
-/**
- * Bottom insets a detail page adds itself, per container: a shell and the two-pane pane pad the
- * system bars, the one-pane layer pads all but the bottom. With the IME, only the part of the
- * keyboard the container did not pad is added. Checked on the pure value and on the Compose
- * modifier under real window insets.
- */
+
+
+
+
+
+
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [33])
 class DetailPageInsetsTest {
@@ -40,12 +40,12 @@ class DetailPageInsetsTest {
 
     @Test
     fun `bottom inset per container, without and with the keyboard`() {
-        // Shell or two-pane: the container pads the bar.
+        
         assertEquals(0, detailPageBottomInset(containerPadsBottom = true, navigationBarBottom = bar, imeBottom = 0, ime = false))
         assertEquals(0, detailPageBottomInset(containerPadsBottom = true, navigationBarBottom = bar, imeBottom = keyboard, ime = false))
         assertEquals(keyboard - bar, detailPageBottomInset(containerPadsBottom = true, navigationBarBottom = bar, imeBottom = keyboard, ime = true))
         assertEquals(0, detailPageBottomInset(containerPadsBottom = true, navigationBarBottom = bar, imeBottom = 0, ime = true))
-        // One-pane layer: the page pads the bar, or the keyboard when larger.
+        
         assertEquals(bar, detailPageBottomInset(containerPadsBottom = false, navigationBarBottom = bar, imeBottom = 0, ime = false))
         assertEquals(bar, detailPageBottomInset(containerPadsBottom = false, navigationBarBottom = bar, imeBottom = 0, ime = true))
         assertEquals(keyboard, detailPageBottomInset(containerPadsBottom = false, navigationBarBottom = bar, imeBottom = keyboard, ime = true))
@@ -74,7 +74,7 @@ class DetailPageInsetsTest {
             .setVisible(WindowInsetsCompat.Type.ime(), imeBottom > 0)
             .build()
         ViewCompat.dispatchApplyWindowInsets(activity.window.decorView, insets)
-        // Frames are scheduled ahead of the paused clock: advance it so the new insets lay out.
+        
         shadowOf(Looper.getMainLooper()).idleFor(FRAME_WAIT_MS, TimeUnit.MILLISECONDS)
         return outer - inner
     }

@@ -16,11 +16,11 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/**
- * Shared menu shell contract (issue #1237): the row is the library's 44dp "App" row, the divider
- * item is 8dp tall, the panel never falls under its 180dp minimum, and a disabled row swallows
- * clicks.
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34])

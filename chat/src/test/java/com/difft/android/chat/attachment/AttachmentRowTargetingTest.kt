@@ -4,13 +4,13 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
-/**
- * Which attachment rows a write can reach.
- *
- * This is the exact shape of issue #1178: forwarding copied a message's attachment row with the SAME
- * server-side id, so a status write locating rows by that id updated the original message's row too
- * and its bubble replayed the copy's download. A localId locator makes the sibling unreachable.
- */
+
+
+
+
+
+
+
 class AttachmentRowTargetingTest {
 
     private data class Row(val label: String, val messageId: String?, val authorityId: Long?)
@@ -27,7 +27,7 @@ class AttachmentRowTargetingTest {
         val original = attachmentRowTarget("local-original", "shared-id", "msg-1")
         val forwarded = attachmentRowTarget("local-forwarded", "shared-id", "msg-2")
 
-        // Same server-side id on both — only the localId tells the rows apart.
+        
         assertEquals(AttachmentRowTarget.ByLocalId("local-original"), original)
         assertEquals(AttachmentRowTarget.ByLocalId("local-forwarded"), forwarded)
     }
@@ -54,10 +54,10 @@ class AttachmentRowTargetingTest {
 
     @Test
     fun `the legacy locator cannot reach a forward-owned row at all`() {
-        // A forward copy's `messageId` column is NULL — the owning message id lives on its
-        // ForwardModel — so the id+messageId predicate a job persisted before the localId key
-        // degrades to matches nothing, and its status write silently vanishes. That is why
-        // DownloadAttachmentJob re-addresses by the resolved row's rowid once it has one.
+        
+        
+        
+        
         val forwardRow = Row("forward-copy", messageId = null, authorityId = 999L)
         val target = attachmentRowTarget(localId = null, attachmentId = "shared-id", messageId = "msg-wrapper")
 
@@ -93,7 +93,7 @@ class AttachmentRowTargetingTest {
     fun `an unidentifiable legacy job still picks a row rather than giving up`() {
         val rows = listOf(Row("first", "msg-1", 777L), Row("second", "msg-2", 777L))
 
-        // Every candidate holds the same remote file, so the worst case is a redundant download.
+        
         assertEquals("first", pick(rows, legacyKey = "msg-gone")?.label)
     }
 
@@ -106,16 +106,16 @@ class AttachmentRowTargetingTest {
 
     @Test
     fun `a row with no local id yet answers with the id every reader synthesizes for it`() {
-        // Same value the migration's backfill persists, so the key the job emits under is exactly
-        // the one the rendering bubble collects under.
+        
+        
         assertEquals("synth-1", adopt(listOf(LocalIdRow(localId = null, synthesized = "synth-1"))))
         assertEquals("synth-1", adopt(listOf(LocalIdRow(localId = "", synthesized = "synth-1"))))
     }
 
     @Test
     fun `an ambiguous legacy match adopts nothing`() {
-        // Writing an id into one of several rows sharing a server-side id would hand a sibling copy
-        // an identity it was never rendered under.
+        
+        
         val rows = listOf(LocalIdRow(null, "synth-1"), LocalIdRow(null, "synth-2"))
 
         assertNull(adopt(rows))

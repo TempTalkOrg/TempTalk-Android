@@ -36,13 +36,10 @@ import kotlin.test.assertEquals
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
-/**
- * Covers the Android 14 partial-access ("Select photos") permission matrix:
- * acceptance criteria A1/A2 (partial grant => Granted), A3 (full grant),
- * A4 (true denial keeps Denied/PermanentlyDenied), A5/A6 (SDK 33 / 26-32
- * tiers unchanged), A9 (request array contains VISUAL_USER_SELECTED on 34+),
- * A13 (non-picture single-permission flows unaffected by the exemption).
- */
+
+
+
+
 @RunWith(AndroidJUnit4::class)
 @Config(application = PermissionUtilTest.TestScopeApplication::class)
 class PermissionUtilTest {
@@ -76,7 +73,7 @@ class PermissionUtilTest {
     private fun robolectricActivity(): Activity =
         Robolectric.buildActivity(Activity::class.java).create().get()
 
-    // ---- picturePermissions request array per SDK tier (A9 / F5) ----
+    
 
     @Test
     @Config(sdk = [34])
@@ -124,7 +121,7 @@ class PermissionUtilTest {
         )
     }
 
-    // ---- getPermissionState on 34+: partial access matrix ----
+    
 
     @Test
     @Config(sdk = [34])
@@ -150,8 +147,8 @@ class PermissionUtilTest {
             Manifest.permission.READ_MEDIA_IMAGES to false,
             Manifest.permission.READ_MEDIA_VIDEO to false,
         )
-        // Robolectric activities report shouldShowRequestPermissionRationale=false,
-        // which is exactly the second-denial condition that used to escalate.
+        
+        
         val activity = robolectricActivity()
 
         assertEquals(PermissionState.Granted, PermissionUtil.getPermissionState(activity, result))
@@ -176,8 +173,8 @@ class PermissionUtilTest {
     @Test
     @Config(sdk = [34])
     fun `granted images and video with denied visual on 34 is granted`() {
-        // OEM anomaly: real media read permissions granted but VISUAL reported
-        // denied. Any granted media read permission means media is usable.
+        
+        
         grant(
             Manifest.permission.READ_MEDIA_IMAGES,
             Manifest.permission.READ_MEDIA_VIDEO,
@@ -221,7 +218,7 @@ class PermissionUtilTest {
         assertEquals(PermissionState.PermanentlyDenied, state)
     }
 
-    // ---- non-picture flows share getPermissionState (A13) ----
+    
 
     @Test
     @Config(sdk = [34])
@@ -244,7 +241,7 @@ class PermissionUtilTest {
         assertEquals(PermissionState.Granted, state)
     }
 
-    // ---- lower SDK tiers keep existing semantics (A5 / A6) ----
+    
 
     @Test
     @Config(sdk = [33])
@@ -262,7 +259,7 @@ class PermissionUtilTest {
     @Test
     @Config(sdk = [33])
     fun `media denial on 33 stays denied even if visual user selected string is granted`() {
-        // The exemption is gated on SDK 34+; on 33 the permission does not exist.
+        
         grantVisualUserSelected()
         val result = mapOf(
             Manifest.permission.READ_MEDIA_IMAGES to false,
@@ -294,7 +291,7 @@ class PermissionUtilTest {
         assertEquals(PermissionState.Denied, state)
     }
 
-    // ---- getMediaAccessState three-state pre-check (T1-T9) ----
+    
 
     @Test
     @Config(sdk = [34])
@@ -340,7 +337,7 @@ class PermissionUtilTest {
     @Test
     @Config(sdk = [33])
     fun `T6 media access on 33 with only visual string granted is NONE`() {
-        // The VISUAL permission does not exist below 34; no PARTIAL tier here.
+        
         grant(visualUserSelected)
         assertEquals(MediaAccessState.NONE, PermissionUtil.getMediaAccessState())
     }
@@ -368,7 +365,7 @@ class PermissionUtilTest {
         assertEquals(MediaAccessState.FULL, PermissionUtil.getMediaAccessState())
     }
 
-    // ---- launchMediaSelectionOrOpen entry-gate decision (T10-T12) ----
+    
 
     @Test
     @Config(sdk = [34])
@@ -416,10 +413,10 @@ class PermissionUtilTest {
         verify(exactly = 0) { launcher.launch(any<Array<String>>()) }
     }
 
-    // ------------------------------------------------------------------------
-    // Media-send URI hardening: getMediaAccessState precondition pin (T12) and
-    // classifyReadDenial mapping (T90-T95).
-    // ------------------------------------------------------------------------
+    
+    
+    
+    
 
     private val mediaUri: Uri = Uri.parse("content://media/external/images/media/1")
 
@@ -440,9 +437,9 @@ class PermissionUtilTest {
     @Test
     @Config(sdk = [29])
     fun `T12 getMediaAccessState on 29 ignores granted READ_MEDIA permissions`() {
-        // Precondition pin: the 29 tier reads only READ_EXTERNAL_STORAGE. Granting the 33+ strings
-        // must not move the state, so a future "let's also request READ_MEDIA_* on 29" change fails
-        // here instead of silently reporting readable media that the platform never grants.
+        
+        
+        
         grant(
             Manifest.permission.READ_MEDIA_IMAGES,
             Manifest.permission.READ_MEDIA_VIDEO,
@@ -489,10 +486,9 @@ class PermissionUtilTest {
     @Test
     @Config(sdk = [29])
     fun `T93 classifyReadDenial on a sandbox file uri is NOT_MEDIA_SCOPED`() {
-        // A sandbox read failure must never be attributed to the permission layer.
+        
         grant(Manifest.permission.READ_EXTERNAL_STORAGE)
         val sandboxUri = Uri.parse("file:///data/user/0/pkg/files/draft_blobs/x.jpg")
-
         val denial = PermissionUtil.classifyReadDenial(sandboxUri, IOException("boom"))
 
         assertEquals(MediaReadDenialKind.NOT_MEDIA_SCOPED, denial.kind)
@@ -503,7 +499,6 @@ class PermissionUtilTest {
     fun `T94 classifyReadDenial on a cross profile media authority takes the media branch`() {
         grant(Manifest.permission.READ_EXTERNAL_STORAGE)
         val crossProfileUri = Uri.parse("content://0@media/external/images/media/1")
-
         val denial = PermissionUtil.classifyReadDenial(crossProfileUri, IOException("boom"))
 
         assertEquals(MediaReadDenialKind.GRANTED_BUT_UNREADABLE, denial.kind)
@@ -512,8 +507,8 @@ class PermissionUtilTest {
     @Test
     fun `T95 classifyReadDenial performs no IO and writes no log`() {
         grant(Manifest.permission.READ_EXTERNAL_STORAGE)
-        // Structural pin: this is a classifier, not a prober. Touching the ContentResolver here
-        // would turn permission state into a readability predicate, which it is not.
+        
+        
         val noResolver = object : ContextWrapper(
             ApplicationProvider.getApplicationContext<Application>()
         ) {
@@ -545,13 +540,13 @@ class PermissionUtilTest {
         }
     }
 
-    /**
-     * Records every message Timber receives, plus a FIFO barrier.
-     *
-     * [L] dispatches through a single unlimited channel consumed by one thread, so once a sentinel
-     * message has been observed, everything enqueued before it has been observed too — which turns
-     * "produced no log" into a deterministic assertion.
-     */
+    
+
+
+
+
+
+
     private class RecordingTree : Timber.Tree() {
         private val recorded = CopyOnWriteArrayList<String>()
 

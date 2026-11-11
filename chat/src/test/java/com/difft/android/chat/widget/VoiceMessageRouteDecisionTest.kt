@@ -9,17 +9,17 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/**
- * T4-1 … T4-7 — the `preferredOutputType` truth table. This pure decision function IS the
- * routing contract for voice-message playback: the earpiece is only forced when the device has
- * no external output attached.
- *
- * Runs under Robolectric although the function is pure, because the built-in whitelist gates
- * `TYPE_BUILTIN_SPEAKER_SAFE` on `Build.VERSION.SDK_INT`, which is not a compile-time constant — a
- * bare JVM run would read 0 and exercise a whitelist no real device has.
- *
- * Verify: :chat:testDebugUnitTest
- */
+
+
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [33])
 class VoiceMessageRouteDecisionTest {

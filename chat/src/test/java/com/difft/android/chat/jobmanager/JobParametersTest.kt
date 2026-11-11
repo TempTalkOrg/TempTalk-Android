@@ -9,7 +9,7 @@ import kotlin.test.assertTrue
 
 class JobParametersTest {
 
-    // region Builder defaults
+    
 
     @Test
     fun `default builder generates non-empty id`() {
@@ -72,9 +72,9 @@ class JobParametersTest {
         assertEquals(Job.Parameters.UNLIMITED, params.maxInstancesForQueue)
     }
 
-    // endregion
+    
 
-    // region Builder with explicit id
+    
 
     @Test
     fun `builder with explicit id uses that id`() {
@@ -82,9 +82,9 @@ class JobParametersTest {
         assertEquals("my-id", params.id)
     }
 
-    // endregion
+    
 
-    // region Builder setters
+    
 
     @Test
     fun `setQueue sets queue key`() {
@@ -189,9 +189,9 @@ class JobParametersTest {
         assertFalse(params.isMemoryOnly)
     }
 
-    // endregion
+    
 
-    // region Constants
+    
 
     @Test
     fun `IMMORTAL constant is -1`() {
@@ -208,9 +208,9 @@ class JobParametersTest {
         assertEquals("MIGRATION", Job.Parameters.MIGRATION_QUEUE_KEY)
     }
 
-    // endregion
+    
 
-    // region toBuilder roundtrip
+    
 
     @Test
     fun `toBuilder preserves all fields`() {
@@ -256,13 +256,13 @@ class JobParametersTest {
         assertEquals(5, modified.maxAttempts)
     }
 
-    // endregion
+    
 
-    // region Builder chaining
+    
 
     @Test
     fun `all builder setters return builder for chaining`() {
-        // This test verifies the fluent API compiles and works
+        
         val params = Job.Parameters.Builder("chain-test")
             .setCreateTime(1000L)
             .setLifespan(2000L)
@@ -285,5 +285,5 @@ class JobParametersTest {
         assertTrue(params.isMemoryOnly)
     }
 
-    // endregion
+    
 }

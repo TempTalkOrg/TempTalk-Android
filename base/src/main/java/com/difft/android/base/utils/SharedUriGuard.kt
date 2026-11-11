@@ -1,25 +1,28 @@
 package com.difft.android.base.utils
 
+import android.content.ComponentName
 import android.content.ContentResolver
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
+import androidx.core.content.IntentCompat
 import java.io.File
 
-/**
- * Screens URIs that other apps hand to the share entry (#1429). The app opens them with its own
- * permissions, so a `file://` URI into its own storage would copy private data on the sender's
- * behalf.
- */
+
+
+
+
+
 object SharedUriGuard {
 
-    /** Directories owned by this app: its private data dir and its app-specific external dirs. */
+    
     fun appStorageRoots(context: Context): List<File> = buildList {
         add(context.dataDir)
         context.getExternalFilesDirs(null).filterNotNull().mapNotNullTo(this) { it.parentFile }
         context.externalCacheDirs.filterNotNull().mapNotNullTo(this) { it.parentFile }
     }
 
-    /** True when [uri] is a `file://` URI that resolves inside one of [appRoots], or cannot be resolved. */
+    
     fun pointsIntoAppStorage(uri: Uri, appRoots: List<File>): Boolean {
         if (uri.scheme != ContentResolver.SCHEME_FILE) return false
         val path = uri.path ?: return true
@@ -28,5 +31,30 @@ object SharedUriGuard {
             val rootPath = runCatching { root.canonicalPath }.getOrNull() ?: return@any false
             target == rootPath || target.startsWith(rootPath + File.separator)
         }
+    }
+
+    
+    fun isOwnProviderUri(context: Context, uri: Uri): Boolean {
+        if (!ContentResolver.SCHEME_CONTENT.equals(uri.scheme, ignoreCase = true)) return false
+        
+        val authority = uri.authority?.substringAfterLast('@') ?: return true
+        
+        
+        val owner = runCatching { context.packageManager.resolveContentProvider(authority, 0)?.packageName }.getOrNull()
+        return owner == context.packageName
+    }
+
+    
+
+
+
+    fun excludeOwnTargets(context: Context, chooser: Intent): Intent {
+        val target = IntentCompat.getParcelableExtra(chooser, Intent.EXTRA_INTENT, Intent::class.java) ?: return chooser
+        val own = context.packageManager.queryIntentActivities(target, 0)
+            .map { it.activityInfo }
+            .filter { it.packageName == context.packageName }
+            .map { ComponentName(it.packageName, it.name) }
+        if (own.isNotEmpty()) chooser.putExtra(Intent.EXTRA_EXCLUDE_COMPONENTS, own.toTypedArray())
+        return chooser
     }
 }

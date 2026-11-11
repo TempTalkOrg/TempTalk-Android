@@ -14,7 +14,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
-/** Waveform extraction must never leave decrypted audio in the attachment dir (#1438). */
+
 class WaveformSourceTest {
 
     @get:Rule
@@ -57,7 +57,7 @@ class WaveformSourceTest {
 
     @Test
     fun `self-sent voice still uploading is read in place and kept`() {
-        // Final ciphertext already written, key not yet stored on the row.
+        
         writeCiphertext()
         File(basePath).writeBytes(audio)
 

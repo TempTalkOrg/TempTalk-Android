@@ -14,11 +14,7 @@ import com.difft.android.setting.ProxySettingsActivity
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * ActivityProvider的实现类
- * 使用Dagger Hilt进行依赖注入，解决依赖顺序问题
- * 直接引用Activity类，避免使用Class.forName
- */
+
 @Singleton
 class ActivityProviderImpl @Inject constructor() : ActivityProvider {
 

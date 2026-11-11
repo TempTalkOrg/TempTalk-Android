@@ -1,11 +1,19 @@
 <resources>
+    
+    <dimen name="hairline">1px</dimen>
     <dimen name="chat_sidebar_text_size_normal_default">11sp</dimen>
-    <!-- Maximum width for bottom sheet dialogs on wide screens (same as Material 3 ModalBottomSheet) -->
+    
     <dimen name="bottom_sheet_max_width">640dp</dimen>
-    <!-- Floating close button on message detail pages (large text, media preview, confidential sheets) -->
+    
+    <dimen name="bottom_sheet_inset">8dp</dimen>
+    
+    <dimen name="bottom_sheet_elevation">6dp</dimen>
+    
     <dimen name="detail_close_button_size">48dp</dimen>
     <dimen name="detail_close_button_margin">14dp</dimen>
-    <dimen name="detail_close_button_elevation">3dp</dimen>
-    <!-- size + 2 * margin: bottom padding for scrolling content under the button -->
+    
     <dimen name="detail_close_button_content_inset">76dp</dimen>
+    
+    <dimen name="radius_card">16dp</dimen>
+    <dimen name="radius_floating">24dp</dimen>
 </resources>

@@ -9,7 +9,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** Which flow a "focus this group" request starts, the duration sheet description and the end-time label. */
+
 class FocusActionPlanTest {
 
     private fun focus(active: Boolean = true, invalid: Boolean = false, vararg gids: String = arrayOf("A"), feature: Boolean = true) =
@@ -64,7 +64,7 @@ class FocusActionPlanTest {
         assertEquals(R.string.focus_sheet_desc_notify, meAndCall.res)
         assertEquals(listOf(StillNotifyItem.MENTION_ME, StillNotifyItem.GROUP_CALL), meAndCall.stillNotify)
 
-        // @All alone still counts: the description no longer depends on @Me only.
+        
         assertEquals(listOf(StillNotifyItem.MENTION_ALL), desc(fold = true, me = false, all = true, call = false).stillNotify)
 
         assertEquals(R.string.focus_sheet_desc_fold, desc(fold = true, me = false, all = false, call = false).res)
@@ -85,7 +85,7 @@ class FocusActionPlanTest {
         val tomorrow = FocusTimeFormat.endLabel(now + 24 * 3_600_000L, now, zone, Locale.US)
         assertTrue(tomorrow.tomorrow)
 
-        // Midnight crossing: 23:30 today vs 00:30 the next day.
+        
         val late = java.time.Instant.parse("2026-10-28T23:30:00Z").toEpochMilli()
         assertFalse(FocusTimeFormat.endLabel(late, now, zone, Locale.US).tomorrow)
         assertTrue(FocusTimeFormat.endLabel(late + 3_600_000, now, zone, Locale.US).tomorrow)

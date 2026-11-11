@@ -13,17 +13,17 @@ import org.difft.app.database.wcdb
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * DB access the chat list needs for the focus group only (design §3/§4): its latest previews for
- * the focus card, a stand-in row when it has no visible room row, and making that room real when
- * the user pins it. All blocking; callers run them on IO, never from a bind.
- */
+
+
+
+
+
 @Singleton
 class FocusChatRooms @Inject constructor(
     private val dbRoomStore: DBRoomStore,
 ) {
 
-    /** The focus card's previews (`sender: content`, the room preview format), oldest first. */
+    
     fun previewLines(gid: String): List<String> = try {
         WCDBUpdateService.latestPreviewMessages(gid, FOCUS_CARD_LINES.toLong())
             .map { it.previewContent() }
@@ -36,11 +36,11 @@ class FocusChatRooms @Inject constructor(
         emptyList()
     }
 
-    /**
-     * A row for the focus group built from its group (and room, when one exists with
-     * `lastActiveTime == 0`), with an empty preview; null when the group is not stored or not
-     * active. Never written.
-     */
+    
+
+
+
+
     fun synthesize(gid: String): RoomViewData? = try {
         val group = wcdb.group.getFirstObject(DBGroupModel.gid.eq(gid))?.takeIf { it.status == 0 }
         if (group == null) {
@@ -68,10 +68,10 @@ class FocusChatRooms @Inject constructor(
         null
     }
 
-    /**
-     * Before a user pin on a synthesized row: creates the room when missing and makes it visible
-     * (`lastActiveTime == 0` rooms are filtered out of the list), so the pin outlives the focus.
-     */
+    
+
+
+
     fun ensureVisibleRoom(gid: String, now: Long) {
         dbRoomStore.createRoomIfNotExist(For.Group(gid))
         wcdb.room.updateValue(

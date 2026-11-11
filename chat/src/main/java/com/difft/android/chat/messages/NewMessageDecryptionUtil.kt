@@ -16,21 +16,21 @@ import uniffi.dtproto.DtProtoException
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Thrown when a Base64-encoded envelope field (identityKey / peerContext) is
- * malformed. Same input → same failure, so [EnvelopToMessageProcessor.classify]
- * routes this to [DropReason.BASE64_DECODE_FAILED] (Permanent).
- *
- * Wrapping the raw `IOException` / `IllegalArgumentException` / `NullPointerException`
- * from `Base64.decode` lets `classify()` match on a stable type instead of
- * sniffing stack frames.
- */
+
+
+
+
+
+
+
+
+
 class Base64DecodeException(field: String, cause: Throwable?) :
     RuntimeException("Base64 decode failed for envelope field: $field", cause)
 
 private val ACCOUNT_SOURCE = Regex("^\\+\\d+$")
 
-/** True when [source] is a user account id (E.164 shaped), as opposed to "server" or a service name. */
+
 internal fun isAccountSource(source: String?): Boolean = source != null && ACCOUNT_SOURCE.matches(source)
 
 @Singleton
@@ -41,14 +41,14 @@ class NewMessageDecryptionUtil @Inject constructor(
     fun decrypt(envelope: Envelope): SignalServiceDataClass? {
         val typeNumber = envelope.getType().number
 
-        // NOTIFY: server-driven plaintext control signal (group / contact updates).
-        // It is not an E2E chat message and is never rendered as one — it is parsed
-        // as JSON and dispatched to the notify handlers. Kept as its own path.
+        
+        
+        
         if (typeNumber == Envelope.Type.NOTIFY_VALUE) {
-            // A peer can submit a NOTIFY envelope through the 1:1 send API and the server
-            // forwards it with the sender's account as source. Server notifies carry "server"
-            // and internal-service notifies never use an account source, so an account-shaped
-            // source is a forged control signal: drop it (same rule as iOS PR #812).
+            
+            
+            
+            
             if (isAccountSource(envelope.source)) {
                 L.w { "[Message] drop notify from account source ts=${envelope.timestamp}" }
                 return null
@@ -58,10 +58,10 @@ class NewMessageDecryptionUtil @Inject constructor(
                 contentString,
                 TTNotifyMessage::class.java
             )
-            // Front-runner classifier log for the whole notify path. Subsequent
-            // handlers (GroupUpdater / ContactsUpdater / ...) emit their own
-            // entry logs once dispatched; this one tells you what arrived and
-            // which sub-path it should hit before any dispatching happens.
+            
+            
+            
+            
             L.i {
                 val d = notifyMessage.data
                 "[Message] received notify type=${notifyMessage.notifyType}" +
@@ -71,20 +71,20 @@ class NewMessageDecryptionUtil @Inject constructor(
                         " gid=${d?.gid}" +
                         " display=${notifyMessage.display}"
             }
-            // Local debug only: logcat-only (not persisted to file), contains sensitive fields
-            // (group/member names, critical alert content). Do NOT promote to L.i.
-            // L.d { "[Message] received notify raw json=$contentString" }
+            
+            
+            
             return SignalServiceDataClass(envelope, null, notifyMessage)
         }
 
-        // Security whitelist: ENCRYPTEDTEXT is the ONLY type that carries a real
-        // E2E-encrypted, signed, source-authenticated message. Envelope.type is a
-        // server-controlled field, so any other value (PLAINTEXT/CIPHERTEXT/
-        // KEY_EXCHANGE/PREKEY_BUNDLE/RECEIPT/UNKNOWN/...) would otherwise let a
-        // malicious or compromised server hand us unauthenticated content and have
-        // us render it as a genuine message — i.e. forge messages from any sender.
-        // Senders only ever emit ENCRYPTEDTEXT, so dropping everything else costs
-        // no legitimate functionality.
+        
+        
+        
+        
+        
+        
+        
+        
         if (typeNumber != Envelope.Type.ENCRYPTEDTEXT_VALUE) {
             L.w { "[Message] drop non-encrypted envelope type=$typeNumber ts=${envelope.timestamp}" }
             return null
@@ -94,8 +94,8 @@ class NewMessageDecryptionUtil @Inject constructor(
         val version = envelope.content.first().toUInt().shr(4).toInt()
 
         if (version !in MESSAGE_MINIMUM_SUPPORTED_VERSION..MESSAGE_MAX_SUPPORTED_VERSION) {
-            // Drop instead of throwing: version mismatch is permanent, and
-            // throwing would land the envelope in the failed_message retry queue.
+            
+            
             L.w { "[Message] decrypt: unsupported version=$version, drop ts=${envelope.timestamp}" }
             return null
         }
@@ -112,7 +112,7 @@ class NewMessageDecryptionUtil @Inject constructor(
                     encryptedMessage.signedEKey.toByteArray().map { it.toUByte() },
                     encryptedMessage.identityKey.toByteArray().map { it.toUByte() },
                     identityKeyBytes.map { it.toUByte() }.drop(1),
-                    null, // cachedTheirIdKey: no local cache yet
+                    null, 
                     encryptedMessage.eKey.toByteArray().map { it.toUByte() },
                     encryptionDataManager.getAciIdentityKey().privateKey.serialize().map { it.toUByte() },
                     peerContextBytes.map { it.toUByte() },
@@ -120,7 +120,7 @@ class NewMessageDecryptionUtil @Inject constructor(
                 )
             }
         } catch (e: Exception) {
-            // Decryption with the original identity key fails, trying to decrypt with the old identity key.
+            
             if (e is DtProtoException.DecryptMessageDataException && encryptionDataManager.hasOldAciIdentityKey() && !encryptionDataManager.checkOldAciIdentityExpired()) {
                 try {
                     val dtProto = DtProto(version)
@@ -129,7 +129,7 @@ class NewMessageDecryptionUtil @Inject constructor(
                             encryptedMessage.signedEKey.toByteArray().map { it.toUByte() },
                             encryptedMessage.identityKey.toByteArray().map { it.toUByte() },
                             identityKeyBytes.map { it.toUByte() }.drop(1),
-                            null, // cachedTheirIdKey: no local cache yet
+                            null, 
                             encryptedMessage.eKey.toByteArray().map { it.toUByte() },
                             encryptionDataManager.getAciIdentityOldKey().privateKey.serialize().map { it.toUByte() },
                             peerContextBytes.map { it.toUByte() },
@@ -151,11 +151,11 @@ class NewMessageDecryptionUtil @Inject constructor(
         return SignalServiceDataClass(envelope, contentObj, null)
     }
 
-    /**
-     * Decode a Base64 envelope field, wrapping any failure (returns-null,
-     * IOException, IllegalArgumentException, NPE) as [Base64DecodeException]
-     * so the classifier gets a stable type to match on.
-     */
+    
+
+
+
+
     private fun decodeBase64OrThrow(field: String, value: String?): ByteArray {
         return try {
             Base64.decode(value) ?: throw Base64DecodeException(field, null)

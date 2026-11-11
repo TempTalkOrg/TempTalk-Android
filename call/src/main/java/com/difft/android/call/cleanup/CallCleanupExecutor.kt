@@ -13,18 +13,18 @@ import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
-/**
- * Concurrency-safe once-only executor for a list of named cleanup steps.
- *
- * - Mutex + atomic flag ensure idempotency even under concurrent trigger. The call session's end
- *   starts it once; a call page's `onCleared` only detaches from the session and never starts it.
- * - Each step is wrapped in `runCatching` so one failure cannot block the rest.
- * - Runs on `appScope` + `Dispatchers.IO` wrapped with `NonCancellable` so the
- *   cleanup always completes even after the call session's scope is cancelled.
- *
- * Step ownership stays in the call site (the call session). The executor only owns
- * ordering, concurrency, and error isolation.
- */
+
+
+
+
+
+
+
+
+
+
+
+
 class CallCleanupExecutor(
     private val runScope: CoroutineScope = appScope,
 ) {
@@ -34,7 +34,7 @@ class CallCleanupExecutor(
     private val jobRef = AtomicReference<Job?>(null)
     private val released = AtomicBoolean(false)
 
-    /** Start cleanup with the given step list. Subsequent calls are no-ops. */
+    
     fun start(reason: String, steps: List<Step>) {
         val job = runScope.launch(Dispatchers.IO) {
             withContext(NonCancellable) {

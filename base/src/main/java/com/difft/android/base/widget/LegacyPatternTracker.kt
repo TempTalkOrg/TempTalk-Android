@@ -2,11 +2,11 @@ package com.difft.android.base.widget
 
 import kotlin.math.hypot
 
-/**
- * The dot-selection rule patterns were saved with before segment hit testing: only the current
- * position of each event counts, a generous radius picks the first dot, later dots need a sample
- * within [hitRadius]. Kept unchanged so a stored pattern drawn under it can still be matched.
- */
+
+
+
+
+
 internal class LegacyPatternTracker(
     private val grid: PatternGrid,
     private val hitRadius: Float,

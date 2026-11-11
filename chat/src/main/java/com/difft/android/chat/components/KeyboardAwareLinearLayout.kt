@@ -33,10 +33,10 @@ import com.difft.android.chat.util.Util
 import com.difft.android.chat.util.ViewUtil
 import java.util.HashSet
 
-/**
- * LinearLayout that, when a view container, will report back when it thinks a soft keyboard
- * has been opened and what its height would be.
- */
+
+
+
+
 open class KeyboardAwareLinearLayout @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
@@ -142,10 +142,10 @@ open class KeyboardAwareLinearLayout @JvmOverloads constructor(
                 }
             }
         } catch (e: Exception) {
-            // Catch Exception (not Throwable) — Android 11+ hidden-API enforcement throws
-            // RuntimeException wrapping the reflection error, which the original narrow
-            // multi-catch missed and would bubble up through onMeasure → activity crash.
-            // Errors (OOM, StackOverflow) intentionally propagate.
+            
+            
+            
+            
             L.w(e) { "$TAG getViewInset failed" }
         }
         return statusBarHeight

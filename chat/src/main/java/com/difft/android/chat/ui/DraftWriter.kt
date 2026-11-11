@@ -6,18 +6,18 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.atomic.AtomicLong
 
-/**
- * Single writer for conversation drafts. The debounced save and [DraftViewModel.flushNow] (and
- * a ViewModel being cleared while another opens the same room) can write concurrently, and
- * [DraftRepository.upsertDraft] is a read-then-insert without a version. Every write takes a
- * version when the draft is produced ([nextVersion]) and runs under one lock; a write older than
- * the last one applied to that room is dropped, so an older draft never replaces a newer one.
- */
+
+
+
+
+
+
+
 internal class DraftWriter(
     private val repository: DraftRepository,
     private val order: Order = Order.shared,
 ) {
-    /** Lock and per-room versions shared by every writer in the process. */
+    
     class Order {
         internal val lock = Mutex()
         internal val counter = AtomicLong()

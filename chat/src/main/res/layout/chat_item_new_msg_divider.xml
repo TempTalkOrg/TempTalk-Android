@@ -14,7 +14,7 @@
     <View
         android:layout_width="match_parent"
         android:layout_height="1dp"
-        android:background="@color/t.info"
+        android:background="@color/info"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
@@ -24,6 +24,6 @@
         android:layout_height="wrap_content"
         android:gravity="center"
         android:text="@string/chat_label_new_message"
-        android:textColor="@color/t.info"
+        android:textColor="@color/info"
         android:textSize="12sp" />
 </LinearLayout>

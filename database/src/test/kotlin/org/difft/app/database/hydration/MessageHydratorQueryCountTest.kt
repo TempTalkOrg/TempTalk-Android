@@ -7,18 +7,18 @@ import org.difft.app.database.test.fakes.FakeMessageChildRowLoader
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/**
- * Pins the batched query count at the benchmark window tiers (issue #1162): the number the
- * `:microbenchmark` module measures as real SELECT statements on-device is fixed here as a
- * loader-call contract on the host JVM, where it runs on every `testAll`.
- *
- * At these sizes loader calls and SQL statements coincide (`IN` chunking starts at 500 keys):
- * plain tier = 6 (one per always-queried child table; quote/forward/phone key sets are empty and
- * an empty key set issues no query), uniform rich tier = 14 (adds quote, quote-attachments,
- * forward-context, top forwards, two BFS child levels — the second proving the frontier empty —
- * forward attachments and forward mentions). The old point-query path at the same tiers issues
- * 6 and 24 SELECTs PER MESSAGE (1080 / 4320 at 180) — measured on-device in `QueryCountTest`.
- */
+
+
+
+
+
+
+
+
+
+
+
+
 class MessageHydratorQueryCountTest {
 
     @Test

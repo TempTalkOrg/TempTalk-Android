@@ -23,12 +23,10 @@ import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import java.util.concurrent.TimeUnit
 
-/**
- * A secondary page (1:1 chat settings, design §3.10) pushed from a hosted conversation through
- * `detailNavigation().push(from, destination)`: it stacks above the conversation, Back returns to the
- * conversation (which resumes again), and leaving a removed contact closes exactly the pages about
- * that contact (design §3.2 subjects).
- */
+
+
+
+
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [33])
 class DetailDestinationStackTest {
@@ -38,13 +36,13 @@ class DetailDestinationStackTest {
         override fun shellIntent(context: Context): Intent = Intent("settings-shell")
     }
 
-    /** A page about [subjectId] (group info, contact card, chat settings). */
+    
     private class AboutDestination(private val label: String, override val subjectId: String) : DetailDestination {
         override fun newFragment(): Fragment = StackPageFragment.newInstance(label, handlesBack = false)
         override fun shellIntent(context: Context): Intent = Intent(label)
     }
 
-    /** One page with variants (a moderators page per action): the variant is part of the key. */
+    
     private class VariantDestination(
         private val label: String,
         override val subjectId: String,
@@ -71,7 +69,7 @@ class DetailDestinationStackTest {
         idle()
     }
 
-    /** What SingleChatSettingFragment does once the server removed friend [id]. */
+    
     private fun removeFriend(id: String) {
         val settings = host.pages(TAB_CHATS).last()
         RemovedConversations.add(id)

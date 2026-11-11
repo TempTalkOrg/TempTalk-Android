@@ -36,12 +36,18 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
+import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.onSubscription
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -109,19 +115,30 @@ object ContactorUtil {
 
     val friendStatusUpdate: SharedFlow<Pair<String, Boolean>> = mFriendStatusSubject
 
-    // 协程实现
     private val coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO + CoroutineName("ContactorUtil") + dbKeyFailSoftExceptionHandler)
-    private val fetchAndSaveFlow = MutableSharedFlow<Boolean>(replay = 1) // replay=1 缓存最后一个事件，Boolean表示是否强制刷新
+    private val fetchAndSaveFlow = MutableSharedFlow<Boolean>(replay = 1) 
     private var isCoroutineInitialized = false
 
-    /** The first full sync when a caller wants it now, ahead of the debounce (see [awaitFirstSync]). */
+    
     private val firstSyncFlow = MutableSharedFlow<Boolean>(extraBufferCapacity = 1)
 
-    /**
-     * A first full sync is running. Keeps the chat list's own trigger from re-emitting into the
-     * pipeline, whose `collectLatest` would cancel that run and start over.
-     */
+    
+
+
+
     private val firstSyncInFlight = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    
+
+
+
+    private val immediateSyncRequests = Channel<Unit>(Channel.CONFLATED)
+
+    
+    private val syncInFlight = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    
+    private val immediateSyncPending = MutableStateFlow(false)
 
 
     fun Context.getEntryPoint() = EntryPointAccessors.fromApplication<EntryPoint>(this)
@@ -130,12 +147,12 @@ object ContactorUtil {
         try {
             val id = contactResponse.number ?: return null
 
-            // Use the unified decode helper so bulk-fetch and single-update paths share
-            // the same failure semantics. On null/empty input -> null; on plain string
-            // (no '|') -> the string itself; on V1| with a successful decode -> plaintext;
-            // on V1| with a decode failure (exception or null result) -> null, never the
-            // raw "V1|<base64>" string (which would otherwise be persisted into DB and
-            // surfaced as the contact's display name through the cache).
+            
+            
+            
+            
+            
+            
             val remark = when (val result = decodeRemarkV1OrPlain(contactResponse.remark, id)) {
                 is RemarkDecodeResult.Success -> result.plain
                 RemarkDecodeResult.Failure -> null
@@ -179,9 +196,9 @@ object ContactorUtil {
     }
 
 
-    /**
-     * get data from db first,then through the network
-     */
+    
+
+
     suspend fun getContactWithID(context: Context, id: String): Optional<ContactorModel> = withContext(Dispatchers.IO) {
         val local = wcdb.contactor.getFirstObject(DBContactorModel.id.eq(id))
             ?: wcdb.groupMemberContactor.getFirstObject(DBGroupMemberContactorModel.id.eq(id))
@@ -193,8 +210,8 @@ object ContactorUtil {
         if (contacts.isNotEmpty()) {
             return@withContext Optional.ofNullable(contacts.first())
         }
-        // Weak-snapshot fallback: lowest priority (after live contactor / groupMember / network).
-        // Keeps the name from degrading to a bare UID when the account is gone entirely.
+        
+        
         context.getEntryPoint().getPendingRemovalContactRepository().getSnapshot(id)?.let {
             return@withContext Optional.of(it)
         }
@@ -231,9 +248,9 @@ object ContactorUtil {
                     L.i { "[ContactorUtil] fetchContactors avatar changes: $avatarChanges" }
                 }
 
-                // A by-ids response may omit publicAccountType; from() defaulted it to NORMAL, which
-                // would demote a known OFFICIAL on delete+reinsert. Carry forward the prior DB value
-                // when the server field is absent (full sync stays authoritative and is untouched).
+                
+                
+                
                 existInContacts.forEach { contact ->
                     val serverValue = rawContacts.find { it.number == contact.id }?.publicConfigs?.publicAccountType
                     val priorValue = list.find { it.id == contact.id }?.publicAccountType
@@ -280,10 +297,8 @@ object ContactorUtil {
     fun getSortLetter(name: String): String {
         if (TextUtils.isEmpty(name)) return "#"
         return try {
-            //汉字转换成拼音
             val pinyin = CharacterParser.getSelling(name)
             val sortString = pinyin.substring(0, 1).uppercase(Locale.getDefault())
-            // 正则表达式，判断首字母是否是英文字母
             if (sortString.matches(Regex("[A-Z]"))) sortString.uppercase(Locale.getDefault()) else "#"
         } catch (e: Exception) {
             L.w(e) { "[ContactorUtil] getFirstChar error:" }
@@ -315,16 +330,29 @@ object ContactorUtil {
         }
     }
 
-    /**
-     * Runs the first full sync now, without the debounce, and waits for it, so a screen can open with
-     * the contactor table populated. Idempotent: an install that has already synced returns at once,
-     * and a running sync is joined rather than restarted. Returns whether that sync succeeded.
-     */
+    
+
+
+
+
     suspend fun awaitFirstSync(): Boolean {
         if (globalServices.userManager.getUserData()?.syncedContactsV5 == true) return true
         init()
         return getContactsStatusUpdate
             .onSubscription { if (firstSyncInFlight.compareAndSet(false, true)) firstSyncFlow.emit(true) }
+            .first()
+    }
+
+    
+
+
+
+    suspend fun refreshNow(): Boolean {
+        init()
+        return getContactsStatusUpdate
+            .onSubscription {
+                if (!syncInFlight.get() && immediateSyncPending.compareAndSet(false, true)) immediateSyncRequests.trySend(Unit)
+            }
             .first()
     }
 
@@ -342,18 +370,22 @@ object ContactorUtil {
         isCoroutineInitialized = true
     }
 
-    /**
-     * fetch and save contacts to db using coroutines
-     * Uses debounce(2000) for frequency control (2 seconds)
-     */
+    
+
+
+
     @OptIn(FlowPreview::class)
     private fun setupFetchAndSaveContactorsWithCoroutines() {
         coroutineScope.launch {
             merge(
-                fetchAndSaveFlow.debounce(2000), // 频率控制：2秒内只处理最后一次请求
-                firstSyncFlow,
+                
+                
+                fetchAndSaveFlow.debounce(2000).onEach { immediateSyncPending.first { !it } }.map { it to false },
+                firstSyncFlow.map { it to false },
+                immediateSyncRequests.receiveAsFlow().map { true to true },
             )
-                .collectLatest { forceRefresh ->
+                .collectLatest { (forceRefresh, immediate) ->
+                    syncInFlight.set(true)
                     try {
                         val httpService = application.getEntryPoint().getHttpClient().httpService
                         val contactsResponse = httpService.fetchAllContactors()
@@ -361,20 +393,15 @@ object ContactorUtil {
                         val contacts = contactsResponse.data?.contacts?.toMutableList() ?: mutableListOf()
                         val directoryVersion = contactsResponse.data?.directoryVersion ?: 0
 
-                        // Gate for mechanism-3 sweep: null data = server error (200 with no body) →
-                        // distinct from an empty-but-present list, so we never sweep on an error response.
+                        
+                        
                         val serverReturnedFriendList = contactsResponse.data?.contacts != null
 
-                        // 检查是否需要跳过处理
                         val currentVersion = globalServices.userManager.getUserData()?.directoryVersionForContactors ?: 0
                         val isSyncedContacts = globalServices.userManager.getUserData()?.syncedContactsV5 ?: false
 
                         L.i { "[ContactorUtil] fetchAndSaveContactors total count:" + contacts.size + " - directoryVersion:$directoryVersion, currentVersion:$currentVersion, isSyncedContacts:$isSyncedContacts, forceRefresh:$forceRefresh" }
 
-                        // 跳过处理的条件：
-                        // 1. 新版本 <= 当前版本
-                        // 2. 且 通讯录已经首次同步过
-                        // 3. 且 不是手动强制刷新
                         if (directoryVersion <= currentVersion && isSyncedContacts && !forceRefresh) {
                             emitGetContactsStatusUpdate(true)
                             return@collectLatest
@@ -385,11 +412,11 @@ object ContactorUtil {
                         val noAvatarIds = contacts.filter { it.avatar == null }.map { it.number ?: "null" }
                         L.i { "[ContactorUtil] fetchAndSaveContactors total:${contacts.size}, withoutAvatar:${noAvatarIds.size}, ids:$noAvatarIds" }
 
-                        // Snapshot prior friend ids before the table is wiped (both ≤1000 and streaming paths).
+                        
                         val oldContactorIds = wcdb.contactor.allObjects.map { it.id }.toSet()
-                        // Snapshot official ids known before this sync (cache is overwritten by replaceAll
-                        // below). Used to shield the official conversation from the mechanism-3 sweep if the
-                        // server ever omits it from the directory.
+                        
+                        
+                        
                         val preSyncOfficialIds = OfficialAccountCache.state.value
 
                         wcdb.contactor.deleteObjects()
@@ -408,31 +435,30 @@ object ContactorUtil {
                             emitContactsUpdate(allContactEntities.map { it.id })
                         }
 
-                        // 数据保存成功后，才更新版本号
+                        
                         updateLocalContactDirectoryVersionIfChanged(directoryVersion)
                         L.i { "[ContactorUtil] SaveContactors complete directoryVersion=$directoryVersion" }
 
-                        // 更新状态
                         globalServices.userManager.update {
                             this.syncedContactsV5 = true
                         }
 
                         L.i { "[ContactorUtil] fetchAndSaveContactors complete" + contacts.size }
-                        // Reconcile synchronously before the sweep so the weak set is up-to-date.
+                        
                         val reconcileOk = application.getEntryPoint().getWeakContactReconciler().reconcile("fullSync")
 
-                        // Mechanism 3: sweep rooms for friends removed while a notify was missed.
-                        // Only ex-friends (in oldContactorIds but absent from the new list) and not
-                        // in the weak table are swept. Gate on serverReturnedFriendList: null data
-                        // (error as HTTP 200) would make every old friend look vanished.
-                        // Also gate on reconcileOk: if reconcile failed/was incomplete the weak table is
-                        // stale/empty, so isPending checks below would read false for genuinely-weak uids
-                        // and the sweep would delete their rooms by mistake (worst at first launch / flaky net).
+                        
+                        
+                        
+                        
+                        
+                        
+                        
                         val newFriendIds = contacts.mapNotNull { it.number }.toSet()
                         val vanishedFriends = oldContactorIds - newFriendIds
                         if (vanishedFriends.isNotEmpty()) {
                             if (!serverReturnedFriendList) {
-                                // data==null: skip sweep — never delete conversations off an absent list.
+                                
                                 L.w { "[ContactorUtil] fullSync: server returned no friend list (data null), skip room sweep (${vanishedFriends.size} would-be vanished)" }
                             } else if (!reconcileOk) {
                                 L.w { "[ContactorUtil] fullSync: reconcile failed, skip mechanism-3 room sweep to avoid false deletions (${vanishedFriends.size} would-be vanished)" }
@@ -440,10 +466,10 @@ object ContactorUtil {
                                 val entryPoint = application.getEntryPoint()
                                 val pendingRepo = entryPoint.getPendingRemovalContactRepository()
                                 val dbMessageStore = entryPoint.getDBMessageStore()
-                                // One batch read of the weak uid set (uid+expireAt columns only, no snapshot
-                                // deserialization) instead of N serial isPending() getFirstObject queries.
+                                
+                                
                                 val pendingUids = pendingRepo.getAllExpireAt().keys
-                                // Never sweep an official conversation off an incomplete directory list.
+                                
                                 val officialVanished = vanishedFriends intersect preSyncOfficialIds
                                 if (officialVanished.isNotEmpty()) {
                                     L.w { "[ContactorUtil] fullSync: kept official conversation(s) out of room sweep count=${officialVanished.size}" }
@@ -457,11 +483,16 @@ object ContactorUtil {
                         }
                         emitGetContactsStatusUpdate(true)
 
+                    } catch (e: CancellationException) {
+                        
+                        throw e
                     } catch (e: Exception) {
                         L.e(e) { "[ContactorUtil] fetchAndSaveContactors fail:" }
                         emitGetContactsStatusUpdate(false)
                     } finally {
                         firstSyncInFlight.set(false)
+                        syncInFlight.set(false)
+                        if (immediate) immediateSyncPending.value = false
                     }
                 }
         }
@@ -503,7 +534,7 @@ object ContactorUtil {
         return set.contains(contactID)
     }
 
-    //发送好友请求消息，目前兼容老版本，后面可能移除
+    
     fun sendFriendRequestMessage(scope: CoroutineScope, friendRequestText: String, forWhat: For) {
         scope.launch(Dispatchers.IO) {
             runCatching {
@@ -539,16 +570,16 @@ object ContactorUtil {
     fun updateRemark(contactId: String, remarkString: String?) {
         when (val result = decodeRemarkV1OrPlain(remarkString, contactId)) {
             is RemarkDecodeResult.Success -> updateContactRemark(result.plain, contactId)
-            RemarkDecodeResult.Failure -> Unit // decode failed - preserve local value, do not clear
+            RemarkDecodeResult.Failure -> Unit 
         }
     }
 
     private fun updateContactRemark(remark: String?, contactId: String) {
-        // Diff short-circuit: skip when cache holds a definitive value matching the new value.
-        // We deliberately do NOT short-circuit when normalized is null and cache.get returns null,
-        // because a null cache result is ambiguous between "no remark" and "preload not yet
-        // completed for this uid" -- in the latter case the DB may still hold an old value that
-        // must be cleared.
+        
+        
+        
+        
+        
         val normalized = remark?.takeIf { it.isNotEmpty() }
         if (normalized != null && ContactRemarkCache.getRemark(contactId) == normalized) return
 
@@ -577,7 +608,7 @@ object ContactorUtil {
     }
 
     private fun updateContactRemarkAvatar(plainAvatarJson: String?, contactId: String) {
-        // Diff short-circuit: skip when cache holds a definitive value matching the new value.
+        
         val normalized = plainAvatarJson?.takeIf { it.isNotEmpty() }
         if (normalized != null && ContactRemarkCache.getRemarkAvatar(contactId) == normalized) return
 
@@ -626,29 +657,29 @@ object ContactorUtil {
         emitContactsUpdate(allContactIds)
     }
 
-    /**
-     * Decodes a V1|-encrypted or plain remark string.
-     *
-     * Three distinct outcomes:
-     *  - input null / empty -> [RemarkDecodeResult.Success] with plain=null (explicit clear)
-     *  - input non-empty and decoded successfully -> [RemarkDecodeResult.Success] with non-empty plain
-     *  - input non-empty but Base64 / decryption throws -> [RemarkDecodeResult.Failure]
-     *    (preserve local value; must NOT be treated as clear)
-     *
-     * Callers ([updateRemark]) must distinguish Success(null) from Failure:
-     * the former writes empty to DB + cache; the latter skips the entry to avoid
-     * accidentally clearing an existing remark.
-     */
+    
+
+
+
+
+
+
+
+
+
+
+
+
     private fun decodeRemarkV1OrPlain(remarkString: String?, contactId: String): RemarkDecodeResult {
         if (remarkString.isNullOrEmpty()) return RemarkDecodeResult.Success(null)
         val parts = remarkString.split("|")
         if (parts.size <= 1) return RemarkDecodeResult.Success(remarkString)
         return try {
             val decoded = ContactRemarkUtil.decodeRemark(Base64.decode(parts[1]), ContactRemarkUtil.keyForUid(contactId))
-            // A null result from decodeRemark indicates a silent decryption failure
-            // (e.g. corrupted ciphertext that does not throw). Treat it as Failure so
-            // the caller preserves the local value rather than surfacing the raw V1|
-            // string to the user as a contact name.
+            
+            
+            
+            
             if (decoded == null) {
                 L.w { "[ContactorUtil] decodeRemarkV1OrPlain returned null uid=$contactId" }
                 RemarkDecodeResult.Failure
@@ -662,9 +693,9 @@ object ContactorUtil {
     }
 
     private sealed interface RemarkDecodeResult {
-        /** Decode succeeded; plain may be null (explicit clear) or a non-empty string. */
+        
         data class Success(val plain: String?) : RemarkDecodeResult
-        /** Decode failed (Base64 / decryption error). Caller must preserve local value and skip. */
+        
         data object Failure : RemarkDecodeResult
     }
 }

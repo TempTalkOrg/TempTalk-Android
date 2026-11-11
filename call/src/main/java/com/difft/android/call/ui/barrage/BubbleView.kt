@@ -32,10 +32,10 @@ import com.difft.android.call.data.TextBubbleMessage
 import kotlin.math.roundToInt
 import kotlinx.coroutines.isActive
 
-/** Bottom of the tabletop stage in overlay-window px while the dock is shown; null otherwise. */
+
 internal val LocalBubbleStageBottomPx = compositionLocalOf<Int?> { null }
 
-/** Start height above the stage bottom while in tabletop: the portrait 120dp is too tall for a ~410dp stage. */
+
 private val TABLETOP_BUBBLE_PADDING = 24.dp
 
 private data class BubbleAnimParams(
@@ -46,18 +46,11 @@ private data class BubbleAnimParams(
     val screenHeightPx: Float,
 )
 
-/**
- * 单个气泡飘动 Composable。
- *
- * ### 绝对坐标定位 + 虚拟时间驱动
- *
- * **定位**：使用 [Modifier.layout] 将 Column 放置到基于 [BubbleAnimParams.screenHeightPx]
- * （气泡创建时冻结）的绝对屏幕坐标，完全脱离父 Box 的尺寸和 alignment。
- * 即使父容器 relayout、WindowInsets 变化或 Compose 重组，气泡位置不受影响。
- *
- * **动画**：维护独立的 virtualElapsedMs，每帧推进量 ≤ 1.5 帧
- * （[MAX_FRAME_ADVANCE]），丢帧时虚拟时间不跳跃。
- */
+
+
+
+
+
 @SuppressLint("ConfigurationScreenWidthHeight")
 @Composable
 fun BoxScope.BubbleView(
@@ -143,8 +136,8 @@ fun BoxScope.BubbleView(
                 val placeable = measurable.measure(
                     constraints.copy(minWidth = 0, minHeight = 0)
                 )
-                // The column's offset places the bubble's left edge; a bubble wider than the room
-                // right of it (a long name on a narrow window) moves left to stay on screen.
+                
+                
                 val maxX = if (constraints.hasBoundedWidth) (constraints.maxWidth - placeable.width).coerceAtLeast(0) else Int.MAX_VALUE
                 layout(placeable.width, placeable.height) {
                     placeable.place(

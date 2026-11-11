@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
@@ -18,7 +17,7 @@ import com.difft.android.base.ui.compose.settings.DifftSettingsDefaults
 import com.difft.android.base.ui.compose.settings.DifftSettingsGroup
 import com.difft.android.base.ui.compose.settings.DifftSwitchRow
 
-/** Which of the three items still notify; shared by "Other Groups Still Notify" and "Still Notify". */
+
 data class StillNotifyState(
     val mentionMe: Boolean = true,
     val mentionAll: Boolean = false,
@@ -37,16 +36,18 @@ data class StillNotifyState(
     }
 }
 
-/** Three switches (@Me / @All / Group calls) on a settings page; each change is reported at once. */
+
 @Composable
 fun StillNotifyScreen(
     title: String,
     state: StillNotifyState,
     onToggle: (StillNotifyItem, Boolean) -> Unit,
     onBack: () -> Unit,
+    showBackButton: Boolean = true,
+    modifier: Modifier = Modifier,
 ) {
-    Column(Modifier.fillMaxSize().systemBarsPadding()) {
-        TitleBar(titleText = title, onBackClick = onBack)
+    Column(modifier.fillMaxSize()) {
+        TitleBar(titleText = title, onBackClick = onBack, showBackButton = showBackButton)
         Column(
             Modifier
                 .fillMaxSize()

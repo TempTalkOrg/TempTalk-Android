@@ -29,13 +29,13 @@ internal abstract class ElementEditSession(
     }
 
     companion object {
-        /**
-         * Map src to dst using the matrix.
-         *
-         * @param dst    Output point.
-         * @param matrix Matrix to transform point with.
-         * @param src    Input point.
-         */
+        
+
+
+
+
+
+
         private fun mapPoint(dst: PointF, matrix: Matrix, src: PointF) {
             val input = floatArrayOf(src.x, src.y)
             val out = FloatArray(2)

@@ -29,8 +29,7 @@
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintBottom_toBottomOf="parent" />
 
-    <!-- Forced dark: this sheet hardcodes .night colours, so the shell cannot infer dark from the
-         resource configuration. Not clickable: the row owns selection. -->
+    
     <com.difft.android.base.widget.DifftCheckBoxView
         android:id="@+id/checkbox"
         android:layout_width="24dp"

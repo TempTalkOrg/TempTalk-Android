@@ -26,23 +26,23 @@ import androidx.compose.ui.unit.dp
 import com.difft.android.call.R
 import com.difft.android.call.ui.tabletop.TabletopGeometry
 
-/** Controls on the tabletop dock. */
+
 enum class DockSlot { MIC, VIDEO, SPEAKER, EMOJI, INVITE, PEOPLE, MORE, END }
 
-/**
- * Dock rows, top to bottom. Group: Mic · Video · Speaker · Emoji over Invite · People · More ·
- * Leave, People only where the participants panel can render ([peopleAvailable]). 1v1 has no
- * panel: Invite · More · End (flip camera stays in the More sheet, so the grid never jumps).
- */
+
+
+
+
+
 fun dockSlots(isGroup: Boolean, peopleAvailable: Boolean): List<List<DockSlot>> = listOf(
     listOf(DockSlot.MIC, DockSlot.VIDEO, DockSlot.SPEAKER, DockSlot.EMOJI),
     listOfNotNull(DockSlot.INVITE, DockSlot.PEOPLE.takeIf { isGroup && peopleAvailable }, DockSlot.MORE, DockSlot.END),
 )
 
-/**
- * More-sheet quick actions for [chrome]: none on the tabletop dock (Invite and Emoji are on it, People
- * only for group calls when the panel is available), the rail's own set beside the rail (#1451), otherwise what the bar plan dropped.
- */
+
+
+
+
 fun moreQuickActions(chrome: CallChromeLayout, isGroup: Boolean, isScreenShare: Boolean): List<ActionBarQuickAction> = when {
     chrome.dock != null -> emptyList()
     chrome.rail != null -> railMoreQuickActions(isGroup, isScreenShare, chrome.rail.fitsSevenControls)
@@ -58,14 +58,11 @@ private val CONSOLE_ROW_GAP = 24.dp
 internal const val TABLETOP_DOCK_TAG = "call_tabletop_dock"
 internal const val TABLETOP_CONSOLE_TAG = "call_tabletop_console"
 
-/**
- * The controls below a half-open horizontal fold, always shown while in tabletop. The dock box is
- * transparent and takes no input, so the page ground shows through and the 1v1 floating window
- * above or beside the console stays interactive; a tap there reaches the root like a tap on the
- * stage. Only the console, where the layout put it at the window bottom (call-layout decision 39,
- * see [TabletopGeometry.consoleDp]), consumes taps, so taps between its controls do not toggle the
- * title bar. Provisional style after the iOS standing console, to be refined by the UI design.
- */
+
+
+
+
+
 @Composable
 internal fun CallTabletopDock(
     dock: TabletopGeometry,
@@ -75,7 +72,7 @@ internal fun CallTabletopDock(
     isGroup: Boolean,
     bottomInsetDp: Float = 0f,
 ) {
-    // Top left, never mirrored: the console's absolute offset is from the window's left edge.
+    
     Box(Modifier.fillMaxSize(), contentAlignment = AbsoluteAlignment.TopLeft) {
         Box(
             Modifier
@@ -84,8 +81,8 @@ internal fun CallTabletopDock(
                 .height(dock.dockHeightDp.dp)
                 .testTag(TABLETOP_DOCK_TAG),
         )
-        // In window dp, like the cards: never mirrored in RTL, and outside the dock box so a console
-        // laid out above the dock top still takes its taps.
+        
+        
         val console = dock.consoleDp(bottomInsetDp)
         BoxWithConstraints(
             Modifier

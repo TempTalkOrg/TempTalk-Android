@@ -22,43 +22,43 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.cancellation.CancellationException
 
-/**
- * A length-known byte stream for one attachment. [length] is the exact number of bytes [stream] will
- * yield, so the writer can emit the frame length prefix without buffering the attachment in memory.
- */
+
+
+
+
 class AttachmentBytes(val length: Long, val stream: InputStream)
 
-/**
- * Resolves the raw bytes for an attachment named by [NeutralRecord.Attachment]'s `contentRef` — the
- * seam that keeps the writer free of any knowledge of platform storage. The writer streams the bytes
- * into the encrypted body and closes the stream. Null means no bytes are available for the ref, and
- * the writer emits a zero-length attachment frame instead.
- */
+
+
+
+
+
+
 fun interface AttachmentByteSource {
-    /** Open the bytes for [contentRef] with a known length, or null if unavailable. */
+    
     fun open(contentRef: String): AttachmentBytes?
 }
 
-/**
- * Frames and encrypts a neutral record stream into the migration container, using [BackupCrypto]'s
- * envelope (PBKDF2 → AES-256-CTR → trailing HMAC-SHA256); the body layout is [ContainerFormat].
- *
- * Constant-memory: records are encoded and encrypted one frame at a time and attachment bytes are
- * copied through a fixed buffer, so nothing is ever materialized whole. The KDF (~1s) runs once.
- *
- * Any throwable mid-write, cancellation included, calls [ArchiveSink.abort] before rethrowing, so no
- * partial archive lingers. Runs on [Dispatchers.IO].
- */
+
+
+
+
+
+
+
+
+
+
 interface ContainerWriter {
 
-    /**
-     * Write [records] (+ their attachment bytes) to [sink] as an encrypted container.
-     *
-     * @param sourceAccount exporting account id, written into the manifest for the importer's
-     *   account-match check.
-     * @return the [ContainerManifest] describing what was written, with the true tallied counts.
-     * @throws MigrationException.EncryptionFailed on cipher / IO failure during the write.
-     */
+    
+
+
+
+
+
+
+
     suspend fun write(
         records: Flow<NeutralRecord>,
         sink: ArchiveSink,
@@ -66,16 +66,16 @@ interface ContainerWriter {
         attachmentBytes: AttachmentByteSource,
         sourceAccount: String,
         sourceAppVersion: String,
-        /**
-         * What the stream will hold, counted by the source before writing, so the receiver can draw a
-         * determinate bar from the first frame. Null writes zeros, which readers treat as unknown.
-         */
+        
+
+
+
         totals: ContainerTotals? = null,
-        /**
-         * Runs right before the end marker, after every record and attachment frame. Until the end
-         * marker and the trailing HMAC are written the receiver cannot commit, so a hook that throws
-         * aborts the container uncommittable (the migration message pause's commit marker, #1382).
-         */
+        
+
+
+
+
         beforeFinalize: (suspend () -> Unit)? = null,
     ): ContainerManifest
 }
@@ -113,9 +113,9 @@ class ContainerWriterImpl @Inject constructor(
             L.e { "[MigrationV2][Container] write failed: ${e.stackTraceToString()}" }
             throw e
         } catch (e: IOException) {
-            // The sink went away under the writer. A cancel closes the pipe before the coroutine is
-            // resumed with the cancellation, so the write fails first and that failure is the cancel;
-            // otherwise the peer hung up. Neither says anything about the data.
+            
+            
+            
             if (!currentCoroutineContext().isActive) {
                 L.w { "[MigrationV2][Container] write cancelled (sink closed)" }
                 currentCoroutineContext().ensureActive()
@@ -133,15 +133,15 @@ class ContainerWriterImpl @Inject constructor(
         }
     }
 
-    /**
-     * The core streaming pipeline: plaintext header (authenticated) → encrypted[ manifest, records,
-     * attachment bytes, end ] → trailing HMAC over header ‖ ciphertext.
-     *
-     * The manifest is the first body frame, so its counts come from the caller's pre-[totals] rather
-     * than a second pass, which would break constant-memory; zeros mean unknown. The reader tallies
-     * the true counts up to the END sentinel, and the returned manifest carries those. The identity
-     * fields are authoritative as written.
-     */
+    
+
+
+
+
+
+
+
+
     private suspend fun runWrite(
         records: Flow<NeutralRecord>,
         out: OutputStream,
@@ -160,11 +160,11 @@ class ContainerWriterImpl @Inject constructor(
         val cipher: Cipher = crypto.newAesCtrCipher(Cipher.ENCRYPT_MODE, keys.encKey, iv)
         val mac: Mac = crypto.newHmacSha256(keys.macKey)
 
-        // 1. Plaintext header — NOT encrypted, but IS authenticated by the trailing HMAC.
+        
         out.write(header)
         mac.update(header)
 
-        // 2. Manifest frame: identity fields are final; counts come from the caller's pre-count.
+        
         val provisional = ContainerManifest(
             bodyFormatVersion = ContainerFormat.BODY_FORMAT_VERSION,
             encoding = ContainerFormat.ENCODING_JSONL,
@@ -180,7 +180,7 @@ class ContainerWriterImpl @Inject constructor(
         )
         writeFrame(out, cipher, mac, ContainerFormat.TAG_MANIFEST, codec.encodeManifest(provisional).toByteArray(Charsets.UTF_8))
 
-        // 3. Record frames; attachment records additionally trigger a byte frame.
+        
         var recordCount = 0
         var attachmentCount = 0
         records.collect { record ->
@@ -190,8 +190,8 @@ class ContainerWriterImpl @Inject constructor(
             recordCount++
 
             if (record is NeutralRecord.Attachment) {
-                // Bytes travel only for a non-pointer-only attachment. The frame carries no id, so
-                // it is paired with its record positionally on read.
+                
+                
                 val att = record.value
                 if (!att.pointerOnly) {
                     streamAttachmentFrame(out, cipher, mac, att.stableId, attachmentBytes)
@@ -200,14 +200,14 @@ class ContainerWriterImpl @Inject constructor(
             }
         }
 
-        // 4. End-of-stream sentinel, after the caller's last word: a hook that throws leaves no end marker.
+        
         if (beforeFinalize != null) {
             beforeFinalize()
             currentCoroutineContext().ensureActive()
         }
         writeFrame(out, cipher, mac, ContainerFormat.TAG_END, ByteArray(0))
 
-        // 5. Finalise cipher + flush trailing HMAC over header ‖ ciphertext.
+        
         val finalCt = cipher.doFinal()
         if (finalCt.isNotEmpty()) {
             out.write(finalCt)
@@ -219,14 +219,14 @@ class ContainerWriterImpl @Inject constructor(
         return provisional.copy(recordCount = recordCount, attachmentCount = attachmentCount)
     }
 
-    /**
-     * Stream one attachment's bytes as a single length-prefixed [ContainerFormat.TAG_ATTACHMENT]
-     * frame: `[TAG(1)][LEN(8 BE)][bytes…]`. The length is taken from [AttachmentBytes.length]
-     * (known up front), so the bytes are copied straight through a fixed
-     * [ContainerFormat.ATTACHMENT_COPY_BUFFER] buffer into the cipher, so an arbitrarily large
-     * attachment never enters memory whole. The length is 8 bytes, not the 4 used by JSON frames,
-     * because attachment payloads can exceed `Int.MAX_VALUE`.
-     */
+    
+
+
+
+
+
+
+
     private fun streamAttachmentFrame(
         out: OutputStream,
         cipher: Cipher,
@@ -251,8 +251,8 @@ class ContainerWriterImpl @Inject constructor(
                 copied += read
             }
             if (copied != source.length) {
-                // Declared length and actual bytes diverged, so the frame is malformed and the
-                // reader would under- or over-read. Fail rather than ship a bad archive.
+                
+                
                 throw MigrationException.EncryptionFailed(
                     "attachment byte length mismatch contentRef=$contentRef declared=${source.length} actual=$copied"
                 )
@@ -260,7 +260,7 @@ class ContainerWriterImpl @Inject constructor(
         }
     }
 
-    /** Write the attachment frame header: `[TAG_ATTACHMENT(1)][LEN(8 BE)]`. */
+    
     private fun writeAttachmentPrefix(out: OutputStream, cipher: Cipher, mac: Mac, length: Long) {
         val prefix = ByteBuffer.allocate(1 + 8)
             .order(ByteOrder.BIG_ENDIAN)
@@ -270,12 +270,12 @@ class ContainerWriterImpl @Inject constructor(
         encryptAndWrite(out, cipher, mac, prefix)
     }
 
-    /**
-     * Write one framed payload: `[TAG(1)][LEN(4 BE)][PAYLOAD]`, all encrypted + authenticated.
-     * The tag + length prefix are encrypted alongside the payload (they are part of the body).
-     * Used for manifest + record (JSONL) frames; attachment frames use [streamAttachmentFrame]
-     * with an 8-byte length.
-     */
+    
+
+
+
+
+
     private fun writeFrame(out: OutputStream, cipher: Cipher, mac: Mac, tag: Byte, payload: ByteArray) {
         val prefix = ByteBuffer.allocate(ContainerFormat.FRAME_PREFIX_SIZE)
             .order(ByteOrder.BIG_ENDIAN)
@@ -288,7 +288,7 @@ class ContainerWriterImpl @Inject constructor(
         }
     }
 
-    /** Encrypt [data] through [cipher], write the ciphertext, and feed it to [mac]. */
+    
     private fun encryptAndWrite(out: OutputStream, cipher: Cipher, mac: Mac, data: ByteArray) {
         val ct = cipher.update(data) ?: ByteArray(0)
         if (ct.isNotEmpty()) {

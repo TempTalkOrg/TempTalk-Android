@@ -30,20 +30,12 @@ import org.robolectric.annotation.Config
 import java.io.File
 import java.util.concurrent.ExecutionException
 
-/**
- * T15 / T16 / T41 — how [UriGlideRenderer] hands a source to Glide.
- *
- * T15 is the hard blocker of the image-editor preview: `File(uri.path)` for a MediaStore URI is
- * "/external/images/media/1", a path that never exists, so every gallery image failed to decode.
- * T16 pins the other side of the branch — a sandbox `file://` source must keep the `File` model so
- * the loads that work today stay byte-identical.
- *
- * T15 / T16 read the real `RequestBuilder`'s model (Glide dispatches on the model's runtime type),
- * so they exercise the real Glide registry rather than a stub. T41 needs a load failure at an exact
- * moment, so it stubs the Glide chain instead of racing Glide's executors.
- *
- * Run: :chat:testDebugUnitTest
- */
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [33])
 class UriGlideRendererTest {
@@ -68,7 +60,7 @@ class UriGlideRendererTest {
         unmockkAll()
     }
 
-    /** T15 — a content URI must reach Glide as a `Uri` so the load goes through ContentResolver. */
+    
     @Test
     fun `content uri is handed to glide as a uri`() {
         val source = Uri.parse("content://media/external/images/media/1")
@@ -79,7 +71,7 @@ class UriGlideRendererTest {
         assertEquals(source, model)
     }
 
-    /** T16 — the sandbox / SAF branch keeps the `File` model: no behaviour change where it works. */
+    
     @Test
     fun `file uri keeps the file model`() {
         val path = "/data/user/0/com.difft.android/files/attachment/x.jpg"
@@ -90,7 +82,7 @@ class UriGlideRendererTest {
         assertEquals(path, (model as File).path)
     }
 
-    /** A URI with no path at all still resolves to something loadable rather than `File("")`. */
+    
     @Test
     fun `path less uri is handed to glide as a uri`() {
         val source = Uri.parse("content://com.difft.android.provider")
@@ -101,10 +93,10 @@ class UriGlideRendererTest {
         assertEquals(source, model)
     }
 
-    /**
-     * T41 — the blocking branch runs during the final render, where a swallowed failure would ship
-     * a blacked-out image. The throw is what lets the caller decide, so it must not be absorbed.
-     */
+    
+
+
+
     @Test
     fun `blocking load failure is rethrown rather than swallowed`() {
         val cause = ExecutionException(RuntimeException("glide load failed"))

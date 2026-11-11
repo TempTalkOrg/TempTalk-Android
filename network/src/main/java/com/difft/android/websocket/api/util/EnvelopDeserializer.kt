@@ -23,7 +23,7 @@ object EnvelopDeserializer {
     private fun parseSignalServiceEnvelop(body: ByteArray): Envelope? {
         val envelope: Envelope? = try {
             val signalingKey = globalServices.userManager.getUserData()?.signalingKey ?: ""
-            // 该过程包含对 envelop 数据通道加密的解密过程，不包含端上加密的解密过程
+            
             val input = body
             if (input.size < VERSION_LENGTH || input[VERSION_OFFSET].toInt() != SUPPORTED_VERSION) {
                 throw InvalidVersionException("Unsupported version!");
@@ -37,7 +37,6 @@ object EnvelopDeserializer {
                 L.d { "[EnvelopDeserializer] parse envelope success:${it.timestamp}" }
             }
         } catch (e: InvalidVersionException) {
-            // 解析 proto 数据可能出现异常，可以在这里处理
             L.w(e) { "[EnvelopDeserializer] parse envelope exception:" }
             null
         } catch (e: IOException) {

@@ -48,24 +48,24 @@ import java.security.GeneralSecurityException
 import javax.inject.Named
 import javax.inject.Singleton
 
-/**
- * Hilt providers for the three storage DataStores:
- *
- * - `secure_user.pb`            — encrypted [DataStore]<[UserAuthData]> (auth/identity fields).
- * - `secure_config.pb`          — encrypted [DataStore]<[GlobalConfigData]> (global + call config).
- * - `app_state.preferences_pb`  — plain [DataStore]<[Preferences]> (UX state, DB-recovery flags).
- *
- * All three DataStores share a single [CoroutineScope] backed by [SupervisorJob] + [Dispatchers.IO].
- */
+
+
+
+
+
+
+
+
+
 @Module
 @InstallIn(SingletonComponent::class)
 internal object StorageModule {
 
-    /**
-     * Shared coroutine scope for all DataStores. SupervisorJob + IO dispatcher
-     * matches DataStore's actor model. Cancellation of one DataStore does not
-     * tear down the others.
-     */
+    
+
+
+
+
     @Provides
     @Singleton
     @Named("storage")
@@ -144,15 +144,15 @@ internal object StorageModule {
             produceFile = { context.preferencesDataStoreFile(APP_STATE_FILE) },
         )
 
-    /**
-     * Builds a Tink [Aead], or returns `null` (after logging + Crashlytics report) when the
-     * Android Keystore can't load the existing keyset (crash 8d61a948), so the caller falls
-     * back to [UnavailableDataStore] instead of crashing during Hilt injection.
-     *
-     * Catch scope is deliberately narrow — only [GeneralSecurityException] (InvalidKeyException,
-     * KeyStoreException, …) and [IOException] (keyset prefs read). Programming errors (NPE etc.)
-     * propagate so real bugs still surface. `internal` for direct catch-boundary unit tests.
-     */
+    
+
+
+
+
+
+
+
+
     internal fun buildAeadOrNull(
         context: Context,
         keysetPrefsFile: String,
@@ -170,16 +170,16 @@ internal object StorageModule {
             null
         }
 
-    /** Logs a Keystore-driven AEAD build failure. No sensitive data — `namespace` is a fixed enum string. */
+    
     private fun reportKeystoreFailure(namespace: String, e: Throwable) {
         L.e { "[Storage] aead build failed namespace=$namespace ${e.stackTraceToString()}" }
     }
 
-    /**
-     * Constructs a Tink [Aead] primitive bound to the per-namespace Keystore
-     * master key. Idempotent across calls — [AeadConfig.register] short-circuits
-     * after the first invocation.
-     */
+    
+
+
+
+
     private fun buildAead(
         context: Context,
         keysetPrefsFile: String,

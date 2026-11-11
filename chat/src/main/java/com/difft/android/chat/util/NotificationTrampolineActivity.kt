@@ -4,8 +4,12 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import androidx.annotation.VisibleForTesting
 import com.difft.android.base.activity.ActivityProvider
 import com.difft.android.base.activity.ActivityType
+import com.difft.android.base.activity.NotificationPopupGate
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.LinkDataEntity
 import com.difft.android.chat.group.GroupChatContentActivity
@@ -13,17 +17,19 @@ import com.difft.android.chat.ui.ChatActivity
 import dagger.hilt.android.EntryPointAccessors
 import util.AppForegroundObserver
 
-/**
- * Transparent trampoline Activity that routes notification clicks to MainActivity
- * with appropriate flags based on [AppForegroundObserver.hasUserFacingActivity].
- *
- * - Foreground (a non-PiP page resumed since it last started): Routes WITHOUT CLEAR_TASK,
- *   with EXTRA_OPEN_POPUP=true -> opens popup
- * - Background (including a call PiP window only) / cold start: Routes WITH CLEAR_TASK -> normal deeplink flow
- *
- * Note: Uses Activity instead of BroadcastReceiver because Android 12+ blocks
- * BroadcastReceivers from starting Activities (trampoline restriction).
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
 class NotificationTrampolineActivity : android.app.Activity() {
 
     companion object {
@@ -40,6 +46,47 @@ class NotificationTrampolineActivity : android.app.Activity() {
                 }
             }
         }
+
+        
+
+
+
+
+
+        @VisibleForTesting
+        internal fun mainActivityFlags(isForegrounded: Boolean): Int =
+            if (isForegrounded) 0 else Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NEW_TASK
+
+        
+
+
+
+
+
+
+        @VisibleForTesting
+        internal fun startPopupAfterLaunch(context: Context, popup: Intent, blocker: () -> String?) {
+            val app = context.applicationContext
+            Handler(Looper.getMainLooper()).postDelayed({
+                val reason = blocker()
+                if (reason == null) {
+                    app.startActivity(popup)
+                } else {
+                    L.w { "[NotificationTrampoline] delayed popup dropped blocker=$reason" }
+                }
+            }, POPUP_DELAY_MS)
+        }
+
+        
+        private fun delayedPopupBlocker(gate: NotificationPopupGate): String? = when {
+            !AppForegroundObserver.hasUserFacingActivity() -> "background"
+            gate.isMainActivityHostingRecovery() -> "recovery"
+            else -> gate.inPlacePopupBlocker()
+        }
+
+        
+        @VisibleForTesting
+        internal const val POPUP_DELAY_MS = 120L
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -58,15 +105,39 @@ class NotificationTrampolineActivity : android.app.Activity() {
             applicationContext,
             NotificationTrampolineEntryPoint::class.java
         )
-        // Not isForegrounded(): this launch may restart the page below first (HyperOS), and a
-        // call PiP window alone is not the app being in use (#1427).
+        
+        
         val isForegrounded = AppForegroundObserver.hasUserFacingActivity()
-        L.i { "[NotificationTrampoline] isForegrounded=$isForegrounded, processForegrounded=${AppForegroundObserver.isForegrounded()}, startedActivityCount=${AppForegroundObserver.getStartedActivityCount()}, contactId=$contactId, groupId=$groupId" }
+        
+        
+        
+        
+        val gate = applicationContext as? NotificationPopupGate
+        val popupIntent = if (isForegrounded) ChatPopupIntents.create(this, contactId, groupId) else null
+        var popupBlocker: String? = null
+        val route = when {
+            !isForegrounded -> Route.MAIN.also { popupBlocker = "background" }
+            gate == null -> Route.MAIN.also { popupBlocker = "no_gate" }
+            gate.isMainActivityHostingRecovery() -> Route.DROP.also { popupBlocker = "recovery" }
+            popupIntent == null -> Route.MAIN.also { popupBlocker = "invalid_id" }
+            else -> {
+                popupBlocker = gate.inPlacePopupBlocker()
+                if (popupBlocker == null) Route.POPUP else Route.MAIN
+            }
+        }
+        L.i { "[NotificationTrampoline] isForegrounded=$isForegrounded, processForegrounded=${AppForegroundObserver.isForegrounded()}, startedActivityCount=${AppForegroundObserver.getStartedActivityCount()}, route=$route, blocker=$popupBlocker, contactId=$contactId, groupId=$groupId" }
 
-        val mainIntent = createMainActivityIntent(entryPoint, contactId, groupId, isForegrounded)
-        startActivity(mainIntent)
+        when (route) {
+            Route.POPUP -> if (popupIntent != null && gate != null) {
+                startPopupAfterLaunch(this, popupIntent) { delayedPopupBlocker(gate) }
+            }
+            Route.MAIN -> startActivity(createMainActivityIntent(entryPoint, contactId, groupId, isForegrounded))
+            Route.DROP -> Unit
+        }
         finish()
     }
+
+    private enum class Route { POPUP, MAIN, DROP }
 
     private fun createMainActivityIntent(
         entryPoint: NotificationTrampolineEntryPoint,
@@ -84,13 +155,10 @@ class NotificationTrampolineActivity : android.app.Activity() {
                 putExtra(ChatActivity.BUNDLE_KEY_CONTACT_ID, contactId)
             }
 
+            addFlags(mainActivityFlags(isForegrounded))
             if (isForegrounded) {
-                // Foreground: preserve existing pages, open popup
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                
                 putExtra(EXTRA_OPEN_POPUP, true)
-            } else {
-                // Background/Cold start: clear task for proper navigation
-                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NEW_TASK)
             }
         }
     }

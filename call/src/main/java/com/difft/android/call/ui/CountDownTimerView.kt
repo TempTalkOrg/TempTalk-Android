@@ -90,8 +90,8 @@ fun CountDownTimerView(modifier: Modifier, viewModel: LCallViewModel, callConfig
     Row(
         modifier = modifier
             .wrapContentSize()
-            // Not a library colour: 80 % veil over the call ground (Gray900), so the timer stays
-            // readable over video. No semantic token carries the alpha.
+            
+            
             .background(color = Color(0xCC181A20), shape = DifftTheme.radius.mediumShape)
             .padding(start = 4.dp, top = 2.dp, end = 4.dp, bottom = 2.dp)
             .graphicsLayer { rotationZ = countDownShakeAnim.value },

@@ -14,7 +14,7 @@ class NotifyMessage(
     notifySequenceId: Long,
     sequenceId: Long,
     mode: Int,
-    var notifyContent: String,//json   SignalNotifyMessage
+    var notifyContent: String,
 ) : Message(
     id,
     fromWho,

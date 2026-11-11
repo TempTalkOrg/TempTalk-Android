@@ -26,16 +26,16 @@ import difft.android.messageserialization.model.MessageActivityNoticeData
 import org.whispersystems.signalservice.internal.push.conversationId
 import java.util.concurrent.TimeUnit
 
-/**
- * Sends a [MessageActivityNotice][org.whispersystems.signalservice.internal.push.SignalServiceProtos.MessageActivityNotice]
- * after an activity (e.g., COPY) completes. Mirrors [PushForwardNoticeSendJob] 1:1 —
- * see that class's KDoc for the design rationale (visible-but-silent, per-target queues,
- * three-way sendTs alignment for messageId dedup across paths, etc.).
- *
- * Difference from forward notice: payload uses the new `MessageActivityNotice` proto
- * (oneof typeData → CopyData for this iteration; future types add new oneof cases) and
- * routes through [NewSignalServiceMessageSender.sendActivityNoticeMessage].
- */
+
+
+
+
+
+
+
+
+
+
 class PushActivityNoticeSendJob @AssistedInject constructor(
     @Assisted parameters: Parameters?,
     @Assisted private val target: For,
@@ -63,14 +63,14 @@ class PushActivityNoticeSendJob @AssistedInject constructor(
             conversation = conversationId {
                 when (val src = target) {
                     is For.Group -> groupId = ByteString.copyFrom(src.id.transformGroupIdFromLocalToServer())
-                    is For.Account -> number = src.id   // peer uid (= myId for NTS source)
+                    is For.Account -> number = src.id   
                 }
             }
         }.build()
 
-        // sendSyncToSelf: true only for 1v1-to-other. Groups fan out to all members
-        // server-side (including my-as-member); NTS recipient=self already reaches
-        // every device of mine.
+        
+        
+        
         val sendSyncToSelf = target is For.Account && target.id != globalServices.myId
 
         L.i {
@@ -92,9 +92,9 @@ class PushActivityNoticeSendJob @AssistedInject constructor(
 
         val success = result.success
         if (success != null) {
-            // Primary send succeeded → insert local DB record on THIS device.
-            // DB failure is isolated — do NOT rethrow. Retry would re-send the
-            // notice to peers (who already have it), producing duplicates.
+            
+            
+            
             try {
                 localMessageCreator.createActivityNoticeMessage(
                     operatorId = globalServices.myId,

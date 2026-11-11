@@ -19,13 +19,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.difft.android.base.ui.compose.input.ClearMode
 import com.difft.android.base.ui.compose.input.DifftClearableTextField
@@ -42,15 +40,15 @@ import com.difft.android.chat.contacts.data.getContactAvatarUrl
 import com.difft.android.messageserialization.db.store.getDisplayNameWithoutRemarkForUI
 import org.difft.app.database.models.ContactorModel
 
-/**
- * Avatar + name block of the contact card.
- *
- * Browse: avatar (tap → preview), display name, a persistent pencil after the name (remark edit
- * entry, hidden for self) and the original-name / original-avatar subtitle when a remark is set.
- * Edit: avatar wears [AvatarEditOverlay] (tap → change remark avatar), the name becomes a bordered
- * 40dp input holding the remark, and [RemarkQuickFillRow] sits under it while the contact's real
- * name still adds something. The privacy line lives in the top bar, not here.
- */
+
+
+
+
+
+
+
+
+
 @Composable
 internal fun ContactDetailHeader(
     contactor: ContactorModel?,
@@ -96,7 +94,7 @@ internal fun ContactDetailHeader(
             }
         }
 
-        Spacer(modifier = Modifier.width(AVATAR_NAME_GAP))
+        Spacer(modifier = Modifier.width(DifftTheme.spacing.insetMedium))
 
         if (isEditing) {
             Column(modifier = Modifier.weight(1f)) {
@@ -106,7 +104,7 @@ internal fun ContactDetailHeader(
                     onDone = onSubmitEdit,
                 )
                 if (showQuickFill) {
-                    Spacer(modifier = Modifier.height(QUICK_FILL_TOP_GAP))
+                    Spacer(modifier = Modifier.height(DifftTheme.spacing.stackXSmall))
                     RemarkQuickFillRow(originalName = quickFillName, onFill = onQuickFill)
                 }
             }
@@ -157,24 +155,20 @@ private fun NameColumn(
             )
 
             if (isOfficialAccount) {
-                Spacer(modifier = Modifier.width(4.dp))
-                Icon(
-                    painter = painterResource(id = R.drawable.chat_ic_official_bot_badge),
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp),
-                    tint = Color.Unspecified
-                )
+                Spacer(modifier = Modifier.width(DifftTheme.spacing.inlineXSmall))
+                Text(stringResource(R.string.contacts_official), style = DifftTheme.typography.p4,
+                    color = DifftTheme.colors.textInfo)
             }
 
             if (showEditEntry) {
-                Spacer(modifier = Modifier.width(PENCIL_GAP))
+                Spacer(modifier = Modifier.width(DifftTheme.spacing.inlineSmall))
                 Icon(
                     painter = painterResource(id = R.drawable.chat_ic_pencil),
                     contentDescription = null,
                     modifier = Modifier
                         .clickable { onEditClick() }
-                        .padding(PENCIL_TOUCH_PADDING)
-                        .size(PENCIL_SIZE),
+                        .padding(DifftTheme.spacing.insetSmall)
+                        .size((DifftTheme.contacts.cardIcon - DifftTheme.contacts.gapSmall)),
                     tint = DifftTheme.colors.textTertiary
                 )
             }
@@ -184,7 +178,7 @@ private fun NameColumn(
             (hasRemark && !originalName.isNullOrEmpty()) ||
             hasRemarkAvatar
         if (showSubtitle) {
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(DifftTheme.spacing.inlineXSmall))
             SubtitleRow(
                 isOfficialAccount = isOfficialAccount,
                 hasRemark = hasRemark,
@@ -198,10 +192,10 @@ private fun NameColumn(
     }
 }
 
-/**
- * The library form field holding the remark (empty when there is none), with a trailing clear
- * button. 16sp Regular per spec — a notch below the browse-mode name.
- */
+
+
+
+
 @Composable
 private fun RemarkNameInput(
     value: String,
@@ -253,10 +247,10 @@ private fun SubtitleRow(
             }
         }
         when {
-            // Both remarked: inline "[smallAvatar] originalName" without key labels.
+            
             hasRemark && hasRemarkAvatar && !originalName.isNullOrEmpty() -> {
                 SmallOriginalAvatar(originalAvatarJson, contactor, onOriginalAvatarClick)
-                Spacer(modifier = Modifier.width(4.dp))
+                Spacer(modifier = Modifier.width(DifftTheme.spacing.inlineXSmall))
                 Text(
                     text = originalName,
                     style = DifftTheme.typography.p3,
@@ -265,7 +259,7 @@ private fun SubtitleRow(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            // Only name remarked: "Name: originalName"
+            
             hasRemark && !originalName.isNullOrEmpty() -> {
                 Text(
                     text = stringResource(R.string.contact_name_label, originalName),
@@ -275,14 +269,14 @@ private fun SubtitleRow(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            // Only avatar remarked: "Original: [smallAvatar]"
+            
             hasRemarkAvatar -> {
                 Text(
                     text = stringResource(R.string.contact_avatar_label),
                     style = DifftTheme.typography.p3,
                     color = tertiary,
                 )
-                Spacer(modifier = Modifier.width(4.dp))
+                Spacer(modifier = Modifier.width(DifftTheme.spacing.inlineXSmall))
                 SmallOriginalAvatar(originalAvatarJson, contactor, onOriginalAvatarClick)
             }
         }
@@ -295,10 +289,10 @@ private fun SmallOriginalAvatar(
     contactor: ContactorModel?,
     onClick: () -> Unit,
 ) {
-    val avatarSizePx = with(LocalDensity.current) { 20.dp.roundToPx() }
+    val avatarSizePx = with(LocalDensity.current) { (DifftTheme.contacts.cardIcon - DifftTheme.contacts.gapSmall).roundToPx() }
     Box(
         modifier = Modifier
-            .size(20.dp)
+            .size((DifftTheme.contacts.cardIcon - DifftTheme.contacts.gapSmall))
             .clip(CircleShape)
             .clickable { onClick() }
     ) {
@@ -321,11 +315,3 @@ private fun SmallOriginalAvatar(
         )
     }
 }
-
-
-private val AVATAR_NAME_GAP = 12.dp
-private val PENCIL_GAP = 8.dp
-// Spec says 16dp; Tabler's 2px stroke reads too thin at that size, so 20dp.
-private val PENCIL_SIZE = 20.dp
-private val PENCIL_TOUCH_PADDING = 8.dp
-private val QUICK_FILL_TOP_GAP = 4.dp

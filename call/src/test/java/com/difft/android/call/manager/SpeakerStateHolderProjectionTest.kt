@@ -22,12 +22,12 @@ import org.junit.Test
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
-/**
- * [SpeakerStateHolder]'s solo / no-speak reminder reads call presence from
- * `OnGoingCallStateManager`: it fires while the call is up and is never armed once the call is
- * ending. The reminder delay runs on a real IO thread, so it is shortened through [CallConfig].
- * Row T5-12.
- */
+
+
+
+
+
+
 class SpeakerStateHolderProjectionTest {
 
     @get:Rule
@@ -39,7 +39,7 @@ class SpeakerStateHolderProjectionTest {
     private val roomCtl = mockk<CallRoomController>(relaxed = true) {
         every { updateNoSpeakSoloTimeout(true) } answers { fired.countDown() }
     }
-    private val holder = SpeakerStateHolder(scope, roomCtl, mockk(relaxed = true), ogsm)
+    private val holder = SpeakerStateHolder(scope, roomCtl, ogsm)
     private val config = CallConfig(autoLeave = AutoLeave(PromptReminder(silenceTimeout = 1, soloMemberTimeout = 1)))
 
     @After

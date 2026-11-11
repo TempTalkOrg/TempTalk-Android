@@ -7,14 +7,13 @@ import androidx.fragment.app.Fragment
 import com.difft.android.base.utils.pane.DetailShellActivity
 import dagger.hilt.android.AndroidEntryPoint
 
-/** Full-window shell for [SearchMoreFragment] (pushed from the shell [SearchActivity]). */
+
 @AndroidEntryPoint
 class SearchMoreActivity : DetailShellActivity() {
 
     companion object {
         const val SEARCH_TYPE_CONTACT = 1
         const val SEARCH_TYPE_GROUP = 2
-        const val SEARCH_TYPE_MESSAGE = 3
 
         fun startActivity(activity: Activity, type: Int, key: String) {
             activity.startActivity(intent(activity, type, key))
@@ -25,5 +24,5 @@ class SearchMoreActivity : DetailShellActivity() {
     }
 
     override fun createPage(): Fragment? =
-        intent.extras?.takeIf { it.getInt("type", -1) in SEARCH_TYPE_CONTACT..SEARCH_TYPE_MESSAGE }?.let { SearchMoreFragment.newInstance(it) }
+        intent.extras?.takeIf { it.getInt("type", -1) in SEARCH_TYPE_CONTACT..SEARCH_TYPE_GROUP }?.let { SearchMoreFragment.newInstance(it) }
 }

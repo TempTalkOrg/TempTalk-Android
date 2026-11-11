@@ -16,13 +16,13 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Resolves a message pause that outlived its process (#1382). The transfer service is not sticky,
- * so no export survives a cold start: a pause still exporting cannot have been committed and is
- * cleared; one past its commit marker asks the receiver once, with the receipt stored in the same
- * write as the marker, and otherwise awaits a decision, still paused. A record awaiting a decision
- * or the old login's end stays for [MigrationVerdictRecheck] and the auth probe, which start here.
- */
+
+
+
+
+
+
+
 @Singleton
 class MigrationPauseRecovery @Inject constructor(
     private val pause: MigrationMessagePause,
@@ -31,7 +31,7 @@ class MigrationPauseRecovery @Inject constructor(
     private val pendingStore: PendingVerdictStore,
     private val recheck: MigrationVerdictRecheck,
 ) {
-    /** One `/status` question to the receiver; a seam for tests. */
+    
     internal var probeVerdict: suspend (SenderSessionRef) -> Verdict = recheck::probe
 
     fun start(scope: CoroutineScope = appScope) {
@@ -42,12 +42,12 @@ class MigrationPauseRecovery @Inject constructor(
     }
 
     suspend fun onColdStart() {
-        // The load is the barrier: messaging stays closed until it completes.
+        
         pause.onChanged.first { it != MessagingPauseState.Loading }
         loginScope.discardIfOutOfScope("cold_start")
         val record = pause.record ?: return
         when (record.phase) {
-            // The commit marker precedes the end marker, so no receiver can have committed.
+            
             MigrationPausePhase.EXPORTING ->
                 settlement.settle(record.owner, null, MigrationPauseOutcome.NOT_COMMITTED, SOURCE)
 

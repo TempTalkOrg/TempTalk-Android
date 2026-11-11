@@ -1,6 +1,9 @@
 package com.difft.android.base.widget
 
 import android.app.Dialog
+import android.graphics.Outline
+import android.graphics.drawable.GradientDrawable
+import android.os.Build
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -8,154 +11,146 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.annotation.DrawableRes
 import androidx.annotation.LayoutRes
+import android.view.ViewOutlineProvider
+import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentActivity
 import com.difft.android.base.R
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.ui.theme.tokens.ColorTokens
 import com.difft.android.base.utils.SecureModeUtil
+import com.difft.android.base.utils.StatusBarSetting
 import com.difft.android.base.utils.WindowSizeClassUtil
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 
-/**
- * Base class for BottomSheetDialogFragment with unified styling and wide-screen support.
- *
- * Features:
- * - Rounded corners at top (16dp) when using default container
- * - Drag handle (optional)
- * - Auto fit-to-content by default
- * - Optional fixed peek height with expandable behavior
- * - Optional full-screen mode
- * - Max width constraint for wide screens (640dp), applied through [BottomSheetBehavior.setMaxWidth]
- *   before the first layout pass so the sheet never flashes at full width
- * - Custom layout support (bypass default container)
- * - Black 50% window dim, the same scrim the Compose sheets and dialogs draw
- *
- * Usage Mode 1 - Default Container (with rounded corners and drag handle):
- * 1. Override [getContentLayoutResId] to provide your content layout
- * 2. Override [onContentViewCreated] to setup your views
- * 3. Default: auto fit-to-content height
- * 4. Optional: override [getPeekHeightRatio] (e.g., 0.75f) for fixed initial height
- *
- * Usage Mode 2 - Custom Layout (full control):
- * 1. Override [useDefaultContainer] to return false
- * 2. Override [getCustomLayoutResId] to provide your custom layout
- * 3. Override [onViewCreated] to setup your views
- * 4. Override [isFullScreen], [isCancelableByUser], [isDraggable] as needed
- *
- * Usage Mode 3 - Fragment-based content:
- * 1. Override [getContentFragment] instead of [getContentLayoutResId]
- * 2. The fragment will be loaded into the container automatically
- */
+
+
+
+
+
+
+
+
+
+
 abstract class BaseBottomSheetDialogFragment : BottomSheetDialogFragment() {
 
-    // ========== Container Configuration ==========
+    
 
-    /**
-     * Whether to use the default container layout (with rounded corners and drag handle).
-     * Return false to use a custom layout via [getCustomLayoutResId].
-     * Default is true.
-     */
+    
+
+
+
+
     protected open fun useDefaultContainer(): Boolean = true
 
-    /**
-     * Provide a custom layout resource ID when [useDefaultContainer] returns false.
-     * This layout will be used directly without the default container wrapper.
-     */
+    
+
+
+
     @LayoutRes
     protected open fun getCustomLayoutResId(): Int = 0
 
-    // ========== Content Configuration (for default container) ==========
+    
 
-    /**
-     * Provide the layout resource ID for the content.
-     * Only used when [useDefaultContainer] returns true.
-     * Return 0 if using [getContentFragment] instead.
-     */
+    
+
+
+
+
     @LayoutRes
     protected open fun getContentLayoutResId(): Int = 0
 
-    /**
-     * Provide a Fragment to be loaded as content.
-     * Only used when [useDefaultContainer] returns true.
-     * Return null if using [getContentLayoutResId] instead.
-     */
+    
+
+
+
+
     protected open fun getContentFragment(): Fragment? = null
 
-    // ========== Behavior Configuration ==========
+    
 
-    /**
-     * Peek height ratio (0.0 - 1.0) of screen height.
-     * Return 0 or negative to use auto fit-to-content behavior (default).
-     * Return positive value (e.g., 0.75f) for fixed initial height with expandable behavior.
-     */
+    
+
+
+
+
     protected open fun getPeekHeightRatio(): Float = 0f
 
-    /**
-     * Whether the bottom sheet should use full screen height.
-     * Default is false.
-     */
+    
+
+
+
     protected open fun isFullScreen(): Boolean = false
 
-    /**
-     * Whether the bottom sheet can be expanded to full screen.
-     * Only applies when using fixed peek height (getPeekHeightRatio > 0).
-     * Default is true.
-     */
+    
+
+
+
+
     protected open fun isExpandable(): Boolean = true
 
-    /**
-     * Whether the user can cancel the dialog by clicking outside or pressing back.
-     * Default is true.
-     */
+    
+
+
+
     protected open fun isCancelableByUser(): Boolean = true
 
-    /**
-     * Whether the bottom sheet can be dragged by the user.
-     * Default is true.
-     */
+    
+
+
+
     protected open fun isDraggable(): Boolean = true
 
-    /**
-     * Whether to show the drag handle (only for default container).
-     * Default is true.
-     */
+    
+
+
+
     protected open fun showDragHandle(): Boolean = true
 
-    /**
-     * Whether to use the default rounded background.
-     * Set to false if you want to use a custom background.
-     * Default is true.
-     */
+    
+
+
+
+
     protected open fun useDefaultBackground(): Boolean = true
 
-    /**
-     * Background for the default container. Defaults to the app-wide sheet surface (`bg.popup`).
-     * Override with [R.drawable.base_bg_bottom_sheet_page] for content that is also shown as a
-     * full page and therefore paints the page colour itself — a different container colour would
-     * show as a two-tone seam at the drag handle.
-     */
+    
+
+
+
+
+
     @DrawableRes
     protected open fun getContainerBackgroundRes(): Int = R.drawable.base_bg_bottom_sheet
 
-    // ========== Max Width Configuration ==========
+    
 
-    /**
-     * Maximum width for the bottom sheet in pixels.
-     * Return 0 or negative to use full width.
-     * Default uses R.dimen.bottom_sheet_max_width (640dp).
-     */
+
+
+
+
+    protected open fun reservesKeyboardInset(): Boolean = true
+
+    
+
+    
+
+
+
+
     protected open fun getMaxWidth(): Int {
         return resources.getDimensionPixelSize(R.dimen.bottom_sheet_max_width)
     }
 
-    // ========== Internal State ==========
+    
 
     private var contentView: View? = null
 
-    // ========== Lifecycle Methods ==========
+    
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -174,27 +169,34 @@ abstract class BaseBottomSheetDialogFragment : BottomSheetDialogFragment() {
         }
     }
 
+    
+    override fun getTheme(): Int = R.style.Theme_TT_BottomSheetDialog
+
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
         if (useDefaultContainer()) {
-            view.setBackgroundResource(getContainerBackgroundRes())
+            applyInsetCard(view, keepBackground = !useDefaultBackground())
+            
+            ViewCompat.setOnApplyWindowInsetsListener(view) { card, insets ->
+                val navigationBar = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
+                val keyboard = if (reservesKeyboardInset()) insets.getInsets(WindowInsetsCompat.Type.ime()).bottom else 0
+                bottomInsetPx = maxOf(navigationBar, keyboard)
+                insetFromSheetEdges(card)
+                insets
+            }
 
-            // Setup drag handle visibility
             val dragHandle = view.findViewById<View>(R.id.drag_handle)
             dragHandle?.visibility = if (showDragHandle()) View.VISIBLE else View.GONE
 
-            // Load content
             val contentContainer = view.findViewById<FrameLayout>(R.id.content_container)
 
             val contentFragment = getContentFragment()
             if (contentFragment != null) {
-                // Load Fragment into container
                 childFragmentManager.beginTransaction()
                     .replace(R.id.content_container, contentFragment)
                     .commit()
             } else {
-                // Inflate layout into container
                 val layoutResId = getContentLayoutResId()
                 if (layoutResId != 0) {
                     contentView = layoutInflater.inflate(layoutResId, contentContainer, false)
@@ -203,40 +205,110 @@ abstract class BaseBottomSheetDialogFragment : BottomSheetDialogFragment() {
                 }
             }
         }
-        // When not using default container, subclasses should handle their own view setup
+        
     }
 
-    /**
-     * Called after content view is created (when using [getContentLayoutResId] with default container).
-     * Override this to setup your views.
-     */
+    
+    private var bottomInsetPx = 0
+
+    
+
+
+
+
+    private fun applyInsetCard(view: View, keepBackground: Boolean) {
+        val radius = resources.getDimension(R.dimen.radius_floating)
+        if (keepBackground) {
+            view.setBackgroundResource(getContainerBackgroundRes())
+            view.outlineProvider = object : ViewOutlineProvider() {
+                override fun getOutline(view: View, outline: Outline) = outline.setRoundRect(0, 0, view.width, view.height, radius)
+            }
+            view.elevation = resources.getDimension(R.dimen.bottom_sheet_elevation)
+            view.applyFloatingCardShadow()
+        } else {
+            val fill = (ContextCompat.getDrawable(view.context, getContainerBackgroundRes()) as? GradientDrawable)?.color?.defaultColor
+            view.applyFloatingSurface(cornerRadiusPx = radius, fillColor = fill, clipsContent = true)
+        }
+        view.clipToOutline = true
+        insetFromSheetEdges(view)
+    }
+
+    
+
+
+
+
+
+    private fun insetFromSheetEdges(view: View) {
+        val sheet = view.parent as? ViewGroup ?: return
+        sheet.clipChildren = false
+        sheet.clipToPadding = false
+        (sheet.parent as? ViewGroup)?.clipChildren = false
+        val params = view.layoutParams as? ViewGroup.MarginLayoutParams ?: return
+        val inset = resources.getDimensionPixelSize(R.dimen.bottom_sheet_inset)
+        val bottom = inset + bottomInsetPx
+        if (params.leftMargin == inset && params.rightMargin == inset && params.bottomMargin == bottom) return
+        params.setMargins(inset, params.topMargin, inset, bottom)
+        view.layoutParams = params
+    }
+
+    
+
+
+
     protected open fun onContentViewCreated(view: View, savedInstanceState: Bundle?) {
-        // Override in subclass
+        
     }
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         val dialog = super.onCreateDialog(savedInstanceState) as BottomSheetDialog
 
-        // Must happen before the first measure: resizing the sheet in onShow (after the first
-        // layout) produces a visible full-width -> 640dp jump.
+        
+        
         dialog.behavior.applyMaxWidth(getMaxWidth())
 
-        // Same scrim as the Compose sheets and dialogs; the Material theme default is ~60%.
-        dialog.window?.setDimAmount(ColorTokens.ScrimDimAmount)
+        
+        
+        
+        
+        if (getPeekHeightRatio() <= 0f && !isFullScreen()) {
+            dialog.behavior.isFitToContents = true
+            dialog.behavior.peekHeight = BottomSheetBehavior.PEEK_HEIGHT_AUTO
+            dialog.behavior.state = BottomSheetBehavior.STATE_EXPANDED
+        }
 
-        // Set cancelable based on configuration
+        
+        dialog.window?.setDimAmount(SheetScrim.dimAmount(requireContext()))
+        dialog.window?.let { window ->
+            StatusBarSetting.attach(requireContext(), window)
+            
+            
+            
+            
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                window.attributes = window.attributes.apply { fitInsetsTypes = 0 }
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                window.isNavigationBarContrastEnforced = false
+            }
+        }
+
         isCancelable = isCancelableByUser()
         dialog.setCanceledOnTouchOutside(isCancelableByUser())
 
         dialog.setOnShowListener { dialogInterface ->
-            // Dialog.show() posts this callback; a recreation, or a self-dismiss queued from
-            // onContentViewCreated, can detach the fragment before it runs (#1440).
+            
+            
             val host = activity ?: run {
                 val sheetName = javaClass.simpleName
                 L.w { "[BottomSheet] onShow after detach sheet=$sheetName" }
                 return@setOnShowListener
             }
             val bottomSheetDialog = dialogInterface as BottomSheetDialog
+            
+            
+            
+            bottomSheetDialog.dismissWithAnimation = true
             val bottomSheet = bottomSheetDialog.findViewById<FrameLayout>(
                 com.google.android.material.R.id.design_bottom_sheet
             )
@@ -245,28 +317,25 @@ abstract class BaseBottomSheetDialogFragment : BottomSheetDialogFragment() {
                 val behavior = BottomSheetBehavior.from(sheet)
                 val peekHeightRatio = getPeekHeightRatio()
 
-                // Configure draggable
                 behavior.isDraggable = isDraggable()
                 behavior.isHideable = isCancelableByUser()
 
                 val screenHeight = WindowSizeClassUtil.getWindowHeightPx(host)
 
                 if (peekHeightRatio > 0 && !isExpandable()) {
-                    // Fixed height mode (non-expandable) - similar to ChatPopupActivity
+                    
                     val fixedHeight = (screenHeight * peekHeightRatio).toInt()
 
-                    // Set view height to fixed height
                     val layoutParams = sheet.layoutParams
                     layoutParams.height = fixedHeight
                     sheet.layoutParams = layoutParams
 
-                    // Configure behavior for fixed height mode
                     behavior.isFitToContents = true
                     behavior.skipCollapsed = true
                     behavior.peekHeight = fixedHeight
                     behavior.state = BottomSheetBehavior.STATE_EXPANDED
                 } else if (isFullScreen() || peekHeightRatio > 0) {
-                    // Expandable mode (full screen or expandable peek height)
+                    
                     behavior.isFitToContents = false
                     behavior.skipCollapsed = isFullScreen()
 
@@ -277,24 +346,23 @@ abstract class BaseBottomSheetDialogFragment : BottomSheetDialogFragment() {
                         behavior.state = BottomSheetBehavior.STATE_COLLAPSED
                     }
 
-                    // Set the BottomSheet height to match screen
                     val layoutParams = sheet.layoutParams
                     layoutParams.height = ViewGroup.LayoutParams.MATCH_PARENT
                     sheet.layoutParams = layoutParams
                 } else {
-                    // Auto height based on content (default behavior)
+                    
                     behavior.isFitToContents = true
                     behavior.skipCollapsed = false
                     behavior.peekHeight = BottomSheetBehavior.PEEK_HEIGHT_AUTO
                     behavior.state = BottomSheetBehavior.STATE_EXPANDED
                 }
 
-                // Apply background
+                
                 if (useDefaultBackground()) {
                     sheet.setBackgroundResource(android.R.color.transparent)
+                    if (useDefaultContainer()) view?.let(::insetFromSheetEdges)
                 }
 
-                // Add callback for state changes
                 behavior.addBottomSheetCallback(object : BottomSheetBehavior.BottomSheetCallback() {
                     override fun onStateChanged(bottomSheet: View, newState: Int) {
                         if (newState == BottomSheetBehavior.STATE_HIDDEN) {
@@ -308,61 +376,61 @@ abstract class BaseBottomSheetDialogFragment : BottomSheetDialogFragment() {
                     }
                 })
 
-                // Allow subclasses to do additional customization
                 onBottomSheetReady(sheet, behavior)
             }
         }
 
-        // 根据屏幕锁状态设置安全模式（Dialog 有独立 Window，需单独设置）
+        
         SecureModeUtil.applySecureFlagToDialog(dialog)
 
         return dialog
     }
 
 
-    /**
-     * Called when the bottom sheet is ready and configured.
-     * Override to do additional customization.
-     *
-     * @param sheet The bottom sheet view
-     * @param behavior The bottom sheet behavior
-     */
+    
+
+
+
+
+
+
     protected open fun onBottomSheetReady(sheet: View, behavior: BottomSheetBehavior<*>) {
-        // Override in subclass if needed
+        
     }
 
-    /**
-     * Called when bottom sheet state changes.
-     * Override to handle state changes.
-     */
+    
+
+
+
     protected open fun onBottomSheetStateChanged(newState: Int) {
-        // Override in subclass if needed
+        
     }
 
-    /**
-     * Called when bottom sheet slides.
-     * @param slideOffset -1.0 (hidden) to 1.0 (expanded), 0.0 is collapsed
-     */
+    
+
+
+
     protected open fun onBottomSheetSlide(slideOffset: Float) {
-        // Override in subclass if needed
+        
     }
 
     override fun onDestroyView() {
+        dialog?.window?.let(StatusBarSetting::detach)
         super.onDestroyView()
         contentView = null
     }
 
     companion object {
-        /**
-         * Helper to show a BottomSheetDialogFragment from an Activity.
-         */
+        
+
+
         fun <T : BaseBottomSheetDialogFragment> T.show(activity: FragmentActivity, tag: String? = null) {
             show(activity.supportFragmentManager, tag ?: this::class.java.simpleName)
         }
 
-        /**
-         * Helper to show a BottomSheetDialogFragment from a Fragment.
-         */
+        
+
+
         fun <T : BaseBottomSheetDialogFragment> T.show(fragment: Fragment, tag: String? = null) {
             show(fragment.parentFragmentManager, tag ?: this::class.java.simpleName)
         }

@@ -11,11 +11,11 @@ class GroupCryptoKeysModel {
     @WCDBField
     var rGroup: String? = null
 
-    /**
-     * Crypto-key generation. Baseline 0 = original/un-rotated (also what existing
-     * rows read as: the column is auto-added by [db.createTable] and NULL reads as 0).
-     * Server assigns monotonically increasing versions starting at 1 on each rotate.
-     */
+    
+
+
+
+
     @WCDBField
     var keyVersion: Int = 0
 

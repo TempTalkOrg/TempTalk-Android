@@ -30,11 +30,11 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/**
- * Channel creation and upkeep: the five kept channels (#1354), in-place rename that keeps the
- * user's settings, and the critical-alert bypass reconcile. Retirement of obsolete ids is covered
- * by [NotificationChannelMigrationTest].
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class NotificationChannelManagerTest {
@@ -95,7 +95,7 @@ class NotificationChannelManagerTest {
         assertEquals(emptySet(), fake.channels.keys intersect NotificationChannelIds.OBSOLETE.toSet())
     }
 
-    // The startup path and the shared ensure never touch DataStore.
+    
     @Test
     fun `ensuring channels never reads DataStore`() {
         val guarded = mockk<DataStore<Preferences>> {
@@ -207,7 +207,7 @@ class NotificationChannelManagerTest {
         policyAccess = true
         fake.channel(NotificationChannelIds.CRITICAL_ALERT, "Critical alerts")
         every { nm.createNotificationChannel(any<NotificationChannel>()) } answers {
-            // The system keeps a category the user has touched: the re-create changes nothing.
+            
         }
 
         val result = manager().reconcileCriticalAlertBypass(appVersion = "2.4.6")

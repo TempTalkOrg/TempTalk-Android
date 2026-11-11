@@ -4,10 +4,10 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * Dot selection on a 3x3 grid in a 260px view (mdpi: 1px == 1dp): centres at 16 / 130 / 244 on both
- * axes, hit radius 24, start radius 72. Dot ids are `row * 3 + column`.
- */
+
+
+
+
 class PatternSelectionTest {
 
     private val grid = PatternGrid(3).also { g ->
@@ -31,7 +31,7 @@ class PatternSelectionTest {
 
     @Test
     fun `start picks the nearest dot when the start radius overlaps a neighbour`() {
-        // 45px left of dot 1 is 69px from dot 0: both are within the 72px start radius.
+        
         assertEquals(listOf(1), selector().down(x(1) - 45f, y(1)))
 
         val offGrid = selector()
@@ -44,8 +44,8 @@ class PatternSelectionTest {
         val selector = selector()
         selector.downAt(0)
 
-        // The sample beside dot 1 is 26px from its centre (outside the 24px hit radius) but the segment
-        // from the previous sample passes within 22px of it.
+        
+        
         val beside = selector.move(140f, 40f)
         val end = selector.moveTo(2)
 
@@ -95,7 +95,7 @@ class PatternSelectionTest {
     @Test
     fun `middle dot is filled in a row when the path misses it but ends on the dot two cells away`() {
         val selector = selector()
-        // Start acquired 44px below dot 0; the path to dot 2 passes 29px from dot 1, outside the hit radius.
+        
         selector.down(16f, 60f)
 
         val added = selector.move(244f, 30f)
@@ -118,7 +118,7 @@ class PatternSelectionTest {
     fun `middle dot is filled on a diagonal`() {
         val selector = selector()
         selector.downAt(0)
-        // Detour so the segment into dot 8 passes 31px from dot 4 (outside the 24px hit radius).
+        
         assertEquals(emptyList<Int>(), selector.move(60f, 120f))
 
         val added = selector.moveTo(8)
@@ -132,7 +132,7 @@ class PatternSelectionTest {
         selector.downAt(1)
         selector.moveTo(0)
 
-        // 0 -> 2 with dot 1 already used.
+        
         assertEquals(listOf(2), selector.move(244f, 30f))
         assertEquals(listOf(1, 0, 2), selector.selected)
     }
@@ -143,7 +143,7 @@ class PatternSelectionTest {
         selector.downAt(0)
         selector.moveTo(1)
 
-        // Back across dot 0 and 1 while staying on the row.
+        
         assertTrue(selector.move(x(0), y(0)).isEmpty())
         assertTrue(selector.move(x(1), y(1)).isEmpty())
         assertTrue(selector.move(x(1) + 5f, y(1)).isEmpty())
@@ -182,7 +182,7 @@ class PatternSelectionTest {
     @Test
     fun `legacy tracker starts from the 72dp radius and never selects a dot twice`() {
         val legacy = legacy()
-        legacy.down(x(0) + 50f, y(0) + 50f) // 70.7 from dot 0
+        legacy.down(x(0) + 50f, y(0) + 50f) 
         legacy.move(x(1), y(1))
         legacy.move(x(0), y(0))
         legacy.move(x(1), y(1))

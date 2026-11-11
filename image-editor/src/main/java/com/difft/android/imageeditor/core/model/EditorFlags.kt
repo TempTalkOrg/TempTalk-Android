@@ -1,12 +1,12 @@
 package com.difft.android.imageeditor.core.model
 
-/**
- * Flags for an [EditorElement].
- *
- * Values you set are not persisted unless you call [persist].
- *
- * This allows temporary state for editing and an easy way to revert to the persisted state via [reset].
- */
+
+
+
+
+
+
+
 class EditorFlags(flags: Int) {
 
     private var flags: Int = flags

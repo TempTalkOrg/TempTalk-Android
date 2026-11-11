@@ -31,12 +31,11 @@ fun String.utf8Substring(maxUtf8Len: Int): String {
     }
 
     var endIndex = maxUtf8Len
-    // Ensure we do not cut a multi-byte character in the middle
+    
     while (endIndex > 0 && (bytes[endIndex].toInt() and 0xC0) == 0x80) {
         endIndex--
     }
 
-    // Convert the valid UTF-8 byte array back to a string
     return String(bytes, 0, endIndex, StandardCharsets.UTF_8)
 }
 
@@ -45,8 +44,8 @@ fun Context.openExternalBrowser(url: String) {
         val intent = Intent(Intent.ACTION_VIEW, url.toUri())
         startActivity(intent)
     }.onFailure { e ->
-        // Never log e.stackTraceToString() here: ActivityNotFoundException's message embeds the
-        // full failed Intent URI (including query params) — log the exception class + url host only.
+        
+        
         L.w { "[Base] openExternalBrowser failed url_host=${url.toUri().host} exception=${e.javaClass.simpleName}" }
         ToastUtil.show(R.string.base_link_open_failed)
     }
@@ -61,9 +60,9 @@ suspend inline fun <T> T.suspendAlso(block: suspend (T) -> Unit): T {
     return this
 }
 
-/**
- *  Assert that a value is true. this function only works in debug mode.
- */
+
+
+
 fun assertInDebug(value: Boolean, lazyMessage: () -> String = { "" }) {
     if (BuildConfig.DEBUG) {
         assert(value, lazyMessage)
@@ -107,18 +106,15 @@ fun Context.getSafeContext(): Context {
     }
 }
 
-/**
- * Get LifecycleOwner from view tree or context chain.
- * Handles ContextWrapper scenarios where direct cast fails.
- */
+
+
+
+
 fun View.getLifecycleOwner(): LifecycleOwner? {
-    // 1. Try findViewTreeLifecycleOwner first
     findViewTreeLifecycleOwner()?.let { return it }
     
-    // 2. Try direct context cast
     (context as? LifecycleOwner)?.let { return it }
     
-    // 3. Unwrap context to find Activity (handles ContextThemeWrapper etc.)
     var ctx = context
     while (ctx is ContextWrapper) {
         if (ctx is LifecycleOwner) return ctx
@@ -128,23 +124,23 @@ fun View.getLifecycleOwner(): LifecycleOwner? {
     return null
 }
 
-// IO: most appScope.launch{} callers are IO-bound (DB / SP / file / network post-processing).
-// CPU-bound paths (libsignal decrypt) already use explicit withContext(Default).
-// dbKeyFailSoftExceptionHandler (same package): a WCDBKeyUnavailableException on a launch here is
-// swallowed as fail-soft instead of crashing; CoroutineName tags the Crashlytics breadcrumb.
+
+
+
+
 val appScope = CoroutineScope(Dispatchers.IO + SupervisorJob() + CoroutineName("appScope") + dbKeyFailSoftExceptionHandler)
 
 fun checkThread() {
     if (BuildConfig.DEBUG) {
         val isMainThread = Thread.currentThread() == Looper.getMainLooper().thread
         if (isMainThread) {
-            val stackTrace = Throwable().stackTrace.take(10).joinToString("\n") // 限制堆栈深度为10
+            val stackTrace = Throwable().stackTrace.take(10).joinToString("\n")
             L.d { "Running on main thread. Stack trace (limited to 10 frames):\n$stackTrace" }
         }
     }
 }
 
-// Strips query params to prevent presigned credentials from leaking into persistent log files.
+
 fun String.sanitizeUrl(): String {
     return replace(Regex("""\?[^\s"')\]}>]+"""), "?[REDACTED]")
 }

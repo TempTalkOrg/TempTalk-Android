@@ -11,12 +11,12 @@ import com.difft.android.chat.ui.ChatActivity.Companion.jumpMessageTimeStamp
 import com.difft.android.chat.ui.ChatActivity.Companion.source
 import com.difft.android.chat.ui.ChatActivity.Companion.sourceType
 
-/**
- * Entry for opening a conversation from anywhere: `ChatActivity.startActivity` and
- * `GroupChatContentActivity.startActivity` go through [open]. The app installs the conversation
- * router as the Application's [ConversationOpener] (home detail stack or full-window shell); without
- * one, the full-window shell Activity opens as before.
- */
+
+
+
+
+
+
 object ConversationShells {
 
     fun open(context: Context, target: ConversationTarget) {
@@ -28,7 +28,7 @@ object ConversationShells {
         }
     }
 
-    /** The full-window shell Activity for [target]. */
+    
     fun intent(context: Context, target: ConversationTarget): Intent = when (target.kind) {
         ConversationTarget.Kind.ONE_ON_ONE -> Intent(context, ChatActivity::class.java).apply {
             contactorID = target.id

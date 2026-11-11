@@ -1,6 +1,4 @@
-<!-- Ported from tmp/gif-favorite/assets/btn-gif.svg (Gif). The SVG <rect x=3 y=4
-     w=18 h=16 rx=3 stroke-width=2> is expressed as a rounded-rect stroke path; the
-     inner "GIF" wordmark path is stroke-width 1.67. Monochrome; tinted via @color/icon. -->
+
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"

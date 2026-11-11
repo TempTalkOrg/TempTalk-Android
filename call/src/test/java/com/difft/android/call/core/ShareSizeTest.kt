@@ -12,7 +12,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
-/** The share's size reaches the layout from its publication first, then from its renderer's frames. */
+
 class ShareSizeTest {
 
     @Test
@@ -23,7 +23,7 @@ class ShareSizeTest {
         assertNull("unchanged", size.onFrame("s", 1080, 2400))
         assertNull("another layer of the same shape", size.onFrame("s", 540, 1200))
         assertEquals(ScreenShare("s", 2400.0, 1080.0), size.onFrame("s", 2400, 1080))
-        // The publication's list re-emitting its first dimensions does not undo the frame size.
+        
         assertEquals(ScreenShare("s", 2400.0, 1080.0), size.onPublished(ScreenShare("s", 1920.0, 1080.0)))
     }
 

@@ -22,11 +22,11 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
-/**
- * [MessageForegroundService] starts the WebSocket from onCreate as well as onStartCommand: a vendor that
- * kills the process on a recents swipe (HyperOS SwipeUpClean) recreates the service without delivering
- * onStartCommand.
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [31])
 class MessageForegroundServiceConnectionTest {

@@ -17,18 +17,18 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/**
- * [ChatTranslateListBinder] — the fragment-side reporter of "which messages can the user see".
- *
- * The behaviour that matters is what it does NOT report: read receipts, reactions and send-status
- * updates commit a list every few hundred milliseconds, and reporting each one would restart the
- * visible-range batch continuously.
- *
- * What each case asserts:
- *  - T59 five commits over an unchanged window report nothing
- *  - T60 a commit that brings a new id reports once, as WINDOW_CHANGED
- *  - T61 a NO_POSITION layout manager yields an empty list rather than throwing
- */
+
+
+
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class ChatTranslateListBinderTest {
@@ -64,7 +64,7 @@ class ChatTranslateListBinderTest {
         every { layoutManager.findLastVisibleItemPosition() } returns last
     }
 
-    // --- T59 ----------------------------------------------------------------
+    
 
     @Test
     fun `T59 repeated commits over an unchanged window report nothing`() {
@@ -77,7 +77,7 @@ class ChatTranslateListBinderTest {
         assertEquals(emptyList<Pair<List<String>, VisibleReason>>(), reports)
     }
 
-    // --- T60 ----------------------------------------------------------------
+    
 
     @Test
     fun `T60 a commit that brings a new id reports once as WINDOW_CHANGED`() {
@@ -105,7 +105,7 @@ class ChatTranslateListBinderTest {
         assertEquals(emptyList<Pair<List<String>, VisibleReason>>(), reports)
     }
 
-    // --- explicit triggers --------------------------------------------------
+    
 
     @Test
     fun `the first render and every scroll idle report unconditionally`() {
@@ -122,7 +122,7 @@ class ChatTranslateListBinderTest {
 
     @Test
     fun `only the completely visible head through the last partially visible row is reported`() {
-        // A half-scrolled top row that grew by a translate block would push the viewport down.
+        
         window("m1", "m2", "m3", "m4", first = 1, last = 2)
 
         binder.onScrollIdle()
@@ -130,7 +130,7 @@ class ChatTranslateListBinderTest {
         assertEquals(listOf("m2", "m3"), reports.single().first)
     }
 
-    // --- T61 ----------------------------------------------------------------
+    
 
     @Test
     fun `T61 NO_POSITION yields no report instead of throwing`() {
@@ -164,7 +164,7 @@ class ChatTranslateListBinderTest {
 
     @Test
     fun `T61 a last position past the end of the list is tolerated`() {
-        // The layout manager and the committed list can be one frame apart.
+        
         window("m1", "m2", first = 0, last = 5)
 
         binder.onScrollIdle()

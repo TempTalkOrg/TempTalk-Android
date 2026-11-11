@@ -22,14 +22,14 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/**
- * The recycling contract of the meeting-invite row avatar slot: exactly one child View for the
- * lifetime of the holder, an immediate value painted synchronously, and a pending fetch that is
- * cancelled — so its result never lands — once the row is rebound or recycled.
- *
- * Collaborators are injected through the constructor, so the contract is exercised without Hilt
- * and without a RecyclerView.
- */
+
+
+
+
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33])
@@ -79,15 +79,15 @@ class InviteRowAvatarBinderTest {
         assertEquals(listOf(immediate), fake.bound)
     }
 
-    /**
-     * Rebinding cancels the previous fetch, so its result never reaches the row. The
-     * `boundUid == uid` compare inside the binder is defence-in-depth behind that cancel.
-     */
+    
+
+
+
     @Test
     fun `rebinding cancels the previous fetch so its late result never lands`() {
         val pending = CompletableDeferred<AvatarData?>()
-        // Set only if the u1 fetch resumes normally; cancellation must prevent that, so the
-        // guard inside the binder is never what drops the result.
+        
+        
         var resumedNormally = false
         val binder = binderWith { uid ->
             if (uid == "u1") pending.await().also { resumedNormally = true } else null
@@ -143,7 +143,7 @@ class InviteRowAvatarBinderTest {
 
     @Test
     fun `a fetch equal to the immediate value is not re-bound`() {
-        // Re-binding the same record would only restart the load the immediate bind started.
+        
         val binder = binderWith { nameData("u1") }
         val immediate = nameData("u1")
 
@@ -164,7 +164,7 @@ class InviteRowAvatarBinderTest {
 
     private fun nameData(uid: String) = AvatarData.FromNameOrUid(uid, uid)
 
-    /** Records every [bind] so the test can assert the exact sequence the row received. */
+    
     private class RecordingAvatarViewBinder(override val view: View) : AvatarViewBinder {
         val bound = mutableListOf<AvatarData>()
 

@@ -8,9 +8,9 @@ import kotlinx.parcelize.Parcelize
 import com.difft.android.imageeditor.core.ColorableRenderer
 import com.difft.android.imageeditor.core.RendererContext
 
-/**
- * Renders a [AutomaticControlPointBezierLine] with [thickness], [color] and [cap] end type.
- */
+
+
+
 @Parcelize
 class BezierDrawingRenderer private constructor(
     private var colorValue: Int,

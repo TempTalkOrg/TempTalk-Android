@@ -6,16 +6,16 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * Stored pattern in these tests is "1,3,9,8" on the 3x3 grid, i.e. ids 0,2,8,7, saved under the
- * retired selection rule unless a test says otherwise.
- */
+
+
+
+
 class PatternUnlockPolicyTest {
 
     private val storedSequence = listOf(0, 2, 8, 7)
     private val storedKey = PatternUnlockPolicy.sequenceKey(storedSequence)
 
-    // The same gesture under the new rule also selects the dots it crossed: 1,2,3,6,9,8.
+    
     private val newRuleSequence = listOf(0, 1, 2, 5, 8, 7)
 
     private class Checker(private val accepted: String) {
@@ -139,7 +139,7 @@ class PatternUnlockPolicyTest {
 
     @Test
     fun `T12 a pattern created under the new rule only ever checks the new sequence`() {
-        // The old-rule sequence would match an older pattern, but this one carries the marker.
+        
         val (result, checker) = evaluate(newRuleSequence, storedSequence, createdWithNewRule = true)
 
         assertEquals(PatternUnlockPolicy.Result.Failed(attempts = 1, checked = 1, ladder = PatternUnlockPolicy.Ladder.None), result)
@@ -155,7 +155,7 @@ class PatternUnlockPolicyTest {
 
     @Test
     fun `a legacy pattern whose new-rule sequence is short still unlocks through the legacy one`() {
-        // The two rules start on different dots: new [1, 2, 5], legacy [0, 1, 2, 5] (the stored one).
+        
         val legacy = listOf(0, 1, 2, 5)
         val newShort = listOf(1, 2, 5)
         assertEquals(4, PatternUnlockPolicy.entryLength(newShort, legacy, createdWithNewRule = false))
@@ -185,7 +185,7 @@ class PatternUnlockPolicyTest {
         assertEquals(PatternCredential("aa", "bb", false), legacy)
         assertFalse(legacy!!.createdWithNewRule)
         assertEquals("aa:bb", legacy.format())
-        // Readers that only take the first two parts are unaffected by the marker.
+        
         assertEquals(listOf("aa", "bb"), marked.split(":").take(2))
         assertNull(PatternCredential.parse("garbage"))
         assertTrue(PatternCredential.parse("aa:bb:1")!!.createdWithNewRule)

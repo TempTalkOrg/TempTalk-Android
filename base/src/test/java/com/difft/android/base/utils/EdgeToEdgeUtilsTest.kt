@@ -14,11 +14,11 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
 
-/**
- * Pins the additive contract of [EdgeToEdgeUtils.applyBottomInsetAsPadding]: the home tab bar
- * carries its own bottom padding (`activity_index.xml`), so the navigation-bar inset must be
- * added to it, and repeated inset dispatches must not stack on top of each other.
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33])
 class EdgeToEdgeUtilsTest {
@@ -66,7 +66,7 @@ class EdgeToEdgeUtilsTest {
 
     @Test
     fun `a side cutout pads the content only when its hole reaches below the status strip`() {
-        // Unfolded foldable in landscape: the hole sits in the top-left corner, inside the strip.
+        
         val cornerHole = viewWithPadding()
         EdgeToEdgeUtils.applySystemBarsPadding(cornerHole, applyHorizontal = true)
         dispatchSideInsets(cornerHole, holeTop = TOP_PADDING / 2, barRight = INSET)
@@ -74,7 +74,15 @@ class EdgeToEdgeUtilsTest {
         assertEquals(INSET, cornerHole.paddingRight, "a side navigation bar is still respected")
         assertEquals(TOP_PADDING, cornerHole.paddingTop, "top keeps the full status strip")
 
-        // Bar phone in landscape: the hole sits mid-height on the long edge, over the content.
+        
+        val hiddenBar = viewWithPadding()
+        EdgeToEdgeUtils.applySystemBarsPadding(hiddenBar, applyHorizontal = true)
+        dispatchSideInsets(hiddenBar, holeTop = TOP_PADDING / 2, barRight = INSET, statusVisible = false)
+        assertEquals(0, hiddenBar.paddingTop, "a corner camera does not push the page down")
+        assertEquals(0, hiddenBar.paddingLeft, "nor the content column aside")
+        assertEquals(INSET, hiddenBar.paddingRight)
+
+        
         val edgeHole = viewWithPadding()
         EdgeToEdgeUtils.applySystemBarsPadding(edgeHole, applyHorizontal = true)
         dispatchSideInsets(edgeHole, holeTop = TOP_PADDING * 4, barRight = INSET)
@@ -82,7 +90,7 @@ class EdgeToEdgeUtilsTest {
         assertEquals(INSET, edgeHole.paddingRight)
     }
 
-    private fun dispatchSideInsets(view: View, holeTop: Int, barRight: Int) {
+    private fun dispatchSideInsets(view: View, holeTop: Int, barRight: Int, statusVisible: Boolean = true) {
         val hole = Rect(0, holeTop, CUTOUT, holeTop + HOLE_SIZE)
         val cutout = DisplayCutoutCompat(
             Insets.of(CUTOUT, 0, 0, 0),
@@ -93,9 +101,12 @@ class EdgeToEdgeUtilsTest {
             Insets.NONE,
         )
         val insets = WindowInsetsCompat.Builder()
-            .setInsets(WindowInsetsCompat.Type.systemBars(), Insets.of(0, TOP_PADDING, barRight, 0))
+            
+            .setInsets(WindowInsetsCompat.Type.systemBars(), Insets.of(0, if (statusVisible) TOP_PADDING else 0, barRight, 0))
+            .setInsetsIgnoringVisibility(WindowInsetsCompat.Type.statusBars(), Insets.of(0, TOP_PADDING, 0, 0))
             .setInsets(WindowInsetsCompat.Type.displayCutout(), Insets.of(CUTOUT, 0, 0, 0))
             .setDisplayCutout(cutout)
+            .setVisible(WindowInsetsCompat.Type.statusBars(), statusVisible)
             .build()
         ViewCompat.dispatchApplyWindowInsets(view, insets)
     }

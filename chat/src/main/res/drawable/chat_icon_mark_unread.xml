@@ -3,7 +3,7 @@
     android:height="20dp"
     android:viewportWidth="20"
     android:viewportHeight="20">
-  <!-- Tabler "message-circle-exclamation" (chat-list gesture design: Unread). -->
+  
   <group
       android:scaleX="0.833333"
       android:scaleY="0.833333">
@@ -12,21 +12,21 @@
       android:strokeLineJoin="round"
       android:strokeWidth="1.8"
       android:fillColor="@color/transparent"
-      android:strokeColor="@color/gray_200"
+      android:strokeColor="@color/icon"
       android:strokeLineCap="round"/>
   <path
       android:pathData="M19,16v3"
       android:strokeLineJoin="round"
       android:strokeWidth="1.8"
       android:fillColor="@color/transparent"
-      android:strokeColor="@color/gray_200"
+      android:strokeColor="@color/icon"
       android:strokeLineCap="round"/>
   <path
       android:pathData="M19,22v0.01"
       android:strokeLineJoin="round"
       android:strokeWidth="1.8"
       android:fillColor="@color/transparent"
-      android:strokeColor="@color/gray_200"
+      android:strokeColor="@color/icon"
       android:strokeLineCap="round"/>
   </group>
 </vector>

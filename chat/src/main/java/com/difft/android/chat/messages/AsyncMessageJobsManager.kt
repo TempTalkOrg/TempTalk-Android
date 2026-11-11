@@ -15,15 +15,11 @@ import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Created by King.W on 2023/10/31
- * Desc: Used to manage async jobs comes from message processor [MessageContentProcessor]
- *
- * This class uses in-memory caches to avoid redundant network requests for contacts and groups
- * that have already been confirmed to exist locally. The caches are automatically cleared on
- * app restart. For logout/account switch scenarios, call [clearCaches] explicitly.
- */
-// All wcdb calls in this class run on Dispatchers.IO.
+
+
+
+
+
 @Suppress("BlockingWcdbInSuspend")
 @Singleton
 class AsyncMessageJobsManager @Inject constructor(
@@ -36,12 +32,9 @@ class AsyncMessageJobsManager @Inject constructor(
 
     private val makeSureGroupExist = mutableSetOf<String>()
 
-    // Cache of contactor IDs that have been confirmed to exist locally (either already in DB or fetched)
-    // This prevents redundant network requests within the same app lifecycle
-    // Using ConcurrentHashMap for thread-safe read/write from multiple coroutines
+    
     private val confirmedContactorIds: MutableSet<String> = ConcurrentHashMap.newKeySet()
 
-    // Cache of group IDs that have been confirmed to exist locally
     private val confirmedGroupIds: MutableSet<String> = ConcurrentHashMap.newKeySet()
 
     @Synchronized
@@ -51,7 +44,7 @@ class AsyncMessageJobsManager @Inject constructor(
 
     @Synchronized
     fun runAsyncJobs() {
-        // Copy and clear pending tasks first to avoid holding lock during async operations
+        
         val contactorsToProcess = contactorIdsForFetching.toList()
         val groupsToProcess = makeSureGroupExist.toList()
         contactorIdsForFetching.clear()
@@ -72,7 +65,6 @@ class AsyncMessageJobsManager @Inject constructor(
     }
 
     private suspend fun processContactors(contactorsToProcess: List<String>) {
-        // Filter out contactors that have already been confirmed in memory cache
         val contactorsNotInCache = contactorsToProcess.filter { it !in confirmedContactorIds }
         if (contactorsNotInCache.isEmpty()) {
             if (contactorsToProcess.isNotEmpty()) {
@@ -81,16 +73,13 @@ class AsyncMessageJobsManager @Inject constructor(
             return
         }
 
-        // Check local database first (both contactor and groupMemberContactor tables)
         val existingInDb = wcdb.getContactorsFromAllTable(contactorsNotInCache).map { it.id }.toSet()
 
-        // Add existing ones to cache directly
         if (existingInDb.isNotEmpty()) {
             confirmedContactorIds.addAll(existingInDb)
             L.i { "[AsyncMessageJobsManager] Found ${existingInDb.size} contactors in local DB (contactor or groupMember), added to cache: $existingInDb" }
         }
 
-        // Only fetch those not in local DB
         val contactorsToFetch = contactorsNotInCache.filter { it !in existingInDb }
         if (contactorsToFetch.isNotEmpty()) {
             L.i { "[AsyncMessageJobsManager] Fetching ${contactorsToFetch.size} contactors from network: $contactorsToFetch" }
@@ -105,7 +94,6 @@ class AsyncMessageJobsManager @Inject constructor(
     }
 
     private suspend fun processGroups(groupsToProcess: List<String>) {
-        // Filter out groups that have already been confirmed in memory cache
         val groupsNotInCache = groupsToProcess.filter { it !in confirmedGroupIds }
         if (groupsNotInCache.isEmpty()) {
             if (groupsToProcess.isNotEmpty()) {
@@ -114,18 +102,16 @@ class AsyncMessageJobsManager @Inject constructor(
             return
         }
 
-        // Check local database first - batch query for better performance
         val existingGroupsInDb = wcdb.group.getAllObjects(
             DBGroupModel.gid.`in`(*groupsNotInCache.toTypedArray())
         ).mapNotNull { it.gid }.toSet()
 
-        // Add existing ones to cache directly
         if (existingGroupsInDb.isNotEmpty()) {
             confirmedGroupIds.addAll(existingGroupsInDb)
             L.i { "[AsyncMessageJobsManager] Found ${existingGroupsInDb.size} groups already in local DB, added to cache: $existingGroupsInDb" }
         }
 
-        // Only fetch those not in local DB - use forceUpdate=true since we already checked DB
+        
         val groupsToFetch = groupsNotInCache.filter { it !in existingGroupsInDb }
         if (groupsToFetch.isNotEmpty()) {
             L.i { "[AsyncMessageJobsManager] Fetching ${groupsToFetch.size} groups from network: $groupsToFetch" }
@@ -145,9 +131,9 @@ class AsyncMessageJobsManager @Inject constructor(
         makeSureGroupExist.add(groupId)
     }
 
-    /**
-     * Clear all caches. Should be called on logout or account switch.
-     */
+    
+
+
     @Synchronized
     fun clearCaches() {
         confirmedContactorIds.clear()

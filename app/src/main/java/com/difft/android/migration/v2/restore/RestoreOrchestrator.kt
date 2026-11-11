@@ -42,62 +42,62 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.cancellation.CancellationException
 
-/**
- * The restore engine. Given a selected `.ttmig` source, a passphrase and the current verify account it
- * validates (HMAC-authenticate, decrypt, read the manifest, then check format-version compatibility
- * and account match), guards that the target is a fresh install, imports the neutral records into a
- * fresh [StagingDatabase] while streaming attachment bytes into a staging dir, promotes the staging
- * products into the live locations via [PromoteStep], and returns [RestoreResult.ReadyForSignIn].
- *
- * It never signs in or restarts the process: after [RestoreResult.ReadyForSignIn] the flag is at
- * [RestorePhase.SIGNING_IN] and the caller drives the rest.
- *
- * Phase milestones go to the [RestoreFlagStore]. [PromoteStep] writes its own authoritative marker for
- * the critical section, so this class does not double-handle promote recovery: on any failure it
- * discards the staging products and surfaces the failure, and cold start finishes or rolls back a
- * promote interrupted mid-section. Restore runs only on a net install, so the worst case of any
- * interruption is a redo from the empty state.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 @Singleton
 class RestoreOrchestrator @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val containerReader: ContainerReader,
-    /**
-     * The unified net-install signal: the guard reuses the same
-     * [MigrationImportLauncher.isFreshInstallTarget] that gates the login import prompt, so the restore
-     * engine and `:login` never diverge on what a net-install target means.
-     */
+    
+
+
+
+
     private val migrationImportLauncher: MigrationImportLauncher,
-    /**
-     * Secure-storage writer for the carried identity material. The install is a single atomic update
-     * performed immediately before promote — see [RestoreCommitTail] for why it must not go through
-     * `EncryptionDataManager.updateAciIdentityKey`.
-     */
+    
+
+
+
+
     private val userManager: UserManager,
-    /**
-     * Writer for a carried session credential (same-device no-login handoff). Kept out of this class on
-     * purpose: the write needs a freshness test inside its own update block, a distinct concern from
-     * orchestrating the restore. Untouched unless the handoff is on.
-     */
+    
+
+
+
+
     private val credentialInstaller: CredentialInstaller,
 ) {
 
     private val _progress = MutableStateFlow<RestoreProgress?>(null)
 
-    /** Restore progress for the caller's UI; null before a restore starts and after a terminal result. */
+    
     val progress: StateFlow<RestoreProgress?> = _progress.asStateFlow()
 
-    /**
-     * Run the full restore and return a typed [RestoreResult]. All IO runs on [Dispatchers.IO]. The
-     * validation rejects do not throw — they return [RestoreResult.Rejected], so the caller can show a
-     * clear message and stay on the picker.
-     *
-     * @param currentVerifyAccount the account the caller just verified in memory, compared against the
-     *   manifest's `sourceAccount`. Not read from storage here, since it is not persisted until sign-in.
-     * @param isFreshTarget the net-install precondition probe: true only when no user account has ever
-     *   been established on this install. Injectable so the decision is unit-testable without native
-     *   storage.
-     */
+    
+
+
+
+
+
+
+
+
+
+
     suspend fun restore(
         source: ArchiveSource,
         passphrase: String,
@@ -113,12 +113,12 @@ class RestoreOrchestrator @Inject constructor(
         L.i { "[MigrationV2][Restore] orchestrator start" }
         val work = File(paths.containerWorkFile).parentFile
         try {
-            // Materialize the source to a randomly-accessible work file: verify-before-trust is a
-            // two-pass read and SAF input is forward-only.
+            
+            
             val containerFile = materialize(source, paths.containerWorkFile)
             publish("validating", 5)
 
-            // Validation chain: HMAC, decrypt and manifest, then version, then account.
+            
             val validation = validate(containerFile, passphrase, currentVerifyAccount)
             if (validation is RestoreResult.Rejected) {
                 L.w { "[MigrationV2][Restore] rejected at validation: ${validation.error.code}" }
@@ -126,35 +126,35 @@ class RestoreOrchestrator @Inject constructor(
                 return@withContext validation
             }
 
-            // Net-install guard: the target must be a fresh install with no account ever established
-            // here. A passive device kick preserves the account, so a kicked device is correctly not
-            // fresh. Surfaced as Rejected rather than a thrown Failed, so the file and streaming paths
-            // return the identical result for the same condition. The pre-promote re-check below closes
-            // the TOCTOU window for both.
+            
+            
+            
+            
+            
             if (!isFreshTarget()) {
                 L.w { "[MigrationV2][Restore] rejected: target already has an established account (net-install-only)" }
                 cleanupWork(work)
                 return@withContext RestoreResult.Rejected(MigrationError.TargetNotEmpty)
             }
 
-            // Import into staging. begin() writes the phase, source, start time and the account the
-            // data belongs to, which login binds the pending sign-in to.
+            
+            
             flagStore.begin(sourceLabel(source), currentVerifyAccount)
             publish("importing", 20)
-            // currentVerifyAccount is the migrating account's own uid, already matched against the
-            // manifest above, and the importer uses it so the room-state recompute excludes own-sent
-            // messages from the unread count — the role globalServices.myId plays on the live path.
-            // A well-formed container carries exactly one identity record, emitted first; the last one
-            // wins defensively. Held in memory only, never staged.
+            
+            
+            
+            
+            
             var carriedIdentity: NeutralIdentity? = null
             val staging = importToStaging(
                 containerFile, passphrase, paths, stagingFactory, currentVerifyAccount,
                 identitySink = { carriedIdentity = it },
             )
 
-            // Promote and finalize, shared with the streaming path; promote is the single commit. The
-            // shared tail re-checks isFreshTarget immediately before it, so a device that became
-            // non-fresh during the import discards staging instead of clobbering the live DB.
+            
+            
+            
             storageGuard.requireHeadroom("import-tail")
             commitTail.run(
                 staging, paths, flagStore, work, promoteStep, isFreshTarget, carriedIdentity,
@@ -164,8 +164,8 @@ class RestoreOrchestrator @Inject constructor(
             _progress.update { null }
             RestoreResult.ReadyForSignIn
         } catch (e: MigrationException.CommittedUnconfirmed) {
-            // Same rule as the streaming path: the data IS the primary database now, so neither a
-            // Failed verdict nor a cleanup is true; the promote marker and flag feed the cold-start resume.
+            
+            
             _progress.update { null }
             throw e
         } catch (e: CancellationException) {
@@ -181,36 +181,36 @@ class RestoreOrchestrator @Inject constructor(
         }
     }
 
-    /**
-     * The receiver-side twin of [restore], consuming a forward-only [source] — the de-chunked P2P
-     * container body — through [ContainerReader.readStreaming] instead of materializing and two-pass
-     * reading a `.ttmig` file. It reuses, rather than reimplements, the staging open, [NeutralImporter],
-     * [PromoteStep], promote-marker and cleanup machinery [restore] uses.
-     *
-     * Every data-safety guard of the file path is preserved:
-     *  - The same net-install signal is checked before any record reaches staging and re-checked
-     *    immediately before promote, and a receiver that is or becomes non-fresh is rejected with the
-     *    same [MigrationError.TargetNotEmpty] the file path returns.
-     *  - Account match is fail-fast: the manifest is the first frame, so `onManifest` compares its
-     *    `sourceAccount` to [currentVerifyAccount] before the record loop pours anything into staging,
-     *    and a mismatch throws, discards staging and never promotes.
-     *  - Format-version compatibility is self-gated inside [ContainerReader.readStreaming], before any
-     *    record is emitted, by the same [FormatCompat] rule the file path applies.
-     *  - Environment isolation is enforced earlier, at the P2P handshake: the receiver compares the
-     *    sender's declared environment against its own and hard-rejects a mismatch before any session
-     *    exists, so no container byte reaches this method. The manifest carries no environment field,
-     *    so this method does not re-compare it.
-     *  - App-lock passcode is structurally absent from the neutral schema, so it is never in the stream.
-     *  - Promote is gated on `readStreaming` returning normally. Records stream into the discardable
-     *    staging DB as they decrypt, and any throw — tamper, truncation, HMAC failure, account mismatch
-     *    — propagates out of [importStreamToStaging], discards staging and never reaches promote.
-     *
-     * @param source forward-only container byte stream; not closed here.
-     * @param transferKey the ephemeral per-transfer key from the handshake, fed to
-     *   [ContainerReader.readStreaming] in the passphrase position. Never logged.
-     * @param currentVerifyAccount the logging-in account the manifest's `sourceAccount` must match, and
-     *   also the importer's own-uid for the room-state recompute.
-     */
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     suspend fun restoreFromStream(
         source: InputStream,
         transferKey: String,
@@ -220,18 +220,18 @@ class RestoreOrchestrator @Inject constructor(
         promoteStep: PromoteStep = PromoteStep(context),
         stagingFactory: (stagingDbPath: String) -> StagingDatabase = { StagingDatabase.create(context, it) },
         isFreshTarget: () -> Boolean = migrationImportLauncher::isFreshInstallTarget,
-        // Transfer progress in [0,1] from the manifest totals: records consumed and attachment bytes
-        // landed against what the source announced. Silent when it announced none.
+        
+        
         onProgress: (Float) -> Unit = {},
-        // Same-device no-login handoff: the container is expected to carry a session credential, and
-        // this install adopts it right after promote so it comes up already signed in. A handoff
-        // stream carrying NO credential is rejected before promote (see [RestoreCommitTail]).
+        
+        
+        
         credentialHandoff: Boolean = false,
-        // What the peer reads as "still working" through GET /status: stage, record count, attachment
-        // bytes as they land, and the commit point. Distinct from onProgress, this device's own bar.
+        
+        
         liveness: TransferProgressReporter = TransferProgressReporter.None,
-        // The session whose body this import reads, taken at the call: only that session may commit
-        // it, never one that replaced it after a cancel (#1382).
+        
+        
         livenessSessionId: String? = liveness.bodySessionId(),
         storageGuard: StorageGuard = StorageGuard.forContext(context),
         commitTail: RestoreCommitTail = defaultCommitTail(),
@@ -239,30 +239,30 @@ class RestoreOrchestrator @Inject constructor(
         L.i { "[MigrationV2][Restore] streaming orchestrator start (P2P no-disk)" }
         val work = File(paths.containerWorkFile).parentFile
         try {
-            // Publish the stage early so the UI sequence matches the file path. This path has no
-            // materialize-and-peek pass, but it still validates, so "validating" is the right first
-            // signal.
+            
+            
+            
             publish("validating", 5)
 
-            // Net-install guard before accepting the stream: a receiver with an established account is
-            // rejected up front, with no staging opened and no bytes consumed. Returned as Rejected
-            // rather than a thrown Failed, so the caller shows a clear reason and no RESTORING residue
-            // is left. Account match and format compatibility are enforced inside the stream read.
+            
+            
+            
+            
             if (!isFreshTarget()) {
                 L.w { "[MigrationV2][Restore] streaming rejected: target already has an established account (net-install-only)" }
                 cleanupWork(work)
                 return@withContext RestoreResult.Rejected(MigrationError.TargetNotEmpty)
             }
 
-            // Import into staging by streaming; begin() writes the phase bound to the account.
+            
             flagStore.begin("p2p-stream", currentVerifyAccount)
             publish("importing", 20)
             liveness.stage(TransferStages.IMPORTING)
-            // currentVerifyAccount is both the account-match target and the importer's own uid, the
-            // same dual use as the file path. A mismatch throws from the early-manifest hook before any
-            // record reaches staging, so staging is discarded and nothing is promoted.
+            
+            
+            
             var carriedIdentity: NeutralIdentity? = null
-            // Memory only, never staged, never logged — the same seam the identity record rides.
+            
             var carriedCredential: NeutralCredential? = null
             val staging = importStreamToStaging(
                 source, transferKey, paths, stagingFactory, currentVerifyAccount,
@@ -273,10 +273,10 @@ class RestoreOrchestrator @Inject constructor(
                 storageGuard = storageGuard,
             )
 
-            // Promote and finalize — the identical tail to the file path. Promote is the single commit
-            // point and is reached only because readStreaming returned normally with a verified HMAC.
-            // The shared tail re-checks isFreshTarget immediately before it, so a device that became
-            // non-fresh during a long stream import discards staging instead of clobbering the live DB.
+            
+            
+            
+            
             storageGuard.requireHeadroom("import-tail")
             commitTail.run(
                 staging, paths, flagStore, work, promoteStep, isFreshTarget, carriedIdentity,
@@ -287,9 +287,9 @@ class RestoreOrchestrator @Inject constructor(
             _progress.update { null }
             RestoreResult.ReadyForSignIn
         } catch (e: MigrationException.CommittedUnconfirmed) {
-            // No cleanupOnFailure and no result: the data IS the primary database now, and the promote
-            // marker and the restore flag are exactly what the cold-start recovery needs. The caller
-            // publishes no terminal to the peer either — neither "succeeded" nor "failed" is true.
+            
+            
+            
             _progress.update { null }
             throw e
         } catch (e: CancellationException) {
@@ -297,7 +297,7 @@ class RestoreOrchestrator @Inject constructor(
             cleanupOnFailure(paths, flagStore, work)
             throw e
         } catch (e: Throwable) {
-            // As in the reader: a stream closed by a cancel fails before the cancellation is delivered.
+            
             if (!currentCoroutineContext().isActive) {
                 L.w { "[MigrationV2][Restore] streaming cancelled (stream closed)" }
                 cleanupOnFailure(paths, flagStore, work)
@@ -312,33 +312,33 @@ class RestoreOrchestrator @Inject constructor(
         }
     }
 
-    // ── validation chain ────────────────────────────────────────────────────────────────────────
+    
 
-    /**
-     * [ContainerReader.peekManifest] authenticates, decrypts and decodes the manifest; this then checks
-     * format-version compatibility and account match. Each reject maps to a stable [MigrationError];
-     * a pass returns null and the caller proceeds to import.
-     */
+    
+
+
+
+
     private suspend fun validate(
         containerFile: File,
         passphrase: String,
         currentVerifyAccount: String,
     ): RestoreResult? {
-        // Authenticate, decrypt and read the manifest. An HMAC mismatch means a wrong passphrase or a
-        // tampered file; DecryptionFailed means bad magic, version, truncation or corruption.
+        
+        
         val manifest: ContainerManifest = try {
             containerReader.peekManifest(containerFile, passphrase)
         } catch (e: MigrationException.HmacMismatch) {
-            // The file carries only salt, KDF and HMAC, so a mismatch cannot distinguish a wrong
-            // passphrase from tampering. Surface PassphraseInvalid, by far the common cause;
-            // FileCorrupted is reserved for structural failures.
+            
+            
+            
             return RestoreResult.Rejected(MigrationError.PassphraseInvalid)
         } catch (e: MigrationException.DecryptionFailed) {
             return RestoreResult.Rejected(MigrationError.FileCorrupted)
         }
 
-        // Format-version compatibility: a cross-MAJOR container is a hard reject. A newer MAJOR gets
-        // its own error so the UI can show upgrade guidance instead of a dead end.
+        
+        
         if (!isFormatCompatible(manifest.formatVersion)) {
             L.w { "[MigrationV2][Restore] incompatible formatVersion=${manifest.formatVersion} supported=$SUPPORTED_FORMAT_VERSION" }
             val error = if (FormatCompat.isNewerThanSupported(manifest.formatVersion)) {
@@ -349,8 +349,8 @@ class RestoreOrchestrator @Inject constructor(
             return RestoreResult.Rejected(error)
         }
 
-        // Account match: the manifest's sourceAccount against the current verify account. A
-        // cross-account import is rejected.
+        
+        
         if (!accountMatches(manifest.sourceAccount, currentVerifyAccount)) {
             L.w { "[MigrationV2][Restore] account mismatch (manifest vs current verify account)" }
             return RestoreResult.Rejected(MigrationError.AccountMismatch)
@@ -360,30 +360,30 @@ class RestoreOrchestrator @Inject constructor(
         return null
     }
 
-    /**
-     * Cross-MAJOR compatibility check, delegating to the single-owner [FormatCompat.isCompatible] so
-     * every gate applies the identical rule.
-     */
+    
+
+
+
     private fun isFormatCompatible(manifestFormatVersion: String): Boolean =
         FormatCompat.isCompatible(manifestFormatVersion)
 
-    /**
-     * Account-match comparison: both sides are the same account-identity string, compared verbatim
-     * after trimming. The raw values are never logged.
-     */
+    
+
+
+
     private fun accountMatches(manifestAccount: String, currentVerifyAccount: String): Boolean =
         manifestAccount.isNotBlank() &&
             currentVerifyAccount.isNotBlank() &&
             manifestAccount.trim() == currentVerifyAccount.trim()
 
-    // ── import ──────────────────────────────────────────────────────────────────────────────────
+    
 
-    /**
-     * Open a fresh [StagingDatabase], run the [NeutralImporter] over the decrypted record stream, and
-     * stream attachment bytes into the staging attachment dir. Returns the staging DB closed, so its
-     * WAL is checkpointed into the db file and it is promote-ready. On any failure the staging DB is
-     * discarded and the exception propagates.
-     */
+    
+
+
+
+
+
     private suspend fun importToStaging(
         containerFile: File,
         passphrase: String,
@@ -402,22 +402,22 @@ class RestoreOrchestrator @Inject constructor(
                 file = containerFile,
                 passphrase = passphrase,
                 attachmentTarget = AttachmentByteTarget { contentRef, declaredLength ->
-                    // Bytes of a skipped unknown record are consumed and authenticated but never
-                    // persisted, so no orphan staging files are left.
+                    
+                    
                     if (importer.isSkippedBytes(contentRef)) return@AttachmentByteTarget null
-                    // An empty frame carries nothing decryptable. Persisting it leaves a 0-byte at-rest
-                    // file that reads as a corrupt attachment forever, while writing no file leaves the
-                    // row pointer-only and the app re-downloads it.
+                    
+                    
+                    
                     if (declaredLength <= 0L) {
                         L.w { "[MigrationV2][Restore] empty attachment frame ref=$contentRef — not persisted" }
                         importer.onAttachmentBytesAbsent(contentRef)
                         return@AttachmentByteTarget null
                     }
                     attachmentFiles++
-                    // Canonical `<ownerKey>/<fileName>` under the staging dir, so promote lands the bytes
-                    // where the app reads them. With no placement the write falls back to a flat name.
-                    // The failure hook fires on both an open failure and a mid-write one, and the row
-                    // has no file either way, so it is also where the row is corrected.
+                    
+                    
+                    
+                    
                     openStagingAttachment(paths, contentRef, importer.placementFor(contentRef)) {
                         attachmentWriteFailures++
                         importer.onAttachmentBytesAbsent(contentRef)
@@ -429,8 +429,8 @@ class RestoreOrchestrator @Inject constructor(
                 },
             )
             importer.finish()
-            // Checkpoint and close, so the staging db file is self-contained and promote-ready. A
-            // checkpoint failure throws and staging is discarded below.
+            
+            
             staging.close()
             L.i { "[MigrationV2][Restore] import → staging complete attachments=$attachmentFiles writeFailures=$attachmentWriteFailures" }
             return staging
@@ -440,20 +440,20 @@ class RestoreOrchestrator @Inject constructor(
         }
     }
 
-    /**
-     * The streaming twin of [importToStaging]: the same staging open, the same [NeutralImporter], the
-     * same canonical attachment subtree. The only difference is the record source —
-     * [ContainerReader.readStreaming] over a forward-only [source] instead of a random-access file.
-     *
-     * Verify-before-commit: records pour into the discardable staging DB as they decrypt, before the
-     * end-of-stream HMAC is known. [ContainerReader.readStreaming] throws on an HMAC mismatch, a
-     * truncation, a cross-MAJOR manifest or an account mismatch from [onManifest], and on any throw this
-     * method discards staging and re-throws, so the commit is never reached. It returns the closed
-     * staging DB only on a fully verified stream.
-     *
-     * @param selfUid both the importer's own uid and the manifest account-match target; [onManifest]
-     *   compares `manifest.sourceAccount` to it before any record is emitted and throws on mismatch.
-     */
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
     private suspend fun importStreamToStaging(
         source: InputStream,
         transferKey: String,
@@ -476,30 +476,30 @@ class RestoreOrchestrator @Inject constructor(
             val progress = ProgressReporter(onProgress)
             var attachmentFiles = 0
             var attachmentWriteFailures = 0
-            // readStreaming invokes onRecord sequentially from its own single reader coroutine, like
-            // the two counters above, so a plain local needs no synchronization. Throttled because a
-            // StatFs syscall per imported record is a measurable regression on a large library.
+            
+            
+            
             var sinceStorageCheck = 0
             containerReader.readStreaming(
                 source = source,
-                passphrase = transferKey, // R3: ephemeral key in the passphrase position; NEVER logged
+                passphrase = transferKey, 
                 attachmentTarget = AttachmentByteTarget { contentRef, declaredLength ->
-                    // As on the file path above. The bytes still arrive and still count toward the
-                    // total the manifest announced.
+                    
+                    
                     if (importer.isSkippedBytes(contentRef)) {
                         progress.attachmentBytes(declaredLength)
                         liveness.attachmentBytesLanded(declaredLength)
                         return@AttachmentByteTarget null
                     }
-                    // As on the file path: never persist an empty frame as a 0-byte file.
+                    
                     if (declaredLength <= 0L) {
                         L.w { "[MigrationV2][Restore] empty attachment frame ref=$contentRef — not persisted" }
                         importer.onAttachmentBytesAbsent(contentRef)
                         return@AttachmentByteTarget null
                     }
                     attachmentFiles++
-                    // Same placement as the file path. Counted per write so a peer reading /status sees
-                    // a long attachment land as progress; a file that cannot open still counts as drained.
+                    
+                    
                     val out = openStagingAttachment(paths, contentRef, importer.placementFor(contentRef)) {
                         attachmentWriteFailures++
                         importer.onAttachmentBytesAbsent(contentRef)
@@ -524,11 +524,11 @@ class RestoreOrchestrator @Inject constructor(
                     }
                 },
                 onManifest = { manifest ->
-                    // Fail-fast account match before any record reaches staging. This path has no
-                    // peekManifest pre-pass, and the manifest is the first frame, so this hook is the
-                    // earliest possible identity gate; a mismatch throws and staging is discarded.
+                    
+                    
+                    
                     assertManifestAccountMatch(manifest.sourceAccount, selfUid)
-                    // The manifest is the first frame, so from here the bar has its denominator.
+                    
                     progress.start(ContainerTotals.fromManifest(manifest))
                 },
             )
@@ -542,11 +542,11 @@ class RestoreOrchestrator @Inject constructor(
         }
     }
 
-    /**
-     * Fail-fast account-match assertion for the streaming path, mirroring the file path's [accountMatches].
-     * A mismatch throws, so the read propagates it before any record is committed and staging is
-     * discarded. The raw account values are compared but never logged.
-     */
+    
+
+
+
+
     private fun assertManifestAccountMatch(manifestAccount: String, currentVerifyAccount: String) {
         if (!accountMatches(manifestAccount, currentVerifyAccount)) {
             L.w { "[MigrationV2][Restore] streaming account mismatch (manifest vs logging-in account) — reject" }
@@ -554,12 +554,12 @@ class RestoreOrchestrator @Inject constructor(
         }
     }
 
-    // ── helpers ─────────────────────────────────────────────────────────────────────────────────
+    
 
-    /**
-     * Materialize [source] to [workPath]. A source already backed by a stable local file is read in
-     * place; a forward-only SAF source is copied to the work file for random access.
-     */
+    
+
+
+
     private fun materialize(source: ArchiveSource, workPath: String): File {
         source.asFile()?.let { return it }
         val workFile = File(workPath)
@@ -570,27 +570,27 @@ class RestoreOrchestrator @Inject constructor(
         return workFile
     }
 
-    /** A best-effort short label for the flag; never the raw URI. */
+    
     private fun sourceLabel(source: ArchiveSource): String =
         source.asFile()?.name ?: "saf-source"
 
-    /**
-     * Resolve the staging-dir destination for an attachment's bytes.
-     *
-     * With a canonical placement from the importer, write into the relative `<ownerKey>/<fileName>`
-     * subtree, each component sanitized, so the promote dir-move lands the bytes where the app
-     * reconstructs the path at load time. The owner-key directory is created up front.
-     *
-     * The stream carries the at-rest ciphertext verbatim, so the file must land at the ciphertext
-     * address, not the bare plaintext one: readers resolve the ciphertext by name, and the legacy
-     * plaintext purge treats anything else as plaintext to encrypt. Writing it at the plaintext address
-     * makes readers feed ciphertext to the decoder and makes the purge encrypt it a second time. The
-     * base name stays whatever the record carried; only the address is derived here.
-     *
-     * With no placement known — an orphan or blank ref, or an owner with no key — this falls back to a
-     * flat write, which is harmless because the importer leaves the row's path null in that case. The
-     * fallback still runs [safeName], keeping the blank-ref guard.
-     */
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     private fun stagingAttachmentFile(
         stagingDir: String,
         contentRef: String,
@@ -602,37 +602,37 @@ class RestoreOrchestrator @Inject constructor(
         } else {
             File(stagingDir, safeName(contentRef))
         }
-        // Ask the at-rest layout itself for the ciphertext address rather than re-spelling the suffix:
-        // writer, reader and the legacy purge must never be able to drift apart.
+        
+        
         return EncryptedAttachmentAccess.encryptedFile(base.absolutePath)
     }
 
-    /**
-     * Make [raw] usable as a single path component without renaming it.
-     *
-     * The attachment must land under the exact name the record carries, because the reader derives its
-     * on-disk path from `AttachmentModel.fileName`. Scrubbing everything outside `[A-Za-z0-9._-]`
-     * silently renames every non-ASCII attachment, and the bytes are then on disk where no reader can
-     * find them: the attachment presents as not downloaded and falls back to a re-download whose server
-     * pointer has long expired.
-     *
-     * Only characters that genuinely cannot be a path component are substituted — separators, NUL, and
-     * the few external-storage rejects — while CJK, spaces and parentheses are preserved verbatim. A
-     * substitution is logged, since that is the one case where the on-disk name and the DB name diverge.
-     * A blank name, or one that reduces to a directory reference, gets a generated name instead:
-     * `File(dir, "")` resolves to the directory itself and the open would fail opaquely.
-     */
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     private fun safeName(raw: String): String =
         AttachmentFileNaming.asPathComponent(raw) ?: run {
             L.w { "[MigrationV2][Restore] attachment name unusable as a path component, substituted" }
             "attachment-${UUID.randomUUID()}"
         }
 
-    /**
-     * Open the staging file for [contentRef]'s bytes. A file that cannot be opened or written costs
-     * only that attachment: [onFailure] counts it, the frame is drained, and the missing file leaves
-     * the row re-downloadable. Null means drain without storing.
-     */
+    
+
+
+
+
     private fun openStagingAttachment(
         paths: RestorePaths,
         contentRef: String,
@@ -654,28 +654,21 @@ class RestoreOrchestrator @Inject constructor(
         _progress.update { RestoreProgress(stage, percent) }
     }
 
-    /** Delete the transient work area — container copy and staging products — after success or reject. */
+    
     private fun cleanupWork(work: File?) {
         runCatching { work?.deleteRecursively() }
     }
 
-    /**
-     * Failure cleanup: discard the staging products, the flag and the work area — but only for a
-     * failure that happened before the promote marker was written. Past that point [PromoteStep] owns
-     * the recovery and every one of those artifacts is an input to it, so the whole body is skipped.
-     */
-    /**
-     * Start an import from a known-empty staging attachment dir.
-     *
-     * `cleanupOnFailure` clears it on every failure the orchestrator can observe, but a process death
-     * mid-import runs no catch block at all, leaving an abandoned attempt's bytes on disk with nothing
-     * to remove them. Wiping on entry gives the attachment side the same guarantee `StagingDatabase`
-     * already has, and keeps a retry from promoting a mix of two attempts' bytes. Best-effort: a delete
-     * failure must not block the retry.
-     *
-     * Attachments used to stage under `filesDir`; an attempt interrupted under such a build leaves
-     * bytes there that the current work-dir wipe no longer reaches, so that location is reclaimed too.
-     */
+    
+
+
+
+
+    
+
+
+
+
     private fun resetAttachmentsStagingDir(paths: RestorePaths) {
         val dir = File(paths.attachmentsStagingDir)
         runCatching { if (dir.exists()) dir.deleteRecursively() }
@@ -686,15 +679,15 @@ class RestoreOrchestrator @Inject constructor(
     }
 
     private fun cleanupOnFailure(paths: RestorePaths, flagStore: RestoreFlagStore, work: File?) {
-        // The whole cleanup is best-effort and must not mask the original typed failure: the marker
-        // probe and flag.clear() do file IO that can throw under the same storage condition that caused
-        // it, which would lose the original result.
+        
+        
+        
         runCatching {
-            // The barrier here is the marker (P0), not the rename (P2), and deliberately so: from the
-            // moment the marker exists the staging database and the staging attachments are what
-            // `PromoteStep.resumeIfPending` needs to finish P2 and P3, so deleting them would strand
-            // every future cold start on a promote it can never complete. "May I delete the staging
-            // products?" and "may I tell the peer how this ended?" are different questions.
+            
+            
+            
+            
+            
             val committed = PromoteMarkerStore(context).exists() ||
                 flagStore.currentPhase().let { it == RestorePhase.SIGNING_IN || it == RestorePhase.COMPLETED }
             if (committed) {
@@ -710,7 +703,7 @@ class RestoreOrchestrator @Inject constructor(
         }
     }
 
-    /** The commit tail with this orchestrator's own progress and work-area hooks bound in. */
+    
     private fun defaultCommitTail(): RestoreCommitTail = RestoreCommitTail(
         context = context,
         userManager = userManager,
@@ -720,13 +713,13 @@ class RestoreOrchestrator @Inject constructor(
     )
 
     companion object {
-        /**
-         * The container format version this app supports, single-sourced from
-         * [FormatCompat.SUPPORTED_FORMAT_VERSION] and retained here for the log line.
-         */
+        
+
+
+
         const val SUPPORTED_FORMAT_VERSION = FormatCompat.SUPPORTED_FORMAT_VERSION
 
-        /** How many imported records pass between two free-space probes. */
+        
         const val STORAGE_CHECK_EVERY_RECORDS = 2_000
     }
 }

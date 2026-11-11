@@ -25,20 +25,20 @@ private data class VideoSlot(val participant: Participant, val key: String)
 
 private enum class ActiveSlot { A, B }
 
-/**
- * Dual-slot A/B video transition with **renderer caching**.
- *
- * After a transition completes the outgoing slot is kept alive at alpha=0
- * rather than destroyed. This keeps its [StableFloatingVideoRenderer]
- * registered with the [VideoTrack][io.livekit.android.room.track.VideoTrack],
- * so the LiveKit adaptive-streaming layer never sends `disabled=true`. When
- * the same participant returns as active speaker the cached slot is promoted
- * instantly — no renderer create/destroy cycle, no key-frame wait, no black
- * screen.
- *
- * If a *different* participant needs the cached slot, the cache is replaced
- * (renderer recycled). Two slots (A/B) are the maximum alive at any time.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 @Composable
 fun ScreenShareFloatingSpeakerVideoTransition(
     modifier: Modifier = Modifier,
@@ -77,8 +77,8 @@ fun ScreenShareFloatingSpeakerVideoTransition(
             return@LaunchedEffect
         }
 
-        // Fast path: incoming participant's renderer is already cached in the
-        // non-active slot — just swap active, zero delay, zero black frames.
+        
+        
         val cachedSlot = if (activeSlot == ActiveSlot.A) slotB else slotA
         if (cachedSlot?.key == key) {
             L.d { "[Call] FloatingSpeaker cache hit, instant swap to $key" }
@@ -106,7 +106,7 @@ fun ScreenShareFloatingSpeakerVideoTransition(
 
         L.d { "[Call] FloatingSpeaker transition start outgoing=$committedKey incoming=$key" }
 
-        // Place incoming in non-active slot (replaces any previously cached participant).
+        
         if (activeSlot == ActiveSlot.A) slotB = VideoSlot(incoming, key)
         else slotA = VideoSlot(incoming, key)
         fadeAlpha.snapTo(1f)
@@ -119,7 +119,7 @@ fun ScreenShareFloatingSpeakerVideoTransition(
                 targetValue = 0f,
                 animationSpec = tween(durationMillis = ScreenShareSpeakerConstants.FADE_MS.toInt()),
             )
-            // Swap active slot but keep the outgoing alive as cache (alpha=0).
+            
             activeSlot = if (activeSlot == ActiveSlot.A) ActiveSlot.B else ActiveSlot.A
             committedKey = key
             committedCameraOn = true

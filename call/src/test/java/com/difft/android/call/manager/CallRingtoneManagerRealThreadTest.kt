@@ -22,11 +22,11 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
-/**
- * Pins the assumption [CallRingtoneManager] rests on (issue #1313): one
- * `Dispatchers.IO.limitedParallelism(1)` view serializes ringtone work issued from real threads,
- * so `Ringtone.play()`/`stop()` never overlap. State-machine rows live in [CallRingtoneManagerTest].
- */
+
+
+
+
+
 class CallRingtoneManagerRealThreadTest {
 
     private lateinit var source: CallRingtoneSource
@@ -43,7 +43,7 @@ class CallRingtoneManagerRealThreadTest {
         private val inFlight = AtomicInteger(0)
         val maxInFlight = AtomicInteger(0)
 
-        /** Runs [body] while counting concurrent framework calls. */
+        
         fun tracked(body: () -> Unit) {
             maxInFlight.accumulateAndGet(inFlight.incrementAndGet(), ::maxOf)
             try {
@@ -53,7 +53,7 @@ class CallRingtoneManagerRealThreadTest {
             }
         }
 
-        /** Reports `isPlaying == true` after `play()` and `false` after `stop()`. */
+        
         fun ringtone(): Ringtone {
             val playing = AtomicBoolean(false)
             val rt = mockk<Ringtone>(relaxed = true)
@@ -63,7 +63,7 @@ class CallRingtoneManagerRealThreadTest {
             return rt
         }
 
-        /** Waits until every task enqueued so far has run (loops are parked at a delay). */
+        
         fun awaitIdle() = runBlocking {
             withTimeout(5_000) { scope.launch(serial) {}.join() }
         }

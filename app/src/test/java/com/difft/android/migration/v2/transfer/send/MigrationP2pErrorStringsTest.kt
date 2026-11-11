@@ -13,13 +13,11 @@ import com.difft.android.p2p.engine.upload.MigrationRejectReason
 import org.junit.Test
 import kotlin.test.assertEquals
 
-/**
- * The shared [classifyFailure] resolves every reason a transfer can end with to one of the twelve
- * situations the failure page knows (产品方案 §8.6 / 附录 A.7). The CRITICAL symmetry: on the OLD
- * device a gate reject arrives as a thrown [PrepareUploadRejectedException] whose message is
- * `"prepare-upload rejected: <wire>"`, on the NEW device as `"403 forbidden: <wire>"` — both carry
- * the wire token, so both resolve to the same kind.
- */
+
+
+
+
+
 class MigrationP2pErrorStringsTest {
 
     @Test
@@ -62,15 +60,15 @@ class MigrationP2pErrorStringsTest {
         assertEquals(MigrationFailureKind.DEVICE, classifyFailure("rejected: ${MigrationError.IdentityInvalid.code}"))
         assertEquals(MigrationFailureKind.READ, classifyFailure("failed: ${MigrationError.SnapshotFailed.code}"))
         assertEquals(MigrationFailureKind.SWITCH, classifyFailure("failed: ${MigrationError.SignInFailed.code}"))
-        // A handoff answered 200 without the receiver's "installed" word: the switch did not happen.
+        
         assertEquals(MigrationFailureKind.SWITCH, classifyFailure(HANDOFF_NOT_ACKNOWLEDGED))
         assertEquals(MigrationFailureKind.SOURCE, classifyFailure("pairing timeout"))
-        // A stream that stops before its end is the peer or the link, never the data.
+        
         assertEquals(MigrationFailureKind.SOURCE, classifyFailure("failed: ${MigrationError.SourceUnavailable.code}"))
         assertEquals(MigrationFailureKind.CONNECTION, classifyFailure("failed: ${MigrationError.ConnectionLost.code}"))
     }
 
-    /** T33 — the reverse-pairing and storage tokens, each with a page of its own. */
+    
     @Test
     fun `reverse-pairing and storage outcomes resolve to their own kinds`() {
         assertEquals(
@@ -87,10 +85,10 @@ class MigrationP2pErrorStringsTest {
             MigrationFailureKind.STORAGE_FULL,
             classifyFailure("403 forbidden: ${MigrationRejectReason.INSUFFICIENT_STORAGE.wire}"),
         )
-        // The local out-of-space error says the same thing as the peer's 403, so it says it the same way.
+        
         assertEquals(MigrationFailureKind.STORAGE_FULL, classifyFailure("failed: ${MigrationError.DiskSpaceInsufficient.code}"))
-        // Only the computer's own user can update it, so this page must not offer THIS device's
-        // download page — which is what the UPDATE_NEEDED kind, and only that kind, drives.
+        
+        
         assertEquals(R.string.migration_m3_title, MigrationFailureKind.PEER_UPDATE_NEEDED.titleRes)
         assertEquals(R.string.migration_p3_reason_update_desktop, MigrationFailureKind.PEER_UPDATE_NEEDED.reasonRes)
         assertEquals(MigrationResultTone.WARNING, MigrationFailureKind.PEER_UPDATE_NEEDED.tone)
@@ -115,7 +113,7 @@ class MigrationP2pErrorStringsTest {
             SenderPauseSession.REASON_COMMIT_FAILED,
             SenderPauseSession.REASON_RESIDUAL,
         ).forEach { reason ->
-            // Thrown as MigrationPauseException; the service reports its message as the reason.
+            
             val kind = classifyFailure(MigrationPauseException(reason).message.orEmpty())
             assertEquals(MigrationFailureKind.UNKNOWN, kind, reason)
             assertEquals(R.string.migration_p3_failed_title, kind.titleRes)
@@ -131,7 +129,7 @@ class MigrationP2pErrorStringsTest {
         assertEquals(R.string.migration_m3_title, kind.titleRes)
         assertEquals(R.string.migration_m3_body_new_device, kind.reasonRes)
         assertEquals(MigrationResultTone.WARNING, kind.tone)
-        // The version reject keeps its own copy and its update-this-device action.
+        
         val versionKind = classifyFailure("403 forbidden: ${MigrationRejectReason.VERSION_INCOMPATIBLE.wire}")
         assertEquals(MigrationFailureKind.UPDATE_NEEDED, versionKind)
         assertEquals(R.string.migration_m3_body, versionKind.reasonRes)

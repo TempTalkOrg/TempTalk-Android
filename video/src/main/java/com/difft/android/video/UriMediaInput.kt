@@ -10,9 +10,9 @@ import android.net.Uri
 import com.difft.android.video.interfaces.MediaInput
 import java.io.IOException
 
-/**
- * A media input source defined by a [Uri] that the system can parse and access.
- */
+
+
+
 class UriMediaInput(private val context: Context, private val uri: Uri) : MediaInput {
   @Throws(IOException::class)
   override fun createExtractor(): MediaExtractor {

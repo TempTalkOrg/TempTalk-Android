@@ -19,20 +19,20 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/**
- * Cases #51 and #63 — what the ViewModel hands the Fragment.
- *
- * #51 is the reverse proof that anchor completeness (A-12) is worth anything: with the before-anchor
- * missing, the SAME first row grows a day header and a re-shown nickname.
- * #63 pins `windowSize` to the LOADED window rather than the transformed list, and the two gate flags
- * to a literal pass-through.
- */
+
+
+
+
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28])
 class ChatMessageViewModelUiStateFieldsTest : ChatMessageViewModelTestBase() {
 
-    // #51 — anchor present vs absent, same window.
+    
     @Test
     fun `a missing before-anchor degrades the first row's day header and name`() = runTest {
         val previous = peerMessage("a0", DAY_ONE)
@@ -58,11 +58,11 @@ class ChatMessageViewModelUiStateFieldsTest : ChatMessageViewModelTestBase() {
         }
     }
 
-    // #63 — windowSize is the loaded window, NOT the transformed list. Here the two differ by two
-    // filtered-out empty notify rows and one prepended E2EE header.
+    
+    
     @Test
     fun `windowSize reports the loaded window and both gate flags pass through verbatim`() = runTest {
-        // On globalServicesMock, never chained through `globalServices` — see the field's KDoc.
+        
         every { globalServicesMock.gson } returns Gson()
         val window = listOf(
             peerMessage("m1", DAY_ONE),
@@ -81,7 +81,7 @@ class ChatMessageViewModelUiStateFieldsTest : ChatMessageViewModelTestBase() {
             pumpMainLooper()
             val state = awaitItem()
 
-            // header + the two text rows; the two empty notifies are filtered out.
+            
             assertEquals(3, state.chatMessages.size)
             assertTrue(state.chatMessages[0] is EncryptionHeaderChatMessage)
             assertEquals(4, state.windowSize)
@@ -112,7 +112,7 @@ class ChatMessageViewModelUiStateFieldsTest : ChatMessageViewModelTestBase() {
     private fun peerMessage(id: String, timestamp: Long) =
         buildMessageModel(id = id, systemShowTimestamp = timestamp, fromWho = PEER_ID)
 
-    /** A notify row whose rendered content is empty — the transform drops these. */
+    
     private fun emptyNotify(id: String, timestamp: Long) = buildMessageModel(
         id = id,
         systemShowTimestamp = timestamp,

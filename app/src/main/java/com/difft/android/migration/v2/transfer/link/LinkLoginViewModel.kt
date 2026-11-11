@@ -24,35 +24,35 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlin.coroutines.cancellation.CancellationException
 
-/** The network and account seams the page needs; the Activity wires the real ones, tests fake them. */
+
 interface LinkLoginGateway {
     suspend fun estimate(): ExportEstimate
 
-    /**
-     * Settles which of the Desktop's advertised addresses to talk to (TCP + TLS + pin, first to
-     * answer wins); null when none did. The page then keeps the code's first address and lets the
-     * precheck report the Desktop unreachable the way it always has.
-     */
+    
+
+
+
+
     suspend fun resolve(target: QrPayload): QrPayload? = EndpointRace.resolve(target)
 
-    /** `link-precheck`; throws [PrepareUploadRejectedException] on a typed refusal, [IOException] when unreachable. */
+    
     suspend fun precheck(target: QrPayload): LinkPeerState
 
-    /**
-     * `link-intent`; returns the Desktop's fresh verdict on the account relation (null from an older
-     * Desktop). Throws [PrepareUploadRejectedException] on a typed refusal, [IOException] when unreachable.
-     */
+    
+
+
+
     suspend fun linkIntent(target: QrPayload, sync: Boolean): LinkPeerState?
 
     suspend fun link(ephemeralId: String, publicKey: String): Result<Unit>
 }
 
-/**
- * Drives the Desktop-login confirmation page. Order on sign-in for a compound code: `link-intent`
- * first, so the Desktop knows the decision at provisioning time, then the link, then — with sync on —
- * hand the payload to the send screen. Any failure of the intent leg degrades to a plain sign-in: the
- * link itself is never blocked by the sync machinery.
- */
+
+
+
+
+
+
 class LinkLoginViewModel(
     private val appContext: Context,
     private val ephemeralId: String,
@@ -64,10 +64,10 @@ class LinkLoginViewModel(
 
     private val payload: QrPayload? = rawPayload?.let(QrPayloadCodec::decode)?.takeIf { it.transferKey != null }
 
-    /**
-     * [payload] with its address settled by [LinkLoginGateway.resolve] — what every request and the
-     * send screen use, so the address that answered is the one the session is recorded against.
-     */
+    
+
+
+
     @Volatile
     private var target: QrPayload? = payload
 
@@ -106,11 +106,11 @@ class LinkLoginViewModel(
         }
     }
 
-    /**
-     * `link-precheck` on open: one call answers both whether the Desktop is reachable and how its
-     * history relates to this account. Same account switches the sync off for good; a stale PIN means
-     * the code on screen has rotated, so the page closes for a re-scan.
-     */
+    
+
+
+
+
     private suspend fun precheck(target: QrPayload) {
         try {
             val state = gateway.precheck(target)
@@ -133,8 +133,8 @@ class LinkLoginViewModel(
             L.i { "[MigrationV2][Link] desktop unreachable: ${e.message}" }
             updateCompound { copy(reachable = false, syncEnabled = false) }
         } catch (e: Exception) {
-            // A Desktop that answers but not in this protocol (a 404 from a build without the
-            // endpoint, an unparsable body) cannot sync; the login itself is unaffected. Never a crash.
+            
+            
             L.w { "[MigrationV2][Link] precheck failed, sync off: ${e.message}" }
             updateCompound { copy(reachable = false, syncEnabled = false) }
         }
@@ -146,8 +146,8 @@ class LinkLoginViewModel(
         when (current) {
             is LinkLoginState.Plain -> signInPlain()
             is LinkLoginState.Compound -> {
-                if (current.reachable == null) return // still prechecking; the button is disabled meanwhile
-                // Same account: the Desktop keeps its own history, no intent is sent, plain link.
+                if (current.reachable == null) return 
+                
                 if (current.reachable == false || current.gateReject != null || current.peerState == LinkPeerState.SAME_ACCOUNT) {
                     signInPlain()
                     return
@@ -157,7 +157,7 @@ class LinkLoginViewModel(
                     val target = this@LinkLoginViewModel.target ?: return@launch signInPlain()
                     val sync = current.syncEnabled
                     val verdict = sendIntent(target, sync) ?: return@launch
-                    // The intent's answer is the Desktop's current view and supersedes the precheck's.
+                    
                     val effective = verdict.state ?: current.peerState
                     val willSync = sync && verdict.reachable && effective != LinkPeerState.SAME_ACCOUNT
                     link(willSync, current.includeAttachments, awaitPeerConfirm = willSync && effective == LinkPeerState.DIFFERENT_ACCOUNT)
@@ -166,20 +166,20 @@ class LinkLoginViewModel(
         }
     }
 
-    /** What `link-intent` came back with: whether the Desktop answered at all, and its account verdict. */
+    
     private data class IntentVerdict(val reachable: Boolean, val state: LinkPeerState?)
 
-    /**
-     * Delivers the decision. Null means the page already handled the outcome (stale PIN → re-scan,
-     * gate reject → offer plain sign-in) and sign-in must not continue.
-     */
+    
+
+
+
     private suspend fun sendIntent(target: QrPayload, sync: Boolean): IntentVerdict? = try {
         IntentVerdict(reachable = true, state = gateway.linkIntent(target, sync))
     } catch (e: CancellationException) {
         throw e
     } catch (e: PrepareUploadRejectedException) {
         if (e.reason.contains(PrepareUploadReasons.PIN_REQUIRED)) {
-            // The code on the Desktop screen has rotated since the scan; it is still there to re-scan.
+            
             L.w { "[MigrationV2][Link] link-intent refused: stale PIN" }
             toast(R.string.link_login_pin_expired)
             _effects.trySend(LinkLoginEffect.Finish)
@@ -190,13 +190,13 @@ class LinkLoginViewModel(
             null
         }
     } catch (e: IOException) {
-        // Unreachable after the precheck said otherwise: the login goes ahead, only the sync is dropped.
+        
         L.w { "[MigrationV2][Link] link-intent unreachable: ${e.message}" }
         toast(R.string.link_login_unreachable_note)
         IntentVerdict(reachable = false, state = null)
     } catch (e: Exception) {
-        // Same as unreachable: an answer this protocol does not know (404, malformed body) drops
-        // the sync, not the login — and never the process.
+        
+        
         L.w { "[MigrationV2][Link] link-intent failed, sync off: ${e.message}" }
         toast(R.string.link_login_unreachable_note)
         IntentVerdict(reachable = false, state = null)
@@ -216,8 +216,8 @@ class LinkLoginViewModel(
             return
         }
         L.i { "[MigrationV2][Link] linked sync=$sync includeAttachments=$includeAttachments awaitPeerConfirm=$awaitPeerConfirm" }
-        // The send screen gets the settled address, not the code's first one, so its service talks
-        // to the Desktop that answered without racing again.
+        
+        
         val raw = target?.let { runCatching { QrPayloadCodec.encodeText(it) }.getOrNull() } ?: rawPayload
         if (sync && raw != null) _effects.trySend(LinkLoginEffect.OpenSend(raw, includeAttachments, awaitPeerConfirm))
         _effects.trySend(LinkLoginEffect.Finish)

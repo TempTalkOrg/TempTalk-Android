@@ -15,13 +15,13 @@ class RecyclerPreloadView : RecyclerView {
     private var mFirstVisiblePosition = 0
     private var mLastVisiblePosition = 0
 
-    /**
-     * reachBottomRow = 1;(default)
-     * mean : when the lastVisibleRow is lastRow , call the onReachBottom();
-     * reachBottomRow = 2;
-     * mean : when the lastVisibleRow is Penultimate Row , call the onReachBottom();
-     * And so on
-     */
+    
+
+
+
+
+
+
     private var reachBottomRow = BOTTOM_DEFAULT
 
     private var onRecyclerViewPreloadListener: OnRecyclerViewPreloadMoreListener? = null
@@ -73,8 +73,8 @@ class RecyclerPreloadView : RecyclerView {
                         isInTheBottom = true
                     }
                 } else {
-                    // First on-screen with no scroll and content within one screen; ensures a
-                    // second pull-to-load when the page size is too small to fill the screen.
+                    
+                    
                     if (dy == 0) {
                         isInTheBottom = false
                     }

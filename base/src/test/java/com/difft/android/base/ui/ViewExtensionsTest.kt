@@ -17,22 +17,12 @@ import org.robolectric.annotation.Config
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/**
- * Regression tests for [noSmoothScrollToBottom] — Crashlytics issue 32a90db4.
- *
- * The offset fine-tune runs inside doOnNextLayout, i.e. inside the layout pass.
- * A synchronous scrollBy there dispatches onScrolled listeners mid-layout, which
- * can mutate the view tree while an ancestor FrameLayout is iterating its children
- * (FATAL NPE in FrameLayout.layoutChildren). The scrollBy must therefore land on a
- * posted runnable, never synchronously inside layout.
- *
- * The offset > 0 branch only fires when the last item's bottom ends up past the
- * viewport after layout. scrollToPosition's pending-position layout end-aligns the
- * target (fixLayoutEndGap), so the tests reproduce the production shape instead:
- * the last item is already visible and then grows taller than the viewport (the
- * emoji-reaction case PR #782 addressed) — the keep-visible-rect anchor leaves its
- * bottom beyond the viewport and the fine-tune must scroll it back into view.
- */
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33])
 class ViewExtensionsTest {
@@ -68,7 +58,7 @@ class ViewExtensionsTest {
         layout(0, 0, 1080, viewportHeight)
     }
 
-    /** Scrolls to bottom, then grows the last item so its bottom overflows the viewport. */
+    
     private fun RecyclerView.scrollToBottomAndGrowLastItem() {
         scrollToPosition(totalItems - 1)
         measureAndLayout()
@@ -92,7 +82,7 @@ class ViewExtensionsTest {
         })
 
         recyclerView.noSmoothScrollToBottom()
-        // Drive the layout pass that fires the doOnNextLayout fine-tune.
+        
         recyclerView.measureAndLayout()
         layoutReturned = true
 
@@ -104,7 +94,7 @@ class ViewExtensionsTest {
 
     @Test
     fun `offset fine-tune still scrolls the grown last item fully into view`() {
-        // Attached to a real window so the posted runnable executes on looper idle.
+        
         val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
         val recyclerView = createRecyclerView(activity)
         activity.setContentView(recyclerView, ViewGroup.LayoutParams(1080, viewportHeight))

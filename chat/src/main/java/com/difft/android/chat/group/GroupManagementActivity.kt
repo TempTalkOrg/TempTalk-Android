@@ -7,7 +7,7 @@ import androidx.fragment.app.Fragment
 import com.difft.android.base.utils.pane.DetailShellActivity
 import dagger.hilt.android.AndroidEntryPoint
 
-/** Compatibility shell; the retained page owns all group state and writes. */
+
 @AndroidEntryPoint
 class GroupManagementActivity : DetailShellActivity() {
     override fun createPage(): Fragment? = intent.getStringExtra(KEY_GID)?.takeIf { it.isNotBlank() }

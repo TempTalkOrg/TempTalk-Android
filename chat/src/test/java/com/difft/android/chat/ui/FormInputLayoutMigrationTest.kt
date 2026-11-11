@@ -17,11 +17,11 @@ import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/**
- * Detached-inflate pins for the forward dialog's note and the media caption: both fields are the
- * shared input shell at their old ids and no raw EditText is left in either layout. Detached
- * inflate exercises the shell's attribute parsing without composition or a Hilt host.
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], qualifiers = "w360dp-h640dp")
 class FormInputLayoutMigrationTest {
@@ -58,7 +58,7 @@ class FormInputLayoutMigrationTest {
         assertTrue(root.editTexts().isEmpty(), "raw EditText left in the caption layout")
     }
 
-    // The send path reads the note from the shell, trimmed, as it read the EditText.
+    
     @Test
     fun forwardNote_readsTheShellQueryTrimmed() {
         val note = inflate(R.layout.chat_layout_forward_dialog).findViewById<DifftClearableInputView>(R.id.et_message)

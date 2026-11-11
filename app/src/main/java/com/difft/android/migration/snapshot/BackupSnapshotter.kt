@@ -16,44 +16,44 @@ import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Takes a consistent on-disk snapshot of the main WCDB database file.
- *
- * WAL auto-checkpoint is disabled for the duration and restored in a `finally` even on failure.
- * `truncateCheckpoint` merges the WAL into the main file and is retried because a long-running
- * reader can make it report `SQLITE_BUSY`; the 5s timeout is a protective ceiling, not an
- * expected wait. The caller deletes the tmp file once it has consumed it.
- */
+
+
+
+
+
+
+
+
 interface BackupSnapshotter {
-    /**
-     * Takes a consistent snapshot of the main WCDB, returning the tmp file path.
-     * Caller is responsible for deleting the tmp file after consumption.
-     *
-     * @throws MigrationException.SnapshotFailed if `truncateCheckpoint` cannot complete
-     *   within the retry budget.
-     */
+    
+
+
+
+
+
+
     suspend fun takeSnapshot(): File
 
     companion object {
-        /** Tmp directory under `filesDir` where snapshot copies live. */
+        
         const val TMP_DIR_NAME = "migration_temp"
 
-        /** Filename of the plaintext WCDB snapshot copy. */
+        
         const val TMP_FILE_NAME = "chat.db.tmp"
 
-        /**
-         * Canonical absolute path of the snapshot tmp file — shared by the snapshotter and by any
-         * startup cleanup that removes a leftover snapshot.
-         */
+        
+
+
+
         fun tmpFilePath(context: Context): File = File(File(context.filesDir, TMP_DIR_NAME), TMP_FILE_NAME)
     }
 }
 
-/**
- * Test seam over the three WCDB [Database] calls the snapshotter needs. [Database] loads a native
- * library in its `<clinit>`, which throws `UnsatisfiedLinkError` on the JVM test classpath even
- * under mocking, so tests inject a pure-JVM fake here instead.
- */
+
+
+
+
+
 @VisibleForTesting
 internal interface SnapshotDbOps {
     fun execute(sql: String)
@@ -79,12 +79,12 @@ class BackupSnapshotterImpl @Inject constructor(
     private val wcdb: WCDB,
 ) : BackupSnapshotter {
 
-    /**
-     * Test seam: `null` in production (resolves from `wcdb.db`). Tests set this directly
-     * to inject a pure-JVM fake, bypassing the `Database` native static-init.
-     *
-     * `@Volatile` so the test-thread write is visible to the IO-dispatched coroutine.
-     */
+    
+
+
+
+
+
     @Volatile
     @VisibleForTesting
     internal var overrideOps: SnapshotDbOps? = null
@@ -121,9 +121,9 @@ class BackupSnapshotterImpl @Inject constructor(
                     throw MigrationException.SnapshotFailed("truncateCheckpoint exhausted retries", lastError)
                 }
             } catch (e: TimeoutCancellationException) {
-                // Translate the timeout here, or the outer `catch (e: CancellationException)`
-                // would report it to the user as "cancelled". User-initiated cancellation throws a
-                // plain `CancellationException`, so it bypasses this catch and keeps propagating.
+                
+                
+                
                 throw MigrationException.SnapshotFailed(
                     "truncateCheckpoint timed out after ${TRUNCATE_TIMEOUT_MS}ms",
                     e,

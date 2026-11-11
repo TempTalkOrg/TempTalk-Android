@@ -3,10 +3,10 @@ package com.difft.android.chat.ui
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/**
- * The 1:1 settings rows are re-derived when the official-account flag flips after the page
- * opened (the cache may fill late), in both directions; previously the page was recreated.
- */
+
+
+
+
 class SingleChatSettingRowsTest {
 
     private val contact = SingleChatSettingRows.of(isSelf = false, isOfficial = false, inContacts = true)

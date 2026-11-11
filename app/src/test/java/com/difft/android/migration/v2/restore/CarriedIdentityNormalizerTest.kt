@@ -8,15 +8,13 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Test
 
-/**
- * The identity a container carries is checked before it is installed, because a key that cannot decode
- * only fails at sign-in's second request — after the first has already revoked the old device. The
- * one peer-side slip we normalize is the bare 32-byte public key (what iOS shipped on 2026-09-09);
- * everything else must be rejected before promote.
- */
+
+
+
+
 class CarriedIdentityNormalizerTest {
 
-    private val raw32 = ByteArray(32) { (it + 0xA0).toByte() }        // first byte 0xA0 — looks like a bad type marker
+    private val raw32 = ByteArray(32) { (it + 0xA0).toByte() }        
     private val serialized33 = byteArrayOf(0x05) + raw32
     private val priv32 = ByteArray(32) { it.toByte() }
 
@@ -30,7 +28,7 @@ class CarriedIdentityNormalizerTest {
 
     @Test
     fun `a bare 32-byte public key gets the 0x05 type byte prepended`() {
-        // Exactly what libsignal would otherwise choke on: its first byte read as the type marker.
+        
         val out = CarriedIdentityNormalizer.normalize(identity(pub = raw32, priv = priv32))
 
         assertArrayEquals(serialized33, Base64.decode(out.aciPublicKey))
@@ -81,7 +79,7 @@ class CarriedIdentityNormalizerTest {
     @Test
     fun `the old pair follows the same rules and a half pair is dropped`() {
         val withOld = identity(pub = serialized33, priv = priv32).copy(
-            oldAciPublicKey = Base64.encodeBytes(raw32),          // bare → normalized
+            oldAciPublicKey = Base64.encodeBytes(raw32),          
             oldAciPrivateKey = Base64.encodeBytes(priv32),
         )
         val out = CarriedIdentityNormalizer.normalize(withOld)

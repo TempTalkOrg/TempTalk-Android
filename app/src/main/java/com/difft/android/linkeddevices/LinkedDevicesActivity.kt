@@ -8,11 +8,11 @@ import com.difft.android.R
 import com.difft.android.base.BaseActivity
 import dagger.hilt.android.AndroidEntryPoint
 
-/**
- * Phone host for the Linked Devices screen: a fragment container, so [BaseActivity] applies the
- * system-bar insets to the XML root exactly as it does for the tablet host. [LinkedDevicesFragment]
- * owns the screen on both form factors.
- */
+
+
+
+
+
 @AndroidEntryPoint
 class LinkedDevicesActivity : BaseActivity() {
 
@@ -20,6 +20,9 @@ class LinkedDevicesActivity : BaseActivity() {
         fun startActivity(context: Context) =
             context.startActivity(Intent(context, LinkedDevicesActivity::class.java))
     }
+
+    
+    override fun participatesInSideChrome(): Boolean = true
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

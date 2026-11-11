@@ -11,10 +11,10 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/**
- * Reaction tabs are keyed by emoji: after a fold recreation where the emoji set changed (👍
- * reactions removed meanwhile), ViewPager2 must not hand the restored 👍 tab to ❤️.
- */
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class EmojiReactionTabsAdapterTest {

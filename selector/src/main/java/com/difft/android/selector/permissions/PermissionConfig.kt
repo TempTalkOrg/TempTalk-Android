@@ -31,21 +31,12 @@ object PermissionConfig {
     @JvmField
     val WRITE_EXTERNAL_STORAGE: String = Manifest.permission.WRITE_EXTERNAL_STORAGE
 
-    /**
-     * 当前申请权限
-     */
     @JvmField
     var CURRENT_REQUEST_PERMISSION = arrayOf<String>()
 
-    /**
-     * 相机权限
-     */
     @JvmField
     val CAMERA = arrayOf(Manifest.permission.CAMERA)
 
-    /**
-     * 获取外部读取权限
-     */
     @JvmStatic
     fun getReadPermissionArray(context: Context, chooseMode: Int): Array<String> {
         if (SdkVersionUtils.isUPSIDE_DOWN_CAKE()) {
@@ -94,12 +85,9 @@ object PermissionConfig {
                 else arrayOf(READ_EXTERNAL_STORAGE)
             }
         }
-        // API 29-32: the manifest caps WRITE_EXTERNAL_STORAGE at maxSdkVersion="28", so it can
-        // never be granted here. Requesting it made the selector see a permanently denied
-        // permission and close the gallery right after the user granted READ (issue #1101).
-        // Keep the request set a subset of the declared set instead of widening the manifest.
-        // The first element must stay READ_EXTERNAL_STORAGE: PictureSelectorFragment identifies
-        // the camera flow with permissions[0] == PermissionConfig.CAMERA[0].
+        
+        
+        
         return if (SdkVersionUtils.isQ()) {
             arrayOf(READ_EXTERNAL_STORAGE)
         } else {

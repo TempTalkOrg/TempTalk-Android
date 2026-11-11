@@ -8,21 +8,21 @@ import org.jetbrains.kotlin.psi.KtCallExpression
 import org.jetbrains.kotlin.psi.KtDotQualifiedExpression
 import org.jetbrains.kotlin.psi.KtExpression
 
-/**
- * Flags a WCDB `prepareSelect()` chain that never calls `.select(...)`.
- *
- * `Select.fields` defaults to null and is set only by `.select(fields)`; without it
- * `.allObjects()`/`.firstObject()` NPE at runtime (`Field.getBindClass(null).length`) —
- * yet it compiles fine. This was the read-receipt regression from #910, which JVM tests
- * (WCDB native is `@Ignore`d) and static review structurally can't catch; a compile-time
- * rule can.
- *
- * Correct form (see [com.difft.android.chat.jobs.WcdbJobStorage]):
- *   `wcdb.x.prepareSelect().select(*Model.allBindingFields())...allObjects()`
- *
- * False positive: splitting `prepareSelect()` and `.select(...)` across statements isn't
- * detected as having a select — keep them in one chain or `@Suppress` with a note.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 class PrepareSelectMissingSelect(config: Config) : Rule(
     config,
     "WCDB prepareSelect() chain with no .select(...): allObjects()/firstObject() will NPE at runtime.",
@@ -46,7 +46,7 @@ class PrepareSelectMissingSelect(config: Config) : Rule(
         }
     }
 
-    /** Climb to the outermost dot-qualified expression containing [start] — the whole chain. */
+    
     private fun climbToTop(start: KtExpression): KtExpression {
         var top: KtExpression = start
         while (true) {
@@ -56,7 +56,7 @@ class PrepareSelectMissingSelect(config: Config) : Rule(
         return top
     }
 
-    /** Walk the receiver chain of [top], returning true if any link calls `.select(...)`. */
+    
     private fun chainHasSelect(top: KtExpression): Boolean {
         var node: KtExpression? = top
         while (node is KtDotQualifiedExpression) {

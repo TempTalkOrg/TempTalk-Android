@@ -27,13 +27,13 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Processes the envelope carried by a normal (`critical == 0`) FCM push on its own coroutine.
- *
- * That coroutine owns its receive ticket (#1382): it is acquired as the first statement and
- * closed after processing and the notification bookkeeping, so a pause that begins after the push
- * arrived either waits for this work or turns it into a no-op.
- */
+
+
+
+
+
+
+
 @Singleton
 class FcmNormalMessageHandler @Inject constructor(
     @param:ApplicationContext private val context: Context,
@@ -45,7 +45,7 @@ class FcmNormalMessageHandler @Inject constructor(
     private val notificationRepostGuard: NotificationRepostGuard,
 ) {
 
-    /** @param scope must run on an IO dispatcher; [appScope] does. */
+    
     fun handle(pushCustomContent: PushCustomContent, scope: CoroutineScope = appScope): Job {
         val msg = pushCustomContent.msg
         if (msg == null) {
@@ -63,8 +63,8 @@ class FcmNormalMessageHandler @Inject constructor(
     }
 
     private suspend fun processAdmitted(msg: String, pushCustomContent: PushCustomContent, admission: MessagingTicket) {
-        // #1347: notifying invites this push may duplicate, snapshotted before processing so
-        // a notification this very push creates is never re-posted over its full-screen intent.
+        
+        
         val showingInviteIds = snapshotShowingInviteNotificationIds(pushCustomContent)
         try {
             L.i { "[fcm] Start processing message" }
@@ -78,9 +78,9 @@ class FcmNormalMessageHandler @Inject constructor(
                     if (messageResult != null) {
                         L.i { "[fcm] Processing message success:${messageResult.message.timeStamp} shouldShowNotification:${messageResult.shouldShowNotification}" }
                         if (messageResult.shouldShowNotification) {
-                            // Atomic increment (issue #725 §9.6): UserManager.update serializes
-                            // the read-modify-write under its writeMutex, so concurrent FCM
-                            // pushes can't race the way the legacy `getInt`+`putInt` pair did.
+                            
+                            
+                            
                             userManager.update { unreadMsgNum += 1 }
                             messageNotificationUtil.showNotificationSuspend(
                                 context,
@@ -102,15 +102,15 @@ class FcmNormalMessageHandler @Inject constructor(
                     )
                 }
                 is EnvelopeProcessResult.TransientFailure -> {
-                    // FCM is best-effort: don't enqueue here. The same
-                    // envelope arrives via WebSocket / pending-message
-                    // pull, where FailedMessageProcessor owns the retry.
+                    
+                    
+                    
                     L.w {
                         "[fcm] Transient failure (not enqueueing; WebSocket path owns retries) " +
                             "ts=${serviceEnvelope!!.timestamp}: ${processRes.cause.stackTraceToString()}"
                     }
                 }
-                // Unreachable while this coroutine holds its ticket; nothing was stored.
+                
                 EnvelopeProcessResult.Paused -> Unit
                 null -> {
                     L.w { "[fcm] Processing message result is null (envelope deserialization failed)" }
@@ -124,7 +124,7 @@ class FcmNormalMessageHandler @Inject constructor(
         }
     }
 
-    /** Notification ids of the notifying call invites this push may duplicate that are still showing. */
+    
     private fun snapshotShowingInviteNotificationIds(pushCustomContent: PushCustomContent): List<Int> =
         try {
             matchNotifyingCallRoomIds(
@@ -139,26 +139,23 @@ class FcmNormalMessageHandler @Inject constructor(
         }
 
     private suspend fun handleMessageProcessingError(pushCustomContent: PushCustomContent) {
-        // Server notify pushes carry no envelope; the generic fallback would be misleading (#1347).
+        
         if (isServerNotifyPush(pushCustomContent.uid, pushCustomContent.notifyType)) {
             L.i { "[fcm] skip fallback notification reason=serverPush notifyType=${pushCustomContent.notifyType}" }
             return
         }
 
-        // 检查某些通知类型不显示通知
         if (pushCustomContent.notifyType == NOTIFY_TYPE_CALL_HANGUP) {
             L.i { "[fcm] notifyType: ${pushCustomContent.notifyType}, skip notification" }
             return
         }
 
-        // 检查是否有有效的目标（群组ID或用户ID）
         if (pushCustomContent.gid.isNullOrEmpty() && pushCustomContent.uid.isNullOrEmpty()) {
             L.w { "[fcm] No valid target (gid or uid) found, cannot show notification" }
             return
         }
 
         try {
-            // 根据目标类型创建For对象
             val forWhat = when {
                 !pushCustomContent.gid.isNullOrEmpty() -> For.Group(pushCustomContent.gid!!)
                 !pushCustomContent.uid.isNullOrEmpty() -> For.Account(pushCustomContent.uid!!)

@@ -10,11 +10,11 @@ import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.migration.ui.MigrationBanner
 import com.difft.android.base.migration.ui.MigrationNoteCard
 
-/**
- * The scanner's bottom block, as the migration scan page draws it: a guidance card from the caller
- * and, under it, a caution banner for a code this scanner declined. Either may be absent; with
- * neither the block draws nothing.
- */
+
+
+
+
+
 @Composable
 fun ScanGuidance(note: String?, notice: String?, modifier: Modifier = Modifier) {
     if (note.isNullOrEmpty() && notice.isNullOrEmpty()) return
@@ -33,10 +33,10 @@ fun ScanGuidance(note: String?, notice: String?, modifier: Modifier = Modifier) 
     }
 }
 
-/**
- * The caller's guidance lines as the one paragraph the guidance card holds. Sentences run together
- * after full-width punctuation (Chinese) and take a space otherwise.
- */
+
+
+
+
 internal fun scanNote(hint: String?, secondary: String?): String? {
     val lines = listOfNotNull(hint, secondary).filter { it.isNotEmpty() }
     if (lines.isEmpty()) return null

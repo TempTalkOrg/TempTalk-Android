@@ -127,7 +127,7 @@ class CompleteSelectView : LinearLayout {
             if (StyleUtils.checkStyleValidity(selectTextColor)) {
                 tvComplete.setTextColor(selectTextColor)
             } else {
-                tvComplete.setTextColor(ContextCompat.getColor(context, com.difft.android.base.R.color.t_info))
+                tvComplete.setTextColor(ContextCompat.getColor(context, com.difft.android.base.R.color.primary))
             }
             if (selectorStyle.bottomBarStyle!!.isCompleteCountTips) {
                 if (tvSelectNum.visibility == View.GONE || tvSelectNum.visibility == View.INVISIBLE) {

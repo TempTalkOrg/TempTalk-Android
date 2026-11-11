@@ -27,15 +27,15 @@ import java.util.Optional
 import java.util.concurrent.TimeUnit
 import java.util.function.Function
 
-/**
- * A default implementation of an [ErrorMapper] that can parse most known application
- * errors.
- *
- * Can be extended to add custom error mapping via [extend].
- *
- * While this class can be used directly, it is primarily intended to be used as part of
- * [DefaultResponseMapper].
- */
+
+
+
+
+
+
+
+
+
 class DefaultErrorMapper private constructor(
     private val customErrorMappers: Map<Int, ErrorMapper>
 ) : ErrorMapper {
@@ -54,8 +54,8 @@ class DefaultErrorMapper private constructor(
         body: String,
         getHeader: Function<String, String>
     ): Throwable? {
-        // Check custom mappers first — callers like NewMessageService register overrides
-        // for 404/409/410 to return group-specific exception types.
+        
+        
         customErrorMappers[status]?.let { customMapper ->
             return try {
                 customMapper.parseError(status, body, getHeader)

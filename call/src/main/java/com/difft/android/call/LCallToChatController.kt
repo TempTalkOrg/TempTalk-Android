@@ -19,28 +19,26 @@ import org.difft.app.database.models.GroupModel
 import java.util.ArrayList
 import java.util.Optional
 
-/**
- * One reusable avatar View for an XML RecyclerView row, which must not host a per-row ComposeView.
- * Create one per ViewHolder, add [view] to the row container exactly once, then call [bind] on
- * every bind — the same View is rebound (as the chat XML rows do with their own `AvatarView`),
- * never re-inflated.
- */
+
+
+
+
+
+
 interface AvatarViewBinder {
-    /** The avatar View; add it to the row container once, never re-add or replace it. */
+    
     val view: View
 
-    /**
-     * Rebinds [view] to [data]. Safe to call repeatedly and on a recycled row; every call
-     * re-applies the avatar so a load that was dropped while the row was detached is retried.
-     */
+    
+
+
+
     fun bind(data: AvatarData)
 }
 
 interface LCallToChatController {
-    /**
-     * Whether an incoming group call that arrived over the chat socket may alert this device (mute
-     * sub-options, focus mode). True when the feature is off, matching the behavior before it.
-     */
+    
+
     suspend fun shouldNotifyGroupCall(gid: String): Boolean
 
     suspend fun joinCall(context: Context, roomId: String, roomName: String?, callerId: String, callType: CallType, conversationId: String?, isNeedAppLock: Boolean): Boolean
@@ -55,13 +53,13 @@ interface LCallToChatController {
 
     suspend fun getContactorById(context: Context, id: String): Optional<ContactorModel>
 
-    /**
-     * Renders [data] with the chat avatar chain (Glide + encrypted-avatar decrypt + letter fallback
-     * + remark). Glide gets an explicit target size derived from [size].
-     *
-     * [letterTextSizeDp] defaults to the size the 48dp list avatar was designed with; pass
-     * [AvatarLetterSize.forDiameterDp] to keep that ratio at another diameter.
-     */
+    
+
+
+
+
+
+
     @Composable
     fun Avatar(
         data: AvatarData,
@@ -70,11 +68,11 @@ interface LCallToChatController {
         letterTextSizeDp: Int = AvatarLetterSize.DEFAULT_LETTER_TEXT_SIZE_DP,
     )
 
-    /**
-     * View counterpart of [Avatar] for XML RecyclerView rows. [avatarSizeDp] is the container
-     * diameter; the letter size and the Glide target size are derived from it once, so the
-     * request identity does not change between the first load and a rebind.
-     */
+    
+
+
+
+
     fun createAvatarViewBinder(
         context: Context,
         avatarSizeDp: Int = AvatarLetterSize.DEFAULT_AVATAR_SIZE_DP,
@@ -92,27 +90,23 @@ interface LCallToChatController {
 
     fun sendOrCreateCallTextMessage(callActionType: CallActionType, textContent: String, sourceDevice: Int, timestamp: Long, systemShowTime: Long, fromWho: For, forWhat: For, callType: CallType, createCallMsg: Boolean, inviteeLIst: List<String> = emptyList())
 
-    /**
-     * Stores the chat-side record of a received call message and returns once it is stored, so the
-     * caller's receive admission covers the write (#1382). A failure is logged, not thrown.
-     */
+    
+
+
+
     suspend fun saveReceivedCallTextMessage(callActionType: CallActionType, textContent: String, sourceDevice: Int, timestamp: Long, systemShowTime: Long, fromWho: For, forWhat: For)
 
-    /**
-     * 发送截屏通知消息到对应会话
-     * @param conversationId 会话ID
-     * @param callType 会议类型
-     */
+    
+
+
     fun sendScreenshotNotification(conversationId: String, callType: CallType)
 
-    /**
-     * 创建本地 Critical Alert 文本消息
-     * @param systemShowTimestamp 服务端时间戳
-     * @param timestamp 消息时间戳
-     * @param fromWho 消息发送者
-     * @param forWhat 消息所属会话
-     * @param sourceDevice 消息所属设备类型
-     */
+    
+
+
+
+
+
     suspend fun createCriticalAlertMessage(systemShowTimestamp: Long, timestamp: Long, fromWho: For, forWhat: For, sourceDevice: Int)
 
     fun getLocalPrivateKey(): ByteArray?
@@ -131,11 +125,11 @@ interface LCallToChatController {
 
     fun getGroupsUpdateListener(): Flow<GroupModel>
 
-    /**
-     * Starts a foreground service. False when the start could not be issued because no notification
-     * channel can carry its notification (#1354). A start deferred to a background retry returns
-     * true; [onDeferredFailure] runs (off main) if that retry is not issued either.
-     */
+    
+
+
+
+
     fun startForegroundService(context: Context, intent: Intent, onDeferredFailure: () -> Unit = {}): Boolean
 
     fun getIncomingCallRoomId(): String?

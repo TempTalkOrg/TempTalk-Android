@@ -30,57 +30,45 @@ data class Data(
     val migration: MigrationConfig? = null
 )
 
-/**
- * Cross-package data-migration section, read only by the retiring `org.difft.chative` family.
- *
- * [androidLegacyEntryEnabled] opens the migration entry in the old app (home title-bar icon,
- * one-time notice, guide page). An absent key reads as closed
- * (`LegacyMigrationGate.DEFAULT_OPEN_WHEN_ABSENT`): the entry must not appear before the new
- * package is published on every channel the guide sends users to.
- */
+
+
+
+
+
 data class MigrationConfig(
     val androidLegacyEntryEnabled: Boolean? = null,
 )
 
-/**
- * Proxy-specific section of the global config. Drives the self-hosted-proxy
- * routing: while the proxy is active, [TunnelDomains] is the single source of
- * truth for BOTH the tunnel-host whitelist (which hosts go through the proxy
- * vs direct) AND the domains each client module is forced onto. See
- * `docs/agents/self-hosted-proxy-design.md` §7.3.
- */
+
+
+
+
+
+
+
 data class ProxyConfigData(
     val tunnelDomains: TunnelDomains? = null
 )
 
-/**
- * Per-module domains used when the proxy is active. Each list is a set of FQDNs
- * that the relay's `ssl_preread` whitelist must also accept (kept in sync
- * server-side). [chat] feeds HTTP/WS host selection ([com.difft.android] URL
- * manager); [call] feeds the meeting/call-service connection domains.
- */
+
+
+
+
+
+
 data class TunnelDomains(
     val chat: List<String>? = null,
     val call: List<String>? = null
 )
 
-/**
- * Legacy host list (paired with the old `srvs` routing via `servTo`). No longer
- * read for URL building in this app — routing now uses `services` + `domains`
- * (see ServiceUrlResolver), aligned with iOS/Desktop. Kept only for
- * cross-platform config parity (server still sends it).
- */
+
 data class Host(
     val certType: String? = null,
     val name: String? = null,
     val servTo: String? = null
 )
 
-/**
- * Legacy service-path config. No longer read for URL building in this app —
- * routing now uses `services` + `domains` (see ServiceUrlResolver), aligned with
- * iOS/Desktop. Kept only for cross-platform config parity (server still sends it).
- */
+
 data class Srvs(
     val chat: String? = null,
     val voice: String? = null,
@@ -102,14 +90,10 @@ data class DisappearanceTimeInterval(
     val activeConversation: ActiveConversation? = null
 )
 
-/**
- * 活跃会话过期配置（秒）
- * 用于控制空会话的清理时间
- * - group: 群聊会话
- * - other: 单聊会话
- * - me: 自己的会话（Saved）
- * - default: 默认值
- */
+
+
+
+
 data class ActiveConversation(
     val default: Long = 604800,
     val me: Long = 0,
@@ -127,8 +111,8 @@ data class Group(
     val membersMaxSize: Int = 200,
     val messageArchivingTimeOptionValues: List<Long>? = null,
     val encryptionEnabled: Boolean = false,
-    // Independent gate for the encrypted-group key reset/rotation entry.
-    // false → hide the reset entry even when encryptionEnabled is true.
+    
+    
     val encryptionKeyResetEnabled: Boolean = false
 )
 
@@ -185,11 +169,11 @@ data class CallConfig(
     val chatMessage: ChatMessage? = null
 )
 
-/**
- * The call config to use for one call operation (START, INVITE, session launch): the live
- * config's `call` block, or the built-in defaults. Read once at the operation's entry and carry
- * the result through the operation, so a server flip mid-operation cannot split it (#1395).
- */
+
+
+
+
+
 fun IGlobalConfigsManager.callConfigSnapshot(): CallConfig = getNewGlobalConfigs()?.data?.call ?: CallConfig(
     autoLeave = AutoLeave(promptReminder = PromptReminder()),
     chatPresets = defaultBarrageTexts,

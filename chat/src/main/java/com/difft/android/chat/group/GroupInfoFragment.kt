@@ -1,5 +1,6 @@
 package com.difft.android.chat.group
 
+import com.difft.android.base.ui.sidechrome.padForSideChrome
 import com.difft.android.base.utils.pane.PageWait
 import com.difft.android.base.utils.pane.SettingsIdiomPage
 import android.content.Context
@@ -36,7 +37,7 @@ import com.difft.android.base.utils.pane.waitWhileVisibleTop
 import org.difft.app.database.members
 import com.difft.android.chat.R
 import com.difft.android.chat.contacts.contactsall.sortedByRoleThenPinyin
-import com.difft.android.chat.contacts.contactsdetail.ContactDetailDestination
+import com.difft.android.chat.contacts.contactsdetail.showContactCard
 import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.chat.contacts.data.FriendSourceType
 import com.difft.android.chat.contacts.data.getContactAvatarData
@@ -61,7 +62,6 @@ import com.difft.android.chat.crypto.GroupCryptoRepo
 import com.difft.android.chat.crypto.GroupKeyDistributor
 import com.difft.android.network.config.GlobalConfigsManager
 import com.difft.android.network.group.GroupRepo
-import com.difft.android.base.widget.ComposeDialogManager
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.lifecycle.withCreationCallback
 import kotlin.coroutines.cancellation.CancellationException
@@ -84,14 +84,13 @@ import javax.inject.Inject
 import com.difft.android.base.widget.ToastUtil
 const val KEY_GROUP_ID = "groupId"
 
-/**
- * Group info. A detail page (design: foldable detail stacks, §3.10): pushed onto the home screen's
- * detail stack above its group conversation, or hosted full-window by [GroupInfoActivity]. Leaving
- * or losing the group closes the conversation and its nested pages.
- */
+
+
+
+
 @AndroidEntryPoint
 class GroupInfoFragment : Fragment(), SettingsIdiomPage {
-    // Wait dialog claim scoped to this page (released with its view, dismissed by token only).
+    
     private val pageWait = PageWait(this)
 
 
@@ -104,27 +103,27 @@ class GroupInfoFragment : Fragment(), SettingsIdiomPage {
 
     private val headerViewModel: GroupInfoHeaderViewModel by viewModels()
 
-    // Field so the picker's permission contract registers before STARTED. Leaving through the
-    // header (Back, title arrow) pops this page.
+    
+    
     private val headerBinder = GroupInfoHeaderBinder(this, { binding }, { headerViewModel }, { groupId }) {
         detailNavigation().pop(this)
     }
 
-    // This page's claim on the wait dialog while a key rotation / upgrade for the group runs.
+    
     private val cryptoWait = PageWait(this)
 
     internal val groupId: String by lazy {
         requireArguments().getString(KEY_GROUP_ID) ?: ""
     }
 
-    // Staged avatar pick for the interim reset-crypto dialog. Compose-observable so the
-    // dialog content recomposes when a pick lands. Reset to null each time the dialog
-    // opens (see showResetCryptoDialog). Create-group model: the file is uploaded +
-    // encrypted only at confirm time, not at pick time.
+    
+    
+    
+    
     internal val resetAvatarPath = mutableStateOf<String?>(null)
 
-    // Fragment field so the permission contract registers before STARTED. Only stages the path;
-    // upload + encrypt happen at confirm time (create-group model).
+    
+    
     internal val resetAvatarPicker = AvatarPickLauncher.forFragment(this) { resetAvatarPath.value = it }
 
     @Inject
@@ -166,14 +165,15 @@ class GroupInfoFragment : Fragment(), SettingsIdiomPage {
         }
     })
 
-    // UI work runs with the view; group operations (leave, rotate, upgrade) with the page.
+    
     internal val viewScope get() = viewLifecycleOwner.lifecycleScope
 
     private val focusSettingsViewModel: GroupFocusSettingsViewModel by viewModels()
 
-    // Focus, mute, notification level and sound rows (Compose); setup runs once per view.
+    
     private val focusSettingsBinder = GroupFocusSettingsBinder(
         { requireActivity() as AppCompatActivity },
+        { this },
         { viewLifecycleOwner },
         { binding.composeNotificationSection },
         { groupId },
@@ -183,17 +183,17 @@ class GroupInfoFragment : Fragment(), SettingsIdiomPage {
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         _binding = ChatActivityGroupInfoBinding.inflate(inflater, container, false)
-        // The root sees every touch first: a tap outside the header resolves an edit in progress.
+        
         return TapPeekFrameLayout(inflater.context).apply {
             addView(binding.root)
             onPeek = headerBinder::onDispatchTouchEvent
         }
     }
 
-    /**
-     * Wait state while a key rotation or encryption upgrade for this group runs, including one a
-     * page destroyed by a fold started ([GroupCryptoOperations] outlives the page).
-     */
+    
+
+
+
     private fun observeCryptoOperation() {
         waitWhileVisibleTop(GroupCryptoOperations.running.map { groupId in it }, cryptoWait)
     }
@@ -206,26 +206,27 @@ class GroupInfoFragment : Fragment(), SettingsIdiomPage {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        // The home screen's panes leave the navigation-bar strip to the page; a shell Activity
-        // already pads for it.
+        
+        
         if (isInDetailStack()) EdgeToEdgeUtils.applyBottomInsetAsPadding(view)
+        padForSideChrome(view)
 
         observeCryptoOperation()
         headerBinder.setup()
         headerBinder.observe()
 
-        // Subscribe to conversationSet for all config-related UI updates
+        
         chatSettingViewModel.conversationSet
             .filterNotNull()
             .onEach { conversationSet ->
-                // Update disappearing time
+                
                 binding.disappearingTimeText.text = conversationSet.messageExpiry.toArchiveTimeDisplayText()
-                // Update save to photos
+                
                 binding.saveToPhotosText.text = getSaveToPhotosDisplayText(conversationSet.saveToPhotos)
             }
             .launchIn(viewScope)
 
-        // The translate value lives outside conversationSet: the stored target is local-only.
+        
         if (chatSettingViewModel.translateSupported) {
             chatSettingViewModel.translateSetting
                 .onEach { binding.translateText.text = translateEntryValue(requireContext(), it) }
@@ -235,22 +236,22 @@ class GroupInfoFragment : Fragment(), SettingsIdiomPage {
         }
 
         focusSettingsBinder.setup()
-        // UI spec 10c8d1c9: while group focus is available, search / group management follow the other settings.
+        
         focusSettingsViewModel.state
             .map { it.featureEnabled }
             .distinctUntilChanged()
             .onEach { placeSearchCard(afterSettings = it) }
             .launchIn(viewScope)
 
-        // The pin can change underneath this page (focus pins / unpins it, a list action), so the
-        // switch follows the room table instead of a one-time read.
+        
+        
         WCDBUpdateService.roomTableUpdated
             .onStart { emit(Unit) }
             .sampleAfterFirst(300)
             .map { withContext(Dispatchers.IO) { isPined() } }
             .onEach { binding.switchStick.isChecked = it }
             .launchIn(viewScope)
-        // Controlled and DB-only: the switch moves once the write landed, no wait dialog needed.
+        
         binding.switchStick.setOnToggleRequestListener { view, requested ->
             view.guardWhile(pinChattingRoom(requested))
         }
@@ -260,8 +261,8 @@ class GroupInfoFragment : Fragment(), SettingsIdiomPage {
             .onEach {
                 if (it.gid == groupId) {
                     if (it.status != 0) {
-                        // Group is gone (kicked / left / dismissed / destroyed) — close the
-                        // conversation with this page.
+                        
+                        
                         detailNavigation().closeConversation(this@GroupInfoFragment)
                         return@onEach
                     }
@@ -313,7 +314,7 @@ class GroupInfoFragment : Fragment(), SettingsIdiomPage {
             override fun onItemClick(contact: GroupMemberModel) {
                 when (contact.uid) {
                     "+" -> {
-                        if (role < GROUP_ROLE_MEMBER || groupInfo?.invitationRule == 2) {
+                        if (canInviteGroupMembers(role, groupInfo?.invitationRule)) {
                             gotoMembersActivity(GroupSelectMemberActivity.TYPE_ADD_MEMBER)
                         } else {
                             ToastUtil.show(getString(R.string.group_permission_denied))
@@ -330,10 +331,7 @@ class GroupInfoFragment : Fragment(), SettingsIdiomPage {
 
                     else -> {
                         contact.uid?.let { uid ->
-                            detailNavigation().push(
-                                this@GroupInfoFragment,
-                                ContactDetailDestination(uid, sourceType = FriendSourceType.FROM_GROUP, source = groupId),
-                            )
+                            showContactCard(this@GroupInfoFragment, uid, sourceType = FriendSourceType.FROM_GROUP, source = groupId)
                         }
                     }
                 }
@@ -348,7 +346,7 @@ class GroupInfoFragment : Fragment(), SettingsIdiomPage {
             else com.difft.android.chat.group.mvi.GroupPageContract.MemberAction.REMOVE))
     }
 
-    private val defaultDisplaySize = 13 //默认显示的人数
+    private val defaultDisplaySize = 13
 
     private fun setMembersView() {
         binding.edittextSearchInput.setOnClickListener {
@@ -421,12 +419,12 @@ class GroupInfoFragment : Fragment(), SettingsIdiomPage {
     private fun setOtherView() {
         setupEncryptionRow()
         bindConversationSettingRows()
-        // The group info (with this member's notification level) may have just loaded.
+        
         focusSettingsViewModel.dispatch(GroupFocusSettingsContract.Intent.Refresh)
         bindMembershipRows()
     }
 
-    /** Card C goes before the notification section normally, after the chat settings card (D) with group focus. */
+    
     private fun placeSearchCard(afterSettings: Boolean) {
         val card = binding.cardSearchManagement
         val parent = card.parent as? ViewGroup ?: return
@@ -436,11 +434,11 @@ class GroupInfoFragment : Fragment(), SettingsIdiomPage {
         parent.addView(card, if (afterSettings) index + 1 else index)
     }
 
-    /** @return the write's job, so the toggle can gate itself on it (see `DifftToggleView.guardWhile`). */
+    
     private fun pinChattingRoom(isPinned: Boolean): Job {
         return viewScope.launch {
             try {
-                // Records who owns the pin (user vs. focus); the switch then follows the room table.
+                
                 focusPinCoordinator.setGroupPin(groupId, isPinned)
                 binding.switchStick.isChecked = isPinned
             } catch (e: CancellationException) {
@@ -456,16 +454,16 @@ class GroupInfoFragment : Fragment(), SettingsIdiomPage {
         return dbRoomStore.getPinnedTime(For.Group(groupId)).isPresent
     }
 
-    /**
-     * Get the display text for save to photos setting
-     * @param saveToPhotos null: follow global, 0: never, 1: always
-     */
+    
+
+
+
     private fun getSaveToPhotosDisplayText(saveToPhotos: Int?): String {
         return when (saveToPhotos) {
             1 -> getString(R.string.save_to_photos_always)
             0 -> getString(R.string.save_to_photos_never)
             else -> {
-                // Default - show dynamic status based on global setting
+                
                 val globalEnabled = userManager.getUserData()?.saveToPhotos == true
                 val statusText = if (globalEnabled) {
                     getString(R.string.save_to_photos_on)
@@ -477,11 +475,10 @@ class GroupInfoFragment : Fragment(), SettingsIdiomPage {
         }
     }
 
-    /**
-     * Encryption meta row under the group name. Visibility and click targets are unchanged from the
-     * former standalone row: encrypted groups always show their status; plain groups show the
-     * upgrade entry only when the flag is on and the user is owner/admin.
-     */
+    
+
+
+
     private fun setupEncryptionRow() {
         val isEncryptedGroup = (groupInfo?.groupCryptoMode ?: 0) > 0
         headerBinder.encryptionMeta = if (isEncryptedGroup) {
@@ -509,7 +506,7 @@ class GroupInfoFragment : Fragment(), SettingsIdiomPage {
     }
 }
 
-/** Group info as a detail destination (home detail stack, or its shell Activity). */
+
 class GroupInfoDestination(private val groupId: String) : DetailDestination {
     override fun newFragment(): Fragment = GroupInfoFragment.newInstance(groupId)
     override fun shellIntent(context: Context): Intent =

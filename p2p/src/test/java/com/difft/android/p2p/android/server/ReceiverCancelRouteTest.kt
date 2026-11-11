@@ -23,13 +23,13 @@ import javax.net.ssl.SSLContext
 import javax.net.ssl.TrustManager
 import javax.net.ssl.X509TrustManager
 
-/**
- * A sender that cancels names its session on `POST /cancel`. The receiver must surface that as an
- * event, so the owner can report the abort as the peer leaving rather than as a dropped link — but
- * only for the session actually in flight, and only with the session token `prepare-upload` issued:
- * without it the route answers 400, and with the wrong one — or for a session the receiver does not
- * know — 404, which changes nothing.
- */
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 class ReceiverCancelRouteTest {
 
@@ -68,12 +68,12 @@ class ReceiverCancelRouteTest {
         val active = prepared.sessionId
         val token = prepared.sessionToken
 
-        // No token: a protocol error, not a lenient yes.
+        
         assertTrue(postCancel(port, active, token = null).startsWith("HTTP/1.1 400"))
-        // Wrong token: refused with the same 404 an unknown id gets, nothing torn down.
+        
         assertTrue(postCancel(port, active, token = "not-the-token").startsWith("HTTP/1.1 404"))
         assertTrue(cancelled.isEmpty())
-        // A stranger's (or stale) id: 404, surfaced to nobody.
+        
         assertTrue(postCancel(port, "s-stale", token).startsWith("HTTP/1.1 404"))
         assertTrue(cancelled.isEmpty())
 
@@ -82,7 +82,7 @@ class ReceiverCancelRouteTest {
         assertEquals(listOf(active), cancelled)
     }
 
-    /** Sends the cancel and returns the status line. */
+    
     private fun postCancel(port: Int, sessionId: String, token: String?): String = trustAllSocket(port).use { socket ->
         socket.soTimeout = 5_000
         val query = "sessionId=$sessionId" + (token?.let { "&token=$it" } ?: "")
@@ -96,7 +96,7 @@ class ReceiverCancelRouteTest {
         socket.getInputStream().bufferedReader().readLine().orEmpty()
     }
 
-    /** The pin is not the subject here — accept whatever cert the server presents. */
+    
     private fun trustAllSocket(port: Int): Socket {
         val trustAll = object : X509TrustManager {
             override fun checkClientTrusted(chain: Array<out java.security.cert.X509Certificate>?, authType: String?) = Unit

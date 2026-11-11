@@ -33,14 +33,14 @@ import timber.log.Timber
 import java.util.Base64
 import java.util.concurrent.CopyOnWriteArrayList
 
-/**
- * [WarmProcessResync] (#1395): on foreground it starts the archive loop and retries the FCM bind,
- * but only when the database passed this process's health probe, is accessible, and the stored
- * session passes the same two checks MainActivity applies (local token, identity keys). A closed
- * gate runs nothing and logs its reason once per process; an unfinished probe is waited for,
- * bounded at 10 s. One task failing never skips the other. Robolectric because the session check
- * decodes the JWT through `android.util.Base64`.
- */
+
+
+
+
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 class WarmProcessResyncTest {
@@ -186,11 +186,11 @@ class WarmProcessResyncTest {
         probed = true
     }
 
-    /**
-     * Lines `L` delivered while [block] ran. `L` delivers asynchronously in order, so lines still
-     * queued from an earlier test are dropped by a leading start marker, and a trailing sentinel
-     * proves delivery is complete.
-     */
+    
+
+
+
+
     private fun captureLogs(block: () -> Unit): List<String> {
         val lines = CopyOnWriteArrayList<String>()
         val tree = object : Timber.Tree() {

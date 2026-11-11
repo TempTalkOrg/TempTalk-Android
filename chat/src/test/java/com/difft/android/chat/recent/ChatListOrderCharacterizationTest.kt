@@ -8,12 +8,10 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/**
- * Characterization baseline of the chat-list order with group focus inactive: instant calls, then
- * rooms in a call, then pinned, then drafts, then the rest, each by `sortTime` descending, with the
- * call binding quirks included. The expectations were recorded against the pre-focus
- * implementation; [ChatListAssembler] must keep reproducing them exactly (PRD A17).
- */
+
+
+
+
 class ChatListOrderCharacterizationTest {
 
     private data class Result(val order: List<String>, val rows: List<RoomViewData>, val instantCache: Map<String, RoomViewData>)
@@ -115,7 +113,7 @@ class ChatListOrderCharacterizationTest {
         val g = r.rows.first()
         assertEquals("call-1", g.callData?.roomId)
         assertEquals(7L, g.lastActiveTime)
-        // sortTime is the ViewModel's and is not recomputed here.
+        
         assertEquals(1L, g.sortTime)
     }
 

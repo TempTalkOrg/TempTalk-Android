@@ -17,13 +17,13 @@ import androidx.compose.ui.unit.dp
 import com.difft.android.base.R
 import com.difft.android.base.ui.theme.DifftTheme
 
-/** Banner emphasis: an aside in the secondary text colour, or a caution in the caution colour. */
+
 enum class MigrationBannerTone { INFO, WARNING }
 
-/**
- * Inline notice in the same geometry as a grouped card; only the text colour changes with the tone.
- * Errors get a page of their own rather than a banner.
- */
+
+
+
+
 @Composable
 fun MigrationBanner(
     text: String,

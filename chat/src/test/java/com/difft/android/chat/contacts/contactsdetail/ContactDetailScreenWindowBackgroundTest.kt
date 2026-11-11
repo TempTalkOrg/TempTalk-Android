@@ -15,20 +15,20 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import kotlin.test.assertEquals
 
-/**
- * M9/M10 (issue #1127, family E): [ContactDetailFragment] gates `applyWindowBackground` on
- * `!isPopupMode`. Mounts the real [ContactDetailScreen] composable directly on a bare
- * [ComponentActivity] (not the real `@AndroidEntryPoint` `ContactDetailFragment` — this codebase
- * has no Hilt-Robolectric harness for constructing Hilt fragments directly in unit tests) with the
- * exact literal `DifftTheme` call shape `ContactDetailFragment.onCreateView` uses post-migration.
- *
- * M9 pins the popup half (`isPopupMode = true` -> `applyWindowBackground = false`): the
- * `ContactDetailBottomSheetDialogFragment` mount path must stop writing the window background.
- * M10 pins the non-popup half (`isPopupMode = false` -> `applyWindowBackground = true`), which
- * covers BOTH `ContactDetailActivity` (path 1) and `IndexActivity`'s dual-pane detail (path 3) —
- * mechanically identical from `DifftTheme`'s perspective — and must keep writing,
- * unaffected by this migration.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34])

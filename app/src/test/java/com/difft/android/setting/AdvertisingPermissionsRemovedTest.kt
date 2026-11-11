@@ -9,11 +9,11 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import kotlin.test.assertTrue
 
-/**
- * The main manifest strips every advertising permission that GMS/Firebase declare transitively.
- * Robolectric's PackageManager is built from the variant's merged manifest, so this runs on
- * every channel.
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class)
 class AdvertisingPermissionsRemovedTest {

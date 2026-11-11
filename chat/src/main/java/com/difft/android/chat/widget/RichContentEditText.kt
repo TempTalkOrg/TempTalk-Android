@@ -26,16 +26,16 @@ class RichContentEditText @JvmOverloads constructor(
         onFilePasteListener = listener
     }
 
-    /**
-     * Stickers/GIFs/images committed by the IME (Gboard, Sogou, etc.) via the Commit Content API.
-     * The listener receives the [InputContentInfoCompat] and is responsible for calling
-     * [InputContentInfoCompat.releasePermission] once it finishes reading the content URI.
-     */
+    
+
+
+
+
     fun setOnStickerCommitListener(listener: (InputContentInfoCompat, String) -> Unit) {
         onStickerCommitListener = listener
     }
 
-    // Accept rich content from any keyboard so sticker/GIF/image taps deliver a content URI.
+    
     override fun onCreateInputConnection(editorInfo: EditorInfo): InputConnection? {
         val ic = super.onCreateInputConnection(editorInfo) ?: return null
         EditorInfoCompat.setContentMimeTypes(
@@ -78,17 +78,17 @@ class RichContentEditText @JvmOverloads constructor(
 
         val item = clipData.getItemAt(0)
 
-        // Check if it's a file URI
+        
         val uri = item.uri
         if (uri != null) {
-            // Handle file paste
+            
             val mimeType = FileUtil.getMimeTypeType(uri) ?: "application/octet-stream"
             onFilePasteListener?.invoke(uri, mimeType)
-            // 隐藏系统粘贴菜单 - 通过清除焦点来隐藏上下文菜单
+            
             clearFocus()
             return true
         } else {
-            // Handle text paste normally - let the system handle it
+            
             return super.onTextContextMenuItem(android.R.id.paste)
         }
     }

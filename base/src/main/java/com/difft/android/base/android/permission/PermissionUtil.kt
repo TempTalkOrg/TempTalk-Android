@@ -20,24 +20,17 @@ import androidx.fragment.app.Fragment
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.application
 
-/** Three-state media read access, mirroring Signal StorageUtil.canReadAny/canOnlyReadSelected. */
+
 enum class MediaAccessState { FULL, PARTIAL, NONE }
 
-/**
- * Why a media read that ALREADY FAILED failed, as a permission-layer classification.
- *
- * Complements [MediaAccessState]: that enum answers "what is granted right now", this one answers
- * "the open failed — what does the permission layer say about it". [PermissionUtil.PermissionState]
- * answers a third, unrelated question (the outcome of one permission request), so the three must
- * stay separate.
- *
- * [GRANTED_BUT_UNREADABLE] is the state the permission layer previously could not express: it has
- * only ever modelled "nothing granted" (request flow) and "permanently denied" (Settings flow),
- * while full access demonstrably coexists with failing reads.
- */
+
+
+
+
+
 enum class MediaReadDenialKind { PERMISSION_MISSING, PARTIAL_SELECTION, GRANTED_BUT_UNREADABLE, NOT_MEDIA_SCOPED }
 
-/** A classified read denial together with the throwable that proved the read had already failed. */
+
 data class MediaReadDenial(val kind: MediaReadDenialKind, val cause: Throwable?)
 
 object PermissionUtil {
@@ -93,11 +86,11 @@ object PermissionUtil {
             it.key
         }
 
-        // Android 14+ partial access ("Select photos"): the system grants
-        // READ_MEDIA_VISUAL_USER_SELECTED while keeping full IMAGES/VIDEO denied.
-        // Media selection is fully usable in this state, so those two denials
-        // must not count — otherwise partial grants escalate to PermanentlyDenied
-        // after two picker sessions.
+        
+        
+        
+        
+        
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE &&
             deniedList.isNotEmpty() &&
             ContextCompat.checkSelfPermission(
@@ -111,9 +104,9 @@ object PermissionUtil {
             )
         }
 
-        // Symmetric guard: any granted real media read permission means media is
-        // usable, so a VISUAL_USER_SELECTED denial must not count. Defends against
-        // an OEM that reports IMAGES/VIDEO granted but VISUAL denied.
+        
+        
+        
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE &&
             deniedList.contains(Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED) &&
             (ContextCompat.checkSelfPermission(
@@ -190,12 +183,12 @@ object PermissionUtil {
         }
     }
 
-    /**
-     * Synchronous pre-check of current media read access (does NOT request).
-     * FULL    = full library readable (IMAGES/VIDEO granted, or READ_EXTERNAL_STORAGE < 33).
-     * PARTIAL = 34+ "Select photos": only VISUAL_USER_SELECTED granted, IMAGES/VIDEO denied.
-     * NONE    = nothing readable → caller must request.
-     */
+    
+
+
+
+
+
     @JvmStatic
     fun getMediaAccessState(context: Context = application): MediaAccessState = when {
         isFullMediaGranted(context) -> MediaAccessState.FULL
@@ -203,7 +196,7 @@ object PermissionUtil {
         else -> MediaAccessState.NONE
     }
 
-    // PARTIAL: 34+ && VISUAL granted && neither IMAGES nor VIDEO granted (Signal canOnlyReadSelected)
+    
     private fun isPartialMediaGranted(context: Context): Boolean =
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE &&
             isGranted(context, Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED) &&
@@ -215,7 +208,7 @@ object PermissionUtil {
                 )
             )
 
-    // FULL: any "real" read grant for the current SDK tier
+    
     private fun isFullMediaGranted(context: Context): Boolean = when {
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU ->
             hasAnyPermission(
@@ -225,7 +218,7 @@ object PermissionUtil {
                     Manifest.permission.READ_MEDIA_VIDEO,
                 )
             )
-        else -> isGranted(context, Manifest.permission.READ_EXTERNAL_STORAGE) // 26–32
+        else -> isGranted(context, Manifest.permission.READ_EXTERNAL_STORAGE) 
     }
 
     private fun hasAnyPermission(context: Context, permissions: Array<String>): Boolean =
@@ -234,21 +227,12 @@ object PermissionUtil {
     private fun isGranted(context: Context, permission: String): Boolean =
         ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
 
-    /**
-     * Classifies a read failure that HAS ALREADY BEEN OBSERVED. [cause] is the throwable thrown by
-     * the failed open; requiring it in the signature makes that precondition part of the contract.
-     *
-     * MUST NOT be used as a pre-check. Permission state is not a readability predicate — the whole
-     * point of this classification is that FULL access coexists with failing reads. Readability can
-     * only be established by actually opening the item.
-     *
-     * Side-effect free: reads permission state, performs no IO, writes no log. The caller that owns
-     * the failure log format is the single owner of the log line.
-     *
-     * [MediaReadDenialKind.NOT_MEDIA_SCOPED] is mandatory, not defensive: without it a sandbox path
-     * whose file is genuinely gone would be reported as a permission problem while access is FULL,
-     * which is exactly the mis-attribution this classification exists to prevent.
-     */
+    
+
+
+
+
+
     @JvmStatic
     fun classifyReadDenial(
         uri: Uri,
@@ -264,18 +248,14 @@ object PermissionUtil {
         return MediaReadDenial(kind, cause)
     }
 
-    // MediaStore authority, including the cross-profile "<userId>@media" form.
+    
     private fun isMediaStoreUri(uri: Uri): Boolean {
         if (uri.scheme != ContentResolver.SCHEME_CONTENT) return false
         val authority = uri.authority ?: return false
         return authority == MediaStore.AUTHORITY || authority.endsWith("@${MediaStore.AUTHORITY}")
     }
 
-    /**
-     * Media entry gate: if media is already usable (full or partial), open directly without prompting;
-     * otherwise fire the permission request. Removes the "re-prompt on every click under partial
-     * access" bug by pre-checking access before launching the system request.
-     */
+    
     fun Permission.launchMediaSelectionOrOpen(context: Context = application, onUsable: () -> Unit) {
         if (getMediaAccessState(context) != MediaAccessState.NONE) {
             onUsable()

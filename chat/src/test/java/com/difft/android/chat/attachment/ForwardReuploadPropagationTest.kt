@@ -16,15 +16,15 @@ import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
 
-/**
- * The two things that must hold for a re-uploaded forward leaf (issue #1181):
- *
- *  1. the MISS signal reaches the send job — it is written on the tree before the per-target copy,
- *     so it must survive that copy, or the job never learns the pointer is dead;
- *  2. the repaired pointer reaches the WIRE — the outgoing attachment pointer is built from the leaf
- *     object the job mutates, so mutating it before the data message is created is what keeps the
- *     wire and the persisted row (written from the same leaf) telling the same story.
- */
+
+
+
+
+
+
+
+
+
 class ForwardReuploadPropagationTest {
 
     @Before
@@ -62,8 +62,7 @@ class ForwardReuploadPropagationTest {
 
     @Test
     fun `the miss signal survives the per-target copy at every nesting level`() {
-        // Zeroed authority id = "the server no longer holds this file". Minting new local identities
-        // per target must not launder it away, or the send job sends the dead pointer as before.
+        
         val source = ForwardContext(
             listOf(
                 forward(
@@ -86,8 +85,8 @@ class ForwardReuploadPropagationTest {
         val leaf = attachment(authorityId = 0L)
         val tree = forward(listOf(leaf))
 
-        // What the repair writes back after the upload: a fresh authorization and the digest of the
-        // ciphertext the server now stores. The key is content-derived, so it comes back unchanged.
+        
+        
         leaf.authorityId = 5150L
         leaf.digest = byteArrayOf(4, 2)
 

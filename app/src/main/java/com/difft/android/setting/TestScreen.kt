@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -40,10 +39,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.difft.android.base.ui.TitleBar
+import com.difft.android.base.ui.compose.systemBarsWithCutoutPadding
 import com.difft.android.base.ui.theme.DifftTheme
+import com.difft.android.base.utils.density.DisplayDensityNormalizer
 import com.difft.android.chat.R
 
-// Debug-only screen; the length is inherent to its flat list of test actions.
+
 @Suppress("LongMethod")
 @Composable
 fun TestScreen(
@@ -54,14 +55,16 @@ fun TestScreen(
     onSendMessageToSingleGroup: (count: Int) -> Unit,
     onCorruptDatabase: () -> Unit,
     onBackupDatabase: () -> Unit,
-    onDialogTest: () -> Unit
+    onDialogTest: () -> Unit,
+    densityMode: DisplayDensityNormalizer.Mode = DisplayDensityNormalizer.Mode.ON,
+    onDensityModeSelect: (DisplayDensityNormalizer.Mode) -> Unit = {},
 ) {
     var memberIds by remember { mutableStateOf("") }
     var groupCount by remember { mutableStateOf("") }
     var singleGroupMessageCount by remember { mutableStateOf("") }
 
     Column(
-        modifier = Modifier.fillMaxSize().systemBarsPadding()
+        modifier = Modifier.fillMaxSize().systemBarsWithCutoutPadding()
     ) {
         TitleBar(titleText = "Test", onBackClick = onNavigateBack)
 
@@ -72,9 +75,9 @@ fun TestScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(DifftTheme.spacing.stackMedium)
         ) {
-            // Section 1: Message Test
+            
             TestSection(title = "Message Test") {
-                // Member IDs Input
+                
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -89,9 +92,9 @@ fun TestScreen(
                     )
                 }
 
-                HorizontalDivider(color = DifftTheme.colors.divider)
+                HorizontalDivider(thickness = DifftTheme.hairline, color = DifftTheme.colors.divider)
 
-                // Create Groups
+                
                 TestRowItem(
                     title = "Create Test Groups",
                     onClick = {
@@ -107,9 +110,9 @@ fun TestScreen(
                     }
                 )
 
-                HorizontalDivider(color = DifftTheme.colors.divider)
+                HorizontalDivider(thickness = DifftTheme.hairline, color = DifftTheme.colors.divider)
 
-                // Send Message to Single Group
+                
                 TestRowItem(
                     title = "Send Message to Single Group",
                     onClick = {
@@ -125,31 +128,31 @@ fun TestScreen(
                     }
                 )
 
-                HorizontalDivider(color = DifftTheme.colors.divider)
+                HorizontalDivider(thickness = DifftTheme.hairline, color = DifftTheme.colors.divider)
 
-                // Send Message to All Groups
+                
                 TestRowItem(
                     title = "Send Message to All Groups",
                     onClick = onSendMessageToAllGroups
                 )
 
-                HorizontalDivider(color = DifftTheme.colors.divider)
+                HorizontalDivider(thickness = DifftTheme.hairline, color = DifftTheme.colors.divider)
 
-                // Disband Groups
+                
                 TestRowItem(
                     title = "Disband or Leave All Groups",
                     onClick = onDisbandGroups
                 )
             }
 
-            // Section 2: Database Recovery Test
+            
             TestSection(title = "Database Recovery Test") {
                 TestRowItem(
                     title = "Corrupt Database File",
                     onClick = onCorruptDatabase
                 )
 
-                HorizontalDivider(color = DifftTheme.colors.divider)
+                HorizontalDivider(thickness = DifftTheme.hairline, color = DifftTheme.colors.divider)
 
                 TestRowItem(
                     title = "Manual Backup Database",
@@ -157,7 +160,7 @@ fun TestScreen(
                 )
             }
 
-            // Section 3: Dialog Test
+            
             TestSection(title = "Dialog Test") {
                 TestRowItem(
                     title = "Dialog Test",
@@ -165,9 +168,26 @@ fun TestScreen(
                     onClick = onDialogTest
                 )
             }
+
+            
+            TestSection(title = "Display Density") {
+                DENSITY_OPTIONS.forEachIndexed { index, (mode, title) ->
+                    if (index > 0) HorizontalDivider(thickness = DifftTheme.hairline, color = DifftTheme.colors.divider)
+                    TestRowItem(
+                        title = title,
+                        subtitle = if (mode == densityMode) "On" else null,
+                        onClick = { if (mode != densityMode) onDensityModeSelect(mode) }
+                    )
+                }
+            }
         }
     }
 }
+
+private val DENSITY_OPTIONS = listOf(
+    DisplayDensityNormalizer.Mode.OFF to "Off (system density)",
+    DisplayDensityNormalizer.Mode.ON to "Normalize (1 dp = 1/160 in)",
+)
 
 @Composable
 private fun TestSection(
@@ -326,7 +346,7 @@ private fun TestInputField(
     )
 }
 
-// ============== Preview Composables ==============
+
 
 @Preview(name = "Light Theme", showBackground = true)
 @Preview(
@@ -378,7 +398,7 @@ private fun TestSectionPreview() {
                     }
                 )
 
-                HorizontalDivider(color = DifftTheme.colors.divider)
+                HorizontalDivider(thickness = DifftTheme.hairline, color = DifftTheme.colors.divider)
 
                 TestRowItem(
                     title = "Send Message to All Groups",

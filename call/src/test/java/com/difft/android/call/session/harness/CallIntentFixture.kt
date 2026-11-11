@@ -5,10 +5,10 @@ import com.difft.android.call.CallIntent
 import io.mockk.every
 import io.mockk.mockk
 
-/**
- * JVM [CallIntent]: a relaxed mock with the fields the session reads stubbed. The real class reads
- * a wrapped `android.content.Intent`, which needs Robolectric.
- */
+
+
+
+
 internal object CallIntentFixture {
     fun build(
         action: CallIntent.Action = CallIntent.Action.START_CALL,

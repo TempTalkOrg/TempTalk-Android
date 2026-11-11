@@ -23,20 +23,20 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import kotlin.test.assertSame
 
-/**
- * M12 (issue #1127, family J): mounts the real [GifInlinePanel] composable directly on a bare
- * [ComponentActivity] (not any of the 5 real `@AndroidEntryPoint` hosts
- * `ChatActivity`/`GroupChatContentActivity`/`ChatPopupActivity`/`GroupChatPopupActivity`/
- * `IndexActivity` — this codebase has no Hilt-Robolectric harness for constructing Hilt
- * fragments/activities directly in unit tests) with the exact literal `DifftTheme` call shape
- * `ChatMessageInputFragment.setupGifPanel()` uses post-migration. A single generic test closes
- * the claim for all 5 hosts because `applyWindowBackground = false`'s behavior is independent of
- * host type — the call site passes the same literal argument regardless of which host mounts it.
- *
- * `GifPanelViewModel`/`FavoriteViewModel` are constructed directly with mocked dependencies (same
- * pattern as the existing `GifPanelViewModelTest`) -- no Hilt component needed, both are plain
- * `@Inject constructor` classes.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34])
@@ -62,10 +62,10 @@ class GifInlinePanelWindowBackgroundTest {
             gifLoader = mockk(relaxed = true),
         )
 
-        // Any non-ColorDrawable stands in for a real host's window background (ChatBackgroundDrawable /
-        // manifest-transparent / @color/bg) -- its concrete type is irrelevant to the assertion (design
-        // §7 exception B). Forcing a ColorDrawable cast against a real ChatActivity/
-        // GroupChatContentActivity host would throw ClassCastException, since neither uses ColorDrawable.
+        
+        
+        
+        
         val sentinel = ShapeDrawable()
         composeTestRule.activity.window.setBackgroundDrawable(sentinel)
 
@@ -81,8 +81,8 @@ class GifInlinePanelWindowBackgroundTest {
         }
         composeTestRule.waitForIdle()
 
-        // Force >= 2 recompositions via GifPanelViewModel's own real state flow (tab switches),
-        // not an artificial recomposition trigger.
+        
+        
         gifPanelViewModel.dispatch(GifPanelContract.Intent.SelectTab(GifPanelContract.GifTab.SEARCH))
         composeTestRule.waitForIdle()
 

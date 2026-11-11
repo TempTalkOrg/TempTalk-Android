@@ -22,99 +22,99 @@ import org.difft.app.database.models.RoomModel
 import org.difft.app.database.models.SharedContactModel
 import org.difft.app.database.models.SharedContactPhoneModel
 
-/**
- * The narrow DB-write surface [NeutralImporter] needs against a target database, and the test seam
- * that lets the round-trip validation run the whole engine under Robolectric: the WCDB ORM loads its
- * native library in a static initializer, which throws `UnsatisfiedLinkError` on the JVM test
- * classpath, so an in-memory fake reproducing WCDB's autoincrement-PK semantics stands in.
- *
- * Every `insert*` returns the new local autoincrement PK the target assigned — WCDB writes the
- * generated rowid back into `model.databaseId`. The importer reconnects FKs from these; source local
- * PKs are not portable and are never reused.
- */
+
+
+
+
+
+
+
+
+
+
 interface WcdbWriteTarget : RoomStateReadWrite {
 
-    /** Run [block] inside a single DB transaction (batched commit). */
+    
     fun runInTransaction(block: () -> Unit)
 
-    /** Insert a quote row; returns the new local PK (`databaseId`). */
+    
     fun insertQuote(model: QuoteModel): Long
 
-    /** Insert a forward-context row; returns the new local PK. */
+    
     fun insertForwardContext(model: ForwardContextModel): Long
 
-    /** Insert a forward row; returns the new local PK. */
+    
     fun insertForward(model: ForwardModel): Long
 
-    /** Insert a message row (FKs already remapped to target-local PKs). */
+    
     fun insertMessage(model: MessageModel)
 
-    /** Insert an attachment row (references its message by stable string id, no PK remap). */
+    
     fun insertAttachment(model: AttachmentModel)
 
-    /** Insert a mention row. */
+    
     fun insertMention(model: MentionModel)
 
-    /** Insert a reaction row. */
+    
     fun insertReaction(model: ReactionModel)
 
-    /** Insert a contact-card row; returns the new local PK the phone rows reference. */
+    
     fun insertSharedContact(model: SharedContactModel): Long
 
-    /** Insert a shared-contact phone row (FK = the contact's target-local PK). */
+    
     fun insertSharedContactPhone(model: SharedContactPhoneModel)
 
-    /** Insert / update a room row (conversation-local state). */
+    
     fun upsertRoom(model: RoomModel)
 
-    /**
-     * Insert or replace a `read_info` row (another participant's read position), keyed on the
-     * {roomId, uid} composite PK so a duplicate overwrites rather than collides.
-     */
+    
+
+
+
     fun insertReadInfo(model: ReadInfoModel)
 
-    /** Insert a group crypto-key row (string PK, no autoincrement). */
+    
     fun insertGroupKey(model: GroupCryptoKeysModel)
 
-    /**
-     * Insert or replace a `pending_message_new` row keyed on its messageId, mirroring the live
-     * `savePendingMessage` (#1382). Throws on failure: the importer fails the import rather than
-     * drop the row.
-     */
+    
+
+
+
+
     fun insertPendingEnvelope(model: PendingMessageModelNew)
 
-    /**
-     * Expand one rung of a read ladder over [roomId]'s incoming messages: set `readTime = readAt` on
-     * every row at or below [maxServerTime] that has none yet. The mirror of the live path's
-     * `DBMessageStore.updateMessageReadTime`, including its write-once `readTime = 0` guard, so
-     * applying rungs by ascending [readAt] leaves each row with the smallest covering read time.
-     *
-     * The guard is `readTime = 0` exactly, never `<= 0`: the migration NOT_STARTED sentinel (-1) is a
-     * decision the source made and must survive the expansion untouched.
-     */
+    
+
+
+
+
+
+
+
+
     fun markReadUpTo(roomId: String, maxServerTime: Long, readAt: Long, selfUid: String)
 
-    /**
-     * Demote the attachment row [attachmentId] to "no bytes here" — status 0, the value the importer
-     * writes for a pointer-only row. The row is inserted optimistically, before its byte frame is
-     * known to have landed; when it did not, this makes the app re-download instead of opening a file
-     * that does not exist.
-     */
+    
+
+
+
+
+
     fun markAttachmentBytesAbsent(attachmentId: String)
 }
 
-/**
- * [WcdbWriteTarget] backed by a real [WCDB] instance — the staging DB, distinct from the live one.
- * Each `insert*` delegates to the ORM's `insertObject`, which writes the assigned autoincrement rowid
- * back into `model.databaseId`, and that value is returned for FK reconnection.
- */
+
+
+
+
+
 class WcdbWriteTargetImpl(private val target: WCDB) : WcdbWriteTarget {
 
     override fun runInTransaction(block: () -> Unit) = target.db.runRollingBack(block)
 
     override fun insertQuote(model: QuoteModel): Long {
         target.quote.insertObject(model)
-        // databaseId is the local autoincrement Int PK; widen it to the Long this interface returns.
+        
         return model.databaseId.toLong()
     }
 
@@ -146,7 +146,7 @@ class WcdbWriteTargetImpl(private val target: WCDB) : WcdbWriteTarget {
 
     override fun insertSharedContact(model: SharedContactModel): Long {
         target.sharedContact.insertObject(model)
-        // databaseId is the local autoincrement Int PK; widen it to the Long the phone FK uses.
+        
         return model.databaseId.toLong()
     }
 
@@ -155,14 +155,14 @@ class WcdbWriteTargetImpl(private val target: WCDB) : WcdbWriteTarget {
     }
 
     override fun upsertRoom(model: RoomModel) {
-        // RoomModel's PK is the autoincrement databaseId, so insertOrReplace over a batch of fresh
-        // models (all databaseId=0) risks collapsing them into one row (#914). The staging target is
-        // empty and roomId is unique, so a plain insertObject is the safe write.
+        
+        
+        
         target.room.insertObject(model)
     }
 
     override fun insertReadInfo(model: ReadInfoModel) {
-        // Insert-or-replace on the {roomId, uid} composite PK, mirroring the live write.
+        
         target.readInfo.insertOrReplaceObject(model)
     }
 
@@ -189,7 +189,7 @@ class WcdbWriteTargetImpl(private val target: WCDB) : WcdbWriteTarget {
         target.attachment.updateValue(0, DBAttachmentModel.status, DBAttachmentModel.id.eq(attachmentId))
     }
 
-    // ── RoomStateReadWrite: delegate reads to the shared support over this WCDB's rows ──────────
+    
 
     override fun roomIdsWithMessages(): List<String> =
         RoomStateSupport.roomIdsWithMessages(target.message.allObjects)
@@ -215,7 +215,7 @@ class WcdbWriteTargetImpl(private val target: WCDB) : WcdbWriteTarget {
     override fun hasFailedOutgoingMessage(roomId: String): Boolean =
         RoomStateSupport.hasFailedOutgoingMessage(roomId, target.message.getAllObjects(DBMessageModel.roomId.eq(roomId)))
 
-    // Alerts are rare; the alert rows are the small side of the intersection.
+    
     override fun hasCriticalAlert(messageIds: List<String>): Boolean =
         RoomStateSupport.hasCriticalAlert(
             messageIds,
@@ -245,13 +245,13 @@ class WcdbWriteTargetImpl(private val target: WCDB) : WcdbWriteTarget {
     }
 }
 
-/**
- * Runs [block] in a transaction that is rolled back on ANY failure. WCDB itself rolls back only on a
- * `false` return or a [WCDBException] out of the callback; any other exception crosses into native
- * code with the transaction's fate undefined. So the block's own failure is caught here, the
- * callback answers `false` (a defined rollback), and the failure is rethrown in place of the generic
- * exception WCDB raises for that `false`.
- */
+
+
+
+
+
+
+
 internal fun Database.runRollingBack(block: () -> Unit) {
     var failure: Exception? = null
     try {

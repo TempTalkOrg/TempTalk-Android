@@ -21,19 +21,19 @@ import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Account-level group focus cache. The server owns the state; this class only stores it and applies
- * it by version:
- *
- * - a snapshot replaces the cached focus only when its `version` is greater (notify type 29, a GET
- *   and a write response all go through the same gate, so a local echo is a no-op);
- * - `featureEnabled` is taken only from a GET (the coalesced fetch), never from a push or a write
- *   response, with one exception that only turns it off: any response with business status 32 clears
- *   it at once and bumps the switch epoch, and a GET that started before the bump (an older answer)
- *   applies its `focus` by version but not its `featureEnabled`;
- * - consumers read [effective] (or [effectiveNow] on a decision path), which judges the snapshot
- *   against the trusted clock; a timer re-publishes it at `until`, so expiry needs no new version.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
 @Singleton
 class GroupFocusRepository internal constructor(
     apiProvider: () -> FocusApi,
@@ -61,17 +61,17 @@ class GroupFocusRepository internal constructor(
     private var loaded = false
     private var expiryJob: Job? = null
 
-    /** Bumped on every status 32; a GET applies its `featureEnabled` only if it started in the current epoch. */
+    
     private val switchEpoch = AtomicInteger()
 
     private val _state = MutableStateFlow(GroupFocusState())
 
-    /** The cached feature switch and server snapshot. Use [effective] for decisions and UI. */
+    
     val state: StateFlow<GroupFocusState> = _state.asStateFlow()
 
     private val _effective = MutableStateFlow(EffectiveFocus.INACTIVE)
 
-    /** The cached state judged against the trusted clock; re-published when `until` passes. */
+    
     val effective: StateFlow<EffectiveFocus> = _effective.asStateFlow()
 
     val featureEnabled: Boolean get() = _state.value.featureEnabled
@@ -82,10 +82,10 @@ class GroupFocusRepository internal constructor(
         scope.launch { ensureLoaded() }
     }
 
-    /** Focus judged right now; for synchronous decision paths, where [effective] may lag a timer tick. */
+    
     fun effectiveNow(): EffectiveFocus = EffectiveFocus.derive(_state.value, clock())
 
-    /** Loads the persisted state once. Idempotent; every mutation also calls it first. */
+    
     suspend fun ensureLoaded() {
         mutex.withLock {
             loadLocked()
@@ -93,10 +93,10 @@ class GroupFocusRepository internal constructor(
         }
     }
 
-    /**
-     * Applies a snapshot from a FOCUS notify (type 29) or any other push. Only the version gate
-     * applies; `featureEnabled` is untouched.
-     */
+    
+
+
+
     suspend fun apply(snapshot: FocusSnapshot, trigger: String?) {
         mutex.withLock {
             loadLocked()
@@ -104,11 +104,11 @@ class GroupFocusRepository internal constructor(
         }
     }
 
-    /**
-     * Re-derives [effective] from the cached state against the trusted clock and re-arms the expiry
-     * timer, without a request. Call it before a foreground GET: a timer that slept through deep idle may
-     * have missed `until`, and a failed GET would otherwise leave the UI stale.
-     */
+    
+
+
+
+
     suspend fun recomputeLocally() {
         mutex.withLock {
             loadLocked()
@@ -117,33 +117,33 @@ class GroupFocusRepository internal constructor(
         }
     }
 
-    /**
-     * Call after the local user's leave or disband request returned [response]: on success the server
-     * state may have changed (the focus group is gone), so reconcile at once instead of waiting for the echo.
-     */
+    
+
+
+
     fun onLocalGroupExit(response: BaseResponse<*>) {
         if (response.isSuccess()) requestRefresh("leave")
     }
 
-    /** Requests a GET. Coalesced: one in flight plus one trailing run; no request is dropped. */
+    
     fun requestRefresh(reason: String) {
         L.i { "[GroupFocus] refresh requested reason=$reason" }
         fetchCoalescer.request()
     }
 
-    /** Opens focus on [gid], or reselects after an invalid state. [durationSeconds] is 3600, 28800 or null (manual end). */
+    
     suspend fun start(gid: String, durationSeconds: Int?): FocusResult =
         write("start") { api.openFocus(FocusOpenRequest(listOf(gid), durationSeconds)) }
 
-    /** Switches the focused group while focus is on; the server keeps the current end time. */
+    
     suspend fun switchGroup(gid: String): FocusResult =
         write("switch") { api.openFocus(FocusOpenRequest(listOf(gid), null)) }
 
-    /** Changes the end time of a running focus; null duration = manual end. */
+    
     suspend fun changeUntil(durationSeconds: Int?): FocusResult =
         write("until") { api.changeUntil(FocusUntilRequest(durationSeconds)) }
 
-    /** Patches the "other groups" options; null leaves a field unchanged. At least one must be given. */
+    
     suspend fun updateOptions(
         othersAllowMentionMe: Boolean? = null,
         othersAllowMentionAll: Boolean? = null,
@@ -158,7 +158,7 @@ class GroupFocusRepository internal constructor(
         }
     }
 
-    /** Ends focus; the options are kept by the server. */
+    
     suspend fun end(): FocusResult = write("end") { api.endFocus() }
 
     private suspend fun write(op: String, call: suspend () -> BaseResponse<FocusResponse>): FocusResult {
@@ -174,7 +174,7 @@ class GroupFocusRepository internal constructor(
         if (response.isSuccess() && focus != null) {
             mutex.withLock {
                 loadLocked()
-                // The write response's featureEnabled is not trusted: only a GET sets it.
+                
                 applyLocked(focus, featureEnabled = null, source = "write:$op")
             }
             return FocusResult.Success(focus)
@@ -189,11 +189,11 @@ class GroupFocusRepository internal constructor(
         return FocusResult.Failure(error)
     }
 
-    /**
-     * Status 32 from any endpoint: the feature is off, whatever a GET already in flight will say. Clears
-     * the switch (persisted, republished so the entries hide) and bumps the epoch before asking again.
-     * A GET that itself returned 32 passes `refresh = false`: that answer is the confirmation.
-     */
+    
+
+
+
+
     private suspend fun onFeatureDisabled(source: String, refresh: Boolean = true) {
         mutex.withLock {
             loadLocked()
@@ -210,11 +210,11 @@ class GroupFocusRepository internal constructor(
         if (refresh) requestRefresh("status32-$source")
     }
 
-    /**
-     * One GET at a time, request through apply: `featureEnabled` has no version, so overlapping GETs
-     * could let an older answer win. The epoch is captured before the request, so an answer that was
-     * overtaken by a status 32 still applies its `focus` (by version) but not its `featureEnabled`.
-     */
+    
+
+
+
+
     private suspend fun fetch(): FocusResponse? = fetchMutex.withLock { fetchLocked() }
 
     private suspend fun fetchLocked(): FocusResponse? {
@@ -242,7 +242,7 @@ class GroupFocusRepository internal constructor(
         if (loaded) return
         val stored = store.read()
         val owner = selfId()
-        // A cache written by another account (passive logout keeps app_state) is not this account's focus.
+        
         _state.value = if (stored.ownerUid != null && owner != null && stored.ownerUid != owner) {
             L.w { "[GroupFocus] discard cache of another account" }
             GroupFocusState()
@@ -253,11 +253,11 @@ class GroupFocusRepository internal constructor(
         republishLocked()
     }
 
-    /**
-     * Drops a cache that belongs to another account once this account is known. [loadLocked] can only
-     * judge this when `selfId` is already available; a passive logout keeps app_state, and a load before
-     * sign-in sees no owner, so the check repeats on every read and write.
-     */
+    
+
+
+
+
     private suspend fun reconcileOwnerLocked() {
         val owner = selfId() ?: return
         val stored = _state.value.ownerUid ?: return
@@ -282,11 +282,11 @@ class GroupFocusRepository internal constructor(
             _state.value = next
             store.write(next)
         }
-        // Also when nothing changed: a GET may have corrected the trusted clock, so `effective` and the expiry timer must be re-judged.
+        
         republishLocked()
     }
 
-    /** Publishes [effective] and re-arms the timer for the next `until` crossing. Call under [mutex]. */
+    
     private fun republishLocked() {
         val state = _state.value
         _effective.value = EffectiveFocus.derive(state, clock())

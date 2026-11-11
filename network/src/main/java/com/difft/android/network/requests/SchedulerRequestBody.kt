@@ -31,12 +31,8 @@ data class MeetingEventDataReq(
     val attachment: List<FileAttachment>?,
     val everyoneCanInviteOthers: Boolean,
     val everyoneCanModify: Boolean,
-    // 20231019@w ------------------------------------------------------------->
-    // Purpose: Add channelName and eid to MeetingEventDataReq for event update
-    // link to issue: https://trello.com/c/Hj9Chhpx
     val eid: String? = null,
     val channelName: String? = null,
-    // 20231019@w -------------------------------------------------------------<
 )
 
 data class RecurringRule(
@@ -96,13 +92,11 @@ data class ChangeGroupReq(
     val target: List<String>
 )
 
-/*
-{
-    "start": 1697997822, //查询是否空闲的开始时间，单位：秒
-    "end": 1697997822, //查询是否空闲的结束时间，单位：秒
-    "users": ["+1234567", "+1234567"]
-}
- */
+
+
+
+
+
 data class GetAvailabilityReq(
     val start: Long = 0,
     val end: Long = 0,

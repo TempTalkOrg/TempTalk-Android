@@ -21,19 +21,17 @@ class PictureSelectionPreviewModel(private val selector: PictureSelector) {
         selectionConfig.isPreviewZoomEffect = false
     }
 
-    /** Image Load the engine */
     fun setImageEngine(engine: ImageEngine?): PictureSelectionPreviewModel {
         selectionConfig.imageEngine = engine
         return this
     }
 
-    /** Set up player engine. Used to preview custom player instances, MediaPlayer by default. */
+    
     fun setVideoPlayerEngine(engine: VideoPlayerEngine<*>?): PictureSelectionPreviewModel {
         selectionConfig.videoPlayerEngine = engine
         return this
     }
 
-    /** PictureSelector theme style settings */
     fun setSelectorUIStyle(uiStyle: PictureSelectorStyle?): PictureSelectionPreviewModel {
         if (uiStyle != null) {
             selectionConfig.selectorStyle = uiStyle
@@ -41,71 +39,66 @@ class PictureSelectionPreviewModel(private val selector: PictureSelector) {
         return this
     }
 
-    /** Set App Language */
     fun setLanguage(language: Int): PictureSelectionPreviewModel {
         selectionConfig.language = language
         return this
     }
 
-    /** Set App default Language */
     fun setDefaultLanguage(defaultLanguage: Int): PictureSelectionPreviewModel {
         selectionConfig.defaultLanguage = defaultLanguage
         return this
     }
 
-    /** View lifecycle listener */
     fun setAttachViewLifecycle(viewLifecycle: IBridgeViewLifecycle?): PictureSelectionPreviewModel {
         selectionConfig.viewLifecycle = viewLifecycle
         return this
     }
 
-    /** Whether to play video automatically when previewing */
     fun isAutoVideoPlay(isAutoPlay: Boolean): PictureSelectionPreviewModel {
         selectionConfig.isAutoVideoPlay = isAutoPlay
         return this
     }
 
-    /** The video supports pause and resume */
     fun isVideoPauseResumePlay(isPauseResumePlay: Boolean): PictureSelectionPreviewModel {
         selectionConfig.isPauseResumePlay = isPauseResumePlay
         return this
     }
 
-    /** Intercept external preview click events, and users can implement their own preview framework */
+    
     fun setExternalPreviewEventListener(listener: OnExternalPreviewEventListener?): PictureSelectionPreviewModel {
         selectionConfig.onExternalPreviewEventListener = listener
         return this
     }
 
-    /** @param isHidePreviewDownload Previews do not show downloads */
+    
     fun isHidePreviewDownload(isHidePreviewDownload: Boolean): PictureSelectionPreviewModel {
         selectionConfig.isHidePreviewDownload = isHidePreviewDownload
         return this
     }
 
-    /** @param isHidePreviewShare Previews do not show share button */
+    
     fun isHidePreviewShare(isHidePreviewShare: Boolean): PictureSelectionPreviewModel {
         selectionConfig.isHidePreviewShare = isHidePreviewShare
         return this
     }
 
-    /** @param isShowConfidentialTip Show confidential message tip bar */
+    
     fun isShowConfidentialTip(isShowConfidentialTip: Boolean): PictureSelectionPreviewModel {
         selectionConfig.isShowConfidentialTip = isShowConfidentialTip
         return this
     }
 
-    /** Hide the bottom-centre close button of the external preview (default: shown). */
+    
     fun isHideBottomClose(isHideBottomClose: Boolean): PictureSelectionPreviewModel {
         selectionConfig.isHideBottomClose = isHideBottomClose
         return this
     }
 
-    /**
-     * preview LocalMedia
-     *
-     * You can use [setInjectActivityPreviewFragment] interface for custom preview.
-     */
+    
+
+
+
+
     fun startActivityPreview(currentPosition: Int, isDisplayDelete: Boolean, list: ArrayList<LocalMedia>) {
         if (!DoubleUtils.isFastDoubleClick()) {
             val activity = selector.getActivity()

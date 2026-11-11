@@ -154,7 +154,7 @@ class VideoThumbnailsExtractor {
                             L.i { TAG + "input done" }
                         } else {
                             val presentationTimeUs = extractor.sampleTime
-                            decoder.queueInputBuffer(inputBufIndex, 0, sampleSize, presentationTimeUs, 0 /*flags*/)
+                            decoder.queueInputBuffer(inputBufIndex, 0, sampleSize, presentationTimeUs, 0 )
                             samplesExtracted++
                             val currentSamplesExtracted = samplesExtracted
                             extractor.seekTo(duration * currentSamplesExtracted / thumbnailCount, MediaExtractor.SEEK_TO_CLOSEST_SYNC)
@@ -176,7 +176,7 @@ class VideoThumbnailsExtractor {
                         outputDone = true
                     }
 
-                    val shouldRender = info.size != 0 /*&& (info.presentationTimeUs >= duration * decodeCount / thumbnailCount)*/
+                    val shouldRender = info.size != 0 
 
                     decoder.releaseOutputBuffer(outputBufIndex, shouldRender)
                     if (shouldRender) {

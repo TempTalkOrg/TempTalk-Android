@@ -56,7 +56,7 @@ import org.robolectric.annotation.GraphicsMode
 import com.difft.android.base.R as BaseR
 import com.difft.android.chat.R as ChatR
 
-/** Actual local-preference Fragments, real Hilt VMs, stored values, and host/shell navigation. */
+
 @HiltAndroidTest
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -118,7 +118,7 @@ class LocalPreferencePageWiringIntegrationTest {
 
     private fun model(page: Fragment): LocalPreferenceViewModel = ViewModelProvider(page)[LocalPreferenceViewModel::class.java]
 
-    /** The decorative checkmark and label share a centred row; allow two dp for glyph rounding. */
+    
     private fun assertSelected(label: String) {
         compose.onAllNodesWithTag(DifftSettingsDefaults.CheckmarkTestTag, useUnmergedTree = true).assertCountEquals(1)
         val check = compose.onNodeWithTag(DifftSettingsDefaults.CheckmarkTestTag, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.center.y
@@ -188,7 +188,7 @@ class LocalPreferencePageWiringIntegrationTest {
         mountLeaf(page)
         compose.runOnUiThread {
             model(page).dispatch(LocalPreferenceContract.Intent.SelectDisplay(NotificationContentDisplayType.NAME_ONLY.value))
-            // A fold recreates the host while the pop is still queued; queued navigator ops are dropped.
+            
             pane!!.recreate()
         }
         idle()

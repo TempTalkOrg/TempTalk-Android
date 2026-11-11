@@ -1,5 +1,4 @@
-<!-- Ported from tmp/gif-favorite/assets/tab-search.svg (tabler:search). Monochrome
-     stroke icon; color is applied via tint at render time (selected/unselected). -->
+
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"

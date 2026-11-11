@@ -16,27 +16,27 @@ import javax.inject.Inject
 
 object MuteExceptionsContract {
     sealed interface Intent {
-        /** Fed by the host whenever the conversation config changes. */
+        
         data class ConversationChanged(val options: MuteOptions) : Intent
         data class Toggle(val item: StillNotifyItem, val on: Boolean) : Intent
 
-        /** The host's conversation write for [item] ended (accepted or not). */
+        
         data class WriteFinished(val item: StillNotifyItem) : Intent
     }
 
     data class State(val items: StillNotifyState = StillNotifyState())
 
     sealed interface Effect {
-        /** Write [item] through the conversation config path, then report [Intent.WriteFinished]. */
+        
         data class Write(val item: StillNotifyItem, val on: Boolean) : Effect
     }
 }
 
-/**
- * "Still Notify" (a muted group's exceptions): three switches writing the conversation config at
- * once. A switch shows its requested value while the write is in flight and falls back to the
- * stored value when the write did not change it (failure).
- */
+
+
+
+
+
 @HiltViewModel
 class MuteExceptionsViewModel @Inject constructor() : ViewModel() {
 

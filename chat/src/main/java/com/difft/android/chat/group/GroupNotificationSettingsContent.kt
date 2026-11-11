@@ -27,12 +27,12 @@ import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.user.GlobalNotificationType
 import com.difft.android.chat.R
 
-/**
- * Stateless body of the per-group notification settings screen.
- *
- * A plain scrolling [Column], not a LazyColumn: the option list is the three
- * [GlobalNotificationType] entries, not data.
- */
+
+
+
+
+
+
 @Composable
 fun GroupNotificationSettingsContent(
     globalNotificationType: Int,
@@ -53,8 +53,8 @@ fun GroupNotificationSettingsContent(
 
         DifftSettingsGroup(
             footer = {
-                // The explanation and the shortcut to the global page are only meaningful while the
-                // group actually follows the global setting.
+                
+                
                 if (isDefaultEnabled) {
                     DifftSettingsCaption(
                         text = stringResource(R.string.notification_change_default_setting_tip),

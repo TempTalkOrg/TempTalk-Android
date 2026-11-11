@@ -12,14 +12,14 @@ import com.difft.android.chat.dependencies.ApplicationDependencies.init
 import com.difft.android.chat.jobmanager.JobManager
 import com.difft.android.chat.video.exo.SimpleExoPlayerPool
 
-/**
- * Location for storing and retrieving application-scoped singletons. Users must call
- * [init] before using any of the methods, preferably early on in
- * [Application.onCreate].
- *
- * All future application-scoped singletons should be written as normal objects, then placed here
- * to manage their singleton-ness.
- */
+
+
+
+
+
+
+
+
 object ApplicationDependencies {
 
     private lateinit var _application: Application
@@ -42,7 +42,7 @@ object ApplicationDependencies {
     @JvmStatic
     fun getApplication(): Application = _application
 
-    // Use separate locks for each component to avoid blocking across different initializations
+    
     private val jobManagerLock = Any()
     private val messageStoreLock = Any()
     private val exoPlayerPoolLock = Any()

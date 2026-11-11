@@ -1,6 +1,5 @@
 package com.difft.android.chat.recent
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -18,20 +17,21 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.difft.android.base.ui.theme.DifftTheme
+import com.difft.android.base.ui.compose.floatingSurface
 import com.difft.android.chat.R
 
-/**
- * The retiring package's persistent "move to the new app" entry in the home title bar: a highlighted
- * pill with the transfer mark and a one-word label, sitting where the other title-bar actions do.
- * Visibility is the host's decision; the pill itself only opens the guide page.
- */
+
+
+
+
+
 @Composable
-fun LegacyMigrationEntryChip(onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun LegacyMigrationEntryChip(onClick: () -> Unit, modifier: Modifier = Modifier, glass: Boolean = false) {
     Row(
         modifier = modifier
             .height(32.dp)
             .clip(DifftTheme.radius.pill)
-            .background(DifftTheme.colors.backgroundBlue)
+            .floatingSurface(shape = DifftTheme.radius.pill, fill = DifftTheme.colors.fill, glass = glass)
             .clickable(onClick = onClick)
             .padding(start = 8.dp, end = 10.dp),
         verticalAlignment = Alignment.CenterVertically,

@@ -2,6 +2,7 @@ package com.difft.android.call.core
 
 import android.content.Context
 import androidx.annotation.VisibleForTesting
+import com.difft.android.base.call.CallType
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.DEFAULT_DEVICE_ID
 import com.difft.android.base.utils.globalServices
@@ -62,6 +63,10 @@ class CallRoomController(
     private val _callType = MutableStateFlow(callIntent.callType)
     val callType = _callType.asStateFlow()
 
+    
+    val startedOneOnOne = callIntent.action == CallIntent.Action.START_CALL &&
+        callIntent.callType == CallType.ONE_ON_ONE.type
+
     private val _micEnabled = MutableStateFlow(false)
     val micEnabled = _micEnabled.asStateFlow()
 
@@ -85,30 +90,28 @@ class CallRoomController(
 
     private val roomLock = Any()
 
-    // @Volatile: the fail-loud [room] getter reads roomInstance OUTSIDE roomLock; @Volatile gives the
-    // cross-thread happens-before so a reader on any thread sees the value written under the lock by createRoom().
+    
+    
     @Volatile
     private var roomInstance: Room? = null
 
-    // @Volatile, lock-free: set TRUE before disconnectAndRelease() enters synchronized(roomLock). Because the
-    // write happens-before the releasing thread blocks on the lock, a lock-free isReleaseIntended() read is
-    // guaranteed to observe it once createRoom() releases the lock — independent of who wins roomLock next.
+    
+    
+    
     @Volatile
     private var releaseIntended = false
 
-    // Drives createRoom()'s in-lock post-create release branch. Only ever touched under roomLock.
+    
     private var releaseRequested = false
 
-    // The room has actually been released (idempotency). Mutated only under roomLock;
-    // @Volatile so the lock-free [room] getter can fail-loud on post-release access.
+    
+    
     @Volatile
     private var released = false
 
-    /**
-     * Phase B entry. Creates the WebRTC room (LiveKit.create() native init, ~624 ms) under [roomLock] on the
-     * caller's thread. If [releaseRequested] was set before we acquired the lock, the freshly-created room is
-     * released immediately post-create (and still returned). Idempotent: repeat calls return the existing instance.
-     */
+    
+
+
     internal fun createRoom(): Room = synchronized(roomLock) {
         roomInstance?.let { return it }
         val created = LiveKit.create(
@@ -124,179 +127,145 @@ class CallRoomController(
         )
         roomInstance = created
         if (releaseRequested) {
-            // release raced in before we acquired the lock → release now
+            
             L.i { "[Call] createRoom: release requested during create, releasing immediately" }
             releaseLocked()
         }
         created
     }
 
-    /**
-     * Non-creating, fail-loud getter. Reading before [createRoom] throws (the on-main-creation bug guard);
-     * reading after release also throws so a stale, already-released [Room] is never handed out.
-     *
-     * Both throw [CallPreconditionException] rather than [IllegalStateException] because [connect]
-     * reads this getter inside its try block: a teardown that releases the room while an attempt is
-     * in flight must end the connection failover, not send it through every remaining candidate
-     * re-reading a room that is gone (connection failover treats unclassified failures as
-     * candidate-specific and retryable — see [com.difft.android.call.connect.classifyConnectFailure]).
-     */
+    
+
+
+
+
+
+
+
+
+
     val room: Room
         get() {
             if (released) throw CallPreconditionException("[Call] room accessed after release")
             return roomInstance ?: throw CallPreconditionException("[Call] room accessed before createRoom()")
         }
 
-    /**
-     * Lock-free, non-throwing counterpart to [room] for UI/touch handlers that can legitimately
-     * race with teardown. Returns null before [createRoom] and after release, so callers treat a
-     * gone room as "not connected" instead of crashing on the fail-loud [room] getter. Reads the
-     * same @Volatile fields (no roomLock) so it never blocks the main thread on an in-flight
-     * disconnect(); a benign released-flip between the two reads still yields a safe "not CONNECTED".
-     */
+    
+
+
+
+
+
+
     fun roomStateOrNull(): Room.State? {
         if (released) return null
         return roomInstance?.state
     }
 
-    /**
-     * Lock-free, non-throwing room accessor for async collectors that can legitimately race with
-     * teardown (e.g. [com.difft.android.call.session.CallTypeCoordinator]'s `room.metadata`
-     * collector, which lives in the session's `mainScope` and is not cancelled synchronously with release).
-     * Returns null before [createRoom] and after release, so a metadata emission that lands after
-     * `disconnectAndRelease()` is dropped instead of crashing on the fail-loud [room] getter.
-     */
+    
+
+
+
+
+
+
     fun roomOrNull(): Room? {
         if (released) return null
         return roomInstance
     }
 
-    /**
-     * Lock-free, non-throwing "is the room fully torn down" snapshot for the manual server-switch
-     * path. A released or not-yet-created room reads as disconnected. Keeps the livekit [Room.State]
-     * type encapsulated here so the coordinator can gate its disconnect→connect sequencing without
-     * importing SDK types.
-     */
+    
+
+
+
+
+
     fun isRoomDisconnected(): Boolean {
         if (released) return true
         return (roomInstance?.state ?: Room.State.DISCONNECTED) == Room.State.DISCONNECTED
     }
 
-    /**
-     * Lock-free, non-throwing remote-presence snapshot for teardown-racing callers (e.g. the
-     * manual server-switch collector on the main thread). Returns false before [createRoom] and
-     * after release, so a gone room is conservatively treated as "only self" instead of crashing
-     * on the fail-loud [room] getter.
-     */
+    
+
+
+
+
+
     fun hasRemoteParticipants(): Boolean {
         if (released) return false
         return roomInstance?.remoteParticipants?.isNotEmpty() == true
     }
 
-    /**
-     * Best-effort disconnect that never throws on a not-yet-created or already-released room.
-     * For connect-failure / manual-switch paths that can race with teardown: unlike
-     * `room.disconnect()` via the fail-loud getter, a gone room is a no-op here instead of a
-     * throwing [CallPreconditionException]. Threading is the caller's responsibility — disconnect() may do
-     * network I/O (TLS close_notify under an active proxy), so call it off the main thread.
-     */
+    
+
+
+
+
+
+
     fun disconnectQuietly() {
         if (released) return
         val r = roomInstance ?: return
         runCatching { r.disconnect() }
     }
 
-    /**
-     * OkHttpClient handed to LiveKit so its **WSS signaling** rides the self-hosted
-     * proxy tunnel when active. `WebSocketTransport.configureClient()` derives from
-     * this via `newBuilder().sslSocketFactory(caCertPem)`, which preserves our [Dns]
-     * and [javax.net.SocketFactory] — yielding the intended TLS-in-TLS (outer pinned
-     * tunnel + inner call-CA TLS). When the proxy is disabled both are no-ops
-     * (system DNS + plain socket), so behavior matches stock LiveKit. WebRTC media is
-     * unaffected and still cannot traverse the tunnel (see proxy design §9.3); step 1
-     * forces WSS-over-domain so the QUIC path (which bypasses OkHttp) is not taken.
-     */
-    // Legitimate exception to ChativeHttpClientRequired: this is LiveKit's signaling
-    // client, not a TempTalk auth-bearing API call. It deliberately carries no auth
-    // interceptor and instead installs the proxy-tunnel Dns + SocketFactory so WSS
-    // signaling rides the self-hosted tunnel; routing it through ChativeHttpClient
-    // would add auth headers LiveKit must not send and drop the tunnel wiring.
+    
+
+
+    
+    
+    
+    
+    
     @android.annotation.SuppressLint("ChativeHttpClientRequired")
     private fun buildSignalingOkHttpClient(): OkHttpClient =
         OkHttpClient.Builder()
-            // Call-scoped tunnel: gated by "Protect IP address in calls". When the
-            // toggle is off the signaling connection goes DIRECT even while the proxy
-            // is active for the IM plane (currentForCall returns null → plain socket).
+            
+            
+            
             .dns(ProxyTunnelDns(proxyConfigProvider, forCall = true))
             .socketFactory(ProxyTunnelSocketFactory(proxyConfigProvider, forCall = true))
             .build()
 
-    /**
-     * Privacy guard for "TURN-mandatory" mode. The proxy exists to hide the client's
-     * real IP from TempTalk (design §1.1/§1.3). WebRTC **media** only avoids leaking
-     * that IP when it is relayed through the operator's TURN server (see
-     * [buildProxyRtcConfig]). If the proxy is active but no TURN secret is configured,
-     * media would fall back to a direct path and expose the client IP to the SFU — so
-     * the call must be refused rather than silently leaking.
-     *
-     * @return true when the proxy is active but TURN is missing (caller should block).
-     */
+    
+
     fun isProxyActiveWithoutTurn(): Boolean {
-        // Call-plane gate: only enforce TURN-mandatory when the proxy actually routes
-        // calls ("Protect IP address in calls" ON). currentForCall already returns null
-        // unless protect-on AND the proxy is active, so a SINGLE read covers both the
-        // gate and the snapshot — no TOCTOU double-read of routingState (matches the
-        // single-read contract in connect()). With the toggle off the call goes direct,
-        // so a TURN-less proxy must not block it.
+        
+        
+        
+        
+        
+        
         val config = proxyConfigProvider.currentForCall ?: return false
         return !config.turnEnabled()
     }
 
-    /**
-     * Builds a relay-only [PeerConnection.RTCConfiguration] that forces WebRTC
-     * **media** through the operator's TURN server when the proxy is active and a
-     * TURN secret is present in the share code. Passing our own ICE servers makes
-     * LiveKit ignore the server-advertised ones (see `RTCEngine.makeRTCConfig`),
-     * and [PeerConnection.IceTransportsType.RELAY] suppresses host/srflx
-     * candidates — so the client's real IP never reaches TempTalk's media path.
-     *
-     * Returns null when no TURN is configured; the call then keeps stock behavior
-     * (signaling tunneled, media direct).
-     *
-     * The "proxy active for calls" gate lives at the SINGLE call site
-     * (`proxyConfig?.let { buildProxyRtcConfig(it) }` in [connect]): a non-null
-     * [config] already came from one `currentForCall` read, so re-reading
-     * `routingState` here would be a second load and reintroduce the TOCTOU the
-     * single-read contract avoids. Derive purely from the captured [config].
-     */
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     private fun buildProxyRtcConfig(config: ProxyConfig): PeerConnection.RTCConfiguration? {
         if (!config.turnEnabled()) return null
         val (user, credential) = config.turnCredentials() ?: return null
 
-        // Stealth mode: the ONLY relay candidate is turns:443 (TURN over TLS).
-        // Media is wrapped in an ordinary-looking TLS flow to :443, so a DPI box
-        // never sees a TURN/STUN handshake on the well-known 3478 — the proxy
-        // operator does not even publish 3478 (see docker-compose.yml). The server
-        // demuxes 443 by SNI: libwebrtc dials turns:<ip>:443 and (verified
-        // empirically) sends the IP literal AS the ClientHello SNI — NOT an empty
-        // SNI. The server keys on that: an IP-shaped (or empty) SNI -> coturn:5349,
-        // while a hostname SNI (the signaling tunnel's decoy) -> the TLS terminator
-        // (see Yelling-TLS-Proxy data/nginx-terminate/nginx.conf). The IP-literal
-        // SNI is therefore load-bearing for media routing — do not override it with
-        // the decoy hostname here, or media would be misrouted to the signaling path,
-        // UNLESS the server-side SNI demux is updated in lockstep to route that
-        // hostname to coturn (a distinct media decoy, kept separate from the signaling
-        // decoy since the TURN-TLS flow carries no ALPN to demux on instead).
-        // TLS_CERT_POLICY_SECURE so WebRTC invokes the custom SSLCertificateVerifier
-        // injected via ConnectOptions (see connect()). The verifier SPKI-pins coturn's
-        // self-signed leaf to ProxyConfig.spkiPinBase64 — same pin as the signaling
-        // tunnel. INSECURE_NO_CHECK is NOT used: it would route the handshake through
-        // SSL_VERIFY_NONE and skip the verifier (the outer TLS would be unverified).
-        // Media stays DTLS-SRTP end-to-end; the TURN credential is a short-lived HMAC.
-        // RELAY-only ICE (below) means dropping the plain turn:3478 candidates costs no
-        // privacy and removes the wasted 3478 gathering attempts; the trade-off is no
-        // lower-latency UDP fallback — acceptable since privacy/anti-blocking is the
-        // primary goal.
+        
+        
+        
+        
+        
         val turnsUrl = "turns:${config.host}:${config.port}?transport=tcp"
         val iceServers = listOf(
             PeerConnection.IceServer.builder(listOf(turnsUrl))
@@ -328,7 +297,7 @@ class CallRoomController(
                 deviceId = "",
                 position = CameraPosition.FRONT,
                 captureParams = VideoCaptureParameter(1280, 720, 30),
-                isPortrait = true // Set portrait mode for vertical video capture orientation
+                isPortrait = true 
             ),
             audioTrackPublishDefaults = AudioTrackPublishDefaults(
                 audioBitrate = 20_000,
@@ -362,21 +331,18 @@ class CallRoomController(
             room.e2eeOptions = getE2EEOptions()
             isUseQuicSignal = useQuicSignal
 
-            // SINGLE read of proxyConfigProvider.currentForCall — both rtcConfig and
-            // the verifier derive from this one snapshot so they cannot drift (TOCTOU).
-            // currentForCall is null when "Protect IP address in calls" is off, so the
-            // call connects directly with no TURN/QUIC proxy injection.
+            
+            
+            
+            
             val proxyConfig = proxyConfigProvider.currentForCall
             val proxyRtcConfig = proxyConfig?.let { buildProxyRtcConfig(it) }
 
-            // QUIC-over-proxy (standards RFC 9298 CONNECT-UDP, design §9.6): only when
-            // QUIC signaling is active AND the proxy advertises a QUIC relay (`q`). The
-            // inner QUIC keeps verifying the SFU via [certPem] (chative CA); the OUTER hop
-            // to the proxy is a separate HTTP/3 CONNECT-UDP connection. The outer hop is now
-            // SPKI-pinned to proxyConfig.spkiPinBase64 (passed as quicProxySpkiPin below) —
-            // the SAME pin used for the WSS tunnel and the coturn TURN-TLS layer. The CA-chain
-            // path is unused (quicProxyCaCertPem stays null); the pin IS the verification.
-            // Inner traffic stays E2E. WSS mode ignores these fields.
+            
+            
+            
+            
+            
             val quicProxy = proxyConfig?.takeIf { useQuicSignal && it.quicEnabled }
             if (quicProxy != null) {
                 L.i { "[Call] QUIC-over-proxy enabled host=${quicProxy.host} port=${quicProxy.port}" }
@@ -385,17 +351,17 @@ class CallRoomController(
             val physicalNetworkHandle =
                 if (forcePhysical) appContext.physicalNetworkHandle() else 0
 
-            // Tie the verifier to the SAME gate as proxyRtcConfig so they can't drift:
-            // a non-null proxyRtcConfig was produced from proxyConfig, so the safe-call
-            // pin read below is non-null on that path. spkiPinBase64 is a non-null String
-            // (ProxyConfig.kt:35); isNullOrBlank() guards the empty/degenerate share link.
+            
+            
+            
+            
             val turnTlsVerifier: SSLCertificateVerifier? = proxyRtcConfig?.let {
                 val pin = proxyConfig?.spkiPinBase64
                 if (pin.isNullOrBlank()) {
-                    // Fail-CLOSED: TURN relay is forced but we have no pin to verify
-                    // coturn's self-signed leaf. Refusing beats connecting unverified.
-                    // Typed as a precondition so failover reports it instead of retrying
-                    // every candidate against the same unsatisfiable guard.
+                    
+                    
+                    
+                    
                     throw CallPreconditionException(
                         "[Call] proxy TURN relay active but SPKI pin absent — refusing unverified connect"
                     )
@@ -425,9 +391,9 @@ class CallRoomController(
                     quicCidTag = mySelfId.replace("+", "").trim(),
                     quicProxyHost = quicProxy?.host,
                     quicProxyPort = quicProxy?.port ?: ProxyConfig.DEFAULT_PORT,
-                    // outerSni() never returns the IP host: an IP literal is illegal in the
-                    // TLS SNI extension (RFC 6066) and gets rejected/ignored, breaking the
-                    // QUIC tunnel for IP-addressed proxies. Mirrors the WSS tunnel + probe paths.
+                    
+                    
+                    
                     quicProxySni = quicProxy?.outerSni(),
                     quicProxyCaCertPem = null,
                     quicProxySpkiPin = quicProxy?.spkiPinBase64,
@@ -471,16 +437,16 @@ class CallRoomController(
     }
 
     fun disconnectAndRelease() {
-        releaseIntended = true // FIRST, lock-free: visible to Phase B's pre-wiring guard (see design §3.3)
+        releaseIntended = true 
         synchronized(roomLock) {
-            releaseRequested = true // honored by createRoom() if room not yet created
-            releaseLocked() // releases now if already created; no-op otherwise
+            releaseRequested = true 
+            releaseLocked() 
         }
     }
 
     private fun releaseLocked() {
-        val r = roomInstance ?: return // not created yet → createRoom() will release post-create
-        if (released) return // idempotent: never double-release
+        val r = roomInstance ?: return 
+        if (released) return 
         released = true
         runCatching { r.disconnect() }
         runCatching {
@@ -493,14 +459,11 @@ class CallRoomController(
     @VisibleForTesting
     fun isRoomInitialized(): Boolean = synchronized(roomLock) { roomInstance != null }
 
-    /**
-     * Lock-free. True from the instant a release is requested (set before disconnectAndRelease takes the lock).
-     * Called by production Phase B wiring (the session's room setup, `CallRoomWiring.kt`),
-     * so this is `internal` (not `@VisibleForTesting`) — same-module tests still reach it.
-     */
+    
+
     internal fun isReleaseIntended(): Boolean = releaseIntended
 
-    /** True once the room has actually been released (post-lock). */
+    
     @VisibleForTesting
     fun isReleased(): Boolean = synchronized(roomLock) { released }
 }

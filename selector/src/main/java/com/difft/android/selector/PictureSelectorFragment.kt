@@ -70,9 +70,6 @@ import com.difft.android.selector.widget.SlideSelectionHandler
 import com.difft.android.selector.widget.TitleBar
 import java.io.File
 
-/**
- * 1:1 Java→Kotlin port (issue #1077); structural split deferred — see #1077 future work.
- */
 @Suppress("LargeClass")
 class PictureSelectorFragment : PictureCommonFragment(),
     OnRecyclerViewPreloadMoreListener, IPictureSelectorEvent {
@@ -84,12 +81,12 @@ class PictureSelectorFragment : PictureCommonFragment(),
     private lateinit var completeSelectView: com.difft.android.selector.widget.CompleteSelectView
     private lateinit var tvCurrentDataTime: TextView
 
-    /**
-     * Android 14+ "Select photos" partial-access hint bar (shown only when
-     * media access is PARTIAL). Its own settings request code is kept distinct
-     * from PermissionChecker.REQUEST_CODE (10086) so returning from Settings
-     * routes through onActivityResult, not the graceful-close settings path.
-     */
+    
+
+
+
+
+
     private var partialAccessBar: View? = null
     private var partialAccessManage: TextView? = null
 
@@ -97,14 +94,8 @@ class PictureSelectorFragment : PictureCommonFragment(),
     private var allFolderSize = 0
     private var currentPosition = -1
 
-    /**
-     * Use camera to callback
-     */
     private var isCameraCallback = false
 
-    /**
-     * memory recycling
-     */
     private var isMemoryRecycling = false
     private var isDisplayCamera = false
 
@@ -130,7 +121,6 @@ class PictureSelectorFragment : PictureCommonFragment(),
     override fun onSelectedChange(isAddRemove: Boolean, currentMedia: LocalMedia) {
         bottomNarBar.setSelectedChange()
         completeSelectView.setSelectedChange(false)
-        // 刷新列表数据
         if (checkNotifyStrategy(isAddRemove)) {
             mAdapter.notifyItemPositionChanged(currentMedia.position)
             mRecycler.postDelayed({ mAdapter.notifyDataSetChanged() }, SELECT_ANIM_DURATION.toLong())
@@ -162,22 +152,18 @@ class PictureSelectorFragment : PictureCommonFragment(),
         bottomNarBar.setOriginalCheck()
     }
 
-    /**
-     * 刷新列表策略
-     */
     private fun checkNotifyStrategy(isAddRemove: Boolean): Boolean {
         var isNotifyAll = false
         if (selectorConfig.isMaxSelectEnabledMask) {
             if (selectorConfig.isWithVideoImage) {
                 if (selectorConfig.selectionMode == SelectModeConfig.SINGLE) {
-                    // ignore
+                    
                 } else {
                     isNotifyAll = selectorConfig.selectCount == selectorConfig.maxSelectNum ||
                         (!isAddRemove && selectorConfig.selectCount == selectorConfig.maxSelectNum - 1)
                 }
             } else {
                 if (selectorConfig.selectCount == 0 || (isAddRemove && selectorConfig.selectCount == 1)) {
-                    // 首次添加或单选，选择数量变为0了，都notifyDataSetChanged
                     isNotifyAll = true
                 } else {
                     if (PictureMimeType.isHasVideo(selectorConfig.resultFirstMimeType)) {
@@ -222,8 +208,8 @@ class PictureSelectorFragment : PictureCommonFragment(),
         tvCurrentDataTime = view.findViewById(R.id.tv_current_data_time)
         partialAccessBar = view.findViewById(R.id.ps_partial_access_bar)
         partialAccessManage = view.findViewById(R.id.ps_partial_access_manage)
-        // Guard against custom onLayoutResourceListener layouts that omit this view (mirrors the
-        // partialAccessBar null-guard in updatePartialAccessBar).
+        
+        
         partialAccessManage?.setOnClickListener { v -> showPartialAccessMenu(v) }
         updatePartialAccessBar()
         onCreateLoader()
@@ -254,9 +240,6 @@ class PictureSelectorFragment : PictureCommonFragment(),
         }
     }
 
-    /**
-     * 完成按钮
-     */
     private fun initComplete() {
         if (selectorConfig.selectionMode == SelectModeConfig.SINGLE && selectorConfig.isDirectReturnSingle) {
             selectorConfig.selectorStyle.titleBarStyle!!.isHideCancelButton = false
@@ -336,9 +319,6 @@ class PictureSelectorFragment : PictureCommonFragment(),
         })
     }
 
-    /**
-     * initAlbumListPopWindow
-     */
     private fun initAlbumListPopWindow() {
         albumListPopWindow = AlbumListPopWindow.buildPopWindow(requireContext(), selectorConfig)
         albumListPopWindow.setOnPopupWindowStatusListener(object : AlbumListPopWindow.OnPopupWindowStatusListener {
@@ -430,9 +410,6 @@ class PictureSelectorFragment : PictureCommonFragment(),
         }
     }
 
-    /**
-     * 开始获取数据
-     */
     private fun beginLoadData() {
         onPermissionExplainEvent(false, emptyArray())
         if (selectorConfig.isOnlySandboxDir) {
@@ -469,34 +446,34 @@ class PictureSelectorFragment : PictureCommonFragment(),
         PermissionConfig.CURRENT_REQUEST_PERMISSION = arrayOf()
     }
 
-    /**
-     * Toggle the Android 14+ partial-access hint bar. Single source of truth is
-     * :base getMediaAccessState()==PARTIAL (Signal canOnlyReadSelected) — NOT the
-     * selector isPartialVisualAccessGranted, which also returns true under FULL and
-     * would wrongly show the bar with full access.
-     */
+    
+
+
+
+
+
     private fun updatePartialAccessBar() {
         val bar = partialAccessBar ?: return
         val partial = currentMediaAccessState(context) == MediaAccessState.PARTIAL
         bar.visibility = if (partial) View.VISIBLE else View.GONE
     }
 
-    /**
-     * Shorthand for the :base three-state predicate. Kept fully-qualified here
-     * (not imported) because its simple name collides with the selector's own
-     * [PermissionUtil], already imported for [PermissionUtil.goIntentSetting].
-     * Uses [getAppContext] instead of the passed-in context — callers may
-     * invoke this after fragment teardown (e.g. returning from system Settings),
-     * where [getContext] can be null and crash the non-null Kotlin param.
-     */
+    
+
+
+
+
+
+
+
     private fun currentMediaAccessState(context: Context?): MediaAccessState {
         return com.difft.android.base.android.permission.PermissionUtil.getMediaAccessState(getAppContext())
     }
 
-    /**
-     * "Manage" menu (aligns with Signal ManageContextMenu two entries). Uses the
-     * host Activity context so the popup inherits the app DayNight theme.
-     */
+    
+
+
+
     private fun showPartialAccessMenu(anchor: View) {
         val popupMenu = PopupMenu(requireActivity(), anchor)
         popupMenu.menu.add(0, 1, 0, getString(R.string.ps_partial_access_select_more))
@@ -517,13 +494,13 @@ class PictureSelectorFragment : PictureCommonFragment(),
         popupMenu.show()
     }
 
-    /**
-     * "Select more photos": reuse the selector's own re-selection mechanism with a
-     * custom callback. Both branches reload — after re-selecting, the user may still
-     * be in "Selected photos" (onDenied) but the selection set changed, so a reload
-     * is required either way. Never route onDenied to handlePermissionDenied (which
-     * toasts and closes the gallery).
-     */
+    
+
+
+
+
+
+
     private fun requestSelectMore() {
         L.i { "[MediaAccess] user tapped select-more (partial)" }
         val readPermissionArray = PermissionConfig.getReadPermissionArray(getAppContext(), selectorConfig.chooseMode)
@@ -538,11 +515,11 @@ class PictureSelectorFragment : PictureCommonFragment(),
         })
     }
 
-    /**
-     * "Go to Settings": use a dedicated request code so onActivityResult below only
-     * reloads (never closes) — the base REQUEST_GO_SETTING path would close the
-     * gallery when access is still partial (a legal usable state).
-     */
+    
+
+
+
+
     private fun openPartialAccessSettings() {
         L.i { "[MediaAccess] user tapped go-to-settings (partial)" }
         PermissionUtil.goIntentSetting(this, REQUEST_PARTIAL_SETTINGS)
@@ -555,17 +532,17 @@ class PictureSelectorFragment : PictureCommonFragment(),
         }
     }
 
-    /**
-     * Unified reload after the user changed access via re-selection or Settings.
-     * Three branches: NONE (revoked in Settings) → mirror handlePermissionSettingResult
-     * graceful degradation (toast + close) instead of leaving a stale unreadable
-     * gallery; FULL/PARTIAL → fresh reload and refresh the bar (hidden when FULL).
-     */
+    
+
+
+
+
+
     private fun reloadAfterAccessChange() {
         val state = currentMediaAccessState(context)
         if (state == MediaAccessState.NONE) {
-            // Fragment may be detached when returning from Settings; use the
-            // null-safe app context for both string lookup and the toast.
+            
+            
             val appContext = getAppContext()
             ToastUtils.showToast(appContext, appContext.getString(R.string.ps_jurisdiction))
             onKeyBackFragmentFinish()
@@ -576,9 +553,6 @@ class PictureSelectorFragment : PictureCommonFragment(),
         updatePartialAccessBar()
     }
 
-    /**
-     * 给AlbumListPopWindow添加事件
-     */
     private fun addAlbumPopWindowAction() {
         albumListPopWindow.setOnIBridgeAlbumWidget(object : OnAlbumItemClickListener {
             override fun onItemClick(position: Int, curFolder: LocalMediaFolder) {
@@ -589,19 +563,18 @@ class PictureSelectorFragment : PictureCommonFragment(),
                 val lastBucketId = lastFolder.bucketId
                 if (selectorConfig.isPageStrategy) {
                     if (curFolder.bucketId != lastBucketId) {
-                        // 1、记录一下上一次相册数据加载到哪了，到时候切回来的时候要续上
+                        
                         lastFolder.data = mAdapter.getData()
                         lastFolder.currentDataPage = mPage
                         lastFolder.isHasMore = mRecycler.isEnabledLoadMore
 
-                        // 2、判断当前相册是否请求过，如果请求过则不从MediaStore去拉取了
+                        
                         if (curFolder.data!!.size > 0 && !curFolder.isHasMore) {
                             setAdapterData(curFolder.data)
                             mPage = curFolder.currentDataPage
                             mRecycler.isEnabledLoadMore = curFolder.isHasMore
                             mRecycler.smoothScrollToPosition(0)
                         } else {
-                            // 3、从MediaStore拉取数据
                             mPage = 1
                             val engine = selectorConfig.loaderDataEngine
                             if (engine != null) {
@@ -623,7 +596,6 @@ class PictureSelectorFragment : PictureCommonFragment(),
                         }
                     }
                 } else {
-                    // 非分页模式直接导入该相册下的所有资源
                     if (curFolder.bucketId != lastBucketId) {
                         setAdapterData(curFolder.data)
                         mRecycler.smoothScrollToPosition(0)
@@ -645,7 +617,7 @@ class PictureSelectorFragment : PictureCommonFragment(),
         }
         mRecycler.isEnabledLoadMore = isHasMore
         if (result.size == 0) {
-            // 如果从MediaStore拉取都没有数据了，adapter里的可能是缓存所以也清除
+            
             mAdapter.getData().clear()
         }
         setAdapterData(result)
@@ -769,8 +741,7 @@ class PictureSelectorFragment : PictureCommonFragment(),
         }
         mRecycler.isEnabledLoadMore = isHasMore
         if (mRecycler.isEnabledLoadMore && result.size == 0) {
-            // 如果isHasMore为true但result.size = 0;
-            // 那么有可能是开启了某些条件过滤，实际上是还有更多资源的再强制请求
+            
             onRecyclerViewPreloadMore()
         } else {
             setAdapterData(result)
@@ -809,9 +780,6 @@ class PictureSelectorFragment : PictureCommonFragment(),
         }
     }
 
-    /**
-     * 内存不足时，恢复RecyclerView定位位置
-     */
     private fun recoveryRecyclerPosition() {
         if (currentPosition > 0) {
             mRecycler.post {
@@ -975,9 +943,6 @@ class PictureSelectorFragment : PictureCommonFragment(),
         }
     }
 
-    /**
-     * 显示当前资源时间轴
-     */
     private fun setCurrentMediaCreateTimeText() {
         if (selectorConfig.isDisplayTimeAxis) {
             val position = mRecycler.getFirstVisiblePosition()
@@ -990,9 +955,6 @@ class PictureSelectorFragment : PictureCommonFragment(),
         }
     }
 
-    /**
-     * 显示当前资源时间轴
-     */
     private fun showCurrentMediaCreateTimeUI() {
         if (selectorConfig.isDisplayTimeAxis && mAdapter.getData().size > 0) {
             if (tvCurrentDataTime.alpha == 0f) {
@@ -1001,21 +963,18 @@ class PictureSelectorFragment : PictureCommonFragment(),
         }
     }
 
-    /**
-     * 隐藏当前资源时间轴
-     */
     private fun hideCurrentMediaCreateTimeUI() {
         if (selectorConfig.isDisplayTimeAxis && mAdapter.getData().size > 0) {
             tvCurrentDataTime.animate().setDuration(250).alpha(0.0f).start()
         }
     }
 
-    /**
-     * 预览图片
-     *
-     * @param position        预览图片下标
-     * @param isBottomPreview true 底部预览模式 false列表预览模式
-     */
+    
+
+
+
+
+
     private fun onStartPreview(position: Int, isBottomPreview: Boolean) {
         if (ActivityCompatHelper.checkFragmentNonExits(requireActivity(), PictureSelectorPreviewFragment.TAG)) {
             val data: ArrayList<LocalMedia>
@@ -1062,8 +1021,7 @@ class PictureSelectorFragment : PictureCommonFragment(),
 
     @SuppressLint("NotifyDataSetChanged")
     private fun setAdapterData(result: ArrayList<LocalMedia>?) {
-        // 这个地方有个时间差，主要是解决进场动画和查询数据同时进行导致动画有点卡顿问题，
-        // 主要是针对添加PictureSelectorFragment方式下
+        
         val enterAnimationDuration = getEnterAnimationDuration()
         if (enterAnimationDuration > 0) {
             requireView().postDelayed({ setAdapterDataComplete(result) }, enterAnimationDuration)
@@ -1088,16 +1046,13 @@ class PictureSelectorFragment : PictureCommonFragment(),
 
     override fun onRecyclerViewPreloadMore() {
         if (isMemoryRecycling) {
-            // 这里延迟是拍照导致的页面被回收，Fragment的重创会快于相机的onActivityResult的
+            
             requireView().postDelayed({ loadMoreMediaData() }, 350)
         } else {
             loadMoreMediaData()
         }
     }
 
-    /**
-     * 加载更多
-     */
     override fun loadMoreMediaData() {
         if (mRecycler.isEnabledLoadMore) {
             mPage++
@@ -1137,11 +1092,11 @@ class PictureSelectorFragment : PictureCommonFragment(),
                 mAdapter.notifyItemRangeChanged(positionStart, mAdapter.getItemCount())
                 hideDataNull()
             } else {
-                // 如果没数据这里在强制调用一下上拉加载更多，防止是因为某些条件过滤导致的假为0的情况
+                
                 onRecyclerViewPreloadMore()
             }
             if (result.size < PictureConfig.MIN_PAGE_SIZE) {
-                // 当数据量过少时强制触发一下上拉加载更多，防止没有自动触发加载更多
+                
                 mRecycler.onScrolled(mRecycler.scrollX, mRecycler.scrollY)
             }
         }
@@ -1209,14 +1164,10 @@ class PictureSelectorFragment : PictureCommonFragment(),
         }
     }
 
-    /**
-     * 拍照出来的合并到相应的专辑目录中去
-     */
     private fun mergeFolder(media: LocalMedia) {
         val allFolder: LocalMediaFolder
         val albumList = albumListPopWindow.getAlbumList() as MutableList<LocalMediaFolder>
         if (albumListPopWindow.getFolderCount() == 0) {
-            // 1、没有相册时需要手动创建相机胶卷
             allFolder = LocalMediaFolder()
             val folderName: String = if (TextUtils.isEmpty(selectorConfig.defaultAlbumName)) {
                 if (selectorConfig.chooseMode == SelectMimeType.ofAudio()) getString(R.string.ps_all_audio) else getString(R.string.ps_camera_roll)
@@ -1228,7 +1179,6 @@ class PictureSelectorFragment : PictureCommonFragment(),
             allFolder.bucketId = PictureConfig.ALL.toLong()
             albumList.add(0, allFolder)
         } else {
-            // 2、有相册就找到对应的相册把数据加进去
             allFolder = albumListPopWindow.getFolder(0)!!
         }
         allFolder.firstImagePath = media.path
@@ -1240,7 +1190,6 @@ class PictureSelectorFragment : PictureCommonFragment(),
         if (currentLocalMediaFolder == null || currentLocalMediaFolder.folderTotalNum == 0) {
             selectorConfig.currentLocalMediaFolder = allFolder
         }
-        // 先查找Camera目录，没有找到则创建一个Camera目录
         var cameraFolder: LocalMediaFolder? = null
         for (i in albumList.indices) {
             val exitsFolder = albumList[i]
@@ -1250,7 +1199,6 @@ class PictureSelectorFragment : PictureCommonFragment(),
             }
         }
         if (cameraFolder == null) {
-            // 还没有这个目录，创建一个
             cameraFolder = LocalMediaFolder()
             albumList.add(cameraFolder)
         }
@@ -1258,11 +1206,11 @@ class PictureSelectorFragment : PictureCommonFragment(),
         if (cameraFolder.bucketId == -1L || cameraFolder.bucketId == 0L) {
             cameraFolder.bucketId = media.bucketId
         }
-        // 分页模式下，切换到Camera目录下时，会直接从MediaStore拉取
+        
         if (selectorConfig.isPageStrategy) {
             cameraFolder.isHasMore = true
         } else {
-            // 非分页模式数据都是存在目录的data下，所以直接添加进去就行
+            
             if (!isAddSameImp(allFolder.folderTotalNum) ||
                 !TextUtils.isEmpty(selectorConfig.outPutCameraDir) ||
                 !TextUtils.isEmpty(selectorConfig.outPutAudioDir)
@@ -1276,9 +1224,6 @@ class PictureSelectorFragment : PictureCommonFragment(),
         albumListPopWindow.bindAlbumData(albumList)
     }
 
-    /**
-     * 数量是否一致
-     */
     private fun isAddSameImp(totalNum: Int): Boolean {
         if (totalNum == 0) {
             return false
@@ -1291,9 +1236,6 @@ class PictureSelectorFragment : PictureCommonFragment(),
         mDragSelectTouchListener?.stopAutoScroll()
     }
 
-    /**
-     * 显示数据为空提示
-     */
     private fun showDataNull() {
         val folder = selectorConfig.currentLocalMediaFolder
         if (folder == null || folder.bucketId == PictureConfig.ALL.toLong()) {
@@ -1304,7 +1246,7 @@ class PictureSelectorFragment : PictureCommonFragment(),
             val tips: String = if (selectorConfig.chooseMode == SelectMimeType.ofAudio()) {
                 getString(R.string.ps_audio_empty)
             } else if (currentMediaAccessState(context) == MediaAccessState.PARTIAL) {
-                // Partial access with 0 selected: guide the user to select more (Manage bar stays visible).
+                
                 getString(R.string.ps_partial_access_empty)
             } else {
                 getString(R.string.ps_empty)
@@ -1313,9 +1255,6 @@ class PictureSelectorFragment : PictureCommonFragment(),
         }
     }
 
-    /**
-     * 隐藏数据为空提示
-     */
     private fun hideDataNull() {
         if (tvDataEmpty.visibility == View.VISIBLE) {
             tvDataEmpty.visibility = View.GONE
@@ -1327,9 +1266,7 @@ class PictureSelectorFragment : PictureCommonFragment(),
         val TAG: String = PictureSelectorFragment::class.java.simpleName
         private val LOCK = Any()
 
-        /**
-         * 这个时间对应的是R.anim.ps_anim_modal_in里面的
-         */
+        
         private var SELECT_ANIM_DURATION = 135
         private const val REQUEST_PARTIAL_SETTINGS = 20086
 

@@ -1,85 +1,66 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
     <color name="ic_launcher_background">#181A1F</color>
-    <!--Brand Color & Function Color-->
-    <color name="primary" tools:ignore="ResourceName">#056FFA</color>
+    
+    <color name="primary" tools:ignore="ResourceName">@color/t.primary</color>
     <color name="success" tools:ignore="ResourceName">#01BC6A</color>
-    <color name="warning" tools:ignore="ResourceName">#FFC814</color>
     <color name="error" tools:ignore="ResourceName">#F84135</color>
     <color name="line" tools:ignore="ResourceName">#EAECEF</color>
-    <color name="icon" tools:ignore="ResourceName">#474D57</color>
-    <color name="number_of_missing_missing_muted" tools:ignore="ResourceName">#B7BDC6</color>
+    <color name="icon" tools:ignore="ResourceName">@color/t.primary</color>
+    <color name="unread_badge_muted" tools:ignore="ResourceName">#B7BDC6</color>
 
-    <!--Text Color-->
+    <color name="on_primary">@color/bg1</color>
+    <color name="info">#056FFA</color>
+    <color name="fill">#0D000000</color>
+    <color name="selected">@color/bg1</color>
+    <color name="avsys_bg">@color/t.primary</color>
+    <color name="avsys_fg">@color/bg1</color>
+    <color name="ripple">#1F1E2329</color>
+
+    
     <color name="t.primary" tools:ignore="ResourceName">#1E2329</color>
     <color name="t.secondary" tools:ignore="ResourceName">#474D57</color>
     <color name="t.secondary.night" tools:ignore="ResourceName">#B7BDC6</color>
     <color name="t.third" tools:ignore="ResourceName">#848E9C</color>
     <color name="t.disable" tools:ignore="ResourceName">#B7BDC6</color>
     <color name="t.white" tools:ignore="ResourceName">#FFFFFF</color>
-    <color name="t.black" tools:ignore="ResourceName">#181A20</color>
     <color name="t.warning" tools:ignore="ResourceName">#B06D00</color>
     <color name="t.error" tools:ignore="ResourceName">#D9271E</color>
     <color name="t.error.night" tools:ignore="ResourceName">#F84135</color>
-    <color name="t.success" tools:ignore="ResourceName">#00764B</color>
     <color name="t.info" tools:ignore="ResourceName">#056FFA</color>
-    <color name="t.info.night" tools:ignore="ResourceName">#82C1FC</color>
 
-    <!--Background Color-->
+    
     <color name="bg1" tools:ignore="ResourceName">#FFFFFF</color>
     <color name="bg2" tools:ignore="ResourceName">#FAFAFA</color>
     <color name="bg3" tools:ignore="ResourceName">#F5F5F5</color>
     <color name="bg3.night" tools:ignore="ResourceName">#2B3139</color>
     <color name="bg4" tools:ignore="ResourceName">#EAECEF</color>
-    <color name="bg.disable" tools:ignore="ResourceName">#EAECEF</color>
     <color name="bg.tooltip" tools:ignore="ResourceName">#5E6673</color>
     <color name="bg.popup" tools:ignore="ResourceName">#FFFFFF</color>
-    <color name="bg_modal" tools:ignore="ResourceName">#FFFFFF</color>
     <color name="divider" tools:ignore="ResourceName">#EAECEF</color>
     <color name="bg.popup.night" tools:ignore="ResourceName">#1E2329</color>
     <color name="bg.blue" tools:ignore="ResourceName">#EBF7FF</color>
-    <color name="bg.sky" tools:ignore="ResourceName">#EBF7FF</color>
-    <!-- bgspace (DifftTheme backgroundSpace): the chat-list focus swipe button. -->
+    
     <color name="bg.space" tools:ignore="ResourceName">#001C4E</color>
-    <color name="bg.primary.clicked" tools:ignore="ResourceName">#2558C1</color>
-    <color name="bg.secondary.clicked" tools:ignore="ResourceName">#F5F5F5</color>
-    <color name="bg.secondary" tools:ignore="ResourceName">@color/bg1</color>
+    <color name="bg.primary.clicked" tools:ignore="ResourceName">@color/t.secondary</color>
     <color name="bg.confidential" tools:ignore="ResourceName">@color/gray_200</color>
-    <color name="bg.confidential.area" tools:ignore="ResourceName">#F7FCFF</color>
-    <color name="bgpage_primary" tools:ignore="ResourceName">#FFFFFF</color>
-    <color name="bgpage_secondary" tools:ignore="ResourceName">#F5F5F5</color>
     <color name="bg5" tools:ignore="ResourceName">#FAFAFA</color>
-    <color name="border" tools:ignore="ResourceName">#EAECEF</color>
 
     <color name="bg" tools:ignore="ResourceName">#F5F5F5</color>
-    <color name="bg.elevated" tools:ignore="ResourceName">#FFFFFF</color>
 
     <color name="login_logo_color" tools:ignore="ResourceName">#181A20</color>
 
-    <!--Blue (only used shades)-->
-    <color name="blue_10" tools:ignore="ResourceName">#EBF7FF</color>
-    <color name="blue_200" tools:ignore="ResourceName">#82C1FC</color>
-    <color name="blue_300" tools:ignore="ResourceName">#4DA0FF</color>
-    <color name="blue_400" tools:ignore="ResourceName">#328AFD</color>
+    
 
-    <!--Green (only used shades)-->
-    <color name="green_600" tools:ignore="ResourceName">#009659</color>
-
-    <!--Yellow (only used shades)-->
-    <color name="yellow_50" tools:ignore="ResourceName">#FFF8C2</color>
-
-    <!--Red (only used shades)-->
+    
     <color name="red_500" tools:ignore="ResourceName">#D9271E</color>
 
-    <!--Gray-->
+    
     <color name="gray_10" tools:ignore="ResourceName">#F5F5F5</color>
     <color name="gray_50" tools:ignore="ResourceName">#EAECEF</color>
-    <color name="gray_100" tools:ignore="ResourceName">#D8DCE1</color>
     <color name="gray_200" tools:ignore="ResourceName">#B7BDC6</color>
     <color name="gray_250" tools:ignore="ResourceName">#929AA5</color>
     <color name="gray_300" tools:ignore="ResourceName">#848E9C</color>
-    <color name="gray_400" tools:ignore="ResourceName">#707A8A</color>
-    <color name="gray_500" tools:ignore="ResourceName">#5E6673</color>
     <color name="gray_600" tools:ignore="ResourceName">#474D57</color>
     <color name="gray_700" tools:ignore="ResourceName">#2B3139</color>
     <color name="gray_800" tools:ignore="ResourceName">#1E2329</color>
@@ -87,30 +68,21 @@
 
     <color name="bg1.night" tools:ignore="ResourceName">#181A20</color>
     <color name="bg2.night" tools:ignore="ResourceName">#1E2329</color>
-    <color name="bg2.light" tools:ignore="ResourceName">#FAFAFA</color>
     <color name="t.primary.night" tools:ignore="ResourceName">#EAECEF</color>
-
-    <color name="event_available">#CCEBF7FF</color>
-    <color name="event_not_available">#CCFFF8EE</color>
-    <color name="caution">#FF8800</color>
-    <color name="t.caution">#AE5004</color>
-
-    <color name="chat_full_input_bg">#FFFFFF</color>
-    <color name="bottom_tab_bg">#80FFFFFF</color>
-    <color name="bottom_tab_divider">#EAECEF</color>
 
     <color name="transparent">#00000000</color>
     <color name="white">#FFFFFFFF</color>
     <color name="black">#000000</color>
     <color name="Yellow_500">#F0B90B</color>
 
-    <!--Semi-transparent colors-->
-    <color name="success_10">#1901BC6A</color>
-    <color name="success_20">#3301BC6A</color>
-    <color name="error_10">#19F84135</color>
-    <color name="error_20">#33F84135</color>
-
-    <!--Log Level Colors-->
-    <color name="log_info_light_blue">#ADD8E6</color>
-    <color name="log_warn_orange">#FFA500</color>
+    
+    <color name="bubble.sent" tools:ignore="ResourceName">#474D57</color>
+    <color name="bubble.sent.text" tools:ignore="ResourceName">#FFFFFF</color>
+    <color name="bubble.sent.meta" tools:ignore="ResourceName">#D9FFFFFF</color>
+    <color name="bubble.sent.link" tools:ignore="ResourceName">#A6F4FA</color>
+    <color name="media.time.bg" tools:ignore="ResourceName">#6B000000</color>
+    <color name="bubble.sent.quote" tools:ignore="ResourceName">#1FFFFFFF</color>
+    <color name="bubble.sent.bar" tools:ignore="ResourceName">#66FFFFFF</color>
+    <color name="bubble.recv" tools:ignore="ResourceName">@color/bg3</color>
+    <color name="bubble.recv.quote" tools:ignore="ResourceName">@color/fill</color>
 </resources>

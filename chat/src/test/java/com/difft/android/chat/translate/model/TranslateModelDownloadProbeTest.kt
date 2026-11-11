@@ -18,19 +18,19 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/**
- * [TranslateModelDownloadProbe] row ownership.
- *
- * `DownloadManager.query` is UID-scoped but not app-feature-scoped, and ML Kit sets neither a title
- * nor a description on its Request — the model URI is the only discriminator. A row this app did not
- * enqueue for a translation model must never be read as translation progress.
- *
- * Robolectric for `MatrixCursor` only; the DownloadManager itself is a MockK.
- *
- * What each case asserts:
- *  - T24b a non-ML-Kit row in the same result set is ignored, the ML Kit row is returned
- *  - T53  (partial) the column reads are correct for a well-formed row
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class TranslateModelDownloadProbeTest {
@@ -70,7 +70,7 @@ class TranslateModelDownloadProbeTest {
     private fun modelRow(id: Long, soFar: Long, total: Long, status: Int = DownloadManager.STATUS_RUNNING) =
         arrayOf<Any>(id, "https://dl.google.com/translate/offline/zh_v1.zip", status, 0, soFar, total)
 
-    // --- T24b ---------------------------------------------------------------
+    
 
     @Test
     fun `T24b a foreign download row is ignored and the ML Kit row is returned`() {
@@ -108,7 +108,7 @@ class TranslateModelDownloadProbeTest {
         assertEquals(7L, probe.snapshot()?.downloadId)
     }
 
-    // --- T53 ----------------------------------------------------------------
+    
 
     @Test
     fun `T53 the newest row wins, and every column is read into the snapshot`() {
@@ -119,7 +119,7 @@ class TranslateModelDownloadProbeTest {
 
         val snapshot = probe.snapshot()
 
-        // Row ids are monotonic, so the largest is the most recent attempt.
+        
         assertEquals(9L, snapshot?.downloadId)
         assertEquals(DownloadManager.STATUS_FAILED, snapshot?.status)
         assertEquals(900L, snapshot?.bytesSoFar)
@@ -140,7 +140,7 @@ class TranslateModelDownloadProbeTest {
         assertNull(probe.snapshot())
     }
 
-    // --- availability -------------------------------------------------------
+    
 
     @Test
     fun `isAvailable reports a disabled or missing DownloadManager`() {

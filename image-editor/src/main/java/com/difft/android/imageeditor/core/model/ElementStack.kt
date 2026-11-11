@@ -6,15 +6,15 @@ import kotlinx.parcelize.Parcelize
 import kotlinx.parcelize.TypeParceler
 import java.util.Stack
 
-/**
- * Contains a stack of elements for undo and redo stacks.
- *
- * Elements are mutable, so this stack serializes the element and keeps a stack of serialized data.
- *
- * The stack has a [limit] and if it exceeds that limit during a push the second to earliest item
- * is removed so that it can always go back to the first state. Effectively collapsing the history for
- * the start of the stack.
- */
+
+
+
+
+
+
+
+
+
 @Parcelize
 @TypeParceler<Stack<ByteArray>, StackParceler>()
 class ElementStack private constructor(
@@ -24,15 +24,15 @@ class ElementStack private constructor(
 
     constructor(limit: Int) : this(limit, Stack())
 
-    /**
-     * Pushes an element to the stack iff the element's serialized value is different to any found at
-     * the top of the stack.
-     *
-     * Removes the second to earliest item if it is overflowing.
-     *
-     * @param element new editor element state.
-     * @return true iff the pushed item was different to the top item.
-     */
+    
+
+
+
+
+
+
+
+
     fun tryPush(element: EditorElement): Boolean {
         val bytes = getBytes(element)
         val push = stack.isEmpty() || !bytes.contentEquals(stack.peek())
@@ -46,9 +46,9 @@ class ElementStack private constructor(
         return push
     }
 
-    /**
-     * Pops the first different state from the supplied element.
-     */
+    
+
+
     @Suppress("DEPRECATION")
     fun pop(element: EditorElement): EditorElement? {
         if (stack.empty()) return null

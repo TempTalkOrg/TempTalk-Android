@@ -19,12 +19,12 @@ import org.robolectric.Robolectric
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 
-/**
- * [dismissWithView]: [ComposeDialogManager] mounts a page's dialogs on the Activity, which for a
- * detail page is the home screen, so a page that is popped or cleared must take its dialog with
- * it (its callbacks would run against a detached page), while a page that only stops (picker
- * Activity, background) keeps it.
- */
+
+
+
+
+
+
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [34])
 class DismissWithViewTest {
@@ -81,7 +81,7 @@ class DismissWithViewTest {
         val baseline = rootChildren()
         val dialog = page.dismissWithView(showBottom())
 
-        // A picker Activity on top, or the app in the background.
+        
         controller.pause().stop()
         assertTrue(dialog.isShowing)
         controller.start().resume()
@@ -124,7 +124,7 @@ class DismissWithViewTest {
         val baseline = rootChildren()
         removePage(page)
 
-        // An async callback that outlived the page shows its dialog late.
+        
         val dialog = page.dismissWithView(showBottom())
 
         assertFalse(dialog.isShowing)

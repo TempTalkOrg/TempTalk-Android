@@ -25,7 +25,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** #1350 jump chains (design T9): a failing step falls through to the next and never throws. */
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class OemSettingsLauncherTest {
@@ -34,7 +34,7 @@ class OemSettingsLauncherTest {
 
     private fun component(name: String) = Intent().setComponent(ComponentName("com.vendor", name))
 
-    // T9
+    
     @Test
     fun `a missing activity and a security failure fall through to the next step`() {
         val tried = mutableListOf<String?>()
@@ -162,7 +162,7 @@ class OemSettingsLauncherTest {
         assertTrue(NotificationFixJump.opensOemPopupDirectly(context, OemBrand.XIAOMI))
         assertFalse(NotificationFixJump.opensOemPopupDirectly(context, OemBrand.HUAWEI))
         assertFalse(NotificationFixJump.opensOemPopupDirectly(context, OemBrand.VIVO, originOsMajor = 5))
-        // Eligible OS, but nothing installed here handles the vivo action.
+        
         assertFalse(NotificationFixJump.opensOemPopupDirectly(context, OemBrand.VIVO, originOsMajor = 6))
 
         val pm = shadowOf(context.packageManager)

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Background with white stroke -->
+    
     <item android:id="@android:id/background">
         <shape android:shape="rectangle">
             <solid android:color="@android:color/transparent" />
@@ -11,7 +11,7 @@
         </shape>
     </item>
 
-    <!-- Progress -->
+    
     <item android:id="@android:id/progress">
         <clip>
             <shape android:shape="rectangle">

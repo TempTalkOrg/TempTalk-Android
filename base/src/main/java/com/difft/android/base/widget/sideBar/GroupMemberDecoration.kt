@@ -39,7 +39,7 @@ class GroupMemberDecoration(context: Context, private val callback: DecorationCa
             return
         }
         if (groupId == 0L || isFirstInGroup(index)) {
-            //同组的第一个才添加padding
+            
             outRect.top = topGap
         } else {
             outRect.top = 0
@@ -48,26 +48,6 @@ class GroupMemberDecoration(context: Context, private val callback: DecorationCa
 
     override fun onDraw(c: Canvas, parent: RecyclerView, state: RecyclerView.State) {
         super.onDraw(c, parent, state)
-        //        int left = parent.getPaddingLeft();
-//        int right = parent.getWidth() - parent.getPaddingRight();
-//
-//        int count = parent.getChildCount();
-//        for (int i = 0; i < count; i++) {
-//            View view = parent.getChildAt(i);
-//            int index = parent.getChildAdapterPosition(view);
-//            long groupId = callback.getGroupId(index);
-//            if (groupId < 0) {
-//                return;
-//            }
-//
-//            String textLine = callback.getGroupFirstLine(index).toUpperCase();
-//            if (index == 0 || isFirstInGroup(index)) {
-//                int top = view.getTop() - topGap;
-//                int bottom = view.getTop();
-//                c.drawRect(left, top, right, bottom, paint);
-//                c.drawText(textLine, left, bottom, textPaint);
-//            }
-//        }
     }
 
     private fun isFirstInGroup(pos: Int): Boolean {
@@ -104,10 +84,9 @@ class GroupMemberDecoration(context: Context, private val callback: DecorationCa
             val viewBottom = view.bottom
             var textY = Math.max(topGap, view.top).toFloat()
             if (position + 1 < itemCount) {
-                //下一个和当前不一样，移动当前
+                
                 val nextGroupId = callback.getGroupId(position + 1)
                 if (nextGroupId != groupId && viewBottom < textY) {
-                    //组内最后一个view进入了header
                     textY = viewBottom.toFloat()
                 }
             }

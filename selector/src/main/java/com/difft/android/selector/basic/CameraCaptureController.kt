@@ -30,10 +30,10 @@ import java.io.FileNotFoundException
 import java.io.FileOutputStream
 import java.io.InputStream
 
-/**
- * In-grid camera-cell (Option A) capture: builds capture intents and parses the
- * result into a [LocalMedia]. Extracted from PictureCommonFragment (issue #1077).
- */
+
+
+
+
 internal class CameraCaptureController(private val host: PictureCommonFragment) {
 
     private val config get() = host.selectorConfig
@@ -156,7 +156,7 @@ internal class CameraCaptureController(private val host: PictureCommonFragment) 
         }
     }
 
-    /** Camera capture result callback processing. */
+    
     fun dispatchHandleCamera(intent: Intent?) {
         PictureThreadUtils.executeByIo(object : PictureThreadUtils.SimpleTask<LocalMedia?>() {
             override fun doInBackground(): LocalMedia? {
@@ -186,7 +186,7 @@ internal class CameraCaptureController(private val host: PictureCommonFragment) 
         })
     }
 
-    /** Copy the recorded audio file to the configured directory. */
+    
     private fun copyOutputAudioToDir() {
         try {
             if (!TextUtils.isEmpty(config.outPutAudioDir)) {
@@ -217,7 +217,7 @@ internal class CameraCaptureController(private val host: PictureCommonFragment) 
         }
     }
 
-    /** Try to resolve the output path returned by a custom camera. */
+    
     fun getOutputPath(data: Intent?): String? {
         if (data == null) {
             return null
@@ -235,7 +235,7 @@ internal class CameraCaptureController(private val host: PictureCommonFragment) 
         return if (PictureMimeType.isContent(outPutUri.toString())) outPutUri.toString() else outPutUri.path
     }
 
-    /** Refresh the media gallery. */
+    
     private fun onScannerScanFile(media: LocalMedia) {
         if (ActivityCompatHelper.isDestroy(host.activity)) {
             return
@@ -271,7 +271,7 @@ internal class CameraCaptureController(private val host: PictureCommonFragment) 
         return media
     }
 
-    /** RESULT_CANCELED cleanup for a camera request. */
+    
     fun handleCameraCancel() {
         if (!TextUtils.isEmpty(config.cameraPath)) {
             MediaUtils.deleteUri(host.getAppContext(), config.cameraPath)

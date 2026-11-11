@@ -20,29 +20,29 @@ import org.whispersystems.signalservice.internal.push.SignalServiceProtos.Envelo
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos.ForwardNoticeMessage
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos.SyncMessage
 
-/**
- * Unit tests for two branches in [SignalServiceDataClass.conversation] lazy:
- *   1. `hasForwardNotice()` — primary path (from peer/group/self-as-NTS)
- *   2. `syncMessage.hasForwardNoticeSync()` — 1v1-to-other self-sync path
- *
- * ForwardNoticeMessage.conversation (tag 4) is self-contained. The receiver does
- * NOT depend on server-populated `envelope.msgExtra.conversationId` (custom-notify-specific).
- *
- * Resolution:
- *   Primary:
- *     - payload.conversation.groupId → For.Group
- *     - else                          → For.Account(senderId) — sender IS the peer for 1v1
- *   Self-sync (senderId == myId):
- *     - payload.conversation.groupId → For.Group (defensive; group source doesn't use sync)
- *     - payload.conversation.number  → For.Account(number) — peer uid directly
- *     - else                          → For.Account(senderId=myId) — NTS fallback
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 class SignalServiceDataClassConversationTest {
 
     private val myId = "+10000000"
     private val peerAccount = "+15551234"
     private val otherPeer = "+15559999"
-    private val groupIdString = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" // 32 bytes ASCII
+    private val groupIdString = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" 
 
     @Before
     fun setUp() {
@@ -57,12 +57,12 @@ class SignalServiceDataClassConversationTest {
         unmockkAll()
     }
 
-    // ---------------------------------------------------------------------
-    // Rule #1: group scene — payload.conversation.groupId present
-    // ---------------------------------------------------------------------
+    
+    
+    
     @Test
     fun `forwardNotice payload groupId resolves to For_Group regardless of envelope_source`() {
-        // Primary receive path (sender is someone else).
+        
         val envelope = envelopeBuilder(peerAccount).build()
         val notice = ForwardNoticeMessage.newBuilder()
             .setConversation(
@@ -80,9 +80,9 @@ class SignalServiceDataClassConversationTest {
         assertEquals(groupIdString, conv.id)
     }
 
-    // ---------------------------------------------------------------------
-    // Primary 1v1 — envelope.source IS the peer; payload.number (if any) is ignored.
-    // ---------------------------------------------------------------------
+    
+    
+    
     @Test
     fun `forwardNotice primary 1v1 resolves to For_Account senderId`() {
         val envelope = envelopeBuilder(peerAccount).build()
@@ -96,9 +96,9 @@ class SignalServiceDataClassConversationTest {
         assertEquals(peerAccount, conv.id)
     }
 
-    // ---------------------------------------------------------------------
-    // Self-sync via SyncMessage.forwardNoticeSync — payload.number = peer uid.
-    // ---------------------------------------------------------------------
+    
+    
+    
     @Test
     fun `syncMessage forwardNoticeSync with number resolves to For_Account number`() {
         val envelope = envelopeBuilder(myId).build()
@@ -116,9 +116,9 @@ class SignalServiceDataClassConversationTest {
         assertEquals(otherPeer, conv.id)
     }
 
-    // ---------------------------------------------------------------------
-    // Self-sync edge — payload.conversation missing → For.Account(myId) fallback (NTS).
-    // ---------------------------------------------------------------------
+    
+    
+    
     @Test
     fun `syncMessage forwardNoticeSync without conversation falls back to self`() {
         val envelope = envelopeBuilder(myId).build()
@@ -134,9 +134,9 @@ class SignalServiceDataClassConversationTest {
         assertEquals(myId, conv.id)
     }
 
-    // ---------------------------------------------------------------------
-    // Regression guard — unknown content still throws from the final else branch.
-    // ---------------------------------------------------------------------
+    
+    
+    
     @Test
     fun `unknown content type still throws IAE from final else branch`() {
         val envelope = envelopeBuilder(peerAccount).build()
@@ -150,9 +150,9 @@ class SignalServiceDataClassConversationTest {
         )
     }
 
-    // ---------------------------------------------------------------------
-    // Pin the "forwardNotice 不触发推送" contract — shouldShowNotification returns false.
-    // ---------------------------------------------------------------------
+    
+    
+    
     @Test
     fun `shouldShowNotification returns false for Content forwardNotice no push`() {
         val envelope = envelopeBuilder(peerAccount).build()
@@ -167,9 +167,9 @@ class SignalServiceDataClassConversationTest {
         )
     }
 
-    // ---------------------------------------------------------------------
-    // Helper — build a minimal envelope the SignalServiceDataClass lazies can use.
-    // ---------------------------------------------------------------------
+    
+    
+    
     private fun envelopeBuilder(source: String): Envelope.Builder = Envelope.newBuilder()
         .setSource(source)
         .setSourceDevice(1)

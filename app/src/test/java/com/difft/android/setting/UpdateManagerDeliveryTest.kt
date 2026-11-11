@@ -39,10 +39,10 @@ import java.io.IOException
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/**
- * UpdateManager keeps the check and the dialogs; every confirmed offer goes to the channel's
- * [UpdateDelivery], whatever the server's updateWithApk says.
- */
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class)
 class UpdateManagerDeliveryTest {
@@ -254,7 +254,7 @@ class UpdateManagerDeliveryTest {
 
     private fun awaitDialog() = awaitCondition { onConfirm.isCaptured }
 
-    /** checkUpdate hops to Dispatchers.IO and back to the main looper; poll with a bound. */
+    
     private fun awaitCondition(condition: () -> Boolean) {
         repeat(200) {
             shadowOf(Looper.getMainLooper()).idle()

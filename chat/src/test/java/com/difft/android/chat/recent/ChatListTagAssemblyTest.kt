@@ -13,17 +13,17 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * T2-1 … T2-9 — chat-list preview tag assembly.
- *
- * Pure JVM: [buildTagSegments] / [joinTags] / [detailColorRes] take no View, Context or TextPaint.
- * Width-driven degradation is a separate concern, covered by [SelectVisibleTagsTest].
- *
- * Verify: :chat:testDebugUnitTest
- */
+
+
+
+
+
+
+
+
 class ChatListTagAssemblyTest {
 
-    /** Mirrors the English `values/strings.xml` values, brackets included. */
+    
     private val enLabels = ChatListTagLabels(
         criticalAlert = "[🚨 Critical Alert]",
         sendFailed = "[Send failed]",
@@ -45,7 +45,7 @@ class ChatListTagAssemblyTest {
         labels = enLabels,
     )
 
-    // ── T2-1 ─────────────────────────────────────────────────────────────────
+    
 
     @Test
     fun `T2-1 all four tags come back in priority order`() {
@@ -67,7 +67,7 @@ class ChatListTagAssemblyTest {
         )
     }
 
-    // ── T2-2 ─────────────────────────────────────────────────────────────────
+    
 
     @Test
     fun `T2-2 joined four-tag run is the exact designed string`() {
@@ -80,7 +80,7 @@ class ChatListTagAssemblyTest {
             )
         ).toString()
         assertEquals("[🚨 Critical Alert] · [Send failed] · [@You] · [Draft]", joined)
-        // The separator is U+00B7 MIDDLE DOT surrounded by spaces, not an ASCII interpunct look-alike.
+        
         assertEquals(" · ", TAG_SEPARATOR)
     }
 
@@ -91,7 +91,7 @@ class ChatListTagAssemblyTest {
         assertFalse(joined.contains(TAG_SEPARATOR))
     }
 
-    // ── T2-3 ─────────────────────────────────────────────────────────────────
+    
 
     @Test
     fun `T2-3 mention has three states`() {
@@ -106,16 +106,16 @@ class ChatListTagAssemblyTest {
         assertTrue(segments(mentionType = MENTIONS_TYPE_NONE).none { it.tag == ChatListTag.MENTION })
     }
 
-    // ── T2-4 ─────────────────────────────────────────────────────────────────
+    
 
     @Test
     fun `T2-4 only FAILED earns the send-failed tag`() {
         assertTrue(
             segments(sendStatus = ROOM_SEND_STATUS_NONE).none { it.tag == ChatListTag.SEND_FAILED }
         )
-        // The TAG ROW never renders sending: the shipped "sending" indicator is the separate
-        // imageview_sending icon driven by RoomViewData.sendingStatus, not a tag segment, and
-        // the reserved ROOM_SEND_STATUS_SENDING value of THIS column stays unproduced.
+        
+        
+        
         assertTrue(
             segments(sendStatus = ROOM_SEND_STATUS_SENDING).none { it.tag == ChatListTag.SEND_FAILED }
         )
@@ -126,7 +126,7 @@ class ChatListTagAssemblyTest {
         )
     }
 
-    // ── T2-5 / T2-6 ──────────────────────────────────────────────────────────
+    
 
     @Test
     fun `T2-5 no critical alert means no critical-alert tag`() {
@@ -150,7 +150,7 @@ class ChatListTagAssemblyTest {
         )
     }
 
-    // ── T2-7 ─────────────────────────────────────────────────────────────────
+    
 
     @Test
     fun `T2-7 a room with nothing to show yields an empty run`() {
@@ -159,7 +159,7 @@ class ChatListTagAssemblyTest {
         assertEquals("", joinTags(result).toString())
     }
 
-    // ── T2-8 ─────────────────────────────────────────────────────────────────
+    
 
     @Test
     fun `T2-8 declaration order holds for every state combination`() {
@@ -177,8 +177,8 @@ class ChatListTagAssemblyTest {
                         combinations++
                         val result = segments(alert, send, mention, draft)
                         val label = "alert=$alert send=$send mention=$mention draft=$draft"
-                        // Ordinal-sorted == itself: the invariant selectVisibleTags relies on when it
-                        // picks the LAST droppable segment as the next victim.
+                        
+                        
                         assertEquals(label, result.sortedBy { it.tag.ordinal }, result)
                         assertEquals(label, result.distinctBy { it.tag }, result)
                     }
@@ -188,7 +188,7 @@ class ChatListTagAssemblyTest {
         assertEquals(36, combinations)
     }
 
-    // ── T2-9 ─────────────────────────────────────────────────────────────────
+    
 
     @Test
     fun `T2-9 preview colour is emphasized only for unread and unmuted`() {

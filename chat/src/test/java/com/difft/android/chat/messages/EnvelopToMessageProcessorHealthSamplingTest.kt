@@ -17,11 +17,11 @@ import org.junit.Before
 import org.junit.Test
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos.Envelope
 
-/**
- * #1328: latency is sampled only for a message that was newly stored. A redelivery of an already
- * stored envelope (e.g. FCM payload stored, process killed, same envelope pulled later) would
- * otherwise be counted again with latency measured from its original server time.
- */
+
+
+
+
+
 class EnvelopToMessageProcessorHealthSamplingTest {
 
     private val decryptionUtil = mockk<NewMessageDecryptionUtil>()
@@ -34,7 +34,7 @@ class EnvelopToMessageProcessorHealthSamplingTest {
 
     @Before
     fun setUp() {
-        processor = EnvelopToMessageProcessor(decryptionUtil, contentProcessor, dbMessageStore, counters, lateTracker)
+        processor = EnvelopToMessageProcessor(decryptionUtil, contentProcessor, dbMessageStore, counters, lateTracker, mockk(relaxed = true))
         every { decryptionUtil.decrypt(any()) } returns mockk<SignalServiceDataClass>(relaxed = true)
         coEvery { contentProcessor.process(any(), any(), any()) } returns mockk<Message>(relaxed = true)
     }

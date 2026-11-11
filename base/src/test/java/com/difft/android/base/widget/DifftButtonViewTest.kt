@@ -23,12 +23,12 @@ import org.robolectric.annotation.GraphicsMode
 import org.robolectric.shadows.ShadowSystemClock
 import java.time.Duration
 
-/**
- * [DifftButtonView] contract (issue #1208): the shell is a drop-in for the `Button` /
- * `AppCompatButton` tags it replaces — same click and enabled surface — it measures the way every
- * migrated layout needs (an EXACTLY `layout_height` fills the box, a wrap_content one collapses to
- * the design height), and the View, not Compose, owns the click and the accessibility node.
- */
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34])
@@ -46,7 +46,7 @@ class DifftButtonViewTest {
     private fun labelled(activity: ComponentActivity, text: String = "Done"): DifftButtonView =
         DifftButtonView(activity, Robolectric.buildAttributeSet().addAttribute(android.R.attr.text, text).build())
 
-    // ---------- T11 / T12 / T13: measurement ----------
+    
 
     @Test
     fun `an exact layout height fills the whole View box`() {
@@ -69,7 +69,7 @@ class DifftButtonViewTest {
         val view = labelled(activity)
         mount(view, activity)
 
-        // wrap_content inside a real parent arrives as AT_MOST: must not expand to it.
+        
         val atMost = MeasureSpec.makeMeasureSpec(activity.px(1000), MeasureSpec.AT_MOST)
         view.measure(atMost, atMost)
         assertEquals(activity.px(48), view.measuredHeight)
@@ -102,7 +102,7 @@ class DifftButtonViewTest {
         assertEquals(activity.px(40), view.measuredHeight)
     }
 
-    // ---------- T14 / T15: attributes ----------
+    
 
     @Test
     fun `xml attributes land on the shell`() {
@@ -132,15 +132,15 @@ class DifftButtonViewTest {
         )
         mount(view, activity)
 
-        // The framework does not apply android:enabled to a plain View, so the shell must route it
-        // through setEnabled — which is also what keeps the Compose state in step.
+        
+        
         assertFalse(view.isEnabled)
         view.isEnabled = true
         assertTrue(view.isEnabled)
         assertTrue(DifftButtonView(activity).isEnabled)
     }
 
-    /** A row that owns the click turns the button's own click surface off from the layout. */
+    
     @Test
     fun `android clickable and focusable false reach the View`() {
         val activity = host()
@@ -158,7 +158,7 @@ class DifftButtonViewTest {
         assertFalse(view.isFocusable)
     }
 
-    /** The 48dp page CTA every migrated layout hosts, so a tag without the attribute keeps it. */
+    
     @Test
     fun `the default size is xl`() {
         assertEquals(DifftButtonSize.XL, DifftButtonView(host()).size)
@@ -189,7 +189,7 @@ class DifftButtonViewTest {
         assertEquals(DifftButtonVariant.Text, variant("text"))
     }
 
-    // ---------- T16 / T17: click forwarding ----------
+    
 
     @Test
     fun `a click reaches the listener exactly once and the shell is clickable by default`() {
@@ -240,7 +240,7 @@ class DifftButtonViewTest {
         assertEquals(2, clicks)
     }
 
-    // ---------- T18 / T19: accessibility and the text setter ----------
+    
 
     @Test
     fun `TalkBack sees one Button node named by the label`() {
@@ -279,7 +279,7 @@ class DifftButtonViewTest {
         assertEquals("Continue to the next step", view.contentDescription)
     }
 
-    // ---------- T20: a GONE button costs no composition ----------
+    
 
     @Test
     fun `a gone button does not compose on attach`() {

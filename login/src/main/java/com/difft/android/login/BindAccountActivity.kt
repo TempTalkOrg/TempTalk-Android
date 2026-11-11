@@ -2,6 +2,7 @@ package com.difft.android.login
 
 
 import android.app.Activity
+import com.difft.android.base.widget.floatAsTopBarButton
 import com.difft.android.base.log.lumberjack.L
 import android.content.Context
 import android.content.Intent
@@ -55,11 +56,11 @@ class BindAccountActivity : BaseActivity() {
 
     private val activityLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         if (it.resultCode == Activity.RESULT_OK) {
-            // 绑定成功，将结果传递给调用方
+            
             setResult(Activity.RESULT_OK, SecurityResultNonce.resultData(intent))
             finish()
         } else if (it.resultCode != Activity.RESULT_CANCELED) {
-            // 其他情况（如验证失败），不设置RESULT_OK
+            
             finish()
         }
     }
@@ -82,8 +83,8 @@ class BindAccountActivity : BaseActivity() {
     }
 
     private fun initView() {
+        mBinding.ibBack.floatAsTopBarButton(leading = true)
         mBinding.ibBack.setOnClickListener { finish() }
-//        mBinding.skip.setOnClickListener { showSkipDialog() }
 
         when (type) {
             TYPE_BIND_EMAIL -> {

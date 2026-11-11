@@ -35,11 +35,11 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/**
- * The sender's capability gate (#1382) over a real loopback receiver: a container that needs
- * `pending-envelope-v1` is refused by a receiver that does not advertise it after `prepare-upload`
- * and before any frame, with the session cancelled by name; a receiver that does gets the container.
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = android.app.Application::class, sdk = [33])
 class P2pSenderCapabilityGateTest {

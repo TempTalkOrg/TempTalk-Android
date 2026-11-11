@@ -4,13 +4,13 @@ import com.difft.android.imageeditor.core.Bounds
 import com.difft.android.imageeditor.core.Renderer
 import java.util.UUID
 
-/**
- * A special [Renderer] that controls another [EditorElement].
- *
- * It has a reference to the [EditorElement.id] and a [ControlPoint] which it is in control of.
- *
- * The presence of this interface on the selected element is used to launch a ThumbDragEditSession.
- */
+
+
+
+
+
+
+
 interface ThumbRenderer : Renderer {
 
     val controlPoint: ControlPoint
@@ -19,7 +19,7 @@ interface ThumbRenderer : Renderer {
 
     enum class ControlPoint(val x: Float, val y: Float) {
 
-        // 8 point controls
+        
         CENTER_LEFT(Bounds.LEFT, Bounds.CENTRE_Y),
         CENTER_RIGHT(Bounds.RIGHT, Bounds.CENTRE_Y),
 
@@ -31,7 +31,7 @@ interface ThumbRenderer : Renderer {
         BOTTOM_LEFT(Bounds.LEFT, Bounds.BOTTOM),
         BOTTOM_RIGHT(Bounds.RIGHT, Bounds.BOTTOM),
 
-        // 2 point controls
+        
         SCALE_ROT_LEFT(Bounds.LEFT, Bounds.CENTRE_Y),
         SCALE_ROT_RIGHT(Bounds.RIGHT, Bounds.CENTRE_Y),
         ORIGIN(0f, 0f);

@@ -36,21 +36,14 @@ object PictureFileUtils {
         return createMediaFile(context, chooseMode, fileName, format, outCameraDirectory)
     }
 
-    /**
-     * 创建文件
-     */
     private fun createMediaFile(context: Context, chooseMode: Int, fileName: String?, format: String?, outCameraDirectory: String?): File {
         return createOutFile(context, chooseMode, fileName, format, outCameraDirectory)
     }
 
-    /**
-     * 创建文件
-     */
     private fun createOutFile(ctx: Context, chooseMode: Int, fileName: String?, format: String?, outCameraDirectory: String?): File {
         val context = ctx.applicationContext
         val folderDir: File
         if (TextUtils.isEmpty(outCameraDirectory)) {
-            // 外部没有自定义拍照存储路径使用默认
             val rootDir: File
             if (TextUtils.equals(Environment.MEDIA_MOUNTED, Environment.getExternalStorageState())) {
                 rootDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM)
@@ -63,7 +56,6 @@ object PictureFileUtils {
                 rootDir.mkdirs()
             }
         } else {
-            // 自定义存储路径
             folderDir = File(outCameraDirectory!!)
             if (!folderDir.parentFile!!.exists()) {
                 folderDir.parentFile!!.mkdirs()
@@ -91,52 +83,49 @@ object PictureFileUtils {
         }
     }
 
-    /**
-     * 文件根目录
-     */
     private fun getRootDirFile(context: Context, type: Int): File {
         val fileDirPath = FileDirMap.getFileDirPath(context, type)
         return File(fileDirPath!!)
     }
 
-    /**
-     * @return Whether the Uri authority is ExternalStorageProvider.
-     */
+    
+
+
     @JvmStatic
     fun isExternalStorageDocument(uri: Uri): Boolean {
         return "com.android.externalstorage.documents" == uri.authority
     }
 
-    /**
-     * @return Whether the Uri authority is DownloadsProvider.
-     */
+    
+
+
     @JvmStatic
     fun isDownloadsDocument(uri: Uri): Boolean {
         return "com.android.providers.downloads.documents" == uri.authority
     }
 
-    /**
-     * @return Whether the Uri authority is MediaProvider.
-     */
+    
+
+
     @JvmStatic
     fun isMediaDocument(uri: Uri): Boolean {
         return "com.android.providers.media.documents" == uri.authority
     }
 
-    /**
-     * @return Whether the Uri authority is Google Photos.
-     */
+    
+
+
     @JvmStatic
     fun isGooglePhotosUri(uri: Uri): Boolean {
         return "com.google.android.apps.photos.content" == uri.authority
     }
 
-    /**
-     * Get the value of the data column for this Uri. This is useful for
-     * MediaStore Uris, and other file-based ContentProviders.
-     *
-     * @return The value of the _data column, which is typically a file path.
-     */
+    
+
+
+
+
+
     @JvmStatic
     fun getDataColumn(context: Context, uri: Uri?, selection: String?, selectionArgs: Array<String>?): String {
         var cursor: Cursor? = null
@@ -156,17 +145,17 @@ object PictureFileUtils {
         return ""
     }
 
-    /**
-     * Get a file path from a Uri. This will get the the path for Storage Access
-     * Framework Documents, as well as the _data field for the MediaStore and
-     * other file-based ContentProviders.
-     */
+    
+
+
+
+
     @SuppressLint("NewApi")
     @JvmStatic
     fun getPath(ctx: Context, uri: Uri): String? {
         val context = ctx.applicationContext
 
-        // DocumentProvider
+        
         if (DocumentsContract.isDocumentUri(context, uri)) {
             if (isExternalStorageDocument(uri)) {
                 val docId = DocumentsContract.getDocumentId(uri)
@@ -181,7 +170,7 @@ object PictureFileUtils {
                     }
                 }
             } else if (isDownloadsDocument(uri)) {
-                // DownloadsProvider
+                
                 val id = DocumentsContract.getDocumentId(uri)
                 val contentUri = ContentUris.withAppendedId(
                     Uri.parse("content://downloads/public_downloads"), ValueOf.toLong(id)
@@ -189,7 +178,7 @@ object PictureFileUtils {
 
                 return getDataColumn(context, contentUri, null, null)
             } else if (isMediaDocument(uri)) {
-                // MediaProvider
+                
                 val docId = DocumentsContract.getDocumentId(uri)
                 val split = docId.split(":")
                 val type = split[0]
@@ -209,26 +198,26 @@ object PictureFileUtils {
                 return getDataColumn(context, contentUri, selection, selectionArgs)
             }
         } else if ("content".equals(uri.scheme, ignoreCase = true)) {
-            // MediaStore (and general)
-            // Return the remote address
+            
+            
             if (isGooglePhotosUri(uri)) {
                 return uri.lastPathSegment
             }
             return getDataColumn(context, uri, null, null)
         } else if ("file".equals(uri.scheme, ignoreCase = true)) {
-            // File
+            
             return uri.path
         }
 
         return ""
     }
 
-    /**
-     * 复制文件
-     *
-     * @param is 文件输入流
-     * @param os 文件输出流
-     */
+    
+
+
+
+
+
     @JvmStatic
     fun writeFileFromIS(`is`: InputStream?, os: OutputStream?): Boolean {
         var osBuffer: OutputStream? = null
@@ -252,19 +241,12 @@ object PictureFileUtils {
         }
     }
 
-    /**
-     * 生成uri
-     */
     @JvmStatic
     fun parUri(context: Context, cameraFile: File): Uri {
         val authority = context.packageName + ".luckProvider"
-        //通过FileProvider创建一个content类型的Uri
         return FileProvider.getUriForFile(context, authority, cameraFile)
     }
 
-    /**
-     * 判断文件是否存在
-     */
     @JvmStatic
     fun isImageFileExists(path: String): Boolean {
         val options = BitmapFactory.Options()
@@ -274,20 +256,17 @@ object PictureFileUtils {
         return options.outWidth > 0 && options.outHeight > 0
     }
 
-    /**
-     * 判断文件是否存在
-     */
     @JvmStatic
     fun isFileExists(path: String?): Boolean {
         return !TextUtils.isEmpty(path) && File(path!!).exists()
     }
 
-    /**
-     * Size of byte to fit size of memory.
-     *
-     * @param byteSize Size of byte.
-     * @return fit size of memory
-     */
+    
+
+
+
+
+
     @SuppressLint("DefaultLocale")
     @JvmStatic
     fun formatFileSize(byteSize: Long): String {
@@ -320,12 +299,12 @@ object PictureFileUtils {
         }
     }
 
-    /**
-     * Size of byte to fit size of memory.
-     *
-     * @param byteSize Size of byte.
-     * @return fit size of memory
-     */
+    
+
+
+
+
+
     @SuppressLint("DefaultLocale")
     @JvmStatic
     fun formatAccurateUnitFileSize(byteSize: Long): String {
@@ -351,12 +330,12 @@ object PictureFileUtils {
 
     @JvmStatic
     fun close(c: Closeable?) {
-        // java.lang.IncompatibleClassChangeError: interface not implemented
+        
         if (c is Closeable) {
             try {
                 c.close()
             } catch (e: Exception) {
-                // silence
+                
                 L.w(e) { "[PictureFileUtils] close failed" }
             }
         }

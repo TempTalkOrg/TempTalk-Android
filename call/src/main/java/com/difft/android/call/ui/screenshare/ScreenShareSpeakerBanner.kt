@@ -1,12 +1,12 @@
 package com.difft.android.call.ui.screenshare
 
+import com.difft.android.base.ui.compose.floatingSurface
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -25,10 +25,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.IntOffset
@@ -64,10 +61,9 @@ internal val BANNER_CORNER = 8.dp
 internal val BANNER_PADDING = 8.dp
 internal val ICON_SIZE = 16.dp
 internal val AVATAR_SIZE = 16.dp
-internal const val MIC_QUEUE_NAME_MAX_LENGTH = 12
 internal const val MIC_QUEUE_MAX_COUNT = 3
 internal const val MIC_STATE_POLL_MS = 1_000L
-/** Deliberately larger than the 16dp ratio value (7) — the banner letter must stay readable. */
+
 internal const val AVATAR_LETTER_TEXT_SIZE_DP = 8
 
 internal data class WaitingSpeakerDisplay(
@@ -170,8 +166,8 @@ fun ScreenShareSpeakerBanner(
         WaitingSpeakerDisplay(
             sid = p.sid.value,
             displayName = info?.name ?: p.identity?.value ?: p.sid.value,
-            // Forwards the map-held instance unchanged: a fresh copy each frame would defeat
-            // Compose strong skipping and re-run setAvatar on every recomposition.
+            
+            
             avatarData = info?.avatarData,
         )
     }
@@ -184,7 +180,7 @@ fun ScreenShareSpeakerBanner(
         val window = rememberCallWindowSizeDp()
         val cutouts = rememberDisplayCutoutRectsDp()
         val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
-        // The parent is the window less the rail band at the end edge.
+        
         val endGapDp = window.width - with(density) { constraints.maxWidth.toDp().value }
         val topDp = remember(cutouts, window, endGapDp, isRtl) {
             speakerBannerTopDp(cutouts, window.width, window.height, endGapDp, isRtl)
@@ -237,20 +233,7 @@ internal fun ScreenShareSpeakerBannerContent(
     Column(
         modifier = modifier
             .width(BANNER_WIDTH)
-            .shadow(
-                elevation = 6.dp,
-                spotColor = Color(0x14000000),
-                ambientColor = Color(0x14000000),
-                shape = shape,
-            )
-            .shadow(
-                elevation = 14.dp,
-                spotColor = Color(0x14000000),
-                ambientColor = Color(0x14000000),
-                shape = shape,
-            )
-            .clip(shape)
-            .background(DifftTheme.colors.backgroundSecondary)
+            .floatingSurface(shape, fill = DifftTheme.colors.backgroundSecondary)
             .padding(BANNER_PADDING),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
@@ -279,11 +262,11 @@ internal fun ScreenShareSpeakerBannerContent(
     }
 }
 
-/**
- * The banner's resting top in window dp: [BANNER_MARGIN_TOP], or below a cutout rect that meets its
- * column within the title row's band, as the title row itself clears it. [endGapDp] is the rail
- * band the banner keeps clear of at the end edge (#1451).
- */
+
+
+
+
+
 internal fun speakerBannerTopDp(
     cutouts: List<Rect>,
     windowWidthDp: Float,

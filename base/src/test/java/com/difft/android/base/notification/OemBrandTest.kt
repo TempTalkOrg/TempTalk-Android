@@ -3,7 +3,7 @@ package com.difft.android.base.notification
 import org.junit.Test
 import kotlin.test.assertEquals
 
-/** #1350: one brand detector replaces the equality and substring variants. */
+
 class OemBrandTest {
 
     private fun detect(brand: String, manufacturer: String, miui: String = "", hyper: String = "") =

@@ -32,7 +32,7 @@ class PictureSelectorSupporterActivity : BaseActivity() {
         )
     }
 
-    /** set app language */
+    
     fun initAppLanguage() {
         val config = selectorConfig
         if (config != null && config.language != LanguageConfig.UNKNOWN_LANGUAGE && !config.isOnlyCamera) {

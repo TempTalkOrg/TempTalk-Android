@@ -24,12 +24,12 @@ data class DraftWithTime(val draft: Draft, val updatedAt: Long)
 class DraftRepository @Inject constructor(
     private val gson: Gson
 ) {
-    // ✅ 独立的draft更新通知，避免每次room变化都查询draft
+    
     private val _draftUpdates = MutableSharedFlow<Unit>(
-        replay = 1,  // replay=1 确保新订阅者能立即收到
+        replay = 1,  
         extraBufferCapacity = 10,
         onBufferOverflow = BufferOverflow.DROP_OLDEST
-    ).apply { tryEmit(Unit) }  // 初始emit
+    ).apply { tryEmit(Unit) }
 
     val allDraftsFlow: Flow<Map<String, DraftWithTime>> = _draftUpdates
         .map {
@@ -50,9 +50,9 @@ class DraftRepository @Inject constructor(
         }
         .sampleAfterFirst(500)
 
-    /**
-     * Get the draft for a room (synchronously).
-     */
+    
+
+
     fun getDraft(roomId: String): Draft? {
         val entity = wcdb.draft.getFirstObject(DBDraftModel.roomId.eq(roomId)) ?: return null
 
@@ -65,9 +65,9 @@ class DraftRepository @Inject constructor(
         }
     }
 
-    /**
-     * Upsert (create or update) the Draft for a room.
-     */
+    
+
+
     fun upsertDraft(roomId: String, draft: Draft) {
         if (draft.content.isNullOrEmpty()) {
             clearDraft(roomId)
@@ -79,7 +79,7 @@ class DraftRepository @Inject constructor(
             this.draftJson = draftJson
         }
         val currentDraft = wcdb.draft.getFirstObject(DBDraftModel.roomId.eq(roomId))?.draftJson
-        if (currentDraft == draftJson) {// 如果草稿内容没有变化，则不更新
+        if (currentDraft == draftJson) {
             L.i { "[DraftRepository] The same draft content, no need to update" }
             return
         }
@@ -87,22 +87,18 @@ class DraftRepository @Inject constructor(
         newDraft.updatedAt = System.currentTimeMillis()
         wcdb.draft.insertOrReplaceObject(newDraft)
 
-        // ✅ 触发draft查询（独立）
         _draftUpdates.tryEmit(Unit)
-        // ✅ 触发room刷新（草稿变化需要更新会话列表显示）
         RoomChangeTracker.trackRoom(roomId, RoomChangeType.REFRESH)
         L.d { "[DraftRepository] Draft updated, emitted notifications" }
     }
 
-    /**
-     * Clear the draft for a particular room.
-     */
+    
+
+
     fun clearDraft(roomId: String) {
         wcdb.draft.deleteObjects(DBDraftModel.roomId.eq(roomId))
 
-        // ✅ 触发draft查询（独立）
         _draftUpdates.tryEmit(Unit)
-        // ✅ 触发room刷新
         RoomChangeTracker.trackRoom(roomId, RoomChangeType.REFRESH)
         L.d { "[DraftRepository] Draft cleared for $roomId, emitted notifications" }
     }

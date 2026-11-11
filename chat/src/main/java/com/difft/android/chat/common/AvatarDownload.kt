@@ -4,20 +4,20 @@ import okhttp3.ResponseBody
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 
-/**
- * Hard failsafe against an oversized (compromised/misbehaving server) avatar body OOMing the
- * client. Mirrors Signal's `AvatarHelper.AVATAR_DOWNLOAD_FAILSAFE_MAX_SIZE`; legitimate avatars
- * are client-side crop + compressed to well under this.
- */
+
+
+
+
+
 internal const val AVATAR_DOWNLOAD_MAX_BYTES: Long = 10L * 1024 * 1024
 
-/**
- * Reads a `@Streaming` response body into memory, capped at [maxBytes] — enforced on the actual
- * stream read, not just `Content-Length` (chunked responses may omit it). Call on `Dispatchers.IO`:
- * with `@Streaming` the network read happens here.
- *
- * @throws IOException when the body exceeds [maxBytes].
- */
+
+
+
+
+
+
+
 @Throws(IOException::class)
 internal fun ResponseBody.readBoundedBytes(maxBytes: Long = AVATAR_DOWNLOAD_MAX_BYTES): ByteArray = use { body ->
     val declared = body.contentLength()

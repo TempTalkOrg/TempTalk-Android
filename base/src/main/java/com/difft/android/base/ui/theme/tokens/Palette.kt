@@ -2,22 +2,38 @@ package com.difft.android.base.ui.theme.tokens
 
 import androidx.compose.ui.graphics.Color
 
-/**
- * Primitive colour palette of the "Wea Design system" library (Illustration color page).
- *
- * These are raw steps, not semantic roles. UI code reaches for `DifftTheme.colors` first; a
- * [Palette] step is read directly only for a colour that has no semantic role (call-page
- * accents, gradients), which the `DifftColorTokenRequired` lint rule accepts.
- * Semantic tokens live in [ColorTokens] and are exposed through `DifftTheme.colors`.
- *
- * Step names match the library ("Gray 50" -> [Gray50], "Light Blue 800" -> [LightBlue800]).
- */
+
+
+
+
+
+
+
+
+
+
 object Palette {
-    // ============== Brand logo ==============
+    
     val BrandLogoBlue = Color(0xFF328AFD)
     val BrandLogoTeal = Color(0xFF00BDB6)
 
-    // ============== Gray ==============
+    
+    val ChatGradientPurple = Color(0xFF8040D4)
+    val ChatGradientBlue = Color(0xFF1E5FCC)
+
+    
+    
+    val ChatInkPurple = Color(0xFF8B76F2)
+    val ChatInkBlue = Color(0xFF4E8EF7)
+    val ChatInkTeal = Color(0xFF2DB39C)
+    val ChatInkPurpleDark = Color(0xFF9A86FF)
+    val ChatInkBlueDark = Color(0xFF4C8DFF)
+    val ChatInkTealDark = Color(0xFF2FD3BD)
+    val ChatReceivedVeil = Color(0xE6FFFFFF)
+    val ChatReceivedVeilDark = Color(0xE6181A20)
+    val ChatReceivedShadow = Color(0x14101828)
+
+    
     val Gray0 = Color(0xFFFFFFFF)
     val Gray5 = Color(0xFFFAFAFA)
     val Gray10 = Color(0xFFF5F5F5)
@@ -34,7 +50,7 @@ object Palette {
     val Gray900 = Color(0xFF181A20)
     val Gray1000 = Color(0xFF0B0E11)
 
-    // ============== Blue ==============
+    
     val Blue10 = Color(0xFFEBF7FF)
     val Blue50 = Color(0xFFD4EBFC)
     val Blue100 = Color(0xFFB1DCFD)
@@ -47,7 +63,7 @@ object Palette {
     val Blue800 = Color(0xFF012C70)
     val Blue900 = Color(0xFF001C4E)
 
-    // ============== Light Blue ==============
+    
     val LightBlue10 = Color(0xFFEBFAFF)
     val LightBlue50 = Color(0xFFCCF3FF)
     val LightBlue100 = Color(0xFF9BE6FF)
@@ -60,7 +76,7 @@ object Palette {
     val LightBlue800 = Color(0xFF003366)
     val LightBlue900 = Color(0xFF001C4E)
 
-    // ============== Teal ==============
+    
     val Teal10 = Color(0xFFEBFFFD)
     val Teal50 = Color(0xFFC0FCF7)
     val Teal100 = Color(0xFF81F5EB)
@@ -73,7 +89,7 @@ object Palette {
     val Teal800 = Color(0xFF174446)
     val Teal900 = Color(0xFF173536)
 
-    // ============== Green ==============
+    
     val Green10 = Color(0xFFF2FFF4)
     val Green50 = Color(0xFFDEFFE7)
     val Green100 = Color(0xFFB3F9C8)
@@ -86,7 +102,7 @@ object Palette {
     val Green800 = Color(0xFF00563A)
     val Green900 = Color(0xFF003C2C)
 
-    // ============== Yellow ==============
+    
     val Yellow10 = Color(0xFFFFFCE5)
     val Yellow50 = Color(0xFFFFF8C2)
     val Yellow100 = Color(0xFFFFEF87)
@@ -99,7 +115,7 @@ object Palette {
     val Yellow800 = Color(0xFF663B00)
     val Yellow900 = Color(0xFF3E2400)
 
-    // ============== Orange ==============
+    
     val Orange10 = Color(0xFFFFF8EE)
     val Orange50 = Color(0xFFFFEBCC)
     val Orange100 = Color(0xFFFFD587)
@@ -112,7 +128,7 @@ object Palette {
     val Orange800 = Color(0xFF612E10)
     val Orange900 = Color(0xFF411902)
 
-    // ============== Red ==============
+    
     val Red10 = Color(0xFFFFF5F4)
     val Red50 = Color(0xFFFFE3E0)
     val Red100 = Color(0xFFFFC1B8)
@@ -125,7 +141,7 @@ object Palette {
     val Red800 = Color(0xFF680909)
     val Red900 = Color(0xFF4A0101)
 
-    // ============== Pink (starts at step 5, not 10) ==============
+    
     val Pink5 = Color(0xFFFFF2F9)
     val Pink50 = Color(0xFFFFDCEC)
     val Pink100 = Color(0xFFFFADC6)
@@ -138,7 +154,7 @@ object Palette {
     val Pink800 = Color(0xFF700831)
     val Pink900 = Color(0xFF4D001F)
 
-    // ============== Purple ==============
+    
     val Purple10 = Color(0xFFF8F2FF)
     val Purple50 = Color(0xFFECDBFF)
     val Purple100 = Color(0xFFD3A8FF)
@@ -151,7 +167,7 @@ object Palette {
     val Purple800 = Color(0xFF330B67)
     val Purple900 = Color(0xFF1F0048)
 
-    // ============== Purple Blue ==============
+    
     val PurpleBlue10 = Color(0xFFF7F2FF)
     val PurpleBlue50 = Color(0xFFE8DCFF)
     val PurpleBlue100 = Color(0xFFC6ADFF)

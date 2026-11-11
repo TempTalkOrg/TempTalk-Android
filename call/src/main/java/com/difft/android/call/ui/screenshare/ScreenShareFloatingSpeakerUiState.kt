@@ -3,8 +3,9 @@ package com.difft.android.call.ui.screenshare
 import io.livekit.android.room.participant.Participant
 
 enum class FloatingSpeakerSelectionSource {
-    PRIMARY_ACTIVE_SPEAKER,
-    HOLD_LAST_PRIMARY,
+    
+    LAYOUT_SPEAKER,
+    
     FALLBACK_SCREEN_SHARER,
 }
 

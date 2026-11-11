@@ -42,7 +42,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** Shared hosted/shell page; the Fragment ViewModel owns the live run across view recreation. */
+
 @AndroidEntryPoint
 class NotificationTestFragment : Fragment(), SettingsIdiomPage {
     private val viewModel: NotificationTestViewModel by viewModels()

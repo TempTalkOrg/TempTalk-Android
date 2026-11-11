@@ -24,7 +24,7 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
-/** Stand-in for IndexActivity (router rule 1): records what it was asked to open. */
+
 class RouterHomeActivity : FragmentActivity(), ConversationNavigationCallback {
     val opened = mutableListOf<ConversationTarget>()
     override fun openConversation(target: ConversationTarget) {
@@ -42,7 +42,7 @@ class RouterHomeActivity : FragmentActivity(), ConversationNavigationCallback {
     override fun showDetailFragment(fragment: Fragment, tag: String?) = Unit
 }
 
-/** [ConversationRouter] rules (design: foldable detail stacks, §3.5) and the IndexActivity extra. */
+
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [33], application = Application::class)
 class ConversationRouterTest {
@@ -87,6 +87,19 @@ class ConversationRouterTest {
 
         ConversationRouter.open(search, group)
         assertEquals(GroupChatContentActivity::class.java.name, shadowOf(search).nextStartedActivity.component?.className)
+    }
+
+    @Test
+    @Config(qualifiers = "w840dp-h900dp")
+    fun `a popup in a two-pane window opens in the detail pane`() {
+        
+        assertEquals(ConversationRouter.Route.BRING_HOME, ConversationRouter.route(plainActivity()))
+    }
+
+    @Test
+    @Config(qualifiers = "w400dp-h800dp")
+    fun `a popup on a one-pane phone opens a page of its own`() {
+        assertEquals(ConversationRouter.Route.SHELL, ConversationRouter.route(plainActivity()))
     }
 
     @Test

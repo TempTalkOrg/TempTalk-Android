@@ -11,7 +11,7 @@ import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/** #1354: the summary moves to MESSAGE and stays silent through GROUP_ALERT_CHILDREN. */
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class MessageSummaryNotificationTest {

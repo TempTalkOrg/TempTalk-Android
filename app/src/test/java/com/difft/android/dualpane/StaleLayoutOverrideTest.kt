@@ -21,11 +21,11 @@ import org.robolectric.Robolectric
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
-/**
- * [StaleLayoutOverride]: the size override built from the panel, and the attach-time predicate,
- * on [OverrideProbeActivity], which calls `applyIfActive` from `attachBaseContext` the way
- * IndexActivity does (IndexActivity is `@AndroidEntryPoint` and is not booted in these tests).
- */
+
+
+
+
+
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [33], qualifiers = "w860dp-h608dp")
 class StaleLayoutOverrideTest {
@@ -39,7 +39,7 @@ class StaleLayoutOverrideTest {
     @After
     fun tearDown() = DualPaneReconciler.resetProcessStateForTest()
 
-    // ---------------------------------------------------------------- the override configuration
+    
 
     @Test
     fun `outer panel at 2_75 in natural rotation is 424x622 dp portrait`() {
@@ -80,7 +80,7 @@ class StaleLayoutOverrideTest {
         assertEquals(base.uiMode, merged.uiMode)
     }
 
-    // ---------------------------------------------------------------- attach-time predicate
+    
 
     @Test
     fun `a record for the current panel is applied while the incoming configuration exceeds it`() {
@@ -142,7 +142,7 @@ class StaleLayoutOverrideTest {
         assertEquals(860, activity.resources.configuration.screenWidthDp)
     }
 
-    /** Applies the override exactly where IndexActivity does: right after `super.attachBaseContext`. */
+    
     class OverrideProbeActivity : AppCompatActivity() {
         var appliedPanel: String? = null
 
@@ -162,7 +162,7 @@ class StaleLayoutOverrideTest {
     }
 
     companion object {
-        // mdpi test configuration: px == dp.
+        
         val OUTER = OrientationPolicy.HostPanel("424x622", 424, 622, 1f, Surface.ROTATION_0)
         val INNER = OrientationPolicy.HostPanel("859x608", 859, 608, 1f, Surface.ROTATION_0)
     }

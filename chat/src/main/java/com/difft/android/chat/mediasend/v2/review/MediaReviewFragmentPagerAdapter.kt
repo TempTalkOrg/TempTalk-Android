@@ -42,8 +42,8 @@ class MediaReviewFragmentPagerAdapter(fragment: Fragment) : androidx.viewpager2.
 
     override fun createFragment(position: Int): Fragment {
         val mediaItem: LocalMedia = mediaList[position]
-        // Root of the whole derivation chain: this URI becomes each page fragment's ARG_URI, from
-        // which every editor-state key and every preview sink downstream is derived.
+        
+        
         val mediaUri = mediaItem.readableUri()
         return when {
             MediaUtil.isGif(mediaItem.mimeType) -> MediaReviewGifPageFragment.newInstance(mediaUri)
@@ -64,7 +64,7 @@ class MediaReviewFragmentPagerAdapter(fragment: Fragment) : androidx.viewpager2.
         override fun getNewListSize(): Int = newList.size
 
         override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
-            // Same identity notion as getItemId / containsItem, so the two cannot drift apart.
+            
             return oldList[oldItemPosition].readableUri() == newList[newItemPosition].readableUri()
         }
 

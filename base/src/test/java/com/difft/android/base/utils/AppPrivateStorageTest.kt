@@ -14,14 +14,14 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/**
- * Boundary behaviour of the app-private storage predicate (T76-T80).
- *
- * Pure JVM: the predicate is structural, so no Android framework is needed once the roots are
- * passed explicitly. The root is canonicalized in the test as well — on some hosts the temp dir
- * itself sits behind a symlink (`/var` -> `/private/var`), which is precisely the false-negative
- * class the production code canonicalizes to avoid.
- */
+
+
+
+
+
+
+
+
 class AppPrivateStorageTest {
 
     @get:Rule
@@ -52,7 +52,7 @@ class AppPrivateStorageTest {
 
     @Test
     fun `T77 sibling directory sharing the root name prefix is not app private`() {
-        // A bare startsWith would accept this; the root + File.separator boundary rejects it.
+        
         val path = File(tempRoot, "privEVIL/x.jpg").path
 
         assertFalse(AppPrivateStorage.isUnderAnyRoot(path, roots))
@@ -68,7 +68,7 @@ class AppPrivateStorageTest {
     @Test
     fun `T79 nonexistent path inside a private root is still app private`() {
         val file = File(privateRoot, "never-created.jpg")
-        // Reverse regression pin: the predicate must not probe existence at all.
+        
         assertFalse(file.exists())
 
         assertTrue(AppPrivateStorage.isUnderAnyRoot(file.path, roots))
@@ -86,13 +86,13 @@ class AppPrivateStorageTest {
     }
 }
 
-/**
- * Root discovery against the real framework (T81).
- *
- * Separate class rather than separate file: `canonicalRoots` reads `dataDir` and
- * `getExternalFilesDirs` off a real Context, so it needs the Robolectric runner while T76-T80 must
- * stay pure JVM, and `@RunWith` is per class.
- */
+
+
+
+
+
+
+
 @RunWith(AndroidJUnit4::class)
 class AppPrivateStorageRootsTest {
 
@@ -115,7 +115,7 @@ class AppPrivateStorageRootsTest {
     @Test
     fun `T81 null external volumes are filtered out`() {
         val real = context.getExternalFilesDir(null)!!
-        // Framework assumption: getExternalFilesDirs may report null entries for unmounted volumes.
+        
         val withNullVolume = object : ContextWrapper(context) {
             override fun getExternalFilesDirs(type: String?): Array<File> {
                 @Suppress("UNCHECKED_CAST")

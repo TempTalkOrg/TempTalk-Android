@@ -52,7 +52,7 @@ import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/** Actual encrypted-link Save must retain its prompt without showing a dialog over another page. */
+
 @HiltAndroidTest
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -65,9 +65,9 @@ class ProxyPageVisibilityIntegrationTest {
 
     @BindValue @JvmField val strictUsers: StorageBoundUserManager = mockk(relaxed = true)
     @BindValue @JvmField val provider: ProxyConfigProvider = mockk(relaxed = true)
-    // Keep the existing interface @Binds module; replace its injected implementation boundary.
+    
     @BindValue @JvmField val probe: ProxyE2eProbeImpl = mockk(relaxed = true)
-    // Real, initially idle state avoids the property/function isInCalling mock-name collision.
+    
     @BindValue @JvmField val callState = OnGoingCallStateManager()
 
     private val context: Context get() = ApplicationProvider.getApplicationContext()
@@ -133,7 +133,7 @@ class ProxyPageVisibilityIntegrationTest {
         idle()
         val vm = ViewModelProvider(page)[ProxySettingsViewModel::class.java]
         assertTrue(page.detailBackOwner().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED))
-        // Drives the production field -> VM address -> Save -> real encrypted-link inspection.
+        
         compose.onNode(hasSetTextAction()).performTextInput(encryptedLink)
         compose.onNodeWithText(context.getString(R.string.proxy_save)).assertIsEnabled().performClick()
         compose.waitUntil(5_000) {
@@ -147,7 +147,7 @@ class ProxyPageVisibilityIntegrationTest {
         compose.runOnUiThread { pane!!.get().navigator.selectTab(PaneNavigator.TAB_CONTACTS) }
         idle()
         assertFalse(page.detailBackOwner().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED))
-        // Regression: an Activity-window dialog must disappear although this Fragment keeps its view.
+        
         assertNoPrompt()
         assertSame(page, pages().single())
         compose.runOnUiThread { pane!!.get().navigator.selectTab(PaneNavigator.TAB_ME) }

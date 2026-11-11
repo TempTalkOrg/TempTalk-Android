@@ -29,10 +29,10 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/**
- * [DifftSettingsRow] contract (issue #1209): 52dp minimum height, a chevron exactly when the row is
- * clickable, `trailing` displacing that chevron, and `enabled` gating the click.
- */
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34])
@@ -41,7 +41,7 @@ class DifftSettingsRowTest {
     @get:Rule
     val composeTestRule = createComposeRule()
 
-    // T1
+    
     @Test
     fun `a single-line row is 52dp tall`() {
         composeTestRule.setContent {
@@ -53,7 +53,7 @@ class DifftSettingsRowTest {
         composeTestRule.onNodeWithTag(TAG).assertHeightIsEqualTo(DifftSettingsDefaults.RowMinHeight)
     }
 
-    // T2
+    
     @Test
     fun `label and value both render`() {
         composeTestRule.setContent {
@@ -68,13 +68,13 @@ class DifftSettingsRowTest {
 
         composeTestRule.onNodeWithText("Version").assertIsDisplayed()
         composeTestRule.onNodeWithText("2.4.0").assertIsDisplayed()
-        // The value hugs the end edge, the label starts at the leading edge.
+        
         val label = composeTestRule.onNodeWithText("Version").getBoundsInRoot()
         val value = composeTestRule.onNodeWithText("2.4.0").getBoundsInRoot()
         assertTrue("value should sit after the label", value.left.value > label.left.value)
     }
 
-    // T3
+    
     @Test
     fun `a tap far from the trailing edge fires onClick once`() {
         var clicks = 0
@@ -92,7 +92,7 @@ class DifftSettingsRowTest {
         assertEquals(1, clicks)
     }
 
-    // T4
+    
     @Test
     fun `a row without onClick is inert and shows no chevron`() {
         composeTestRule.setContent {
@@ -107,7 +107,7 @@ class DifftSettingsRowTest {
             .assertDoesNotExist()
     }
 
-    // T5
+    
     @Test
     fun `a clickable row shows a 16dp chevron`() {
         composeTestRule.setContent {
@@ -126,7 +126,7 @@ class DifftSettingsRowTest {
             .assertWidthIsEqualTo(DifftSettingsDefaults.ChevronSize)
     }
 
-    // T6
+    
     @Test
     fun `a trailing slot displaces the chevron`() {
         composeTestRule.setContent {
@@ -146,7 +146,7 @@ class DifftSettingsRowTest {
             .assertDoesNotExist()
     }
 
-    // T7
+    
     @Test
     fun `a disabled row swallows the tap`() {
         var clicks = 0
@@ -167,7 +167,7 @@ class DifftSettingsRowTest {
         assertEquals(0, clicks)
     }
 
-    // T13
+    
     @Test
     fun `in RTL the chevron sits at the leading edge`() {
         composeTestRule.setContent {
@@ -185,7 +185,7 @@ class DifftSettingsRowTest {
         val chevron = composeTestRule
             .onNodeWithTag(DifftSettingsDefaults.ChevronTestTag, useUnmergedTree = true)
             .getBoundsInRoot()
-        // Unmerged: the row's clickable merges the label into one node whose bounds are the row.
+        
         val label = composeTestRule.onNodeWithText("RtlLabel", useUnmergedTree = true).getBoundsInRoot()
         assertTrue(
             "chevron ${chevron.left} should precede label ${label.left} in RTL",

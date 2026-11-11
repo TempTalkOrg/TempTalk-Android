@@ -30,11 +30,11 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 
-/**
- * #1382: a directory notify is ACKed and handed to [ContactsUpdater]'s 3 s batch queue; the queued
- * item carries a ticket retained from the envelope's, so the migration pause waits for the batch.
- * The notify's version is already applied, so the consumer handles it without touching WCDB.
- */
+
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33])

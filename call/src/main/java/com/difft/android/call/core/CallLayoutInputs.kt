@@ -35,24 +35,24 @@ import kotlinx.coroutines.launch
 import com.difft.android.base.call.CallType as AppCallType
 import com.difft.android.call.layout.CallType as LayoutCallType
 
-/** The id the call layout knows a participant by: the identity, or the sid before one is known. */
+
 internal fun callMemberId(participant: Participant): String = participant.identity?.value ?: participant.sid.value
 
-/** Receives a camera tile's frame sizes on main; see [com.difft.android.call.ui.video.FrameSizeListener]. */
+
 fun interface CallFrameSizeSink {
     fun onFrameSize(id: String, width: Int, height: Int, seenAtNanos: Long)
 }
 
-/** A share's frames before their size is known. */
+
 private const val DEFAULT_SHARE_WIDTH = 16.0
 private const val DEFAULT_SHARE_HEIGHT = 9.0
 
-/**
- * Reports the call's non-UI events to the layout [controller]: the call type, who is in the call
- * and whose camera is on, camera frame sizes (from every camera tile through [onFrameSize], and
- * from the local camera track itself), who speaks, the share and the scheduler hold. Started once
- * the room is ready; main thread only.
- */
+
+
+
+
+
+
 internal class CallLayoutInputs(
     private val controller: CallLayoutController,
     private val clock: () -> Long = SystemClock::elapsedRealtimeNanos,
@@ -69,11 +69,11 @@ internal class CallLayoutInputs(
     private var layoutState = ControllerState()
     private val _pipContentAspect = MutableStateFlow<Float?>(null)
 
-    /**
-     * Width / height of what picture in picture shows ([ControllerState.focus] or the share); null
-     * (16:9) for an avatar or while a 1on1 waits for the other person. Follows every layout state,
-     * frame size, member list and share.
-     */
+    
+
+
+
+
     val pipContentAspect: StateFlow<Float?> = _pipContentAspect.asStateFlow()
 
     fun start(
@@ -87,7 +87,7 @@ internal class CallLayoutInputs(
         if (jobs.isNotEmpty()) return
         jobs = listOf(
             scope.launchLogged("members") {
-                // The type goes first in the same turn, so a 1on1 list is never laid out as a group.
+                
                 combine(callType, members(participants)) { type, list -> type to list }.collect { (type, list) ->
                     oneOnOne = type == AppCallType.ONE_ON_ONE.type
                     controller.setCallType(if (oneOnOne) LayoutCallType.ONE_ON_ONE else LayoutCallType.GROUP)
@@ -95,7 +95,8 @@ internal class CallLayoutInputs(
                 }
             },
             scope.launchLogged("speakers") {
-                room::activeSpeakers.flow.map { speakers -> speakers.map(::callMemberId) }
+                
+                room::activeSpeakers.flow.map { speakers -> speakers.sortedByDescending { it.audioLevel }.map(::callMemberId) }
                     .distinctUntilChanged()
                     .collect(controller::setSpeakers)
             },
@@ -122,20 +123,20 @@ internal class CallLayoutInputs(
         refreshPipAspect()
     }
 
-    /** The share from its publication (16:9 until its dimensions are known), or null when it ends. */
+    
     internal fun onShare(published: ScreenShare?) {
         controller.setShare(shareSize.onPublished(published))
         refreshPipAspect()
     }
 
-    /** A rotated frame size from the share renderer of [sharerId]; main thread. */
+    
     fun onShareFrameSize(sharerId: String, width: Int, height: Int) {
         val share = shareSize.onFrame(sharerId, width, height) ?: return
         controller.setShare(share)
         refreshPipAspect()
     }
 
-    /** Each state the controller publishes; main thread. */
+    
     fun onLayoutState(state: ControllerState) {
         layoutState = state
         refreshPipAspect()
@@ -148,7 +149,7 @@ internal class CallLayoutInputs(
 
     private fun onMembers(list: List<CallMember>) {
         val local = list.firstOrNull { it.isLocal }?.cameraOn == true
-        // Turning the camera off mutes the same track, so its next first frame has the old size.
+        
         if (localCameraOn && !local) localProbe?.resetDedupe()
         localCameraOn = local
         val turnedOn = frames.onMembers(list)
@@ -158,7 +159,7 @@ internal class CallLayoutInputs(
         refreshPipAspect()
     }
 
-    // Main thread: the flow is collected in the view model's scope.
+    
     private fun attachLocalProbe(track: LocalVideoTrack?, local: LocalParticipant?) {
         if (track === localTrack) return
         localProbe?.let { probe ->
@@ -185,11 +186,11 @@ internal class CallLayoutInputs(
     }
 }
 
-/**
- * What picture in picture shows as width / height (guide §5.3): the share while one is on, else the
- * last frame size of [ControllerState.focus]'s camera; null (16:9) for an avatar, before a frame, or
- * while a 1on1 is [waiting] for the other person.
- */
+
+
+
+
+
 internal fun pipContentAspect(
     state: ControllerState,
     share: ScreenShare?,
@@ -204,7 +205,7 @@ internal fun pipContentAspect(
     return sizeOf(focus)?.let { it.width.toFloat() / it.height }
 }
 
-/** One input's collector; a failure is logged and ends only that input, never the call. */
+
 private fun CoroutineScope.launchLogged(input: String, block: suspend () -> Unit): Job = launch {
     try {
         block()
@@ -215,7 +216,7 @@ private fun CoroutineScope.launchLogged(input: String, block: suspend () -> Unit
     }
 }
 
-/** Everyone in the call with their camera state; emits only when that changes, in any order. */
+
 @OptIn(ExperimentalCoroutinesApi::class)
 private fun members(participants: StateFlow<List<Participant>>): Flow<List<CallMember>> =
     participants.flatMapLatest { list ->
@@ -226,11 +227,11 @@ private fun members(participants: StateFlow<List<Participant>>): Flow<List<CallM
         }
     }.distinctUntilChanged { old, new -> old.toSet() == new.toSet() }
 
-/**
- * The camera is on while its publication is subscribed and unmuted (as the tiles decide it); the
- * local publication counts as subscribed while it has its track, so publishing and unpublishing are
- * covered too.
- */
+
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 private fun cameraOn(participant: Participant): Flow<Boolean> =
     participant::videoTrackPublications.flow
@@ -239,7 +240,7 @@ private fun cameraOn(participant: Participant): Flow<Boolean> =
         .flatMapLatest { pub -> pub?.let { it::muted.flow.map { muted -> !muted } } ?: flowOf(false) }
         .distinctUntilChanged()
 
-/** The share, sized by its publication's dimensions once known and 16:9 before; null when none. */
+
 @OptIn(ExperimentalCoroutinesApi::class)
 private fun share(screenSharingUser: StateFlow<RemoteParticipant?>): Flow<ScreenShare?> =
     screenSharingUser.flatMapLatest { sharer ->

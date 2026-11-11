@@ -1,11 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
+
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="52dp"
-    android:background="@color/bg1"
-    tools:ignore="Overdraw">
+    android:clipChildren="false"
+    android:clipToPadding="false">
 
     <androidx.appcompat.widget.AppCompatImageView
         android:id="@+id/ib_back"
@@ -19,99 +20,137 @@
         app:layout_constraintLeft_toLeftOf="parent"
         app:tint="@color/icon" />
 
-    <!--    <com.difft.android.chat.common.AvatarView-->
-    <!--        android:id="@+id/avatarView"-->
-    <!--        android:layout_width="32dp"-->
-    <!--        android:layout_height="32dp"-->
-    <!--        app:layout_constraintBottom_toBottomOf="parent"-->
-    <!--        app:layout_constraintStart_toEndOf="@+id/ib_back"-->
-    <!--        app:layout_constraintTop_toTopOf="parent" />-->
-
-    <TextView
-        android:id="@+id/textview_nickname"
+    
+    <LinearLayout
+        android:id="@+id/title_pill"
         android:layout_width="wrap_content"
-        android:layout_height="match_parent"
-        android:ellipsize="middle"
+        android:layout_height="@dimen/chat_header_control_size"
+        android:layout_marginStart="@dimen/chat_header_title_gap"
+        android:layout_marginEnd="8dp"
         android:gravity="center_vertical"
-        android:singleLine="true"
-        android:textColor="@color/t.primary"
-        android:textSize="20sp"
-        android:textStyle="bold"
+        android:orientation="horizontal"
         app:layout_constrainedWidth="true"
-        app:layout_constraintEnd_toStartOf="@+id/imageview_bot_badge"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toStartOf="@+id/actions_capsule"
         app:layout_constraintHorizontal_bias="0"
-        app:layout_constraintHorizontal_chainStyle="packed"
         app:layout_constraintStart_toEndOf="@id/ib_back"
-        app:layout_goneMarginStart="@dimen/chat_header_title_margin_start_no_back"
-        tools:text="111113 dwqdqwe qwewe eqwe qwe" />
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_goneMarginStart="@dimen/chat_header_title_margin_start_no_back">
 
-    <ImageView
-        android:id="@+id/imageview_bot_badge"
-        android:layout_width="16dp"
-        android:layout_height="16dp"
-        android:layout_marginStart="4dp"
-        android:importantForAccessibility="no"
-        android:src="@drawable/chat_ic_official_bot_badge"
-        android:visibility="gone"
-        app:layout_constraintBottom_toBottomOf="@id/textview_nickname"
-        app:layout_constraintEnd_toStartOf="@+id/textview_timer"
-        app:layout_constraintStart_toEndOf="@+id/textview_nickname"
-        app:layout_constraintTop_toTopOf="@id/textview_nickname"
-        tools:visibility="visible" />
+        <com.difft.android.chat.common.AvatarView
+            android:id="@+id/imageview_title_avatar"
+            android:layout_width="@dimen/chat_header_avatar_size"
+            android:layout_height="@dimen/chat_header_avatar_size"
+            android:layout_marginEnd="8dp"
+            android:importantForAccessibility="no" />
 
-    <androidx.appcompat.widget.AppCompatTextView
-        android:id="@+id/textview_timer"
+        <LinearLayout
+            android:id="@+id/title_text"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center_vertical"
+            android:orientation="vertical">
+
+            <LinearLayout
+                android:id="@+id/name_row"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/textview_nickname"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:ellipsize="end"
+                    android:singleLine="true"
+                    android:textColor="@color/t.primary"
+                    android:textSize="16sp"
+                    tools:text="111113 dwqdqwe qwewe eqwe qwe" />
+
+                <ImageView
+                    android:id="@+id/imageview_bot_badge"
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
+                    android:layout_marginStart="4dp"
+                    android:importantForAccessibility="no"
+                    android:src="@drawable/chat_ic_official_bot_badge"
+                    android:visibility="gone"
+                    tools:visibility="visible" />
+            </LinearLayout>
+            <LinearLayout
+                android:id="@+id/timer_row"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:visibility="gone"
+                tools:visibility="visible">
+
+                <ImageView
+                    android:layout_width="12dp"
+                    android:layout_height="12dp"
+                    android:importantForAccessibility="no"
+                    android:src="@drawable/chat_ic_hourglass"
+                    app:tint="@color/t.third" />
+
+                <androidx.appcompat.widget.AppCompatTextView
+                    android:id="@+id/textview_timer"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="2dp"
+                    android:singleLine="true"
+                    android:textColor="@color/t.third"
+                    android:textSize="12sp"
+                    tools:text="7d" />
+            </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/actions_capsule"
         android:layout_width="wrap_content"
-        android:layout_height="match_parent"
-        android:gravity="center_vertical"
-        android:textColor="@color/t.third"
-        android:textSize="20sp"
-        android:visibility="invisible"
-        app:layout_constraintBottom_toBottomOf="@+id/textview_nickname"
-        app:layout_constraintEnd_toStartOf="@+id/imageview_add_contact"
-        app:layout_constraintHorizontal_bias="0"
-        app:layout_constraintStart_toEndOf="@+id/imageview_bot_badge"
-        app:layout_constraintTop_toTopOf="@+id/textview_nickname"
-        tools:text="[7d]"
-        tools:visibility="visible" />
-
-
-    <androidx.appcompat.widget.AppCompatImageView
-        android:id="@+id/imageview_add_contact"
-        android:layout_width="44dp"
-        android:layout_height="match_parent"
-        android:clickable="true"
-        android:focusable="true"
-        android:padding="10dp"
-        android:src="@drawable/chat_icon_add_contact"
-        android:visibility="gone"
-        app:layout_constraintEnd_toStartOf="@+id/button_call"
-        app:tint="@color/icon"
-        tools:visibility="visible" />
-
-    <androidx.appcompat.widget.AppCompatImageView
-        android:id="@+id/button_call"
-        android:layout_width="44dp"
-        android:layout_height="match_parent"
-        android:layout_centerVertical="true"
-        android:padding="10dp"
-        android:src="@drawable/chat_fragment_header_call"
-        android:visibility="gone"
-        app:layout_constraintEnd_toStartOf="@+id/imageview_create_group"
-        tools:visibility="visible" />
-
-    <androidx.appcompat.widget.AppCompatImageView
-        android:id="@+id/imageview_create_group"
-        android:layout_width="44dp"
-        android:layout_height="match_parent"
-        android:layout_marginEnd="6dp"
-        android:clickable="true"
-        android:focusable="true"
-        android:padding="10dp"
-        android:src="@drawable/chat_icon_create_group"
-        android:visibility="gone"
+        android:layout_height="@dimen/chat_header_control_size"
+        android:layout_marginEnd="@dimen/chat_header_edge_inset"
+        android:orientation="horizontal"
+        app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:tint="@color/icon"
-        tools:visibility="visible" />
+        app:layout_constraintTop_toTopOf="parent">
+
+        <androidx.appcompat.widget.AppCompatImageView
+            android:id="@+id/imageview_add_contact"
+            android:layout_width="@dimen/chat_header_control_size"
+            android:layout_height="match_parent"
+            android:clickable="true"
+            android:focusable="true"
+            android:padding="10dp"
+            android:src="@drawable/chat_icon_add_contact"
+            android:visibility="gone"
+            app:tint="@color/icon"
+            tools:visibility="visible" />
+
+        <androidx.appcompat.widget.AppCompatImageView
+            android:id="@+id/button_call"
+            android:layout_width="@dimen/chat_header_control_size"
+            android:layout_height="match_parent"
+            android:padding="10dp"
+            android:src="@drawable/chat_fragment_header_call"
+            android:visibility="gone"
+            tools:visibility="visible" />
+
+        <androidx.appcompat.widget.AppCompatImageView
+            android:id="@+id/imageview_create_group"
+            android:layout_width="@dimen/chat_header_control_size"
+            android:layout_height="match_parent"
+            android:clickable="true"
+            android:focusable="true"
+            android:padding="10dp"
+            android:src="@drawable/chat_icon_create_group"
+            android:visibility="gone"
+            app:tint="@color/icon"
+            tools:visibility="visible" />
+    </LinearLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

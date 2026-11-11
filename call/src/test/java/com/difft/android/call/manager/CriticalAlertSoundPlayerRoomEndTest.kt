@@ -26,11 +26,11 @@ import org.robolectric.annotation.Config
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
-/**
- * [CriticalAlertSoundPlayer] when the call of an alert ends (#1387): an end landing between the
- * first lock block and the ringtone install does not start the ringtone, and [stopIfOwner] stops
- * only the alert that owns the play token, pending or playing, never another alert's playback.
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [33])
 class CriticalAlertSoundPlayerRoomEndTest {
@@ -59,7 +59,7 @@ class CriticalAlertSoundPlayerRoomEndTest {
     @Test
     fun `a room that ends after the first lock block does not start the ringtone`() {
         val ringtone = mockk<Ringtone>(relaxed = true)
-        // The end lands while the ringtone is being prepared, between Phase 1 and Phase 3.
+        
         every { RingtoneManager.getRingtone(any(), any()) } answers {
             registry.end(ROOM_A)
             ringtone
@@ -82,7 +82,7 @@ class CriticalAlertSoundPlayerRoomEndTest {
         every { RingtoneManager.getRingtone(any(), any()) } returns ringtoneA
         player.playSound(CONVERSATION, ID_A, ROOM_A)
         waitUntil { stateManager.getCurrentNotificationId() == ID_A }
-        // B's Phase 1 stops A's ringtone; B's room ends while B's ringtone is being prepared.
+        
         every { RingtoneManager.getRingtone(any(), any()) } answers {
             registry.end(ROOM_B)
             ringtoneB
@@ -149,7 +149,7 @@ class CriticalAlertSoundPlayerRoomEndTest {
         every { RingtoneManager.getRingtone(any(), any()) } returns ringtoneA
         player.playSound(CONVERSATION, ID_A, ROOM_A)
         waitUntil { stateManager.getCurrentNotificationId() == ID_A }
-        // B takes the token and its ringtone is still being prepared; the current id is still A's.
+        
         val preparing = CountDownLatch(1)
         val proceed = CountDownLatch(1)
         every { RingtoneManager.getRingtone(any(), any()) } answers {

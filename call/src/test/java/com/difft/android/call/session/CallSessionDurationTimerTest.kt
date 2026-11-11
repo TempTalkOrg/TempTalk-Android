@@ -17,11 +17,11 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 
-/**
- * [CallSessionGraph.startCallDurationTimer] hands the timer the connect instant the session's fenced
- * write left in OnGoingCallStateManager, the value the ongoing-call notification publishes as `when`,
- * so the on-screen duration and the system call chip share one origin.
- */
+
+
+
+
+
 class CallSessionDurationTimerTest {
 
     private val testDispatcher = StandardTestDispatcher()
@@ -50,7 +50,7 @@ class CallSessionDurationTimerTest {
     fun `the timer counts from the connect instant the projection publishes`() = runTest(testDispatcher) {
         val session = h.start()
         session.graph.onRoomIdAssigned("r1")
-        // Already stamped 65 s back: markCallConnected keeps it, and the timer must count from it.
+        
         val stamped = System.currentTimeMillis() - 65_000
         setProjectedConnectedAt(stamped)
 
@@ -58,7 +58,7 @@ class CallSessionDurationTimerTest {
 
         assertEquals("not re-stamped", stamped, h.ogsm.callConnectedAt())
         assertEquals(stamped, timerConnectedAt(session))
-        // Read live between ticks, as the feedback binder's 60 s gate does at teardown.
+        
         val seconds = session.graph.timerManager.getCurrentDuration()
         assertTrue("live duration from the published instant: $seconds", seconds in 65L..75L)
         endSessionBeforeDrain()
@@ -90,7 +90,7 @@ class CallSessionDurationTimerTest {
         endSessionBeforeDrain()
     }
 
-    /** The timer re-arms every virtual second on this test's scheduler; ending the session cancels it before runTest drains. */
+    
     private fun endSessionBeforeDrain() = h.endAll()
 
     private fun setProjectedConnectedAt(millis: Long) {

@@ -10,23 +10,23 @@ import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.io.OutputStream
 
-/**
- * Generic Tink-AEAD wrapper around any [Serializer]. Encrypts the delegate's
- * serialized bytes on write and decrypts on read.
- *
- * Key properties:
- * - **Empty-file short-circuit**: DataStore creates the backing file with 0 bytes
- *   on first access; Tink throws on empty input. We return [delegate]'s
- *   [Serializer.defaultValue] directly to preserve "fresh install" semantics.
- * - **CorruptionException on decrypt failure**: DataStore's prescribed signal —
- *   callers (e.g. `StorageBoundUserManagerImpl`) catch this and route to R3
- *   recovery (reset DataStore, fall back to legacy SP, force re-login).
- * - **AAD bound to namespace**: the [aad] byte sequence prevents cross-namespace
- *   ciphertext replay even if two namespaces share a keyset by accident.
- * - **No sensitive bytes logged**: only the exception class name is logged on
- *   decrypt failure. AAD, ciphertext, plaintext, and keyset bytes never leave
- *   the function.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 internal class EncryptedSerializer<T>(
     private val delegate: Serializer<T>,
     private val aead: Aead,

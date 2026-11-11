@@ -37,10 +37,10 @@ import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import java.time.Duration
 
-/**
- * Lifecycle and lock gating of the IndexActivity prompt host, on a bare FragmentActivity
- * (IndexActivity is an @AndroidEntryPoint and is never booted in tests).
- */
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = Application::class)
 class IndexStartupPromptHostTest {
@@ -60,7 +60,7 @@ class IndexStartupPromptHostTest {
         every { blockingForced } returns this@IndexStartupPromptHostTest.blockingForced
     }
 
-    /** As the checker publishes: the forced offer also gates until a hand-off expires. */
+    
     private fun setUpdate(state: UpdateCheckState) {
         updateState.value = state
         blockingForced.value = (state as? UpdateCheckState.Forced)?.response
@@ -181,7 +181,7 @@ class IndexStartupPromptHostTest {
         val fullScreen = PromptTicket(PromptId.FULL_SCREEN, seq = 2, issue = ReadinessIssue.FULL_SCREEN_DENIED)
         current.value = fullScreen
         idle(10)
-        // Coordinator preempts: the host removes the dialog itself.
+        
         current.value = null
         idle(10)
         verify(exactly = 1) { dialog.dismiss() }
@@ -205,7 +205,7 @@ class IndexStartupPromptHostTest {
     fun `a host destroyed between recording the action and acting aborts it and starts nothing`() {
         val ticket = PromptTicket(PromptId.BACKGROUND_CONNECTION, seq = 3)
         coEvery { coordinator.onActionTaken(ticket, any()) } coAnswers {
-            // Recreation lands while the outcome is being written.
+            
             controller.pause().stop().destroy()
             true
         }
@@ -224,7 +224,7 @@ class IndexStartupPromptHostTest {
         var written = false
         var abortSawWrite: Boolean? = null
         coEvery { coordinator.onActionTaken(ticket, any()) } coAnswers {
-            // The host dies while the write is still in flight.
+            
             controller.pause().stop().destroy()
             delay(50)
             written = true
@@ -267,7 +267,7 @@ class IndexStartupPromptHostTest {
         }
         verifyDialogs(0)
 
-        // The coordinator answers a silent system denial with the app dialog ticket.
+        
         current.value = PromptTicket(PromptId.NOTIFICATIONS, seq = 5, issue = ReadinessIssue.APP_NOTIFICATIONS_OFF)
         idle(10)
         verifyDialogs(1)
@@ -284,7 +284,7 @@ class IndexStartupPromptHostTest {
         verify(exactly = 1) { updateManager.showForceUpdateDialog(any(), response) }
         verifyDialogs(0)
 
-        // Recomposition of the same state does not stack a second forced dialog.
+        
         current.value = null
         idle(10)
         verify(exactly = 1) { updateManager.showForceUpdateDialog(any(), response) }
@@ -311,7 +311,7 @@ class IndexStartupPromptHostTest {
         verifyDialogs(1)
 
         controller.pause().stop()
-        // For example a gate preempts it while the app is in the background.
+        
         current.value = null
         idle(10)
         verify(exactly = 1) { dialog.dismiss() }
@@ -334,7 +334,7 @@ class IndexStartupPromptHostTest {
         verify(exactly = 0) { dialog.dismiss() }
         verifyDialogs(1)
 
-        // Recreated in the background: the new instance renders the same carried ticket.
+        
         val recreated = Robolectric.buildActivity(FragmentActivity::class.java).create()
         IndexStartupPromptHost(coordinator, updateChecker, securityChecks, mockk<UserManager>(relaxed = true))
             .attach(recreated.get(), updateManager, lockPending) { false }
@@ -354,7 +354,7 @@ class IndexStartupPromptHostTest {
         InactiveDeviceNotifier.raise()
         idle(10)
         verify(exactly = 1) { dialog.dismiss() }
-        // The coordinator answers the gate by re-issuing after it clears; nothing mounts meanwhile.
+        
         current.value = PromptTicket(PromptId.NOTIFICATIONS, seq = 7, issue = ReadinessIssue.APP_NOTIFICATIONS_OFF)
         idle(10)
         verifyDialogs(1)
@@ -373,7 +373,7 @@ class IndexStartupPromptHostTest {
         idle(700)
         verifyDialogs(0)
 
-        // Hand-off expiry: the result stays Forced, only the gate is released.
+        
         blockingForced.value = null
         idle(10)
         verify(exactly = 1) { updateManager.dismissForceUpdateDialog() }

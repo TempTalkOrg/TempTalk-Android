@@ -28,11 +28,10 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
-/**
- * Last-line permission gates in [CallMediaController] (spec: "无权限启用不进入 LiveKit"、
- * "关闭操作不查权限"). Robolectric denies all runtime permissions by default; grant cases
- * call `grantPermissions` explicitly.
- */
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [33])
@@ -70,9 +69,9 @@ class CallMediaControllerPermissionGateTest {
         shadowOf(ApplicationProvider.getApplicationContext<TestScopeApplication>()).grantPermissions(*permissions)
     }
 
-    // ------------------------------------------------------------------
-    // Camera gate
-    // ------------------------------------------------------------------
+    
+    
+    
 
     @Test
     fun `camera enable without permission never reaches LiveKit and resets the toggle state`() {
@@ -89,7 +88,7 @@ class CallMediaControllerPermissionGateTest {
 
         controller.setCameraEnabled(true)
 
-        // setCamera hops to Dispatchers.IO (hardcoded), so wait instead of asserting inline.
+        
         coVerify(timeout = 2000) { localParticipant.setCameraEnabled(true) }
         verify(timeout = 2000) { roomCtl.updateCameraEnabled(true) }
     }
@@ -104,9 +103,9 @@ class CallMediaControllerPermissionGateTest {
         coVerify(timeout = 2000) { localParticipant.setCameraEnabled(false) }
     }
 
-    // ------------------------------------------------------------------
-    // Mic gate
-    // ------------------------------------------------------------------
+    
+    
+    
 
     @Test
     fun `mic enable without permission never reaches LiveKit and resets the toggle state`() {

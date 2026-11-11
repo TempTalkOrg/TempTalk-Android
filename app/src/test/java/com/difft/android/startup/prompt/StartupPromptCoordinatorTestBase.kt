@@ -26,7 +26,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Shared harness: the real coordinator and store over an in-memory DataStore, controlled clocks and providers. */
+
 @OptIn(ExperimentalCoroutinesApi::class)
 abstract class StartupPromptCoordinatorTestBase {
 
@@ -77,7 +77,7 @@ abstract class StartupPromptCoordinatorTestBase {
 
     protected suspend fun record(id: PromptId) = store.read()[id]
 
-    /** Delegates to [delegate]; every write throws while [fail] is set. */
+    
     protected class FailingWrites(private val delegate: DataStore<Preferences>) : DataStore<Preferences> {
         var fail = false
         override val data: Flow<Preferences> get() = delegate.data

@@ -67,11 +67,10 @@ import com.difft.android.call.layout.Rect as LayoutRect
 
 private const val TOLERANCE = 1f
 
-/**
- * Tabletop QA follow-ups through production composables: the participants panel takes the dock
- * region below the fold over the console.
- * Fold at 430dp in a 608x860dp window: stage 0-410, dock 458-860.
- */
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(application = TestScopeApplication::class, sdk = [30], qualifiers = "w608dp-h860dp-port-xxhdpi")
@@ -132,7 +131,7 @@ class TabletopChromeReclaimTest {
         val root = rule.onRoot().getUnclippedBoundsInRoot()
         val panel = bounds("call_participants_panel")
         assertEquals(458f, dockTopDp, TOLERANCE)
-        // The side panel at the end of the dock: from the dock top to the window bottom.
+        
         assertEquals("panel starts at the dock top", dockTopDp, panel.top.value, TOLERANCE)
         assertEquals("panel ends at the window bottom", root.bottom.value, panel.bottom.value, TOLERANCE)
         assertEquals("panel sits at the end edge", root.right.value, panel.right.value, TOLERANCE)
@@ -144,7 +143,7 @@ class TabletopChromeReclaimTest {
         rule.waitForIdle()
         assertEquals("a tap inside the panel stays in it", 0, rootTaps)
 
-        // Hiding the title bar keeps the panel, as before on the dock.
+        
         ui.toggleOverlays()
         rule.waitForIdle()
         assertTrue(ui.showUsersEnabled.value)
@@ -223,13 +222,13 @@ class TabletopChromeReclaimTest {
             }
         }
         rule.onAllNodesWithTag("dock_slot", useUnmergedTree = true).assertCountEquals(8)
-        // No plan rect yet: the console sits at the window bottom, centred, 368 wide.
+        
         val console = bounds(TABLETOP_CONSOLE_TAG)
         val root = rule.onRoot().getUnclippedBoundsInRoot()
         assertEquals(root.bottom.value, console.bottom.value, TOLERANCE)
         assertEquals(console.left.value - root.left.value, root.right.value - console.right.value, TOLERANCE)
         assertEquals(CallTabletopSpec.CONSOLE_WIDTH_DP, console.right.value - console.left.value, TOLERANCE)
-        // Where the layout put it (decision 39), e.g. beside a floating window on the right.
+        
         placed = LayoutRect(40.0, 600.0, 368.0, 232.0)
         rule.waitForIdle()
         val moved = bounds(TABLETOP_CONSOLE_TAG)

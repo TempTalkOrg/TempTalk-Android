@@ -9,13 +9,7 @@ import com.difft.android.call.R
 import difft.android.messageserialization.For
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos
 
-/**
- * Text-message generation extensions for [CallMessageHandler].
- *
- * Builds and persists the chat-side text message (`JOINED` marker) that
- * mirrors an inbound `START` / `INVITE` `Calling` message. Logic is
- * unchanged from the pre-refactor implementation.
- */
+
 internal suspend fun CallMessageHandler.handleCallTextMessage(
     envelope: SignalServiceProtos.Envelope,
     content: SignalServiceProtos.CallMessage,
@@ -69,7 +63,7 @@ internal suspend fun CallMessageHandler.handleStartCallTextMessage(
     val isSelfSync = envelope.source == mySelfId && envelope.sourceDevice != DEFAULT_DEVICE_ID
 
     if (isSelfSync) {
-        // Sync message from another device of the current user.
+        
         callInfo.conversationId?.let { otherSideId ->
             val forWhat = when (callInfo.callType) {
                 CallType.GROUP -> For.Group(otherSideId)
@@ -84,7 +78,7 @@ internal suspend fun CallMessageHandler.handleStartCallTextMessage(
             L.e { "[Call] handleCallMessage conversationId is null" }
         }
     } else {
-        // Incoming START from the remote peer.
+        
         val forWhat = when (callInfo.callType) {
             CallType.GROUP -> callInfo.conversationId?.let { For.Group(it) }
             else -> For.Account(callerId)
@@ -112,7 +106,7 @@ internal suspend fun CallMessageHandler.handleInviteCallTextMessage(
     val inviteeList = content.calling.calleesList ?: return
 
     if (isSelfSync) {
-        // Sync INVITE from another device of the current user.
+        
         inviteeList.forEachIndexed { index, invitee ->
             val callMessageTime = content.calling.timestamp + index
             callToChatController.saveReceivedCallTextMessage(
@@ -122,7 +116,7 @@ internal suspend fun CallMessageHandler.handleInviteCallTextMessage(
             )
         }
     } else {
-        // Incoming INVITE addressed to the current user.
+        
         val index = inviteeList.indexOf(mySelfId)
         if (index >= 0) {
             val callMessageTime = content.calling.timestamp + index

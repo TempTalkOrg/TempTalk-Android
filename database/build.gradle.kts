@@ -45,16 +45,16 @@ kotlin {
 dependencies {
     implementation(project(":base"))
 
-    // Hilt
+    
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
 
-    // WCDB
+    
     api(libs.wcdb.main)
     implementation(libs.wcdb.annotation)
     ksp(libs.wcdb.compiler)
 
-    // Test dependencies
+    
     testImplementation(libs.junit)
     testImplementation(libs.kotlin.test)
     testImplementation(libs.kotlinx.coroutines.test)
@@ -65,8 +65,8 @@ dependencies {
     kspTest(libs.hilt.compiler)
     testImplementation(testFixtures(project(":base")))
 
-    // testFixtures source set dependencies. AGP 9 compiles testFixtures as its own Kotlin source
-    // set, so anything the fixtures use must be declared here explicitly — it does not inherit the
-    // test compilation's classpath. Mirrors base/build.gradle.kts.
+    
+    
+    
     testFixturesImplementation(libs.junit)
 }

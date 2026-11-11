@@ -16,11 +16,8 @@ import java.io.InputStream
 
 object BitmapUtils {
     private const val ARGB_8888_MEMORY_BYTE = 4
-    private const val MAX_BITMAP_SIZE = 100 * 1024 * 1024 // 100 MB
+    private const val MAX_BITMAP_SIZE = 100 * 1024 * 1024 
 
-    /**
-     * 判断拍照 图片是否旋转
-     */
     @JvmStatic
     fun rotateImage(context: Context, path: String) {
         var inputStream: InputStream? = null
@@ -66,9 +63,6 @@ object BitmapUtils {
         }
     }
 
-    /**
-     * 旋转Bitmap
-     */
     @JvmStatic
     fun rotatingImage(bitmap: Bitmap, angle: Int): Bitmap {
         val matrix = Matrix()
@@ -76,9 +70,6 @@ object BitmapUtils {
         return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
     }
 
-    /**
-     * 保存Bitmap至本地
-     */
     private fun saveBitmapFile(bitmap: Bitmap, fos: FileOutputStream) {
         var stream: ByteArrayOutputStream? = null
         try {
@@ -95,9 +86,6 @@ object BitmapUtils {
         }
     }
 
-    /**
-     * 读取图片属性：旋转的角度
-     */
     @JvmStatic
     fun readPictureDegree(context: Context, filePath: String): Int {
         val exifInterface: ExifInterface
@@ -124,9 +112,6 @@ object BitmapUtils {
         }
     }
 
-    /**
-     * 获取图片的缩放比例
-     */
     @JvmStatic
     fun getMaxImageSize(imageWidth: Int, imageHeight: Int): IntArray {
         var maxWidth = PictureConfig.UNSET
@@ -150,18 +135,12 @@ object BitmapUtils {
         return intArrayOf(maxWidth, maxHeight)
     }
 
-    /**
-     * 获取当前应用可用内存
-     */
     @JvmStatic
     fun getTotalMemory(): Long {
         val totalMemory = Runtime.getRuntime().totalMemory()
         return if (totalMemory > MAX_BITMAP_SIZE) MAX_BITMAP_SIZE.toLong() else totalMemory
     }
 
-    /**
-     * 计算图片合适压缩比较
-     */
     @JvmStatic
     fun computeSize(srcWidth: Int, srcHeight: Int): Int {
         val w = if (srcWidth % 2 == 1) srcWidth + 1 else srcWidth

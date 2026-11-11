@@ -1,13 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-  Status layer for a CONFIDENTIAL attachment whose file has expired or failed to download
-  (see ConfidentialAttachmentStatusView). Sits above the confidential cover: the blurred content
-  stays hidden underneath, while the status is reversed out in white on a single dark scrim.
-  Shared by image/video, voice and generic file bubbles (long text is excluded: it renders as body
-  text and opens through the text dialog); the binder picks the stacked (media) or inline
-  (voice/file) arrangement at bind time.
-  Not clickable on purpose — taps fall through to the cover, which forwards them to the item.
--->
+
 <com.difft.android.chat.widget.ConfidentialAttachmentStatusView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"

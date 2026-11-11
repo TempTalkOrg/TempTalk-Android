@@ -16,17 +16,17 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import kotlin.test.assertEquals
 
-/**
- * M24 (issue #1127, family G cleanup): [FailedMessageActionPopup] is a temporary full-screen
- * overlay that adds a `ComposeView` directly onto the host Activity's `android.R.id.content`
- * root — it never owns the host window. It migrates to
- * `DifftTheme(applyWindowBackground = false)` and drops the `OnPreDrawListener` snapshot/restore
- * patch entirely — no prior regression test existed for this popup, so this is a new
- * test, not a rewrite.
- *
- * `TestScopeApplication` initializes `ApplicationHelper.instance`, required by the popup's
- * `dpToPx` extension (same requirement as `TextSelectionMenuPopupWindowBackgroundTest`).
- */
+
+
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(application = TestScopeApplication::class, sdk = [34])

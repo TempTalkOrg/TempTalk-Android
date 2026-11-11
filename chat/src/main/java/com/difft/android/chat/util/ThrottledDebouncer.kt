@@ -5,22 +5,22 @@ import android.os.Looper
 import android.os.Message
 import androidx.annotation.MainThread
 
-/**
- * Mixes the behavior of [Throttler] and [Debouncer].
- *
- * Like a throttler, it will limit the number of runnables to be executed to be at most once every
- * specified interval, while allowing the first runnable to be run immediately.
- *
- * However, like a debouncer, instead of completely discarding runnables that are published in the
- * throttling period, the most recent one will be saved and run at the end of the throttling period.
- *
- * Useful for publishing a set of identical or near-identical tasks that you want to be responsive
- * and guaranteed, but limited in execution frequency.
- *
- * Declared `open` for symmetry with [Debouncer] in case future tests need to mock it.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 open class ThrottledDebouncer @MainThread constructor(
-    /** Only one runnable will be executed via [publish] every [intervalMs] milliseconds. */
+    
     private val intervalMs: Long,
 ) {
 

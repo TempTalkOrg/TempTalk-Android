@@ -43,7 +43,7 @@ internal const val TAG_ROW_CRITICAL = "row_critical"
 internal const val TAG_ROW_BACKGROUND = "row_background_connection"
 internal const val TAG_ACTION_NOTIFICATION_OVERVIEW = "notification_overview_action"
 
-/** Labels that come from user settings rather than from the readiness checks. */
+
 internal data class NotificationSettingsLabels(
     val groupNotification: String,
     val displayContent: String,
@@ -51,22 +51,22 @@ internal data class NotificationSettingsLabels(
 
 internal class NotificationSettingsActions(
     val onFix: (NotificationFix) -> Unit,
-    /** Opens the Calls page. */
+    
     val onCalls: () -> Unit,
-    /** Opens the Critical Alerts page. */
+    
     val onCriticalAlerts: () -> Unit,
     val onGroupNotification: () -> Unit,
     val onDisplayContent: () -> Unit,
     val onBackgroundConnection: () -> Unit,
     val onGuide: () -> Unit,
-    /** Opens the notification test page (#1350). */
+    
     val onNotificationTest: () -> Unit,
 )
 
-/**
- * The notification settings page as one grouped list. Calls and Critical Alerts summarise their own
- * pages: "on" when readable, otherwise the first definite problem, otherwise nothing.
- */
+
+
+
+
 @Composable
 internal fun NotificationSettingsContent(
     state: NotificationSettingsUiState?,
@@ -127,17 +127,17 @@ internal fun NotificationSettingsContent(
     }
 }
 
-/**
- * The app-level switch every category depends on. Xiaomi, vivo and OPPO keep more app-level switches
- * on that page, so the caption names them and links there.
- */
+
+
+
+
 @Composable
 private fun AppNotificationsGroup(state: NotificationSettingsUiState, actions: NotificationSettingsActions) {
     DifftSettingsGroup(
         modifier = Modifier.testTag(TAG_GROUP_APP_NOTIFICATIONS),
         footer = if (state.showOverviewHint) {
             {
-                // The link ends the sentence instead of taking a line of its own.
+                
                 CaptionWithLink(
                     caption = stringResource(overviewCaption(state.oemBrand)),
                     link = stringResource(ChatR.string.notification_overview_action),
@@ -183,10 +183,10 @@ private fun NotificationOffBanner(onEnable: () -> Unit) {
     }
 }
 
-/**
- * The message category and the message preferences. With the group focus feature on, "Group Focus"
- * is its own card after them, each state or restore sentence below its card.
- */
+
+
+
+
 @Composable
 private fun MessageGroup(
     state: NotificationSettingsUiState?,
@@ -229,7 +229,7 @@ private fun MessageGroup(
         }
         return
     }
-    // Display is a message preference, so it stays with the message rows; Group Focus follows as its own card.
+    
     val groupNote = groupNotificationNote(focus)
     DifftSettingsGroup(footer = groupNote?.let { note -> { DifftSettingsCaption(note) } }) {
         messageRow()
@@ -240,7 +240,7 @@ private fun MessageGroup(
     NotifyFocusCard(state = focus, onIntent = onFocusIntent)
 }
 
-/** The overview caption names the verified section and switches on Xiaomi and vivo; other skins get the generic one. */
+
 private fun overviewCaption(brand: OemBrand): Int = when (brand) {
     OemBrand.XIAOMI -> ChatR.string.notification_overview_caption_xiaomi
     OemBrand.VIVO -> ChatR.string.notification_overview_caption_vivo

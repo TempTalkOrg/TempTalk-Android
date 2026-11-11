@@ -28,32 +28,32 @@ import org.junit.Rule
 import org.junit.Test
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos
 
-/**
- * Config-layer contract (design-report §8.2, C1-C33). Verifies the full-expansion action
- * set + ordering (Master Order) + reaction-bar visibility that
- * [MessageActionConfigBuilder.build] produces for every B1-B6 variant, plus the
- * deleteSaved/moreInfo factory property changes.
- *
- * Pure list construction — no Android runtime needed. globalServices.myId is mocked by
- * [GlobalStaticMockRule]; ServerTimeProvider is pinned deterministically via resetForTest;
- * the recall timeout falls back to the built-in 24h default (getNewGlobalConfigs()==null).
- *
- * Run: ./gradlew :chat:testDebugUnitTest --tests "*MessageActionConfigBuilderTest"
- */
+
+
+
+
+
+
+
+
+
+
+
+
 class MessageActionConfigBuilderTest {
 
     @get:Rule
     val globalMocks = GlobalStaticMockRule()
 
     private val globalConfigsManager: IGlobalConfigsManager = mockk {
-        every { getNewGlobalConfigs() } returns null // → default 24h recall timeout
+        every { getNewGlobalConfigs() } returns null 
     }
 
     private lateinit var builder: MessageActionConfigBuilder
 
     @Before
     fun setUp() {
-        // Pin trusted time so recall-timeout math is deterministic.
+        
         ServerTimeProvider.resetForTest(wallClock = { NOW }, elapsedClock = { 0L })
         builder = MessageActionConfigBuilder(globalConfigsManager, translateSupported = true)
     }
@@ -63,7 +63,7 @@ class MessageActionConfigBuilderTest {
         ServerTimeProvider.resetForTest(wallClock = { System.currentTimeMillis() }, elapsedClock = { 0L })
     }
 
-    // ───────────────────────── helpers ─────────────────────────
+    
 
     private fun types(
         message: TextChatMessage,
@@ -113,7 +113,7 @@ class MessageActionConfigBuilderTest {
         mode = SignalServiceProtos.Mode.CONFIDENTIAL_VALUE
     }
 
-    // ───────────── B1: own, within timeout, !isSaved ─────────────
+    
 
     @Test fun `C1 text own`() = assertEquals(
         listOf(Type.QUOTE, Type.COPY, Type.FORWARD, Type.MULTISELECT, Type.TRANSLATE, Type.SAVE_TO_NOTE, Type.RECALL, Type.MORE_INFO),
@@ -155,7 +155,7 @@ class MessageActionConfigBuilderTest {
         types(confidential(mine = true))
     ).also { assertFalse(build(confidential(mine = true)).showReactionBar) }
 
-    // ───────────── B2: received (isMine=false) = B1 minus RECALL ─────────────
+    
 
     @Test fun `C9 text received`() = assertEquals(
         listOf(Type.QUOTE, Type.COPY, Type.FORWARD, Type.MULTISELECT, Type.TRANSLATE, Type.SAVE_TO_NOTE, Type.MORE_INFO),
@@ -197,7 +197,7 @@ class MessageActionConfigBuilderTest {
         types(confidential(mine = false))
     ).also { assertFalse(build(confidential(mine = false)).showReactionBar) }
 
-    // ───────── B3: saved (isSaved=true) = drop saveToNote + add deleteSaved (recall→delete→info) + noReact ─────────
+    
 
     @Test fun `C17 text saved`() = assertEquals(
         listOf(Type.QUOTE, Type.COPY, Type.FORWARD, Type.MULTISELECT, Type.TRANSLATE, Type.RECALL, Type.DELETE_SAVED, Type.MORE_INFO),
@@ -234,7 +234,7 @@ class MessageActionConfigBuilderTest {
         types(confidential(mine = true), isSaved = true)
     ).also { assertFalse(build(confidential(mine = true), isSaved = true).showReactionBar) }
 
-    // ───────── B6: forward mode (isForForward=true, mostUseEmojis=null) = drop take(3), full expansion ─────────
+    
 
     @Test fun `C24 text forward-mode`() = assertEquals(
         listOf(Type.COPY, Type.FORWARD),
@@ -256,7 +256,7 @@ class MessageActionConfigBuilderTest {
         types(file(mine = true), isForForward = true, mostUseEmojis = null)
     )
 
-    // ───────────── state mutual-exclusion / property assertions ─────────────
+    
 
     @Test fun `C28 text own translate showing yields TRANSLATE_OFF in translate slot`() {
         val msg = text(mine = true).apply {
@@ -272,8 +272,8 @@ class MessageActionConfigBuilderTest {
         val expected = mapOf(
             null to Type.TRANSLATE,
             TranslateStatus.Invisible to Type.TRANSLATE,
-            // Every status that puts the translate block on screen offers "off"; an error row
-            // has no other way to be dismissed.
+            
+            
             TranslateStatus.Translating to Type.TRANSLATE_OFF,
             TranslateStatus.ShowCN to Type.TRANSLATE_OFF,
             TranslateStatus.ShowEN to Type.TRANSLATE_OFF,
@@ -330,7 +330,7 @@ class MessageActionConfigBuilderTest {
 
     private companion object {
         const val NOW = 1_700_000_000_000L
-        const val EXPIRED_DELTA_MS = 25L * 60 * 60 * 1000 // 25h > default 24h recall window
+        const val EXPIRED_DELTA_MS = 25L * 60 * 60 * 1000 
         val DEFAULT_EMOJIS = listOf("👍", "❤️", "😂")
     }
 }

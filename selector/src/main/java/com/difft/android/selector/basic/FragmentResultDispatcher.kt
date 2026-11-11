@@ -6,15 +6,15 @@ import com.difft.android.selector.config.SelectorProviders
 import com.difft.android.selector.entity.LocalMedia
 import com.difft.android.selector.utils.ActivityCompatHelper
 
-/**
- * Both result paths (activity-result + callback) plus lazy engine
- * instantiation. Extracted from PictureCommonFragment (issue #1077).
- */
+
+
+
+
 internal class FragmentResultDispatcher(private val host: PictureCommonFragment) {
 
     private val config get() = host.selectorConfig
 
-    /** Return the processed selection result. */
+    
     fun onCallBackResult(result: ArrayList<LocalMedia>) {
         if (!ActivityCompatHelper.isDestroy(host.activity)) {
             host.dismissLoading()
@@ -62,7 +62,7 @@ internal class FragmentResultDispatcher(private val host: PictureCommonFragment)
         host.requireActivity().requestedOrientation = config.requestedOrientation
     }
 
-    /** Back to the current fragment. */
+    
     fun onBackCurrentFragment() {
         if (!ActivityCompatHelper.isDestroy(host.activity)) {
             if (!host.isStateSaved) {
@@ -79,7 +79,7 @@ internal class FragmentResultDispatcher(private val host: PictureCommonFragment)
         }
     }
 
-    /** Exit PictureSelector. */
+    
     fun onExitPictureSelector() {
         if (!ActivityCompatHelper.isDestroy(host.activity)) {
             if (host.isNormalDefaultEnter()) {

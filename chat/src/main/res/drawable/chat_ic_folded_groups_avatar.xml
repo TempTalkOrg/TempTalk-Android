@@ -3,15 +3,15 @@
     android:height="48dp"
     android:viewportWidth="48"
     android:viewportHeight="48">
-    <!-- Folded groups avatar: function avatar (same as Saved Messages): #474D57 circle in light and dark (gray_600 has no night override), white Tabler "folder-filled" glyph at half the avatar size, from the group focus prototype (symbol i-folder-f). -->
+    
     <path
-        android:fillColor="@color/gray_600"
+        android:fillColor="@color/avsys_bg"
         android:pathData="M24,0a24,24 0,1 0,0 48a24,24 0,1 0,0 -48z" />
     <group
         android:translateX="12"
         android:translateY="12">
         <path
-            android:fillColor="@color/white"
+            android:fillColor="@color/avsys_fg"
             android:pathData="M9,3a1,1 0,0 1,0.608 0.206l0.1,0.087l2.706,2.707h6.586a3,3 0,0 1,2.995 2.824l0.005,0.176v8a3,3 0,0 1,-2.824 2.995l-0.176,0.005h-14a3,3 0,0 1,-2.995 -2.824l-0.005,-0.176v-11a3,3 0,0 1,2.824 -2.995l0.176,-0.005h4z" />
     </group>
 </vector>

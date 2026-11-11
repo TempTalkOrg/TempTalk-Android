@@ -8,7 +8,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
 
-/** Channel-independent part of [ExactAlarmAccess]; the declared/undeclared cases live per channel. */
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class)
 class ExactAlarmAccessTest {

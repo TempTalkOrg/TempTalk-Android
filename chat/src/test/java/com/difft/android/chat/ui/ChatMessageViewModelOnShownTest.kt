@@ -13,18 +13,18 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/**
- * The room opens on the first [ChatMessageViewModel.onShown], not at creation: a conversation that
- * IndexActivity restores covered or in a hidden tab is created eagerly but must neither count as
- * open nor clear a manual unread mark until it is shown (design: foldable detail stacks, §3.4).
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28])
 class ChatMessageViewModelOnShownTest : ChatMessageViewModelTestBase() {
 
     private val room = For.Account("peer")
 
-    /** Clears [vm] the way its owner's ViewModelStore does, which runs the protected onCleared. */
+    
     private fun clear(vm: ChatMessageViewModel) {
         val store = ViewModelStore()
         ViewModelProvider(

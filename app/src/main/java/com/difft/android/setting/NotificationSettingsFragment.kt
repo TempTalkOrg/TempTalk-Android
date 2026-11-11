@@ -30,8 +30,8 @@ import com.difft.android.base.utils.openExternalBrowser
 import com.difft.android.chat.R
 import com.difft.android.chat.focus.FocusActionLauncher
 import com.difft.android.chat.focus.FocusDialogs
-import com.difft.android.chat.focus.settings.FocusGroupPickerActivity
-import com.difft.android.chat.focus.settings.FocusOthersNotifyActivity
+import com.difft.android.chat.focus.settings.FocusGroupPickerDestination
+import com.difft.android.chat.focus.settings.FocusOthersNotifyDestination
 import com.difft.android.chat.focus.settings.NotifyFocusSettingsContract
 import com.difft.android.chat.focus.settings.NotifyFocusSettingsViewModel
 import com.difft.android.chat.focus.showFocusError
@@ -43,10 +43,10 @@ import javax.inject.Inject
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
-/**
- * Notification settings as one grouped page (Compose body in an XML shell), with the Calls and
- * Critical Alerts pages under it. Can be displayed in both Activity (single-pane) and dual-pane mode.
- */
+
+
+
+
 @AndroidEntryPoint
 class NotificationSettingsFragment : Fragment(), SettingsIdiomPage {
 
@@ -67,10 +67,6 @@ class NotificationSettingsFragment : Fragment(), SettingsIdiomPage {
     lateinit var focusActionLauncher: FocusActionLauncher
 
     private val focusViewModel: NotifyFocusSettingsViewModel by viewModels()
-
-    private val focusGroupPicker = registerForActivityResult(FocusGroupPickerActivity.Contract()) { gid ->
-        if (gid != null) focusActionLauncher.applyPickedGroup(requireActivity(), gid)
-    }
 
     private var refreshJob: Job? = null
     private var uiState by mutableStateOf<NotificationSettingsUiState?>(null)
@@ -135,10 +131,10 @@ class NotificationSettingsFragment : Fragment(), SettingsIdiomPage {
     private fun handleFocusEffect(effect: NotifyFocusSettingsContract.Effect) {
         val activity = requireActivity()
         when (effect) {
-            NotifyFocusSettingsContract.Effect.OpenGroupPicker -> focusGroupPicker.launch(Unit)
+            NotifyFocusSettingsContract.Effect.OpenGroupPicker -> detailNavigation().push(this, FocusGroupPickerDestination)
             NotifyFocusSettingsContract.Effect.EndFocus -> focusActionLauncher.endFocus(activity)
             NotifyFocusSettingsContract.Effect.ChangeEndTime -> focusActionLauncher.changeEndTime(activity)
-            NotifyFocusSettingsContract.Effect.OpenOthersStillNotify -> FocusOthersNotifyActivity.start(activity)
+            NotifyFocusSettingsContract.Effect.OpenOthersStillNotify -> detailNavigation().push(this, FocusOthersNotifyDestination)
             NotifyFocusSettingsContract.Effect.ShowPausedDialog ->
                 FocusDialogs.groupNotifyPausedByFocus(activity) { focusActionLauncher.endFocus(activity) }
 

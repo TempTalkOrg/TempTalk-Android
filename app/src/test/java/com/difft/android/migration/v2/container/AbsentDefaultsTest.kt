@@ -7,11 +7,11 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * The container format lets any sender omit any field it has no data for, so every one of these
- * decodes is a shape some peer will legitimately produce. Before [AbsentDefaults] the first
- * dereference of an omitted collection threw NPE and took the whole import down with it.
- */
+
+
+
+
+
 class AbsentDefaultsTest {
 
     private val codec = RecordJsonCodec()
@@ -30,28 +30,28 @@ class AbsentDefaultsTest {
 
     @Test
     fun `an omitted nested object stays null rather than being invented`() {
-        // Substituting an empty instance here would turn "this message quotes nothing" into a
-        // message that quotes an empty message — a wrong row, which is worse than a null.
+        
+        
         val message = decodeMessage(MINIMAL_MESSAGE)
 
         assertNull("quote", message.quote)
         assertNull("forwardContext", message.forwardContext)
         assertNull("screenShot", message.screenShot)
-        // The tri-state anchor: absent must stay absent, since 0 means "explicitly not started".
+        
         assertNull("expireStartedAt", message.expireStartedAt)
     }
 
     @Test
     fun `an explicit zero anchor survives the round trip as zero, not as absent`() {
-        // The tri-state hinges on 0 and "omitted" staying distinguishable on the wire: 0 means the
-        // source says the countdown has not started, which the ladder must never override.
+        
+        
         val encoded = codec.encodeRecord(
             (codec.decodeRecord(MINIMAL_MESSAGE) as NeutralRecord.Message).let {
                 NeutralRecord.Message(it.value.copy(expireStartedAt = 0L))
             }
         )
 
-        // org.junit.Assert puts the message first.
+        
         assertTrue("explicit 0 must be encoded, not dropped: $encoded", encoded.contains("\"expireStartedAt\":0"))
         assertEquals(0L, (codec.decodeRecord(encoded) as NeutralRecord.Message).value.expireStartedAt)
     }
@@ -66,7 +66,7 @@ class AbsentDefaultsTest {
 
     @Test
     fun `collections nested inside a quote are filled too`() {
-        // The sweep has to recurse: the crash reappears one level down otherwise.
+        
         val message = decodeMessage(
             """{"type":"message","value":{$REQUIRED_MESSAGE_FIELDS,"quote":{"author":"+1","sentAt":7}}}"""
         )
@@ -77,8 +77,8 @@ class AbsentDefaultsTest {
 
     @Test
     fun `a quote or forward node missing its author decodes with an empty author`() {
-        // Desktop writes the author key only when it has one; without this the first non-null
-        // setter threw and the whole message was dropped.
+        
+        
         val message = decodeMessage(
             """{"type":"message","value":{$REQUIRED_MESSAGE_FIELDS,"quote":{"sentAt":7},""" +
                 """"forwardContext":{"roots":[{"sentAt":8}]}}}"""
@@ -99,10 +99,10 @@ class AbsentDefaultsTest {
 
     @Test
     fun `an AbsentStaysNull field keeps its null`() {
-        // These two distinguish "the sender said nothing" from "the sender said none", so the sweep
-        // must leave them alone. The annotation only works if it lands on the FIELD — Kotlin puts it
-        // on the constructor parameter by default, where reflection cannot see it and the opt-out is
-        // silently inert. This asserts the behaviour, not the declaration.
+        
+        
+        
+        
         val identity = codec.decodeRecord(MINIMAL_IDENTITY) as NeutralRecord.Identity
 
         assertNull("recoverySlotKeks", identity.value.recoverySlotKeks)

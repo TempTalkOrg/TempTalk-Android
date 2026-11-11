@@ -4,7 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Rail order and the More sheet's quick row while the rail is shown (#1451). */
+
 class RailSlotsTest {
 
     private val head = listOf(RailSlot.MIC, RailSlot.VIDEO, RailSlot.SPEAKER)
@@ -68,7 +68,7 @@ class RailSlotsTest {
                     assertEquals(slots.toSet().size, slots.size)
                     assertEquals(ActionBarQuickAction.INVITE, more.first())
                     assertEquals(more.toSet().size, more.size)
-                    // Emoji is always reachable exactly once; People too where a group has a panel.
+                    
                     val emojiPlaces = listOf(RailSlot.EMOJI in slots, ActionBarQuickAction.EMOJI in more).count { it }
                     assertEquals("emoji group=$group share=$share fits=$fits", 1, emojiPlaces)
                     val peoplePlaces = listOf(RailSlot.PEOPLE in slots, ActionBarQuickAction.PEOPLE in more).count { it }

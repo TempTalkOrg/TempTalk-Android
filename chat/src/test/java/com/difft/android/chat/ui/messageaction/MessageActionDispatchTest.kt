@@ -8,16 +8,16 @@ import io.mockk.verify
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/**
- * D1 (#1294): [dispatchTo] routes each [MessageAction.Type] to exactly one listener method.
- * The table must cover every enum entry, so adding a type without a row fails here.
- */
+
+
+
+
 class MessageActionDispatchTest {
 
     private val listener = mockk<MessageActionCoordinator.ActionListener>(relaxed = true)
     private val message = mockk<TextChatMessage>()
 
-    /** Expected call per type; null means the type is handled elsewhere and must not call the listener. */
+    
     private val expected: Map<MessageAction.Type, (() -> Unit)?> = mapOf(
         MessageAction.Type.QUOTE to { listener.onQuote(message) },
         MessageAction.Type.COPY to { listener.onCopy(message, null) },

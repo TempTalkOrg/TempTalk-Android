@@ -3,7 +3,7 @@ package com.difft.android.chat.recent
 import org.junit.Test
 import kotlin.test.assertEquals
 
-/** Preview lines of the focus card (PRD 7.4.1: the latest 3 messages, `sender: content`). */
+
 class FocusCardLinesTest {
 
     @Test

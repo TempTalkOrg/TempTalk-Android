@@ -14,10 +14,10 @@ fun <T> Optional<T>.getOrNull(): T? {
     }
 }
 
-/**
- * Returns the display name for a contact, honoring user-set remarks.
- * Priority: cachedRemark > remark > groupRemark > publicName > name > groupDisplayName > id
- */
+
+
+
+
 fun ContactorModel.getDisplayNameForUI(): String {
     return getFirstNonEmptyValue(
         ContactRemarkCache.getRemark(this.id),
@@ -30,10 +30,10 @@ fun ContactorModel.getDisplayNameForUI(): String {
     )
 }
 
-/**
- * 获取不含有remark的显示名称，避免泄露隐私（比如@功能，快速建群功能等）
- * 优先级：publicName > name > groupDisplayName > id
- */
+
+
+
+
 fun ContactorModel.getDisplayNameWithoutRemarkForUI(): String {
     return getFirstNonEmptyValue(
         publicName,
@@ -43,10 +43,10 @@ fun ContactorModel.getDisplayNameWithoutRemarkForUI(): String {
     )
 }
 
-/**
- * Avatar JSON to render, walking the remark priority chain:
- * cache.remarkAvatar > contactor.remarkAvatar > gMember.remarkAvatar > contactor.avatar.
- */
+
+
+
+
 fun ContactorModel.getEffectiveAvatarJson(): String? {
     return ContactRemarkCache.getRemarkAvatar(this.id)?.takeIf { it.isNotEmpty() }
         ?: remarkAvatar?.takeIf { it.isNotEmpty() }
@@ -58,21 +58,18 @@ fun getFirstNonEmptyValue(vararg values: String?): String {
     return values.firstOrNull { !it.isNullOrEmpty() } ?: ""
 }
 
-/**
- * 格式化联系人ID为显示格式：TT-Base58(id) 或 Base58(id)
- * 例如：id是+78262753445，展示为：TT-base58Encoded 或 base58Encoded
- * @param showPrefix 是否显示TT-前缀，默认为true
- */
+
+
+
+
 fun String.formatBase58Id(showPrefix: Boolean = true): String {
     return try {
-        // 去掉开头的+号
         val cleanId = this.removePrefix("+")
-        // 转换为数字类型
         val numericId = cleanId.toLong()
         val base58Encoded = Base58.encode(numericId)
         if (showPrefix) "TT-$base58Encoded" else base58Encoded
     } catch (e: Exception) {
         L.e { "[ContactorUtil] formatContactId fail for id: $this, error: ${e.stackTraceToString()}" }
-        if (showPrefix) "TT-${this.takeLast(7)}" else this.takeLast(7) // fallback to last 7 characters
+        if (showPrefix) "TT-${this.takeLast(7)}" else this.takeLast(7) 
     }
 }

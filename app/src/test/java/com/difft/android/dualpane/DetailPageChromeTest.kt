@@ -21,11 +21,11 @@ import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import java.util.concurrent.TimeUnit
 
-/**
- * What a hosted page shows and keeps while it is covered, hidden or popped: the header back button
- * (`setupDynamicBackButton`) and Activity-root overlays (`dismissWhenLeavingVisibleTop`), both
- * against a real [PaneNavigator] on [PaneNavigatorTestHost].
- */
+
+
+
+
+
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [33])
 class DetailPageChromeTest {
@@ -94,10 +94,10 @@ class DetailPageChromeTest {
         push("info")
         push("card")
 
-        controller!!.recreate() // fold / unfold with pages above the conversation
+        controller!!.recreate() 
         idle()
         val root = host.pages(TAB_CHATS).first()
-        // A header decides its button when its view is created: here, covered, depth 3.
+        
         val rootButton = backButtonOf(root)
         assertFalse(root.showsDetailBackButton())
         assertEquals(View.GONE, rootButton.visibility)

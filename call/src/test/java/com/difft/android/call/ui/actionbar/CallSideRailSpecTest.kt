@@ -9,7 +9,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** The side-rail rule (#1451): landscape and at least 480dp tall, nothing else. */
+
 class CallSideRailSpecTest {
 
     @Test
@@ -27,11 +27,11 @@ class CallSideRailSpecTest {
     @Test
     fun `minimize plus six controls fit at the minimum height under a status bar up to 52dp`() {
         assertEquals(348, CallSideRailSpec.STACK_HEIGHT_DP)
-        // 48 minimize + 8 gap + 348 stack + 24 bottom inset.
+        
         assertEquals(428, CallSideRailSpec.HEIGHT_BELOW_TOP_INSET_DP)
         val maxStatusBar = CallSideRailSpec.MIN_WINDOW_HEIGHT_DP - CallSideRailSpec.HEIGHT_BELOW_TOP_INSET_DP
         assertEquals(52, maxStatusBar)
-        // The stack's top also clears the title bar (status bar + 56) by the same margin.
+        
         val stackTop = CallSideRailSpec.MIN_WINDOW_HEIGHT_DP - CallSideRailSpec.BOTTOM_INSET_DP - CallSideRailSpec.STACK_HEIGHT_DP
         assertTrue(stackTop - maxStatusBar >= LCallUiConstants.TOP_BAR_TOTAL_HEIGHT_DP)
     }
@@ -53,22 +53,22 @@ class CallSideRailSpecTest {
 
     @Test
     fun `a cutout over the rail band pushes only the top down, never the column`() {
-        // Fold inner landscape: the camera cutout is a 51x60dp rect in the top-end corner.
+        
         val rail = resolveSideRail(860f, 608f, statusBandDp = 32f, cutouts = listOf(foldCamera))!!
         assertEquals(60.dp, rail.topInset)
         assertEquals(84, rail.widthDp)
         assertEquals(24, rail.bottomInsetDp)
-        // A status band taller than the cutout wins.
+        
         assertEquals(70.dp, resolveSideRail(860f, 608f, statusBandDp = 70f, cutouts = listOf(foldCamera))!!.topInset)
     }
 
     @Test
     fun `a cutout outside the rail band changes nothing`() {
         val elsewhere = listOf(
-            Rect(0f, 0f, 51f, 60f), // top-start corner
-            Rect(0f, 548f, 51f, 608f), // bottom-start corner
-            Rect(400f, 0f, 460f, 30f), // top centre
-            Rect(700f, 0f, 776f, 60f), // ends exactly at the band's start edge
+            Rect(0f, 0f, 51f, 60f), 
+            Rect(0f, 548f, 51f, 608f), 
+            Rect(400f, 0f, 460f, 30f), 
+            Rect(700f, 0f, 776f, 60f), 
         )
         assertEquals(resolveSideRail(860f, 608f, statusBandDp = 32f), resolveSideRail(860f, 608f, statusBandDp = 32f, cutouts = elsewhere))
     }
@@ -109,10 +109,10 @@ class CallSideRailSpecTest {
     @Test
     fun `seven controls need minimize, gap, the taller stack and the bottom inset below the top`() {
         assertEquals(408, CallSideRailSpec.ROOMY_STACK_HEIGHT_DP)
-        // 48 + 8 + 408 + 24 = 488 below the top inset.
+        
         assertTrue(resolveSideRail(1000f, 540f, statusBandDp = 52f)!!.fitsSevenControls)
         assertFalse(resolveSideRail(1000f, 540f, statusBandDp = 53f)!!.fitsSevenControls)
-        // The fold's inner screen fits them under its camera cutout.
+        
         assertTrue(resolveSideRail(860f, 608f, statusBandDp = 32f, cutouts = listOf(foldCamera))!!.fitsSevenControls)
     }
 

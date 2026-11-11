@@ -8,14 +8,14 @@ import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/**
- * Writing one isExist fast-pass response back into the forward tree.
- *
- * The response belongs to exactly ONE leaf. Matching by the server-side attachment id could not
- * express that: every copy of a file carries the same id, so `find` stopped at the first leaf and any
- * later sibling kept a zero authority id and the pre-authorization digest — a silently broken send
- * whenever the same file was forwarded twice in one action. Local ids are unique per leaf.
- */
+
+
+
+
+
+
+
+
 class ChangeAttachmentDigestTest {
 
     private fun attachment(localId: String, id: String = "server-id") = Attachment(
@@ -73,7 +73,7 @@ class ChangeAttachmentDigestTest {
 
     @Test
     fun `duplicate siblings each receive their own response`() {
-        // The same file forwarded twice in one action: two leaves, same server id, two isExist calls.
+        
         val first = attachment("local-a")
         val second = attachment("local-b")
         val tree = forward(listOf(first, second))

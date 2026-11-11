@@ -7,11 +7,11 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
 
-/**
- * [FileUtil.isFileValid] caches only positive results, keyed by exact path, and is otherwise cleared
- * only on logout — so a stale `true` outlives any file that is deleted or moved. This pins the
- * invalidation API that deletion and the attachment migration rely on.
- */
+
+
+
+
+
 class FileValidityCacheTest {
 
     @get:Rule
@@ -23,7 +23,7 @@ class FileValidityCacheTest {
 
         assertTrue(FileUtil.isFileValid(file.path))
         file.delete()
-        // The stale positive is the behaviour that makes the API necessary.
+        
         assertTrue(FileUtil.isFileValid(file.path))
 
         FileUtil.invalidateFileValidity(file.path)
@@ -64,7 +64,7 @@ class FileValidityCacheTest {
 
         assertFalse(FileUtil.isFileValid(first.path))
         assertFalse(FileUtil.isFileValid(second.path))
-        // Untouched: still cached positive, proving the sweep is scoped to the directory.
+        
         assertTrue(FileUtil.isFileValid(outside.path))
     }
 }

@@ -15,33 +15,33 @@ import retrofit2.http.Path
 @Auth(AuthStyle.BASIC)
 interface DeviceApiService {
 
-    /** GET /v1/devices/provisioning/code */
+    
     @GET("v1/devices/provisioning/code")
     suspend fun getDeviceVerificationCode(): DeviceVerificationCodeResponse
 
-    /** PUT /v1/provisioning/{destination} */
+    
     @PUT("v1/provisioning/{destination}")
     suspend fun sendProvisioningMessage(
         @Path("destination") destination: String,
         @Body body: ProvisioningMessageRequest
     )
 
-    /**
-     * GET /v1/devices/ — returns {"devices":[...]}. Raw Response so the Repository maps status
-     * codes itself; the @SignalApi client preserves raw HTTP status.
-     */
+    
+
+
+
     @GET("v1/devices/")
     suspend fun getDevices(): Response<ResponseBody>
 
-    /**
-     * GET /v1/devices/ sent with exactly [basicAuth], so a caller can tell which login an answer is
-     * about even if the stored credential changes while the call is in flight (#1382 A09).
-     */
+    
+
+
+
     @Auth(AuthStyle.EXPLICIT)
     @GET("v1/devices/")
     suspend fun getDevicesAs(@Header("Authorization") basicAuth: String): Response<ResponseBody>
 
-    /** DELETE /v1/devices/{deviceId}. Server contract unverified. */
+    
     @DELETE("v1/devices/{deviceId}")
     suspend fun removeDevice(@Path("deviceId") deviceId: Int): Response<ResponseBody>
 }
@@ -51,5 +51,5 @@ data class DeviceVerificationCodeResponse(
 )
 
 data class ProvisioningMessageRequest(
-    @SerializedName("body") val body: String  // Base64-encoded ciphertext
+    @SerializedName("body") val body: String  
 )

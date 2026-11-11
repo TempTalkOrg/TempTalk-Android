@@ -20,25 +20,25 @@ import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Chooses the one cancelable startup prompt a foreground session may show (#1355).
- *
- * - Priority is [PromptId] order; the first ELIGIBLE, not snoozed entry wins. A lower entry is not
- *   chosen while a higher one is UNKNOWN, for at most 15 s after the host first became presentable;
- *   after that UNKNOWN entries are skipped. Only NOT_ELIGIBLE removes a record (the background-connection slot keeps its dismissal history).
- * - One prompt per session: Declined and ActionTaken use the budget, Preempted does not. A prompt
- *   still unanswered when the app goes to the background stays current and records nothing; it is
- *   the prompt of the next session too, until it is answered, preempted or resolved.
- * - Any active [GateId] blocks choosing and preempts a prompt on screen.
- * - A session that starts within 30 minutes of a primary action (our own trip to Settings, even
- *   across process death) starts with its budget used.
- *
- * Back-off timestamps use the trusted clock ([clock]); in-session durations (late window, hold cap)
- * use [elapsed], which never jumps when the trusted clock anchors.
- *
- * The host renders [current] and reports outcomes. Every state change runs under one [Mutex] in the
- * coordinator's own scope, so a host that goes away mid-write never cancels a persisted outcome.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 @Singleton
 class StartupPromptCoordinator internal constructor(
     private val store: StartupPromptStore,
@@ -58,10 +58,10 @@ class StartupPromptCoordinator internal constructor(
 
     private val _current = MutableStateFlow<PromptTicket?>(null)
 
-    /** The prompt to render now, or null. */
+    
     val current: StateFlow<PromptTicket?> = _current.asStateFlow()
 
-    // Guarded by mutex.
+    
     private var sessionId = 0L
     private var sessionActive = false
     private var budgetUsed = false
@@ -74,19 +74,19 @@ class StartupPromptCoordinator internal constructor(
     private var seq = 0L
     private var holdCapJob: Job? = null
 
-    /** Primary actions of this process, so the own-trip rule holds even when their write failed. */
+    
     private val inProcessPending = mutableMapOf<PromptId, Long>()
 
-    /** Rationale before the outstanding system request, the record's copy as fallback. */
+    
     private var inProcessRationaleBefore: Boolean? = null
 
-    /** The ticket whose primary action was recorded last, so an abort can undo exactly that one. */
+    
     private var lastAction: PromptTicket? = null
 
-    /** (id, reason) pairs already logged as skipped in this session. */
+    
     private val loggedSkips = mutableSetOf<String>()
 
-    /** Idempotent; the host calls it when it attaches. */
+    
     fun start() {
         if (!started.compareAndSet(false, true)) return
         scope.launch { sessions.collect { serialized { onSession(it) } } }
@@ -94,11 +94,11 @@ class StartupPromptCoordinator internal constructor(
         scope.launch { providers.changes().collect { serialized { evaluateLocked() } } }
     }
 
-    /**
-     * Host state: presentable (resumed, no app-lock decision pending, settled), dual-pane detail state,
-     * and whether the system would still show its notification-permission dialog (the Activity's
-     * current `shouldShowRequestPermissionRationale`).
-     */
+    
+
+
+
+
     fun setHostState(presentable: Boolean, dualPaneConversationOpen: Boolean, notificationRationale: Boolean = false) {
         scope.launch {
             serialized {
@@ -111,7 +111,7 @@ class StartupPromptCoordinator internal constructor(
         }
     }
 
-    /** The host mounted [ticket]; a re-render after recreation records nothing. */
+    
     suspend fun onShown(ticket: PromptTicket) {
         perform { shownLocked(ticket) }
     }
@@ -134,12 +134,12 @@ class StartupPromptCoordinator internal constructor(
         L.i { "[StartupPrompt] show id=${ticket.id} shown=${record?.shownCount} declines=${record?.declines} via=$via${ticket.backgroundTrigger?.let { " trigger=$it" }.orEmpty()}" }
     }
 
-    /**
-     * Primary action, including the system permission request ([rationaleBefore] is the rationale
-     * read just before it, kept on the record so a recreation or process death in the system dialog
-     * keeps it). Returns once the outcome is written, or kept in memory for this process if the write
-     * fails, so the host acts only afterwards; false for a stale ticket.
-     */
+    
+
+
+
+
+
     suspend fun onActionTaken(ticket: PromptTicket, rationaleBefore: Boolean = false): Boolean = perform {
         if (isStale(ticket, "ACTION_TAKEN")) return@perform false
         val now = clock()
@@ -152,18 +152,18 @@ class StartupPromptCoordinator internal constructor(
             }
         }
         closeTicket(ticket, budget = true)
-        // The host is leaving (or handing off); it reports again once it is back and settled, so a
-        // pending action is never reconciled before the user could act on it.
+        
+        
         presentable = false
         L.i { "[StartupPrompt] outcome id=${ticket.id} result=ACTION_TAKEN" }
         true
     } ?: false
 
-    /**
-     * The host recorded [ticket]'s primary action but never performed it (it was destroyed in
-     * between). Undoes the pending trip, returns the budget and makes the prompt current again, so the
-     * recreated host shows it. Anything else (an older ticket, a result already seen) is ignored.
-     */
+    
+
+
+
+
     suspend fun onActionAborted(ticket: PromptTicket) {
         perform {
             if (lastAction?.seq != ticket.seq) return@perform
@@ -180,20 +180,20 @@ class StartupPromptCoordinator internal constructor(
         }
     }
 
-    /** "Not now", outside tap or back. A stale ticket (already answered or replaced) records nothing. */
+    
     suspend fun onDeclined(ticket: PromptTicket) {
         perform {
             if (isStale(ticket, "DECLINED")) return@perform
             val now = clock()
             val records = persistOrLog {
-                store.update { it.edit(ticket.id) { r -> PromptBackoffPolicy.declined(r.keyed(ticket), now, PromptBackoffPolicy.floorFor(ticket.id), endsSwitchOff = true) } }
+                store.update { it.edit(ticket.id) { r -> PromptBackoffPolicy.declined(ticket.id, r.keyed(ticket), now, endsSwitchOff = true) } }
             }
             closeTicket(ticket, budget = true)
             logDeclined(ticket.id, records?.get(ticket.id), now)
         }
     }
 
-    /** Result of the system POST_NOTIFICATIONS request; the rationale before it comes from the record. */
+    
     suspend fun onNotificationRequestResult(granted: Boolean, rationaleAfter: Boolean) {
         perform { notificationResultLocked(granted, rationaleAfter) }
     }
@@ -224,7 +224,7 @@ class StartupPromptCoordinator internal constructor(
                 logDeclined(id, records[id], now)
             }
             NotificationRequestOutcome.ShowAppDialog -> {
-                // The system did not ask: its route is exhausted from now on.
+                
                 store.update { map ->
                     map.edit(id) {
                         it.copy(
@@ -239,8 +239,8 @@ class StartupPromptCoordinator internal constructor(
                     _current.value = PromptTicket(id, ++seq, issue = ReadinessIssue.APP_NOTIFICATIONS_OFF)
                     L.i { "[StartupPrompt] outcome id=$id result=SYSTEM_SILENT next=dialog" }
                 } else if (sessionActive) {
-                    // A gate came up during the system dialog: the app dialog is preempted, the
-                    // session keeps its budget and the next evaluation after the gate chooses again.
+                    
+                    
                     budgetUsed = false
                     L.i { "[StartupPrompt] outcome id=$id result=SYSTEM_SILENT next=preempted gate=${gates.joinToString(",")}" }
                 }
@@ -257,7 +257,7 @@ class StartupPromptCoordinator internal constructor(
         sessionId = id
         sessionActive = true
         loggedSkips.clear()
-        // A prompt left unanswered in the background is still this session's prompt.
+        
         val carried = _current.value
         budgetUsed = carried != null
         if (carried == null) ticketShown = false
@@ -266,7 +266,7 @@ class StartupPromptCoordinator internal constructor(
         var records = store.read()
         val leftover = records.filterValues { it.showingSince != 0L }.keys - setOfNotNull(carried?.id)
         if (leftover.isNotEmpty()) {
-            // The process died while these were on screen: nothing was answered, so they are simply due again.
+            
             records = store.update { map -> map.mapValues { (k, r) -> if (k in leftover) r.copy(showingSince = 0) else r } }
             L.i { "[StartupPrompt] showing cleared id=${leftover.joinToString(",")} cause=processDeath" }
         }
@@ -285,7 +285,7 @@ class StartupPromptCoordinator internal constructor(
     }
 
     private fun endSessionLocked() {
-        // An unanswered prompt stays current and on screen for the next session; nothing is recorded.
+        
         val carried = _current.value
         sessionActive = false
         holdCapJob?.cancel()
@@ -301,7 +301,7 @@ class StartupPromptCoordinator internal constructor(
             if (ticketShown) store.update { it.edit(ticket.id) { r -> r.copy(showingSince = 0) } }
             _current.value = null
             ticketShown = false
-            // Preempted: the unanswered prompt uses no budget and may come back once the gate clears.
+            
             budgetUsed = false
             L.i { "[StartupPrompt] gate active=${active.joinToString(",")} preempt=${ticket.id}" }
         } else if (active != previous && active.isNotEmpty()) {
@@ -322,12 +322,12 @@ class StartupPromptCoordinator internal constructor(
         val reconciled = reconcile(read, answers, now)
         val records = if (reconciled.records != read) store.update { reconcile(it, answers, now).records } else read
         reconciled.events.forEach { event -> L.i { "[StartupPrompt] outcome $event" } }
-        // Back on the host: an in-memory own trip has done its job once its record is settled (or was never written).
+        
         inProcessPending.keys.removeAll { records[it]?.pendingActionAt == null || records[it]?.pendingActionAt == 0L }
 
         val ticket = _current.value
         if (ticket != null && gates.isNotEmpty()) {
-            // Never keep a cancelable prompt under a gate (normally onGates already removed it).
+            
             if (ticketShown) store.update { it.edit(ticket.id) { r -> r.copy(showingSince = 0) } }
             ticketShown = false
             _current.value = null
@@ -337,7 +337,7 @@ class StartupPromptCoordinator internal constructor(
         }
         if (ticket != null) {
             if (answers.getValue(ticket.id).eligibility == Eligibility.NOT_ELIGIBLE) {
-                // Fixed while on screen: the host removes it; a rendered prompt used the budget.
+                
                 if (ticketShown) budgetUsed = true
                 ticketShown = false
                 _current.value = null
@@ -365,20 +365,20 @@ class StartupPromptCoordinator internal constructor(
                 if (eligible) logSkip(id.name, "PENDING_ACTION")
                 continue
             }
-            if (PromptBackoffPolicy.isSnoozed(record, now)) {
+            if (PromptBackoffPolicy.isSnoozed(id, record, now)) {
                 if (eligible) logSkip(id.name, "SNOOZED", "until=${PromptBackoffPolicy.snoozedUntil(record)}")
                 continue
             }
             if (answer.eligibility == Eligibility.UNKNOWN && heldBy == null) heldBy = id
             if (!eligible) continue
             if (heldBy != null && holdOpen) {
-                // A higher entry may still turn eligible; wait for it, at most until the hold cap.
+                
                 logSkip(id.name, "HOLD_UNKNOWN", "waitingFor=$heldBy")
                 scheduleHoldCap(PromptBackoffPolicy.UNKNOWN_HOLD_MS - sincePresentable)
                 return
             }
             if (late && dualPaneConversationOpen) {
-                // A late result must not interrupt an open conversation; it waits for the pane to close.
+                
                 logSkip(id.name, "LATE_DUAL_PANE")
                 return
             }
@@ -390,7 +390,7 @@ class StartupPromptCoordinator internal constructor(
         }
     }
 
-    /** One line per (id, reason) per session: why an eligible prompt was not shown. */
+    
     private fun logSkip(id: String, reason: String, detail: String = "") {
         if (!loggedSkips.add("$id:$reason")) return
         val suffix = if (detail.isEmpty()) "" else " $detail"
@@ -411,7 +411,7 @@ class StartupPromptCoordinator internal constructor(
         return true
     }
 
-    /** Records the offer a prompt was shown for from its first write, so a later offer never inherits it. */
+    
     private fun PromptRecord.keyed(ticket: PromptTicket): PromptRecord =
         if (ticket.offerKey != null) copy(offerKey = ticket.offerKey) else this
 
@@ -423,10 +423,10 @@ class StartupPromptCoordinator internal constructor(
         }
     }
 
-    /**
-     * A user answer always closes the prompt and uses the budget, even when the state cannot be
-     * written, so a storage failure can never bring the same (possibly non-cancelable) dialog back.
-     */
+    
+
+
+
     private suspend fun <T> persistOrLog(block: suspend () -> T): T? = try {
         block()
     } catch (e: CancellationException) {
@@ -459,58 +459,75 @@ class StartupPromptCoordinator internal constructor(
     internal companion object {
         private const val DAY_MS = 86_400_000L
 
-        /**
-         * Pure record maintenance for one evaluation: a confirmed NOT_ELIGIBLE removes the record
-         * (a later revocation starts at step 0), except the background-connection slot, which keeps its
-         * dismissal history (floor, ladder step and switched-off flag) and only settles
-         * its in-flight state; a pending primary action that is still ELIGIBLE
-         * counts as one decline (§9 D2), and so does one still UNKNOWN after the 30-minute own-trip
-         * window; a new update offer resets its record; a snooze longer than
-         * its step is clamped. UNKNOWN never changes a record.
-         */
+        
+
+
+
+
+
+
+
+
+
         fun reconcile(records: Map<PromptId, PromptRecord>, answers: Map<PromptId, ProviderAnswer>, now: Long): Reconciled {
             val events = mutableListOf<String>()
             val next = buildMap {
                 for ((id, record) in records) {
                     val answer = answers[id] ?: ProviderAnswer.UNKNOWN
                     when (answer.eligibility) {
-                        Eligibility.NOT_ELIGIBLE -> if (id == PromptId.BACKGROUND_CONNECTION && PromptBackoffPolicy.hasHistory(record)) {
-                            if (record.pendingActionAt != 0L || record.showingSince != 0L) events += "id=$id result=RESOLVED kept=history"
-                            put(id, record.copy(pendingActionAt = 0, showingSince = 0))
-                        } else {
-                            events += "id=$id result=RESOLVED"
+                        Eligibility.NOT_ELIGIBLE -> {
+                            
+                            val kept = if (id == PromptId.BACKGROUND_RESTRICTED && record.pendingActionAt != 0L) settleTrip(id, record, now) else record
+                            if (PromptBackoffPolicy.keepsHistory(id) && PromptBackoffPolicy.hasHistory(kept)) {
+                                if (record.pendingActionAt != 0L || record.showingSince != 0L) events += "id=$id result=RESOLVED kept=history"
+                                put(id, kept.copy(pendingActionAt = 0, showingSince = 0))
+                            } else {
+                                events += "id=$id result=RESOLVED"
+                            }
                         }
                         Eligibility.UNKNOWN -> if (record.pendingActionAt != 0L && now - record.pendingActionAt !in 0..PromptBackoffPolicy.OWN_TRIP_WINDOW_MS) {
-                            // The result could not be read for longer than an own trip lasts: count the
-                            // trip as one decline so the record never waits forever.
-                            val declined = PromptBackoffPolicy.declined(record, minOf(record.pendingActionAt, now), PromptBackoffPolicy.floorFor(id))
-                            events += "id=$id result=DECLINED cause=pendingExpired declines=${declined.declines}"
-                            put(id, declined)
+                            
+                            
+                            val settled = settleTrip(id, record, now)
+                            events += "id=$id result=${if (settled.declines > record.declines) "DECLINED" else "SETTLED"} cause=pendingExpired declines=${settled.declines}"
+                            put(id, settled)
                         } else {
                             put(id, record)
                         }
                         Eligibility.ELIGIBLE -> {
                             var r = record
                             if (id == PromptId.OPTIONAL_UPDATE && r.offerKey != answer.offerKey) {
-                                // Records carry their offer from the first write; any other offer starts over.
+                                
                                 events += "id=$id result=NEW_OFFER"
                                 r = PromptRecord(offerKey = answer.offerKey)
                             }
                             if (r.pendingActionAt != 0L) {
-                                // The decline happened at the trip, not when the result was read.
-                                r = PromptBackoffPolicy.declined(r, minOf(r.pendingActionAt, now), PromptBackoffPolicy.floorFor(id))
-                                events += "id=$id result=DECLINED cause=returnUnfixed declines=${r.declines}"
+                                val settled = settleTrip(id, r, now)
+                                val result = if (settled.declines > r.declines) "DECLINED" else "SETTLED"
+                                r = settled
+                                events += "id=$id result=$result cause=returnUnfixed declines=${r.declines}"
                             }
-                            put(id, PromptBackoffPolicy.clamp(r, now))
+                            put(id, PromptBackoffPolicy.clamp(r, now, id))
                         }
                     }
                 }
             }
             return Reconciled(next, events)
         }
+
+        
+
+
+
+        private fun settleTrip(id: PromptId, record: PromptRecord, now: Long): PromptRecord =
+            if (id == PromptId.BACKGROUND_RESTRICTED) {
+                PromptBackoffPolicy.restrictedTrip(record.copy(pendingActionAt = 0), minOf(record.pendingActionAt, now))
+            } else {
+                PromptBackoffPolicy.declined(id, record, minOf(record.pendingActionAt, now))
+            }
     }
 }
 
-/** Applies [change] to the record of [id], creating a default one first. */
+
 internal fun Map<PromptId, PromptRecord>.edit(id: PromptId, change: (PromptRecord) -> PromptRecord): Map<PromptId, PromptRecord> =
     this + (id to change(this[id] ?: PromptRecord()))

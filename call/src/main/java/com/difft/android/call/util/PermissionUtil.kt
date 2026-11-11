@@ -7,7 +7,7 @@ import androidx.core.content.ContextCompat
 object PermissionUtil {
 
     fun isRuntimePermissionsRequired(): Boolean {
-        // minSdk is 26 (>= 23), so runtime permissions are always required.
+        
         return true
     }
 

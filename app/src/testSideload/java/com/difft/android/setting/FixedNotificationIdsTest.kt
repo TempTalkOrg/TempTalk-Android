@@ -7,10 +7,10 @@ import com.difft.android.migration.v2.transfer.MigrationTransferNotificationHelp
 import org.junit.Test
 import kotlin.test.assertEquals
 
-/**
- * #1354: the merged channels carry notifications from several features, so every fixed
- * notification id must stay distinct; a collision would make one notification replace another.
- */
+
+
+
+
 class FixedNotificationIdsTest {
 
     private fun privateConst(owner: Class<*>, name: String): Int =

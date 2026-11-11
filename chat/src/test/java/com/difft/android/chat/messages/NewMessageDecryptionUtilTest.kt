@@ -18,23 +18,12 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos.Envelope
 
-/**
- * Security regression test for the E2E decryption whitelist.
- *
- * `Envelope.type` is a server-controlled field. Before the fix, any type other
- * than ENCRYPTEDTEXT(8) fell through an `else` branch that parsed the raw,
- * unauthenticated `content` as a genuine [org.whispersystems.signalservice.internal.push.SignalServiceProtos.Content]
- * message — letting a malicious/compromised server forge messages from any
- * sender by simply setting type=PLAINTEXT(7) (or any legacy type).
- *
- * The contract this test pins:
- *  - Only ENCRYPTEDTEXT(8) may reach the decrypt path (verified indirectly:
- *    everything else is dropped without touching the identity keys).
- *  - NOTIFY(6) stays a first-class plaintext control-signal path (server-driven
- *    group/contact updates), returned as a notify message, never as a chat Content.
- *  - Every other type (UNKNOWN/CIPHERTEXT/KEY_EXCHANGE/PREKEY_BUNDLE/RECEIPT/
- *    PLAINTEXT) is dropped (`decrypt` returns null) with no decryption attempt.
- */
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28])
 class NewMessageDecryptionUtilTest {
@@ -64,19 +53,18 @@ class NewMessageDecryptionUtilTest {
 
     @Test
     fun `non-whitelisted server-controlled types are dropped without decryption`() {
-        // Types a malicious server could set to bypass E2E. PLAINTEXT(7) is the
-        // headline case; the legacy types share the same (removed) else branch.
+        
         val forgeableTypes = listOf(
-            Envelope.Type.UNKNOWN_VALUE,       // 0
-            Envelope.Type.CIPHERTEXT_VALUE,    // 1
-            Envelope.Type.KEY_EXCHANGE_VALUE,  // 2
-            Envelope.Type.PREKEY_BUNDLE_VALUE, // 3
-            Envelope.Type.RECEIPT_VALUE,       // 5
-            Envelope.Type.PLAINTEXT_VALUE,     // 7
+            Envelope.Type.UNKNOWN_VALUE,       
+            Envelope.Type.CIPHERTEXT_VALUE,    
+            Envelope.Type.KEY_EXCHANGE_VALUE,  
+            Envelope.Type.PREKEY_BUNDLE_VALUE, 
+            Envelope.Type.RECEIPT_VALUE,       
+            Envelope.Type.PLAINTEXT_VALUE,     
         )
 
         forgeableTypes.forEach { type ->
-            // A well-formed Content that, pre-fix, would have been happily rendered.
+            
             val forgedContent = org.whispersystems.signalservice.internal.push.SignalServiceProtos.Content
                 .newBuilder()
                 .setDataMessage(
@@ -91,9 +79,9 @@ class NewMessageDecryptionUtilTest {
             assertNull("type=$type must be dropped, not rendered", result)
         }
 
-        // No identity-key access at all → no decryption was even attempted for
-        // any dropped type. This is what guarantees the server can't smuggle
-        // content through a non-encrypted envelope type.
+        
+        
+        
         verify(exactly = 0) { encryptionDataManager.getAciIdentityKey() }
         verify(exactly = 0) { encryptionDataManager.getAciIdentityOldKey() }
         confirmVerified(encryptionDataManager)
@@ -112,7 +100,7 @@ class NewMessageDecryptionUtilTest {
 
     @Test
     fun `NOTIFY sent from a user account is dropped`() {
-        // A peer can push NOTIFY through the 1:1 send API; the server stamps the sender's account.
+        
         val forged = """{"notifyType":1}""".toByteArray()
 
         listOf("+72212204429", "+10000").forEach { account ->

@@ -24,13 +24,13 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import kotlin.test.assertNotNull
 
-/**
- * LS1-LS5, LS7, LS8 (#1294): with a real RecyclerView, a list scroll keeps the selection. The menu
- * hides while the list is dragged, the highlight follows the text, and the menu comes back
- * re-anchored when the scroll settles. The message leaving the viewport dismisses, deferred to the
- * end of the overlay gesture or the next frame. Rebinds are covered by
- * [MessageActionCoordinatorRebindTest]; the list is [ListScrollFixture].
- */
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(application = TestScopeApplication::class, sdk = [34], qualifiers = "w411dp-h891dp-xxhdpi")
@@ -98,7 +98,7 @@ class MessageActionCoordinatorScrollTest {
         val bubbleBefore = f.popup.bubbleBounds
 
         f.rv.scrollBy(0, 150)
-        // The idle onScrolled never hides the menu: visible and re-anchored before any frame runs.
+        
         assertTrue(f.overlay.isMenuVisible)
         assertEquals(f.expectedBubbleBounds(), f.popup.bubbleBounds)
         f.settle()
@@ -144,6 +144,32 @@ class MessageActionCoordinatorScrollTest {
     }
 
     @Test
+    fun `LS9 the message scrolled entirely under the floating header dismisses like leaving the screen`() {
+        val f = fixture()
+        f.showAndIdle()
+        ChatContentBand.setInsets(f.rv, ChatChromeInsets(top = HEADER_PX, bottom = 0))
+
+        
+        f.rv.scrollBy(0, f.bubble.bottom - 100)
+        idle()
+
+        assertTrue(f.bubble.isAttachedToWindow)
+        assertFalse(f.coordinator.isShowing)
+    }
+
+    @Test
+    fun `LS9b the same scroll without floating chrome keeps the menu`() {
+        val f = fixture()
+        f.showAndIdle()
+
+        f.rv.scrollBy(0, f.bubble.bottom - 100)
+        idle()
+
+        assertTrue(f.bubble.isAttachedToWindow)
+        assertTrue(f.coordinator.isShowing)
+    }
+
+    @Test
     fun `LS7 the menu shows only after both the drag hide and the scroll hide clear`() {
         val f = fixture()
         f.showAndIdle()
@@ -167,5 +193,9 @@ class MessageActionCoordinatorScrollTest {
         f.adapter.notifyItemInserted(ITEM_COUNT - 1)
 
         assertFalse(f.coordinator.isShowing)
+    }
+
+    private companion object {
+        const val HEADER_PX = 500
     }
 }

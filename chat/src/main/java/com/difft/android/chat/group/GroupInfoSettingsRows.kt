@@ -20,11 +20,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.cancellation.CancellationException
 
-/*
- * GroupInfoFragment's settings rows below the members (moved out of its former setOtherView
- * unchanged): conversation settings entries and group management / leave. Notification rows
- * are the focus settings section (`GroupFocusSettingsBinder`).
- */
+
+
+
+
+
 
 internal fun GroupInfoFragment.bindConversationSettingRows() {
     binding.llSearchChatHistory.setOnClickListener {
@@ -56,7 +56,7 @@ internal fun GroupInfoFragment.bindConversationSettingRows() {
     }
 }
 
-/** Owner: group management and disband; everyone else: leave. */
+
 internal fun GroupInfoFragment.bindMembershipRows() {
     if (role == GROUP_ROLE_OWNER) {
         binding.relGroupManagement.visibility = View.VISIBLE
@@ -81,7 +81,7 @@ private fun GroupInfoFragment.confirmDisband() {
         confirmText = getString(R.string.group_disband_disband),
         cancelText = getString(R.string.group_leave_cancel),
         onConfirm = {
-            // Completes across a fold recreation; only the close needs the page.
+            
             launchOutlivingPage {
                 try {
                     val result = withContext(Dispatchers.IO) {
@@ -111,7 +111,7 @@ private fun GroupInfoFragment.confirmLeave() {
         confirmText = getString(R.string.group_leave_leave),
         cancelText = getString(R.string.group_leave_cancel),
         onConfirm = {
-            // Completes across a fold recreation; only the close needs the page.
+            
             launchOutlivingPage {
                 try {
                     val result = withContext(Dispatchers.IO) {

@@ -30,10 +30,10 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/**
- * #1354, transfer: the foreground notification sits on a verified channel, the
- * result on OTHER_ALERTS, and no start or promotion happens without a channel.
- */
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [34])
 class MigrationTransferChannelTest {
@@ -68,7 +68,7 @@ class MigrationTransferChannelTest {
         Shadow.extract<ShadowContextImpl>(app.baseContext).setSystemService(Context.NOTIFICATION_SERVICE, manager)
     }
 
-    /** The service without Hilt: constructed reflectively with only the notification helper set. */
+    
     private fun service(): MigrationTransferService {
         val service = MigrationTransferService::class.java.getDeclaredConstructor().apply { isAccessible = true }.newInstance()
         ContextWrapper::class.java.getDeclaredMethod("attachBaseContext", Context::class.java)

@@ -14,18 +14,18 @@ import kotlinx.coroutines.CoroutineScope
 import org.difft.app.database.models.ContactorModel
 import com.difft.android.base.widget.DifftCheckBoxView
 
-/**
- * 联系人选择项数据模型
- */
+
+
+
 data class MeetingInviteContactItem(
     val contact: ContactorModel,
     val isSelected: Boolean,
     val isInMeeting: Boolean
 )
 
-/**
- * 联系人列表适配器（支持多选）
- */
+
+
+
 class MeetingInviteContactsAdapter(
     private val onContactClick: (String) -> Unit,
     private val lifecycleScope: CoroutineScope
@@ -75,7 +75,7 @@ class MeetingInviteContactsAdapter(
         fun bind(item: MeetingInviteContactItem) {
             textViewName.text = item.contact.getDisplayNameForUI()
 
-            // Already in the meeting: shown checked but disabled, not selectable.
+            
             checkbox.isEnabled = !item.isInMeeting
             checkbox.isChecked = item.isInMeeting || item.isSelected
 

@@ -4,7 +4,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** G1-G2 (#1294): the shared handle-visibility predicate, plain JVM. */
+
 class VerticalClipTest {
 
     @Test

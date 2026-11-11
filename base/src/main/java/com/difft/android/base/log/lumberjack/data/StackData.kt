@@ -37,25 +37,25 @@ data class StackData(
         val index = callStackIndex
         element = getElement(stackTrace, index)
         if (L.advancedLambdaLogging) {
-            // functions can not start with numbers, so of the class name ends with a number, this must be a lambda which is handled as anonymous function
+            
             val split = element?.className?.split("$")
             if (split?.lastOrNull()?.toIntOrNull() != null) {
-                // example from demo:
-                // com.michaelflisar.lumberjack.demo.MainActivity$onCreate$func$1
-                // => so we need to go up +2, because we want to get the line in onCreate where the caller executes the lambda
+                
+                
+                
                 element2 = element
                 element = getElement(stackTrace, index + 2)
             }
         }
     }
 
-    // ------------------------
-    // functions
-    // ------------------------
+    
+    
+    
 
     fun getLink(): String {
         var link = "(${element?.fileName}${if (disableLine) "" else ":${element?.lineNumber}"})"
-        // AndroidStudio does not support 2 clickable links...
+        
         element2?.let {
             link += " | (${it.fileName}${if (disableLine) "" else ":${it.lineNumber}"})"
         }
@@ -66,9 +66,9 @@ data class StackData(
         return className
     }
 
-    // ------------------------
-    // private helper functions
-    // ------------------------
+    
+    
+    
 
     @SuppressLint("LogNotTimber")
     private fun getElement(stackTrace: List<StackTraceElement>, index: Int): StackTraceElement? {

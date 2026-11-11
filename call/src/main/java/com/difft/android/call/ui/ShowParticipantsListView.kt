@@ -1,5 +1,6 @@
 package com.difft.android.call.ui
 
+import com.difft.android.base.ui.compose.safeTopInsets
 import android.annotation.SuppressLint
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.LocalOverscrollConfiguration
@@ -43,7 +44,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
@@ -76,13 +76,13 @@ import io.livekit.android.util.flow
 import kotlin.math.roundToInt
 
 
-/** Above the panel's header while it takes the tabletop dock, which has no status bar to clear. */
+
 private val TABLETOP_PANEL_TOP_PADDING = 24.dp
 
-/**
- * Whether the window is wide enough for the participants side panel: ≥ 600dp or landscape.
- * Reads the real container size; only the very first composition falls back to Configuration.
- */
+
+
+
+
 @SuppressLint("ConfigurationScreenWidthHeight")
 @Composable
 fun rememberParticipantsPanelWide(): Boolean {
@@ -100,11 +100,11 @@ fun rememberParticipantsPanelWide(): Boolean {
     }
 }
 
-/**
- * The single gate for the 216dp participants panel. Every entry point that toggles
- * `showUsersEnabled` (bar People control, More-sheet People, overflow tile) must be offered only
- * where this is true, otherwise the flag flips with nothing rendered.
- */
+
+
+
+
+
 fun participantsPanelAvailable(isUserSharingScreen: Boolean, isWideScreen: Boolean): Boolean =
     isUserSharingScreen || isWideScreen
 
@@ -120,7 +120,7 @@ fun ShowParticipantsListView(
     val lazyGridState = rememberLazyGridState()
     val joined by viewModel.participants.collectAsState(initial = emptyList())
     val isShowUsersEnabled by viewModel.callUiController.showUsersEnabled.collectAsState()
-    // The panel keeps its own priority order; the call grid follows the layout controller.
+    
     val participants = rememberParticipantsListOrder(joined, open = isShowUsersEnabled, menuOpen = viewModel.callUiController.participantMenuOpen)
     val isUserSharingScreen by viewModel.callUiController.isShareScreening.collectAsState()
     val speakingEnabled by viewModel.callUiController.speakingEnabled.collectAsState()
@@ -132,8 +132,9 @@ fun ShowParticipantsListView(
     val displayInfoMap by contactorCacheManager.participantDisplayMap.collectAsState()
 
     val isWideScreen = rememberParticipantsPanelWide()
-    val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    // In tabletop the panel replaces the dock's console below the fold: the 216dp side panel at the end of the dock region (not full width).
+    
+    val statusBarTop = safeTopInsets().asPaddingValues().calculateTopPadding()
+    
     val tabletop = LocalCallTabletop.current
     val panelTopPadding = when {
         tabletop != null -> TABLETOP_PANEL_TOP_PADDING
@@ -141,8 +142,8 @@ fun ShowParticipantsListView(
         else -> 24.dp
     }
 
-    // Beside the side rail rather than over it, so the rail's End stays reachable; at the edge while
-    // the rail is hidden, easing like the grid (#1451).
+    
+    
     val rail = rememberCallSideRail()
     val railBandReserved = rememberRailBandReserved(viewModel.callUiController, rail)
     val panelEndReserve = animateDpAsState(
@@ -164,8 +165,8 @@ fun ShowParticipantsListView(
                     .fillMaxHeight()
                     .width(216.dp)
                     .background(DifftTheme.colors.backgroundTertiary)
-                    // A tap inside the panel stays in it: falling through to the call surface would
-                    // toggle the chrome, and hiding the chrome closes this panel (#1451).
+                    
+                    
                     .pointerInput(Unit) { detectTapGestures {} },
                 contentAlignment = Alignment.TopEnd
             ){
@@ -369,9 +370,11 @@ fun SmallParticipantViewItem(
                         modifier = Modifier
                             .constrainAs(userNameView){
                                 start.linkTo(avatarView.end, 5.dp)
+                                end.linkTo(if (isScreenSharing) shareStatusView.start else speakStatusView.start, 5.dp)
+                                width = Dimension.fillToConstraints
                                 centerVerticallyTo(parent)
                             },
-                        text = StringUtil.truncateWithEllipsis(displayName, PARTICIPANT_NAME_MAX_LENGTH),
+                        text = StringUtil.truncateWithEllipsis(displayName, NAME_MEASURE_CAP),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         style = DifftTheme.typography.p3,
@@ -394,7 +397,6 @@ fun SmallParticipantViewItem(
                         )
                     }
 
-                    // 使用when表达式简化条件判断
                     val painter = when {
                         audioMuted -> painterResource(id = R.drawable.microphone_off)
                         !effectiveIsSpeaking -> painterResource(id = R.drawable.ic_silent)
@@ -402,7 +404,7 @@ fun SmallParticipantViewItem(
                     }
 
                     val tintColor = when {
-                        audioMuted -> Color.Unspecified // 不设置颜色，或者根据需要设置
+                        audioMuted -> Color.Unspecified
                         else -> Palette.Blue200
                     }
 
@@ -422,10 +424,10 @@ fun SmallParticipantViewItem(
             }
         }
 
-        // The trailing status-icon cluster (mic, plus the share indicator when present) is the mute
-        // entry; avatar / name stay free for other actions. A transparent minTouchTarget-wide zone
-        // over the trailing end of the row; the row's own 34dp is the height cap, since the next
-        // row starts 8dp below and hit zones must not overlap.
+        
+        
+        
+        
         Box(
             modifier = Modifier
                 .align(Alignment.CenterEnd)

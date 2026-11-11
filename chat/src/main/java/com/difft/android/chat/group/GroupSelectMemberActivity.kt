@@ -16,7 +16,7 @@ class GroupSelectMemberActivity : DetailShellActivity() {
             TYPE_REMOVE_MEMBER -> MemberAction.REMOVE
             else -> return null
         }
-        // Membership is loaded from WCDB; old intents may carry a list, but it is never the source of truth.
+        
         return GroupSelectMemberFragment.newInstance(gid, type)
     }
 

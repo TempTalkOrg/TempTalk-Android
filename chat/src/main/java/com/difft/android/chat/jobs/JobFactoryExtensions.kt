@@ -13,8 +13,8 @@ fun PushReadReceiptSendJobFactory.create(
     messageTimeStamps: List<Long>,
     readPosition: ReadPosition,
     messageMode: Int,
-    sendReceiptToSender: Boolean = true,  // 默认发送已读回执
-    sendSyncToSelf: Boolean = true        // 默认发送同步消息
+    sendReceiptToSender: Boolean = true,  
+    sendSyncToSelf: Boolean = true        
 ): PushReadReceiptSendJob {
     val readPos = readPosition {
         readAt = readPosition.readAt

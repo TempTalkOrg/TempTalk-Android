@@ -21,45 +21,45 @@ import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Application-scoped owner of the "this device's credential was rejected by the server" decision.
- *
- * Signals arrive from every Basic-auth channel: the WS handshake (AUTHENTICATION_FAILED), in-socket
- * responses and REST calls (both via [AuthFailureSink]). A signal is never acted on directly — it
- * schedules a single confirming device-list call; only a 401/403 there means the session is gone.
- * A 2xx clears it (false alarm), and a network error leaves the guard armed for the next signal
- * (the health monitor's own backoff re-emits AUTHENTICATION_FAILED within one cycle). A signal is
- * never discarded because the socket reconnected — only [stop] drops the queue.
- *
- * Confirms are serialised through a conflated channel and separated by [MIN_CONFIRM_INTERVAL_MS],
- * so the monitor's reconnect loop cannot turn into a confirm storm.
- *
- * A confirm that itself returns 401 re-enters [onAuthRejected] through DeviceRepository's hook: the
- * self-signal lands in the channel first, then the exception reaches [confirm]'s catch, which sets
- * the [loggedOut] latch. The consumer's next iteration receives that queued signal, sees the latch,
- * and returns without confirming. No recursion — do not "fix" this with an extra flag on the call.
- *
- * The socket state is a replay-1 SharedFlow, so [start] can be handed a stale terminal state. At
- * worst that costs one confirm, which answers 2xx and is discarded.
- *
- * Lifetime is bound to [WebSocketManager.start] / [WebSocketManager.stop].
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 @Singleton
 class SessionAuthGuard @Inject constructor(
     private val appWebSocketHelper: AppWebSocketHelper,
     private val deviceRepository: DeviceRepository,
-    // Lazy breaks a Dagger cycle: WebSocketManager -> this guard -> LogoutManager ->
-    // WebSocketManager. The logout manager is only needed at the moment a kick is confirmed.
+    
+    
     private val logoutManager: dagger.Lazy<LogoutManager>,
     private val userManager: UserManager,
     @param:AppCoroutineScope private val scope: CoroutineScope,
 ) : AuthFailureSink {
 
-    // CONFLATED: never suspends the producer and never fails trySend, so onAuthRejected() honours
-    // its "any thread, never throws" contract; signals arriving during a confirm collapse to one.
+    
+    
     private val signals = Channel<String>(Channel.CONFLATED)
 
-    // Terminal once set: the logout sequence ends in process death, so a second one is always a bug.
+    
     private val loggedOut = AtomicBoolean(false)
 
     private var job: Job? = null
@@ -85,7 +85,7 @@ class SessionAuthGuard @Inject constructor(
         drainSignals()
     }
 
-    /** [AuthFailureSink]: fire-and-forget, any thread, never throws. */
+    
     override fun onAuthRejected(source: String) {
         if (loggedOut.get()) return
         signals.trySend(source)
@@ -99,12 +99,12 @@ class SessionAuthGuard @Inject constructor(
 
                 WebSocketConnectionState.INACTIVE_FAILED -> InactiveDeviceNotifier.raise()
 
-                // A healthy socket says nothing about a 401 another Basic-auth channel just saw, and
-                // dropping the queue here would race trySend from an OkHttp thread. Queued signals
-                // are left to confirm; a stale one costs one call, answered 2xx.
+                
+                
+                
                 WebSocketConnectionState.CONNECTED -> InactiveDeviceNotifier.clear()
 
-                // Connectivity states are the health monitor's business, not ours.
+                
                 WebSocketConnectionState.CONNECTING,
                 WebSocketConnectionState.DISCONNECTED,
                 WebSocketConnectionState.FAILED,
@@ -121,12 +121,12 @@ class SessionAuthGuard @Inject constructor(
         }
     }
 
-    /**
-     * The device call is the tie-breaker: 401/403 = kicked, 2xx = false alarm, error = unknown. The
-     * call carries the credential read here, and a rejection is acted on only while that is still
-     * the stored credential, so a confirm in flight across a re-login never logs out the new
-     * session (#1382 A09).
-     */
+    
+
+
+
+
+
     private suspend fun confirm(source: String) {
         val credential = currentCredential()
         if (credential == null) {
@@ -159,8 +159,8 @@ class SessionAuthGuard @Inject constructor(
     }
 
     private companion object {
-        // Desktop's rate limit for the same decision: at most one confirming call per 5 s no
-        // matter how fast the reconnect loop re-emits AUTHENTICATION_FAILED.
+        
+        
         const val MIN_CONFIRM_INTERVAL_MS = 5_000L
     }
 }

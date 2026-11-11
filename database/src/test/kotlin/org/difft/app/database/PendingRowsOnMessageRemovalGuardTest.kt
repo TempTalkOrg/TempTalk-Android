@@ -5,14 +5,14 @@ import java.io.File
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/**
- * Pending rows waiting on a message are dropped only when the message is really deleted, never when
- * a confidential message turns into a placeholder: the placeholder keeps the message, so a recall or
- * receipt on it that failed transiently must stay for its retry (#1382).
- *
- * A source guard because these extensions bind the Hilt-provided `wcdb` global and WCDB's winq is
- * native, so neither path can run on the JVM.
- */
+
+
+
+
+
+
+
+
 class PendingRowsOnMessageRemovalGuardTest {
 
     private val source = File(moduleDir(), "src/main/java/org/difft/app/database/WCDBExtensions.kt").readText()
@@ -35,7 +35,7 @@ class PendingRowsOnMessageRemovalGuardTest {
         }
     }
 
-    /** The brace-balanced body following [signature]. */
+    
     private fun body(signature: String): String {
         val start = source.indexOf(signature)
         assertTrue(start >= 0, "missing $signature")

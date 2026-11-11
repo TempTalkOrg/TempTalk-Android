@@ -1,5 +1,6 @@
 package com.difft.android.call.ui.incoming
 
+import com.difft.android.base.ui.compose.floatingSurface
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.RepeatMode
@@ -44,7 +45,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
@@ -65,7 +65,7 @@ import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
-/** Geometry and timing from the design spec (incoming call, single-track slider). */
+
 object IncomingCallSliderDefaults {
     val TrackHeight = 88.dp
     val TrackRadius = 44.dp
@@ -73,7 +73,6 @@ object IncomingCallSliderDefaults {
     val HandleHeight = 72.dp
     val HandleRadius = 36.dp
     val HandleInset = 8.dp
-    val HandleShadow = 4.dp
     val LabelInset = 32.dp
     val HintGap = 16.dp
     val HintHeight = 20.dp
@@ -81,10 +80,10 @@ object IncomingCallSliderDefaults {
     val AnswerIconSize = 28.dp
     val TapSlop = 4.dp
 
-    /** Fraction of the travel past which a release commits. */
+    
     const val COMMIT_FRACTION = 0.6f
 
-    /** Fraction of the travel past which the handle takes the side's colour. */
+    
     const val TINT_FRACTION = 0.02f
     const val LABEL_FADE_RATE = 1.4f
     const val FILL_ALPHA = 0.34f
@@ -99,7 +98,7 @@ object IncomingCallSliderDefaults {
 
     const val HANDLE_TEST_TAG = "incoming_call_slider_handle"
 
-    /** +1 answer, -1 decline, 0 spring back. */
+    
     fun commitDirection(offsetPx: Float, maxTravelPx: Float): Int = when {
         maxTravelPx <= 0f -> 0
         offsetPx >= maxTravelPx * COMMIT_FRACTION -> 1
@@ -108,17 +107,17 @@ object IncomingCallSliderDefaults {
     }
 }
 
-/**
- * Single-track incoming-call slider for a screen the call itself lit up: one handle in the middle
- * of a pill track, dragged right to answer or left to decline. Nothing click-like can activate it.
- *
- * Idle: light handle with the green answer glyph, nudged sideways every 2.8 s. Dragging right tints
- * the handle green, fades the "answer" label and fills the right half; dragging left tints it red,
- * swaps the glyph for hang-up, fades "decline" and fills the left half. Releasing past 60 % of the
- * travel fires the callback once and settles the handle at the end; short of that it springs back.
- * A tap without movement fires nothing, re-nudges the handle and shows [hint] above the track for
- * two seconds. Re-enabling after a commit re-arms the slider (a join that failed may be retried).
- */
+
+
+
+
+
+
+
+
+
+
+
 @Composable
 fun IncomingCallSlider(
     answerIcon: Painter,
@@ -130,7 +129,7 @@ fun IncomingCallSlider(
     onDecline: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
-    /** False while off screen (PiP): the idle nudge then holds still. */
+    
     animateIdle: Boolean = true,
 ) {
     val scope = rememberCoroutineScope()
@@ -157,7 +156,7 @@ fun IncomingCallSlider(
             .fillMaxWidth()
             .alpha(if (enabled) 1f else IncomingCallSliderDefaults.DISABLED_ALPHA),
     ) {
-        // Reserved slot (grows with the font scale) so the track never moves; the text exists only while fading.
+        
         Box(contentAlignment = Alignment.Center, modifier = Modifier.heightIn(min = IncomingCallSliderDefaults.HintHeight)) {
             if (hintAlpha > 0f) {
                 Text(
@@ -182,8 +181,8 @@ fun IncomingCallSlider(
                 .background(colors.backgroundSecondary)
                 .onSizeChanged { state.onTrackWidth(it.width) },
         ) {
-            // Left = decline, right = answer are absolute in the design and match the absolute drag
-            // direction, so the sides never mirror under RTL (AbsoluteAlignment, absolutePadding).
+            
+            
             SideFill(AbsoluteAlignment.CenterLeft, colors.error, (-state.progress).coerceAtLeast(0f), fromLeft = true)
             SideFill(AbsoluteAlignment.CenterRight, colors.success, state.progress.coerceAtLeast(0f), fromLeft = false)
             SideLabel(declineLabel, AbsoluteAlignment.CenterLeft, state.labelAlpha(left = true))
@@ -201,7 +200,7 @@ fun IncomingCallSlider(
     }
 }
 
-/** Drag state and the settle / hint jobs, kept outside the composition tree so no late delta can strand the handle. */
+
 private class SliderState(private val scope: CoroutineScope, density: Density) {
     private val handleWidthPx = with(density) { IncomingCallSliderDefaults.HandleWidth.toPx() }
     private val insetPx = with(density) { IncomingCallSliderDefaults.HandleInset.toPx() }
@@ -233,7 +232,7 @@ private class SliderState(private val scope: CoroutineScope, density: Density) {
         maxTravelPx = ((widthPx - 2 * insetPx - handleWidthPx) / 2f).coerceAtLeast(0f)
     }
 
-    /** The side label fades as the handle approaches it. */
+    
     fun labelAlpha(left: Boolean): Float {
         val p = progress
         val fading = if (left) p < 0f else p > 0f
@@ -258,8 +257,8 @@ private class SliderState(private val scope: CoroutineScope, density: Density) {
         val direction = IncomingCallSliderDefaults.commitDirection(offset, maxTravelPx)
         if (direction != 0) {
             committed = true
-            // The action fires at the threshold; the settle to the rail end is visual only, so a
-            // cancel arriving during those 320 ms cannot race a still-pending callback.
+            
+            
             settleTo(direction * maxTravelPx) {}
             if (direction > 0) onAnswer() else onDecline()
         } else {
@@ -279,7 +278,7 @@ private class SliderState(private val scope: CoroutineScope, density: Density) {
         nudgeKey++
     }
 
-    /** A tap without movement never activates: it re-nudges the handle and shows the hint. */
+    
     fun onTap() {
         if (committed || dragging) return
         nudgeKey++
@@ -308,7 +307,7 @@ private class SliderState(private val scope: CoroutineScope, density: Density) {
     }
 }
 
-/** The draggable handle: tinted by direction, answer glyph crossfading to the hang-up glyph on the way left. */
+
 @Composable
 private fun BoxScope.Handle(
     state: SliderState,
@@ -346,11 +345,10 @@ private fun BoxScope.Handle(
             .align(Alignment.Center)
             .absoluteOffset { IntOffset((state.offset + nudgePx).roundToInt(), 0) }
             .size(IncomingCallSliderDefaults.HandleWidth, IncomingCallSliderDefaults.HandleHeight)
-            .shadow(IncomingCallSliderDefaults.HandleShadow, shape)
-            .background(handleColor, shape)
+            .floatingSurface(shape, fill = handleColor)
             .testTag(IncomingCallSliderDefaults.HANDLE_TEST_TAG)
-            // Tap detection sits beside the drag: draggable only reports once the touch slop is
-            // crossed, so a plain tap would otherwise be invisible to the state.
+            
+            
             .pointerInput(enabled) { if (enabled) detectTapGestures(onTap = { state.onTap() }) }
             .draggable(
                 orientation = Orientation.Horizontal,
@@ -392,7 +390,7 @@ private fun BoxScope.SideLabel(text: String, alignment: Alignment, alpha: Float)
     )
 }
 
-/** Half-track gradient that grows in as the handle moves toward that side. */
+
 @Composable
 private fun BoxScope.SideFill(alignment: Alignment, color: Color, alpha: Float, fromLeft: Boolean) {
     val strong = color.copy(alpha = IncomingCallSliderDefaults.FILL_ALPHA)
@@ -412,10 +410,10 @@ private fun BoxScope.SideFill(alignment: Alignment, color: Color, alpha: Float, 
     )
 }
 
-/**
- * The idle "you can drag me" nudge: still for 62 % of each 2.8 s cycle, then 0 → 12 → -8 → 4 → 0 dp.
- * Returns 0 when [active] is false so the transition never fights a drag or a settle.
- */
+
+
+
+
 @Composable
 private fun nudgeOffset(active: Boolean, density: Density): Float {
     if (!active) return 0f
@@ -442,5 +440,5 @@ private fun nudgeOffset(active: Boolean, density: Density): Float {
 
 private const val NUDGE_PERIOD = IncomingCallSliderDefaults.NUDGE_PERIOD_MS.toFloat()
 
-/** `cubic-bezier(.2,.9,.3,1.2)` from the design: a settle with a slight overshoot. */
+
 private val SettleEasing = CubicBezierEasing(0.2f, 0.9f, 0.3f, 1.2f)

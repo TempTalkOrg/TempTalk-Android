@@ -72,27 +72,27 @@ fun CombineForwardBar(
             )
         }
 
-        // Icons row with weights to distribute space evenly (4 tabs)
-        // Horizontal padding: 8dp from Row + 4dp from each item = 12dp on edges
-        // Middle spacing: 4dp + 4dp = 8dp between adjacent tabs
+        
+        
+        
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(vertical = 16.dp, horizontal = 8.dp),
             horizontalArrangement = Arrangement.SpaceAround
         ) {
-            // Forward Icon — single selection forwards one message; multi-selection
-            // bundles the selected messages into one combined-forward container
-            // (decided in ChatMessageViewModel.onForwardClick by selection count).
+            
+            
+            
             IconWithText(
                 iconPainter = painterResource(R.drawable.ic_chat_pinned_manage_forward),
                 text = stringResource(R.string.chat_message_action_forward),
                 isEnabled = state.selectedMessageIds.isNotEmpty(),
                 onClick = onForwardClick,
-                modifier = Modifier.weight(1f)  // Use weight to distribute space
+                modifier = Modifier.weight(1f)  
             )
 
-            // Copy Icon — reuses the long-press menu copy icon
+            
             IconWithText(
                 iconPainter = painterResource(R.drawable.chat_message_action_copy),
                 text = stringResource(R.string.chat_message_action_copy),
@@ -101,7 +101,7 @@ fun CombineForwardBar(
                 modifier = Modifier.weight(1f)
             )
 
-            // Save Icon
+            
             IconWithText(
                 iconPainter = painterResource(R.drawable.ic_chat_pinned_manage_save_notes),
                 text = stringResource(R.string.chat_message_action_save_to_note),
@@ -110,7 +110,7 @@ fun CombineForwardBar(
                 modifier = Modifier.weight(1f)
             )
 
-            // Recall Icon - Red when enabled, gray when disabled
+            
             val recallCount = state.recallableMessageIds.size
             RecallIconWithText(
                 iconPainter = painterResource(R.drawable.chat_message_action_recall),
@@ -130,7 +130,7 @@ fun IconWithText(
     text: String,
     isEnabled: Boolean,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier  // Pass modifier for flexibility
+    modifier: Modifier = Modifier  
 ) {
     val tintColor = if (isEnabled) {
         DifftTheme.colors.textPrimary
@@ -152,7 +152,7 @@ fun IconWithText(
         Spacer(modifier = Modifier.height(5.dp))
         Text(
             text = text,
-            maxLines = 2,  // Allow text to wrap to 2 lines
+            maxLines = 2,  
             overflow = TextOverflow.Ellipsis,
             style = DifftTheme.typography.p4,
             color = tintColor,
@@ -161,11 +161,11 @@ fun IconWithText(
     }
 }
 
-/**
- * Special icon with text for Recall action
- * Uses red color when enabled, gray when disabled
- * Shows count in parentheses after the text
- */
+
+
+
+
+
 @Composable
 fun RecallIconWithText(
     iconPainter: Painter,
@@ -176,11 +176,11 @@ fun RecallIconWithText(
     modifier: Modifier = Modifier
 ) {
     val tintColor = if (isEnabled) {
-        DifftTheme.colors.textError // Red when enabled
+        DifftTheme.colors.textError 
     } else {
-        DifftTheme.colors.textDisabled // Gray when disabled
+        DifftTheme.colors.textDisabled 
     }
-    // Display text with count in parentheses: "Recall (2)" or just "Recall" if count is 0
+    
     val displayText = if (count > 0) "$text ($count)" else text
     
     Column(
@@ -198,7 +198,7 @@ fun RecallIconWithText(
         Spacer(modifier = Modifier.height(5.dp))
         Text(
             text = displayText,
-            maxLines = 2,  // Allow text to wrap to 2 lines
+            maxLines = 2,  
             overflow = TextOverflow.Ellipsis,
             style = DifftTheme.typography.p4,
             color = tintColor,

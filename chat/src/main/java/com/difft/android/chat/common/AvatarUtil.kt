@@ -41,29 +41,26 @@ object AvatarUtil {
         if (TextUtils.isEmpty(id)) {
             return colors[0]
         }
-        // 嘗試將最後一個字符轉換為數字
         val lastCharToInt = id.last().toString().toIntOrNull()
 
-        // 如果最後一個字符是數字，則使用該數字；否則使用字符的 ASCII 碼
         val index = lastCharToInt ?: id.last().code
 
-        // 進一步對結果進行取模，確保索引在 colors 數組範圍內
         val safeIndex = index % colors.size
         return colors[safeIndex]
     }
 
-    /**
-     * Get existing cache file, checking new format first, then legacy _SMALL format
-     */
+    
+
+
     fun getCacheFile(url: String): File? {
         val baseName = "avatar_${url.substringAfterLast("/")}"
         val cacheDir = FileUtil.getAvatarCachePath()
 
-        // Check new format (no suffix)
+        
         val newFile = File(cacheDir, baseName)
         if (newFile.exists()) return newFile
 
-        // Check legacy format (_SMALL)
+        
         val legacyFile = File(cacheDir, "${baseName}_SMALL")
         if (legacyFile.exists()) return legacyFile
 
@@ -71,19 +68,19 @@ object AvatarUtil {
     }
 
 
-    /**
-     * Get file path for saving new cache (always uses new format without suffix)
-     */
+    
+
+
     private fun getNewCacheFile(url: String): File {
         val fileName = "avatar_${url.substringAfterLast("/")}"
         return File(FileUtil.getAvatarCachePath(), fileName)
     }
 
-    /**
-     * A decrypting `content://` uri for the cached avatar at [url], or null when not cached yet.
-     * Consumers (Glide / PictureSelector) read decrypted bytes through [AvatarEncryptedProvider] so
-     * plaintext is never materialised on disk. See docs §15.
-     */
+    
+
+
+
+
     fun cacheContentUri(url: String): android.net.Uri? {
         val file = getCacheFile(url) ?: return null
         return AvatarEncryptedProvider.contentUri(AvatarEncryptedProvider.DIR_AVATAR, file.name)
@@ -117,29 +114,29 @@ object AvatarUtil {
         }
     }
 
-    /**
-     * Ensure avatar is cached. Downloads and decrypts if not already cached.
-     * This method is safe to call from any scope - it only handles caching, not UI.
-     * @return The cache file if successful, null if failed
-     */
+    
+
+
+
+
     suspend fun ensureCached(context: Context, url: String, key: String): File? = withContext(Dispatchers.IO) {
         try {
-            // Check if already cached
+            
             val existingCache = getCacheFile(url)
             if (existingCache != null) {
                 return@withContext existingCache
             }
 
-            // Download and decrypt
+            
             val bytes = fetchAvatar(context, url, key)
             
-            // Save to cache (encrypted-at-rest, see docs §15)
+            
             val cacheFile = getNewCacheFile(url)
             AvatarCacheCipher.writeEncrypted(cacheFile, bytes)
             return@withContext cacheFile
         } catch (e: Exception) {
             L.e { "[AvatarUtil] ensureCached failed: ${e.message}" }
-            // Retry once
+            
             try {
                 val bytes = fetchAvatar(context, url, key)
                 val cacheFile = getNewCacheFile(url)

@@ -116,13 +116,13 @@ class MessageNotificationUtil @Inject constructor(
     private val pendingCallNotifyJobs = ConcurrentHashMap<Int, Job>()
 
 
-    /** Re-submits channel display names when the app language no longer matches them; cheap otherwise. */
+    
     fun refreshChannelNames() = channelManager.ensureChannels()
 
-    /**
-     * Startup entry: creates missing channels and refreshes localized names synchronously (channels
-     * must exist before any post), then applies the one-time legacy fix-up off the main thread.
-     */
+    
+
+
+
     fun checkAndCreateNotificationChannels() {
         channelManager.ensureChannels()
         appScope.launch(Dispatchers.IO) {
@@ -135,7 +135,6 @@ class MessageNotificationUtil @Inject constructor(
             }
         }
 
-        // 启动时异步清理过期缓存
         try {
             appScope.launch(Dispatchers.IO) {
                 cacheManager.cleanupOldCache()
@@ -179,30 +178,25 @@ class MessageNotificationUtil @Inject constructor(
         }
     }
 
-    /**
-     * 显示通知
-     */
     suspend fun showNotificationSuspend(
         context: Context,
         message: Message,
         forWhat: For,
-        isRecall: Boolean = false, // 是否是撤回消息
+        isRecall: Boolean = false,
         delivery: NotificationDelivery = NotificationDelivery.WEB_SOCKET,
     ) = runCatching {
-        // ⚠️ 撤回消息：删除缓存，判断是否需要重建通知（无条件执行，跳过拦截）
+        
         if (isRecall) {
             val removedCount = cacheManager.removeMessageByTimestamp(forWhat.id, message.systemShowTimestamp)
             L.i { "[MessageNotificationUtil] Recall message for ${forWhat.id} timestamp:${message.systemShowTimestamp} removed:$removedCount" }
 
             val messageList = cacheManager.getMessages(forWhat.id)
             if (messageList.isEmpty()) {
-                // 没有剩余消息，取消通知
                 val notificationId = forWhat.id.hashCode()
                 nm.cancel(notificationId)
                 L.i { "[MessageNotificationUtil] All messages recalled for ${forWhat.id}, notification cancelled" }
 
-                // 检查是否还有其他消息通知，如果没有则取消汇总通知
-                // 注意：nm.cancel() 是异步的，需要排除刚取消的通知
+                
                 if (!hasAnyMessageNotifications(excludeNotificationId = notificationId)) {
                     nm.cancel(MESSAGE_SUMMARY_NOTIFICATION_ID)
                     L.i { "[MessageNotificationUtil] No message notifications left, summary notification cancelled" }
@@ -210,11 +204,9 @@ class MessageNotificationUtil @Inject constructor(
                 return@runCatching
             }
 
-            // 有剩余消息，继续往下执行重建通知（跳过拦截条件检查）
             L.i { "[MessageNotificationUtil] Recall: has ${messageList.size} remaining messages, rebuilding notification (skip interceptions)" }
         } else {
             if (messagingPaused("entry")) return@runCatching
-            // 正常新消息：检查拦截条件
             if (shouldInterceptNotification(forWhat, message, delivery)) {
                 return@runCatching
             }
@@ -223,10 +215,8 @@ class MessageNotificationUtil @Inject constructor(
         val fromId = message.fromWho.id
         var sender: ContactorModel? = null
 
-        // 获取用户的通知显示设置
         val displayType = userManager.getUserData()?.notificationContentDisplayType ?: 0
 
-        // 根据设置决定是否需要计算title和content
         val needTitle = displayType != NotificationContentDisplayType.NO_NAME_OR_CONTENT.value
         val needContent = displayType == NotificationContentDisplayType.NAME_AND_CONTENT.value
 
@@ -244,10 +234,9 @@ class MessageNotificationUtil @Inject constructor(
                 title = sender?.getDisplayNameForUI() ?: fromId.formatBase58Id()
             }
         } else {
-            // NO_NAME_OR_CONTENT 情况下，设置默认值
             title = PackageUtil.getAppName() ?: ""
         }
-        // The lookups above suspend; a pause may have begun meanwhile.
+        
         if (messagingPaused("after_lookup")) return@runCatching
 
         val content: String = if (needContent) {
@@ -261,7 +250,6 @@ class MessageNotificationUtil @Inject constructor(
 
         val notificationID = forWhat.id.hashCode()
 
-        // 使用BroadcastReceiver路由，根据app前后台状态打开不同页面
         val pendingIntent = createConversationPendingIntent(forWhat, notificationID)
 
         val personName = if (displayType == NotificationContentDisplayType.NO_NAME_OR_CONTENT.value) {
@@ -272,8 +260,8 @@ class MessageNotificationUtil @Inject constructor(
 
         val user = Person.Builder().setName(personName).setKey(fromId).build()
 
-        // 新消息:添加到缓存（存储消息发送时刻的快照数据）
-        // 撤回消息不需要添加，因为已经在开头删除了
+        
+        
         if (!isRecall) {
             cacheManager.addMessage(
                 forWhat.id,
@@ -286,20 +274,17 @@ class MessageNotificationUtil @Inject constructor(
             )
         }
 
-        // 获取排序后的消息列表
         val messageList = cacheManager.getMessages(forWhat.id)
 
         createSummaryNotification(context)
 
-        // 构建MessagingStyle
         val messagingStyle = NotificationCompat.MessagingStyle(user)
         if (forWhat is For.Group) {
             messagingStyle.isGroupConversation = true
             messagingStyle.conversationTitle = title
         }
 
-        // 去重并添加消息到通知样式(按时间顺序)
-        // 直接使用缓存的快照数据，不再查询数据库
+        
         messageList.distinctBy { it.timestamp }.forEach { msgData ->
             val person = Person.Builder()
                 .setName(msgData.personName)
@@ -326,8 +311,8 @@ class MessageNotificationUtil @Inject constructor(
             .setContentText(content)
             .setContentIntent(pendingIntent)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setCategory(NotificationCompat.CATEGORY_MESSAGE) // 标记为消息类通知，提升权重
-            .setPriority(if (isRecall) NotificationCompat.PRIORITY_LOW else NotificationCompat.PRIORITY_HIGH) // 撤回时低优先级，不显示横幅
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .setPriority(if (isRecall) NotificationCompat.PRIORITY_LOW else NotificationCompat.PRIORITY_HIGH) 
             .setAutoCancel(true)
             .setNumber(unreadMessageNumber)
             .setBadgeIconType(NotificationCompat.BADGE_ICON_NONE)
@@ -335,8 +320,8 @@ class MessageNotificationUtil @Inject constructor(
             .setStyle(messagingStyle)
             .setGroup(NOTIFICATION_GROUP_KEY)
             .setDeleteIntent(pendingDeleteIntent)
-            .setOnlyAlertOnce(isRecall) // 撤回时不震动/响铃，新消息时震动/响铃
-            .setSilent(isRecall) // 撤回时完全静默（Android 8.0+）
+            .setOnlyAlertOnce(isRecall) 
+            .setSilent(isRecall) 
 
         if (messagingPaused("post")) return@runCatching
         nm.notify(notificationID, builder.build())
@@ -344,12 +329,12 @@ class MessageNotificationUtil @Inject constructor(
         L.e { "showNotification failed: ${it.stackTraceToString()}" }
     }
 
-    /**
-     * Ordinary message notifications are not posted while the migration message pause keeps
-     * messaging closed (#1382), including those scheduled by work admitted before the pause.
-     * Incoming-call notifications check it right before posting; critical alerts and the
-     * migration's own notifications do not.
-     */
+    
+
+
+
+
+
     private fun messagingPaused(stage: String): Boolean {
         if (messagingGate.isOpen) return false
         L.i { "[MigrationPause] event=notification_suppressed stage=$stage" }
@@ -373,21 +358,20 @@ class MessageNotificationUtil @Inject constructor(
         return userManager.getUserData()?.unreadMsgNum ?: AppStateDefaults.SP_UNREAD_MSG_NUM
     }
 
-    /**
-     * 检查是否应该拦截通知（返回true表示应该拦截，不显示通知）
-     * @param forWhat 会话信息
-     * @param message 消息对象（可选，用于检查是否已读和@提及）
-     * @param delivery [NotificationDelivery.FCM] pushes already passed the server's mute / focus / level
-     * decision, so only the visibility and read checks run; [NotificationDelivery.WEB_SOCKET] also applies
-     * the local policy ([GroupNotifyGate]).
-     * @return true表示应该拦截，false表示可以显示通知
-     */
+    
+
+
+
+
+
+
+
+
     private suspend fun shouldInterceptNotification(
         forWhat: For,
         message: Message? = null,
         delivery: NotificationDelivery = NotificationDelivery.WEB_SOCKET,
     ): Boolean {
-        // 1. 检查聊天窗口/会话列表/屏幕共享状态
         if (SendMessageUtils.isExistChat(forWhat.id) ||
             ConversationUtils.isConversationListVisible ||
             onGoingCallStateManager.isInScreenSharing()
@@ -398,7 +382,7 @@ class MessageNotificationUtil @Inject constructor(
 
         val room = withContext(Dispatchers.IO) { wcdb.room.getFirstObject(DBRoomModel.roomId.eq(forWhat.id)) }
 
-        // 2. 静音 / 专注 / 群通知级别（仅 WebSocket 路径；FCM 路径信任服务端判定）
+        
         if (delivery == NotificationDelivery.WEB_SOCKET) {
             val decision = groupNotifyGate.decideMessage(forWhat, message, room)
             if (!decision.notify) {
@@ -407,7 +391,6 @@ class MessageNotificationUtil @Inject constructor(
             }
         }
 
-        // 3. 已读位置
         if (room != null && message != null && message.systemShowTimestamp <= room.readPosition) {
             L.i { "[MessageNotificationUtil] Message already read (timestamp: ${message.systemShowTimestamp} <= readPosition: ${room.readPosition})" }
             return true
@@ -416,27 +399,27 @@ class MessageNotificationUtil @Inject constructor(
         return false
     }
 
-    /**
-     * Create PendingIntent for conversation click via TrampolineActivity.
-     * TrampolineActivity routes to MainActivity based on foreground state:
-     * - Foreground: opens popup chat
-     * - Background/Cold start: normal deeplink flow
-     */
+    
+
+
+
+
+
     private fun createConversationPendingIntent(forWhat: For, notificationId: Int): PendingIntent {
         val isGroup = forWhat is For.Group
         val conversationId = forWhat.id
-        
+
         val intent = NotificationTrampolineActivity.createIntent(
             context,
             contactId = if (isGroup) null else conversationId,
             groupId = if (isGroup) conversationId else null
         ).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            // Add unique data URI to ensure PendingIntent uniqueness
-            // (PendingIntent matching doesn't include extras)
+            
+            
             data = "app://notification/$notificationId/${System.currentTimeMillis()}".toUri()
         }
-        
+
         return PendingIntent.getActivity(
             context,
             notificationId,
@@ -445,9 +428,9 @@ class MessageNotificationUtil @Inject constructor(
         )
     }
 
-    /**
-     * Create PendingIntent for notification dismiss.
-     */
+    
+
+
     private fun createDeletePendingIntent(conversationId: String): PendingIntent {
         val deleteIntent = Intent(context, NotificationDismissReceiver::class.java).apply {
             putExtra("conversation_id", conversationId)
@@ -460,9 +443,6 @@ class MessageNotificationUtil @Inject constructor(
         )
     }
 
-    /**
-     * 选择通知Channel
-     */
     private fun selectNotificationChannel(conversationId: String): String {
         return if (supportConversationNotification() &&
             nm.getNotificationChannel(getConversationChannelId(conversationId)) != null
@@ -473,12 +453,11 @@ class MessageNotificationUtil @Inject constructor(
         }
     }
 
-    //无法解析出加密消息内容时显示默认通知
     suspend fun showNotificationOfPush(
         context: Context,
         forWhat: For
     ) = runCatching {
-        // 检查是否已有通知正在显示，如果有则不显示兜底通知，避免覆盖正常的MessagingStyle通知
+        
         if (messagingPaused("push_entry")) return@runCatching
         val notificationID = forWhat.id.hashCode()
         if (isNotificationShowing(notificationID)) {
@@ -486,18 +465,15 @@ class MessageNotificationUtil @Inject constructor(
             return@runCatching
         }
 
-        // 使用统一的拦截检查（不传message参数，因为兜底通知没有message对象）
-        // 兜底通知只来自 FCM：服务端已判定，本地不再做静音 / 专注 / 级别否决。
+        
         if (shouldInterceptNotification(forWhat, null, NotificationDelivery.FCM)) {
             return@runCatching
         }
 
         createSummaryNotification(context)
 
-        // 使用BroadcastReceiver路由，根据app前后台状态打开不同页面
         val pendingIntent = createConversationPendingIntent(forWhat, notificationID)
 
-        // 添加删除监听，用于清理缓存（虽然兜底通知不写缓存，但为了一致性和防止将来逻辑变化）
         val pendingDeleteIntent = createDeletePendingIntent(forWhat.id)
 
         val channelId = selectNotificationChannel(forWhat.id)
@@ -509,15 +485,15 @@ class MessageNotificationUtil @Inject constructor(
             .setContentText(ResUtils.getString(R.string.notification_received_message))
             .setContentIntent(pendingIntent)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setCategory(NotificationCompat.CATEGORY_MESSAGE) // 标记为消息类通知，提升权重
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
             .setNumber(getUnreadMessageNumber())
             .setBadgeIconType(NotificationCompat.BADGE_ICON_NONE)
-            .setWhen(System.currentTimeMillis()) // 显示通知到达时间
+            .setWhen(System.currentTimeMillis())
             .setGroup(NOTIFICATION_GROUP_KEY)
-            .setDeleteIntent(pendingDeleteIntent) // 监听通知删除，用于清理缓存
-            .setOnlyAlertOnce(true) // 避免同一会话多次解密失败时重复提醒
+            .setDeleteIntent(pendingDeleteIntent)
+            .setOnlyAlertOnce(true) 
 
         if (messagingPaused("push_post")) return@runCatching
         nm.notify(notificationID, builder.build())
@@ -525,17 +501,17 @@ class MessageNotificationUtil @Inject constructor(
         L.e { "showNotificationOfPush failed: ${it.stackTraceToString()}" }
     }
 
-    /**
-     * Fail-soft caller/group display lookups for the incoming-call notification.
-     *
-     * Only the caller-name / group-name lookups touch the encrypted DB. Each read is wrapped in
-     * its own try/catch — a key failure that hasn't yet flipped wcdb.isDbInaccessible still throws
-     * (WCDBKeyUnavailableException) inside the lookup, which would otherwise abort the whole
-     * notification coroutine → missed call. On ANY lookup failure we fall back to the keystore-free
-     * display (caller id / conversation id) so the notification itself (full-screen intent, ringing,
-     * accept/reject actions) is ALWAYS built and posted. A flag check alone can't cover the
-     * pre-flip race, hence try/catch.
-     */
+    
+
+
+
+
+
+
+
+
+
+
     private suspend fun loadCallDisplayInfo(
         roomId: String,
         callerId: String,
@@ -560,14 +536,14 @@ class MessageNotificationUtil @Inject constructor(
     }
 
     fun showCallNotificationNew(roomId: String, callName: String, callerId: String, conversationId: String?, callType: CallType, needAppLock: Boolean) {
-        val notificationID = roomId.hashCode()  //roomId为空
+        val notificationID = roomId.hashCode()
         if (callType.isGroup() && conversationId == null) return
 
-        // LAZY + start() after register: ensures the coroutine doesn't begin executing
-        // until cancelNotificationsById can see it via pendingCallNotifyJobs.
+        
+        
         val job = appScope.launch(start = CoroutineStart.LAZY) {
             val (callerInfo, groupInfo) = loadCallDisplayInfo(roomId, callerId, conversationId, callType.isGroup())
-            // Nothing below suspends, so a pause that began during the lookup is caught here (#1382).
+            
             if (messagingPaused("call")) return@launch
 
             var title = ""
@@ -628,11 +604,11 @@ class MessageNotificationUtil @Inject constructor(
                 .setOngoing(true)
 
 
-            // Plain actions on every API level rather than CallStyle. An incoming call earns no
-            // status-bar chip even on AOSP — SystemUI's OngoingCallController only raises one for
-            // EXTRA_CALL_TYPE == CALL_TYPE_ONGOING — so CallStyle buys nothing here but its own
-            // layout, while vendor templates that ignore it (MIUI/HyperOS) drop reject and accept
-            // from the shade altogether.
+            
+            
+            
+            
+            
             builder.addAction(
                 R.mipmap.chat_ic_call_reject,
                 ResUtils.getString(R.string.call_reject),
@@ -645,8 +621,7 @@ class MessageNotificationUtil @Inject constructor(
             )
             builder.setStyle(NotificationCompat.InboxStyle())
 
-            // style= is here so a log from a tester identifies which notification build produced
-            // it; the incoming notification's layout is exactly what is under test.
+            
             L.i { "[Call] showCallNotificationNew notificationID:$notificationID roomId:$roomId style=inbox+2actions" }
             if (!isActive) return@launch
             try {
@@ -675,7 +650,7 @@ class MessageNotificationUtil @Inject constructor(
             .withConversationId(conversationId)
             .withCallRole(CallRole.CALLEE.type)
             .withNeedAppLock(isNeedAppLock)
-            // Only ever used as the incoming-call notification's full-screen intent.
+            
             .withFullScreenLaunch(true)
             .build()
     }
@@ -693,7 +668,7 @@ class MessageNotificationUtil @Inject constructor(
         L.i { "[MessageNotificationUtil] cancelAllNotifications" }
         repostGuard.cancelAll()
 
-        // 异步清理所有缓存，避免主线程阻塞
+        
         appScope.launch(Dispatchers.IO) {
             cacheManager.clearAll()
             L.i { "[MessageNotificationUtil] All notification caches cleared" }
@@ -710,12 +685,11 @@ class MessageNotificationUtil @Inject constructor(
             val notificationId = it.hashCode()
             nm.cancel(notificationId)
 
-            // 异步清理缓存，避免主线程阻塞
+            
             appScope.launch(Dispatchers.IO) {
                 cacheManager.removeConversation(it)
 
-                // 检查是否还有其他消息通知，如果没有则取消汇总通知
-                // 注意：nm.cancel() 是异步的，需要排除刚取消的通知
+                
                 if (!hasAnyMessageNotifications(excludeNotificationId = notificationId)) {
                     nm.cancel(MESSAGE_SUMMARY_NOTIFICATION_ID)
                     L.i { "[MessageNotificationUtil] No message notifications left, summary notification cancelled" }
@@ -742,10 +716,11 @@ class MessageNotificationUtil @Inject constructor(
         return false
     }
 
-    /**
-     * 检查是否还有消息类通知（排除汇总通知）
-     * @param excludeNotificationId 需要排除的通知ID（用于处理 nm.cancel() 异步取消的竞态条件）
-     */
+    
+
+
+
+
     private fun hasAnyMessageNotifications(excludeNotificationId: Int? = null): Boolean {
         return try {
             nm.activeNotifications.any { notification ->
@@ -776,11 +751,10 @@ class MessageNotificationUtil @Inject constructor(
         }
     }
 
-    /**
-     * 检查是否有通知权限（仅检查POST_NOTIFICATIONS权限，Android 13+）
-     * 注意：这个方法只检查权限本身，不检查通知是否被用户关闭
-     * 建议使用 [canShowNotifications] 进行更全面的检查
-     */
+    
+
+
+
     fun hasNotificationPermission(): Boolean {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             val permission = Manifest.permission.POST_NOTIFICATIONS
@@ -793,32 +767,24 @@ class MessageNotificationUtil @Inject constructor(
         return true
     }
 
-    /**
-     * 全面检查通知是否可用
-     * 包括：
-     * 1. Android 13+ 的 POST_NOTIFICATIONS 权限
-     * 2. 系统通知总开关（areNotificationsEnabled）
-     * 3. 检查消息通知渠道和渠道组的有效性
-     *
-     * @param checkChannel 是否检查消息通知渠道的有效性，默认为true（全面检查）
-     * @return true表示通知可以正常显示，false表示通知被阻止
-     */
+    
+
+
+
+
+
     fun canShowNotifications(checkChannel: Boolean = true): Boolean {
-        // 1. 检查POST_NOTIFICATIONS权限（Android 13+）
         if (!hasNotificationPermission()) {
             L.w { "[MessageNotificationUtil] canShowNotifications: no POST_NOTIFICATIONS permission" }
             return false
         }
 
-        // 2. 检查系统通知总开关
         if (!isNotificationsEnabled()) {
             L.w { "[MessageNotificationUtil] canShowNotifications: notifications are disabled by system" }
             return false
         }
 
-        // 3. 可选：检查消息通知渠道和渠道组是否有效
         if (checkChannel && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            // 3.1 检查渠道组是否被阻止（API 28+）
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 val channelGroup = nm.getNotificationChannelGroup(CHANNEL_CONFIG_MESSAGE_GROUP)
                 if (channelGroup?.isBlocked == true) {
@@ -827,7 +793,6 @@ class MessageNotificationUtil @Inject constructor(
                 }
             }
 
-            // 3.2 检查单个渠道是否被阻止
             val messageChannel = nm.getNotificationChannel(CHANNEL_CONFIG_NAME_MESSAGE)
             if (messageChannel == null) {
                 L.w { "[MessageNotificationUtil] canShowNotifications: MESSAGE channel does not exist" }
@@ -846,20 +811,18 @@ class MessageNotificationUtil @Inject constructor(
         return nm.areNotificationsEnabled()
     }
 
-    //注册广播监听通知删除，用于删除通知缓存，避免显示旧通知
     class NotificationDismissReceiver : android.content.BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             val conversationId = intent?.getStringExtra("conversation_id")
             if (!conversationId.isNullOrEmpty() && context != null) {
                 try {
-                    // 通过Hilt EntryPoint获取NotificationCacheManager
                     val entryPoint = dagger.hilt.android.EntryPointAccessors.fromApplication(
                         context.applicationContext,
                         NotificationDismissReceiverEntryPoint::class.java
                     )
                     val cacheManager = entryPoint.notificationCacheManager()
 
-                    // 异步清理缓存，避免阻塞 BroadcastReceiver
+                    
                     appScope.launch(Dispatchers.IO) {
                         cacheManager.removeConversation(conversationId)
                         L.d { "[MessageNotificationUtil] NotificationDismissReceiver cleared cache for $conversationId" }
@@ -871,14 +834,14 @@ class MessageNotificationUtil @Inject constructor(
         }
     }
 
-    // Hilt EntryPoint for BroadcastReceiver
+    
     @dagger.hilt.EntryPoint
     @dagger.hilt.InstallIn(dagger.hilt.components.SingletonComponent::class)
     interface NotificationDismissReceiverEntryPoint {
         fun notificationCacheManager(): NotificationCacheManager
     }
 
-    // Hilt EntryPoint for CriticalAlertNotificationClickReceiver
+    
     @dagger.hilt.EntryPoint
     @dagger.hilt.InstallIn(dagger.hilt.components.SingletonComponent::class)
     interface CriticalAlertReceiverEntryPoint {
@@ -888,9 +851,6 @@ class MessageNotificationUtil @Inject constructor(
         fun notificationRepostGuard(): NotificationRepostGuard
     }
 
-    /**
-     * 跳转到默认消息通知设置页面
-     */
     fun openMessageNotificationChannelSettings(context: Activity, conversationId: String? = null) {
         val conversation = conversationId?.takeIf { supportConversationNotification() }
         if (!NotificationFixJump.openMessageCategory(context, conversation)) {
@@ -924,24 +884,22 @@ class MessageNotificationUtil @Inject constructor(
         val notificationId = timestamp.hashCode()
         L.i { "[CriticalAlert] showCriticalAlert for ${forWhat.id}, timestamp=$timestamp, notificationId=$notificationId, roomId=$roomId "}
 
-        // 先检查本地缓存中是否已经处理过该通知（最快检查）
         if (criticalAlertManager.isCriticalAlertNotificationProcessed(forWhat.id, notificationId)) {
             L.w { "[CriticalAlert] Critical alert notification (id=$notificationId) already processed in cache, skip.}"}
-            // #1347: a late duplicate FCM silently refreshes the alert while it is still showing.
+            
             repostGuard.repostIfActive(notificationId)
             return
         }
 
-        // 检查通知是否正在显示（系统级别检查）
         if(isNotificationShowing(notificationId)) {
             L.w { "[CriticalAlert] Critical alert notification (id=$notificationId) is already showing, skip.}"}
-            // 即使系统显示中，也要添加到缓存，防止重复处理
+            
             criticalAlertManager.addCriticalAlertNotification(forWhat.id, notificationId)
             repostGuard.repostIfActive(notificationId)
             return
         }
 
-        // 先添加到缓存，防止并发调用时重复处理
+        
         L.i { "[CriticalAlert] Adding critical alert notification to cache: conversationId=${forWhat.id}, notificationId=$notificationId"}
         val added = criticalAlertManager.addCriticalAlertNotificationIfNotExists(forWhat.id, notificationId)
         if (!added) {
@@ -949,17 +907,16 @@ class MessageNotificationUtil @Inject constructor(
             return
         }
 
-        // #1381: an alert for the call being joined or already active is handled without showing; #1387: so is
-        // one whose call has already ended.
+        
+        
         if (criticalAlertCallGate.shouldSilence(forWhat.id, roomId)) {
             L.i { "[CriticalAlert] skip reason=silenced notificationId=$notificationId roomId=$roomId" }
             return
         }
 
-        // #1387: recorded before it is posted, so a call end can find and dismiss it.
+        
         if (!roomId.isNullOrEmpty()) criticalAlertManager.recordRoomAlert(roomId, notificationId)
 
-        // 清除之前的InComing通知
         if (!roomId.isNullOrEmpty()) {
             LCallManager.dismissIncomingNotificationByRoomId(roomId)
         } else {
@@ -970,15 +927,14 @@ class MessageNotificationUtil @Inject constructor(
 
         val payload = CriticalAlertPayload(forWhat.id, alertTitle, alertContent, notificationId, timestamp, roomId)
         if (AppForegroundObserver.isForegrounded() && !VoiceRecordingTracker.isRecording) {
-            // App已经在前台，直接显示CriticalAlertActivity
             L.i { "[CriticalAlert] App is in foreground, starting CriticalAlertActivity"}
             postCriticalAlertNotification(payload, CriticalAlertPresentation.SILENT_COMPANION)
             criticalAlertManager.startCriticalAlertActivity(forWhat.id, alertTitle, alertContent, notificationId, roomId)
         } else {
-            // App is in background, or in foreground while recording. Launching CriticalAlertActivity
-            // while recording would cover ChatFragment and detach VoiceRecorderView (shipping a
-            // partial voice note). The full-screen intent is OS-suppressed to heads-up only
-            // when the app is in foreground, so falling through here is the correct system behavior.
+            
+            
+            
+            
             if (VoiceRecordingTracker.isRecording) {
                 L.i { "[CriticalAlert] suppress Activity launch due to voice recording, fall back to notification notificationId=$notificationId" }
             }
@@ -988,8 +944,8 @@ class MessageNotificationUtil @Inject constructor(
             }
         }
 
-        // #1381: a join that began meanwhile may have cancelled alerts before this post; undo it here. #1387: same
-        // for a call end. A page already started guards itself in CriticalAlertActivity.
+        
+        
         if (criticalAlertCallGate.shouldSilence(forWhat.id, roomId)) {
             L.i { "[CriticalAlert] undo reason=silenced_during_publish notificationId=$notificationId roomId=$roomId" }
             repostGuard.cancel(notificationId)
@@ -1012,16 +968,15 @@ class MessageNotificationUtil @Inject constructor(
     fun cancelCriticalAlertNotification(conversationId: String? = null) {
         val shouldCancelAll = conversationId == null
 
-        // 统一先停止声音
+        
         if (shouldCancelAll) {
             criticalAlertManager.stopSound()
         }
 
-        // 将耗时操作移到后台线程执行，避免阻塞主线程
+        
         appScope.launch(Dispatchers.IO) {
-            // FlashLightBlinker 是 object 单例，首次访问触发 <clinit> 类初始化，
-            // 其中 CoroutineScope(SupervisorJob() + Dispatchers.IO) 会引发协程库
-            // 首次加载，低端设备可能耗时 700ms+，因此必须在 IO 线程执行
+            
+            
             if (FlashLightBlinker.isBlinking()) {
                 FlashLightBlinker.stopBlinking()
             }
@@ -1029,7 +984,7 @@ class MessageNotificationUtil @Inject constructor(
             val canceledIds = mutableListOf<Int>()
 
             try {
-                // 如果只取消特定会话，需要从持久化存储中读取该会话的信息
+                
                 if (!shouldCancelAll) {
                     val hashKey = criticalAlertManager.hashConversationId(conversationId!!)
                     val infos = criticalAlertManager.getCriticalAlertInfos()
@@ -1038,11 +993,9 @@ class MessageNotificationUtil @Inject constructor(
                     if (info != null) {
                         info.notificationIds.forEach { notificationId ->
                             try {
-                                // 直接取消通知，不需要检查是否存在（nm.cancel() 是安全的）
-                                // 移除 isNotificationShowing() 检查以避免阻塞主线程
+                                
                                 repostGuard.cancel(notificationId)
                                 L.d { "[MessageNotificationUtil] cancel notificationId=$notificationId for conversationId=$conversationId" }
-                                // 停止匹配的声音
                                 criticalAlertManager.stopSoundIfMatch(notificationId)
                                 canceledIds.add(notificationId)
                             } catch (e: Exception) {
@@ -1051,16 +1004,13 @@ class MessageNotificationUtil @Inject constructor(
                         }
                     }
                 } else {
-                    // 取消所有通知：遍历所有持久化数据
                     val infos = criticalAlertManager.getCriticalAlertInfos()
                     infos.forEach { (hashKey, info) ->
                         info.notificationIds.forEach { notificationId ->
                             try {
-                                // 直接取消通知，不需要检查是否存在（nm.cancel() 是安全的）
-                                // 移除 isNotificationShowing() 检查以避免阻塞主线程
+                                
                                 repostGuard.cancel(notificationId)
                                 L.d { "[MessageNotificationUtil] cancel notificationId=$notificationId" }
-                                // 停止匹配的声音
                                 criticalAlertManager.stopSoundIfMatch(notificationId)
                                 canceledIds.add(notificationId)
                             } catch (e: Exception) {

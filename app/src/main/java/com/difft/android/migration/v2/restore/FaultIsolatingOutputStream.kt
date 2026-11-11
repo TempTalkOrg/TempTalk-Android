@@ -6,13 +6,13 @@ import java.io.File
 import java.io.IOException
 import java.io.OutputStream
 
-/**
- * Staging attachment output whose write failure stays with that one attachment: on the first
- * [IOException] the partial [file] is deleted, [onFailure] fires once, and every later write is
- * swallowed so the reader keeps draining the frame and the import goes on.
- *
- * Running out of space is the one failure that is *not* isolated — see [fail].
- */
+
+
+
+
+
+
+
 class FaultIsolatingOutputStream(
     private val file: File,
     private val delegate: OutputStream,
@@ -48,9 +48,9 @@ class FaultIsolatingOutputStream(
 
     private fun fail(e: IOException) {
         if (StorageGuard.isOutOfSpace(e)) {
-            // Out of space is not one attachment's problem: every later write fails too, and isolating
-            // it would end in a 200 telling the sender about a complete migration it did not get.
-            // Abort the whole import instead — staging is discarded and promote is never reached.
+            
+            
+            
             failed = true
             runCatching { delegate.close() }
             runCatching { file.delete() }

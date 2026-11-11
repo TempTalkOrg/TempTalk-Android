@@ -11,25 +11,25 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
-/**
- * Unit tests for [BackupCryptoImpl].
- *
- * Robolectric is only required because the impl is provided into Hilt; the methods
- * themselves are pure-JVM JCE. Using JUnit + JCE keeps these tests fast.
- *
- * Coverage:
- *  - KDF determinism: equal `(passphrase, salt)` → equal enc/mac material.
- *  - IV uniqueness: 100 invocations of `randomBytes(16)` produce distinct values.
- *  - constant-time compare: equal / unequal / mid-byte difference.
- *  - Header round-trip: build → parse returns same fields.
- *  - Body prefix round-trip: build → parse returns same fields.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 class BackupCryptoTest {
 
     private val crypto: BackupCrypto = BackupCryptoImpl()
 
-    // ─── KDF ────────────────────────────────────────────────────────────────
+    
 
     @Test
     fun `deriveKeys is deterministic for same passphrase and salt`() {
@@ -39,7 +39,7 @@ class BackupCryptoTest {
         val a = crypto.deriveKeys(passphrase, salt)
         val b = crypto.deriveKeys(passphrase, salt)
 
-        // SecretKeySpec doesn't override equals on encoded() bytes, so compare encoded.
+        
         assertContentEquals(a.encKey.encoded, b.encKey.encoded)
         assertContentEquals(a.macKey.encoded, b.macKey.encoded)
         assertEquals(32, a.encKey.encoded.size)
@@ -77,7 +77,7 @@ class BackupCryptoTest {
         }
     }
 
-    // ─── randomBytes / IV uniqueness ────────────────────────────────────────
+    
 
     @Test
     fun `randomBytes returns size and is unique across N invocations`() {
@@ -88,8 +88,8 @@ class BackupCryptoTest {
             assertEquals(size, bytes.size)
             samples.add(bytes.joinToString("") { b -> "%02x".format(b.toInt() and 0xff) })
         }
-        // Probability of any collision in 100 16-byte samples from a CSPRNG is astronomically
-        // small (< 2^-100). If this ever fails, the RNG is broken — not flaky.
+        
+        
         assertEquals(100, samples.size, "All 100 random 16-byte samples should be unique")
     }
 
@@ -99,7 +99,7 @@ class BackupCryptoTest {
         assertFailsWith<IllegalArgumentException> { crypto.randomBytes(-1) }
     }
 
-    // ─── constantTimeEquals ─────────────────────────────────────────────────
+    
 
     @Test
     fun `constantTimeEquals true for equal arrays`() {
@@ -139,7 +139,7 @@ class BackupCryptoTest {
         assertFalse(crypto.constantTimeEquals(a, b))
     }
 
-    // ─── Cipher / Mac construction ──────────────────────────────────────────
+    
 
     @Test
     fun `newAesCtrCipher round-trips a known plaintext`() {
@@ -176,7 +176,7 @@ class BackupCryptoTest {
         assertEquals(32, out.size, "HmacSHA256 yields 32-byte tag")
     }
 
-    // ─── Header round-trip ──────────────────────────────────────────────────
+    
 
     @Test
     fun `buildHeader then parseHeader round-trips`() {
@@ -197,7 +197,7 @@ class BackupCryptoTest {
         val salt = ByteArray(BackupCrypto.SALT_BYTES)
         val iv = ByteArray(BackupCrypto.IV_BYTES)
         val raw = crypto.buildHeader(salt, iv)
-        raw[0] = 'X'.code.toByte() // corrupt magic
+        raw[0] = 'X'.code.toByte() 
         assertFailsWith<IllegalArgumentException> { crypto.parseHeader(raw) }
     }
 
@@ -208,7 +208,7 @@ class BackupCryptoTest {
         }
     }
 
-    // ─── Body prefix round-trip ─────────────────────────────────────────────
+    
 
     @Test
     fun `buildBodyPrefix then parseBodyPrefix round-trips`() {
@@ -226,7 +226,7 @@ class BackupCryptoTest {
     fun `parseBodyPrefix rejects negative dbLen`() {
         val key = ByteArray(BackupCrypto.PLAINTEXT_KEY_SIZE) { 0 }
         val raw = crypto.buildBodyPrefix(key, 0L)
-        // Corrupt the dbLen field (last 8 bytes) to 0xFFFFFFFFFFFFFFFF = -1L.
+        
         for (i in 0 until 8) raw[BackupCrypto.BODY_PREFIX_SIZE - 1 - i] = 0xFF.toByte()
         assertFailsWith<IllegalArgumentException> { crypto.parseBodyPrefix(raw) }
     }
@@ -255,7 +255,7 @@ class BackupCryptoTest {
         assertEquals(250_000, BackupCrypto.KDF_ITERATIONS, "design §3.1 KDF iter = 250k")
         assertEquals("TTBK", BackupCrypto.MAGIC, "design §2.1 magic = TTBK")
         assertEquals(0x0001.toShort(), BackupCrypto.VERSION, "design §2.1 version = 0x0001")
-        // Sanity: header bytes should produce the expected size.
+        
         val raw = BackupCryptoImpl().buildHeader(
             ByteArray(BackupCrypto.SALT_BYTES),
             ByteArray(BackupCrypto.IV_BYTES),

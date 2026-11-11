@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Chat list: after the folded-groups row's name while focus has an end time (HH:MM, or "Tomorrow HH:MM") -->
+    
     <string name="focus_list_fold_resume">Until %1$s</string>
-    <!-- Chat list: swipe button of a group that is not the focus group -->
+    
     <string name="focus_list_swipe_focus">Focus</string>
-    <!-- Chat list: swipe button "End Focus" when the full label does not fit -->
+    
     <string name="focus_list_swipe_end_short">End</string>
-    <!-- Chat list: the folded groups row -->
+    
     <string name="focus_list_folded_title">Folded Groups(%1$d)</string>
     <string name="focus_list_folded_preview">%1$s: %2$s</string>
     <string name="focus_list_folded_screen_title">Folded Groups</string>

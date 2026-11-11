@@ -10,78 +10,75 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 
-/**
- * Edge-to-edge utilities for Android 15+ adaptation
- * Following Google's official recommendation for edge-to-edge implementation
- *
- * @see <a href="https://developer.android.com/develop/ui/views/layout/edge-to-edge">Edge-to-edge documentation</a>
- */
+
+
+
+
+
+
 object EdgeToEdgeUtils {
 
-    /**
-     * Enable edge-to-edge display for the Activity.
-     * Should be called before super.onCreate() in Activity.
-     *
-     * This will:
-     * - Make status bar and navigation bar transparent
-     * - Allow content to draw behind system bars
-     * - Handle display cutouts appropriately
-     */
+    
     fun Activity.setupEdgeToEdge() {
         if (this is ComponentActivity) {
             enableEdgeToEdge()
         }
     }
 
-    /**
-     * Apply system bars padding to the root view.
-     * Should be called after setContentView().
-     *
-     * @param rootView The root view to apply padding to
-     * @param applyTop Whether to apply top (status bar) padding, default true
-     * @param applyBottom Whether to apply bottom (navigation bar) padding, default true
-     * @param applyHorizontal Whether to apply left/right padding for side system bars and
-     *   display cutouts, default false. A cutout only counts horizontally when it reaches into
-     *   the content, i.e. some cutout rect starts below the status strip (a bar phone's hole
-     *   on the long edge in landscape) or the panel has waterfall edges; a hole that sits
-     *   inside the status strip (unfolded foldables in landscape, corner holes) must not push
-     *   the whole content column inwards.
-     */
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
     fun applySystemBarsPadding(
         rootView: View,
         applyTop: Boolean = true,
         applyBottom: Boolean = true,
-        applyHorizontal: Boolean = false
+        applyHorizontal: Boolean = false,
+        extraRight: () -> Int = { 0 },
     ) {
         ViewCompat.setOnApplyWindowInsetsListener(rootView) { view, windowInsets ->
             val insets = windowInsets.getInsets(
                 WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
             )
-            val horizontal = if (cutoutReachesContent(windowInsets, statusStripBottom = insets.top)) {
+            
+            val statusStripBottom = maxOf(
+                insets.top,
+                windowInsets.getInsetsIgnoringVisibility(WindowInsetsCompat.Type.statusBars()).top,
+            )
+            val horizontal = if (cutoutReachesContent(windowInsets, statusStripBottom)) {
                 insets
             } else {
                 windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
             }
             view.updatePadding(
                 left = if (applyHorizontal) horizontal.left else 0,
-                top = if (applyTop) insets.top else 0,
-                right = if (applyHorizontal) horizontal.right else 0,
+                top = if (applyTop) view.safeTopInset(windowInsets) else 0,
+                right = (if (applyHorizontal) horizontal.right else 0) + extraRight(),
                 bottom = if (applyBottom) insets.bottom else 0
             )
-            // Return the insets so child views can also handle them if needed
+            
             windowInsets
         }
-        // Request insets to be applied
         rootView.requestApplyInsets()
     }
 
-    /**
-     * Whether a display cutout intrudes into the content below the status strip: any cutout
-     * rect that starts at or below [statusStripBottom], or waterfall (curved) edges. A hole
-     * whose rect begins inside the strip is covered by the top padding already; any part of it
-     * that dips a few pixels below the strip lands in the empty top of the toolbar, which beats
-     * pushing the whole content column aside (unfolded vivo in landscape).
-     */
+    
+
+
+
+
+
+
     private fun cutoutReachesContent(windowInsets: WindowInsetsCompat, statusStripBottom: Int): Boolean {
         val cutout = windowInsets.displayCutout ?: return false
         val waterfall = cutout.waterfallInsets
@@ -89,13 +86,13 @@ object EdgeToEdgeUtils {
         return cutout.boundingRects.any { it.top >= statusStripBottom }
     }
 
-    /**
-     * Apply system bars and IME (keyboard) padding to the root view.
-     * Useful for screens with input fields that need to adjust for keyboard.
-     *
-     * @param rootView The root view to apply padding to
-     * @param applyTop Whether to apply top (status bar) padding, default true
-     */
+    
+
+
+
+
+
+
     fun applySystemBarsAndImePadding(
         rootView: View,
         applyTop: Boolean = true
@@ -114,16 +111,16 @@ object EdgeToEdgeUtils {
         rootView.requestApplyInsets()
     }
 
-    /**
-     * Add the bottom system bars / cutout inset on top of the view's own bottom padding, so
-     * the view paints behind the navigation bar and owns that strip (e.g. a bottom tab bar).
-     * Additive on purpose, unlike [applySystemBarsPadding], which replaces padding: a bar that
-     * carries its own bottom padding composes with the inset instead of losing it. The base
-     * padding is captured once, so repeated dispatches do not accumulate. Left, right and top
-     * padding stay untouched and the insets are passed on to siblings.
-     *
-     * @param view The view that consumes the bottom inset as extra padding
-     */
+    
+
+
+
+
+
+
+
+
+
     fun applyBottomInsetAsPadding(view: View) {
         val basePaddingBottom = view.paddingBottom
         ViewCompat.setOnApplyWindowInsetsListener(view) { target, windowInsets ->
@@ -136,12 +133,12 @@ object EdgeToEdgeUtils {
         view.requestApplyInsets()
     }
 
-    /**
-     * Get system bars insets (status bar + navigation bar heights)
-     *
-     * @param view Any view that's attached to the window
-     * @return Pair of (statusBarHeight, navigationBarHeight), or (0, 0) if not available
-     */
+    
+
+
+
+
+
     fun getSystemBarsInsets(view: View): Pair<Int, Int> {
         val insets = ViewCompat.getRootWindowInsets(view)
             ?.getInsets(WindowInsetsCompat.Type.systemBars())
@@ -152,10 +149,10 @@ object EdgeToEdgeUtils {
         }
     }
 
-    /**
-     * Clear any WindowInsets listener from the view.
-     * Useful when a view needs custom insets handling.
-     */
+    
+
+
+
     fun clearWindowInsetsListener(view: View) {
         ViewCompat.setOnApplyWindowInsetsListener(view, null)
     }

@@ -6,7 +6,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** The keyed list [AnimatedTileLayout] draws: exits kept while they fade, returns reuse the node. */
+
 class TileRetentionTest {
 
     private fun p(id: String, x: Int = 0) = TilePlacement(id, IntRect(x, 0, x + 10, 10), 0f)

@@ -41,7 +41,7 @@ import kotlinx.coroutines.delay
 import kotlin.math.abs
 import kotlin.math.min
 
-// Page indicator geometry, guide §5.1 (dp).
+
 private const val SEGMENT_WIDTH = 3.0
 private const val SEGMENT_SPACING_MAX = 36.0
 private const val SEGMENT_GAP_MAX = 4.0
@@ -51,37 +51,37 @@ private const val PILL_GAP = 6.0
 private const val LAST_TILE_INSET = 8
 private const val PAGE_SWIPE_DP = 40
 
-// Pill timing, guide §5.1.
+
 private const val PILL_SHOWN_MS = 3_500L
 private const val PILL_FADE_MS = 300
 
-// Guide §5.1 colours (#F1F3F4, #E8EAED at 35%, #202124) as their nearest Palette steps; no
-// DifftTheme token matches them.
+
+
 private val SegmentCurrent = Palette.Gray10
 private val SegmentOther = Palette.Gray50.copy(alpha = 0.35f)
 private val PillGround = Palette.Gray10
 private val PillText = Palette.Gray800
 
-/**
- * The vertical page bar beside the grid (guide §5.1): one segment per page, [spacing] apart, each
- * [segment] long and [SEGMENT_WIDTH] wide; [x] is its left edge, [top] the first segment's top, in
- * window dp.
- */
+
+
+
+
+
 internal data class PagerBar(val x: Double, val top: Double, val spacing: Double, val segment: Double, val pages: Int) {
     fun segmentTop(index: Int): Double = top + index * spacing
 
     fun segmentCenterY(index: Int): Double = segmentTop(index) + segment / 2
 
-    /** The 14dp-wide tap target of segment [index], centred on the bar and as tall as its spacing. */
+    
     fun tapRect(index: Int): Rect =
         Rect(x + SEGMENT_WIDTH / 2 - SEGMENT_TAP_WIDTH / 2, segmentTop(index) - (spacing - segment) / 2, SEGMENT_TAP_WIDTH, spacing)
 }
 
-/**
- * The bar for [pages] pages beside [area]: its right edge [BAR_EDGE_INSET] inside the area's, centred
- * vertically; segments are compressed to `min(36, (h + 4) / pages)` apart with a gap of
- * `min(4, spacing / 4)` once they no longer fit.
- */
+
+
+
+
+
 internal fun pagerBar(area: Rect, pages: Int): PagerBar {
     val count = pages.coerceAtLeast(1)
     val spacing = min(SEGMENT_SPACING_MAX, (area.h + SEGMENT_GAP_MAX) / count)
@@ -92,37 +92,40 @@ internal fun pagerBar(area: Rect, pages: Int): PagerBar {
     return PagerBar(x = right - SEGMENT_WIDTH, top = area.y + (area.h - height) / 2, spacing = spacing, segment = segment, pages = count)
 }
 
-/** Where the page pill sits: its right edge [PILL_GAP] left of the bar, centred on the current segment. */
+
 internal fun pagerPillAnchor(bar: PagerBar, page: Int): Point = Point(bar.x - PILL_GAP, bar.segmentCenterY(page))
 
-/** The page pill's rect for a pill [w] × [h]: right edge and centre at [pagerPillAnchor]. */
+
 internal fun pagerPillRect(bar: PagerBar, page: Int, w: Double, h: Double): Rect {
     val anchor = pagerPillAnchor(bar, page)
     return Rect(anchor.x - w, anchor.y - h / 2, w, h)
 }
 
-/**
- * The last card's label rect for a label [w] × [h] (guide §5.1): top right of [card] inset
- * [LAST_TILE_INSET], its right edge no further right than [PILL_GAP] left of the bar; when that
- * overlaps the page [pill] (its position whether or not it is shown, so a fading pill never moves
- * the label) the label moves left of the pill by [PILL_GAP].
- */
-internal fun lastTileLabelRect(card: Rect, bar: PagerBar, pill: Rect, w: Double, h: Double): Rect {
-    var right = min(card.x + card.w - LAST_TILE_INSET, bar.x - PILL_GAP)
+
+
+
+
+
+
+
+
+internal fun lastTileLabelRect(card: Rect, bar: PagerBar, pill: Rect, w: Double, h: Double, topRight: Double = CARD_RADIUS_DP): Rect {
+    val inset = insetInCorner(LAST_TILE_INSET.toDouble(), LAST_TILE_INSET.toDouble(), topRight, CARD_RADIUS_DP)
+    var right = min(card.x + card.w - inset, bar.x - PILL_GAP)
     val top = card.y + LAST_TILE_INSET
     val overlaps = right - w < pill.x + pill.w && right > pill.x && top < pill.y + pill.h && top + h > pill.y
     if (overlaps) right = pill.x - PILL_GAP
     return Rect(right - w, top, w, h)
 }
 
-/**
- * The page and page count the pill last appeared for. The stage keeps it, so the pill does not come
- * back when the indicator re-enters (leaving picture in picture, a share ending), only on a change.
- */
+
+
+
+
 internal class PagerPillMemory {
     private var last: Pair<Int, Int>? = null
 
-    /** Whether the pill appears for [page] of [pages]: only when either differs from the last time it did. */
+    
     fun appearsFor(page: Int, pages: Int): Boolean {
         val key = page to pages
         if (key == last) return false
@@ -131,14 +134,14 @@ internal class PagerPillMemory {
     }
 }
 
-/** The page turn for a vertical swipe of [dy] px: up past [threshold] is the next page, down the previous. */
+
 internal fun pageTurnFor(dy: Float, threshold: Float): Int = when {
     abs(dy) <= threshold -> 0
     dy < 0 -> 1
     else -> -1
 }
 
-/** Turns a page on a vertical swipe longer than [PAGE_SWIPE_DP] (guide §5.1). */
+
 internal fun Modifier.pageSwipe(enabled: Boolean, controller: CallLayoutController): Modifier =
     if (!enabled) {
         this
@@ -160,11 +163,11 @@ internal fun Modifier.pageSwipe(enabled: Boolean, controller: CallLayoutControll
         }
     }
 
-/**
- * The page indicator, the page pill and the label on the last card (guide §5.1). [origin] is the
- * stage's position in the window (dp), subtracted from every plan coordinate; positions are absolute,
- * never mirrored for RTL, like the cards. Taps here never reach the stage.
- */
+
+
+
+
+
 @Composable
 internal fun CallPagerOverlay(
     pager: Pager,
@@ -197,12 +200,12 @@ internal fun CallPagerOverlay(
 }
 
 
-/**
- * The page pill (the current page number, shown when the page or the page count changes and faded
- * out after [PILL_SHOWN_MS]; a relayout of the same page keeps it hidden) and the last card's label
- * ("N more" on page 1, "back to page 1" after it), placed together so the label can keep clear of
- * the pill's position ([lastTileLabelRect]). Taps on either stay here.
- */
+
+
+
+
+
+
 @Composable
 private fun PagerLabels(
     pager: Pager,
@@ -232,6 +235,8 @@ private fun PagerLabels(
         else -> null
     }
     val pillVisible = alpha > 0f
+    
+    val lastTopRight = lastTile?.let { cardCorners(it.rect, LocalCallScreenCorners.current)?.topRight } ?: CARD_RADIUS_DP
     Layout(
         content = {
             PagerLabel(
@@ -257,7 +262,7 @@ private fun PagerLabels(
         val scale = density.toDouble()
         val pillRect = pagerPillRect(bar, pager.page, pill.width / scale, pill.height / scale)
         val labelRect = if (label != null && lastTile != null) {
-            lastTileLabelRect(lastTile.rect, bar, pillRect, label.width / scale, label.height / scale)
+            lastTileLabelRect(lastTile.rect, bar, pillRect, label.width / scale, label.height / scale, lastTopRight)
         } else {
             null
         }
@@ -268,7 +273,7 @@ private fun PagerLabels(
     }
 }
 
-/** The light pill with dark text the page label and the last-card label share (guide §5.1). */
+
 @Composable
 private fun PagerLabel(text: String, modifier: Modifier) {
     Box(modifier) {

@@ -8,11 +8,11 @@ import io.mockk.verifyOrder
 import org.junit.Assert.assertFalse
 import org.junit.Test
 
-/**
- * SM1-SM5 (#1294): [SelectionMenuSync] hides the menu once per handle drag or list scroll (visible
- * iff no reason is set), re-anchors to the selection rows with a NONE fallback, and tolerates late calls after dismiss.
- * Plain JVM: rows use a mocked [Rect], never a real android.graphics.Rect.
- */
+
+
+
+
+
 class SelectionMenuSyncTest {
 
     private val popup = mockk<MessageActionPopup>(relaxed = true)

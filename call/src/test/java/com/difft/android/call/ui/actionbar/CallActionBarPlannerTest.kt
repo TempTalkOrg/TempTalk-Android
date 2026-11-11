@@ -5,10 +5,10 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * Pins the design's width budgets and its device lookup table, expressed purely as window
- * sizes so the planner never needs to know which device it is running on.
- */
+
+
+
+
 class CallActionBarPlannerTest {
 
     private fun plan(w: Int, h: Int, group: Boolean, landscape: Boolean = w > h) =
@@ -32,9 +32,9 @@ class CallActionBarPlannerTest {
     fun `phone portrait - 1v1 two rows, group emoji outside`() {
         assertEquals(ActionBarLayout.TWO_ROW, plan(375, 812, group = false).layout)
         assertEquals(ActionBarLayout.EMOJI_OUTSIDE, plan(375, 812, group = true).layout)
-        // Wider phones are still tall, so 1v1 keeps its labelled two rows.
+        
         assertEquals(ActionBarLayout.TWO_ROW, plan(411, 914, group = false).layout)
-        // 16:9 phones (1.78) are the shortest "phone" aspect and must still get two rows.
+        
         assertEquals(ActionBarLayout.TWO_ROW, plan(360, 640, group = false).layout)
         assertEquals(ActionBarLayout.EMOJI_OUTSIDE, plan(360, 640, group = true).layout)
     }
@@ -100,11 +100,11 @@ class CallActionBarPlannerTest {
 
     @Test
     fun `chrome reserve stacks margin, bar and outside emoji`() {
-        // Group phone: 48 margin + 48 bar + (40 + 16) outside emoji.
+        
         assertEquals(152, plan(375, 812, group = true).chromeBottomReserveDp)
-        // 1v1 phone two rows with the video backplate: 28 + 16 + 176 + 16.
+        
         assertEquals(236, plan(375, 812, group = false).chromeBottomReserveDp)
-        // Full row: no outside emoji.
+        
         assertEquals(96, plan(476, 752, group = true).chromeBottomReserveDp)
     }
 }

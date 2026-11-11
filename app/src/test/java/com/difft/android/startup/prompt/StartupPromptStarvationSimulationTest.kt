@@ -28,17 +28,17 @@ import org.junit.Test
 import kotlin.random.Random
 import kotlin.time.Duration.Companion.seconds
 
-/**
- * Starvation guard (#1355): 90 simulated days of sessions against the real coordinator, store and
- * back-off policy, with a seeded mix of user behaviour (decline, outside tap, going to the background
- * with the prompt open, Settings without fixing, recreation, process death), app lock at session
- * start, transient gates, late UNKNOWN providers and dual-pane conversations. The target prompt's
- * problem never goes away; lower prompts may be present too. A prompt left open stays current and is
- * seen again on return, which counts as shown in that session.
- *
- * Asserted: the target is shown at least once in every 31-day window, and a session never shows more
- * than one cancelable prompt (a preempted one does not count). Clocks are the test scheduler's.
- */
+
+
+
+
+
+
+
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class StartupPromptStarvationSimulationTest {
 
@@ -72,7 +72,7 @@ class StartupPromptStarvationSimulationTest {
         private val gates = MutableStateFlow<Set<GateId>>(emptySet())
         private val changes = MutableSharedFlow<Unit>(extraBufferCapacity = 64)
 
-        /** Lower prompts whose problem is present as well, fixed per seed. */
+        
         private val noise = PromptId.entries.filter { it > target && random.nextBoolean() }.toSet()
 
         private val showDays = sortedSetOf<Long>()
@@ -82,7 +82,7 @@ class StartupPromptStarvationSimulationTest {
         private var process: CoroutineScope? = null
         private lateinit var coordinator: StartupPromptCoordinator
 
-        // Host state of the current session.
+        
         private var presentable = false
         private var dualPane = false
         private var mountedSeq: Long? = null
@@ -102,6 +102,8 @@ class StartupPromptStarvationSimulationTest {
 
         private fun answer(id: PromptId): ProviderAnswer = when (id) {
             PromptId.BACKGROUND_CONNECTION -> if (now < fcmResolvesAt) ProviderAnswer.UNKNOWN else eligibleOrNot(id)
+            
+            PromptId.BACKGROUND_RESTRICTED -> ProviderAnswer.NOT_ELIGIBLE
             PromptId.OPTIONAL_UPDATE -> if (now < updateResolvesAt) ProviderAnswer.UNKNOWN else eligibleOrNot(id, offerKey = "H1")
             PromptId.NOTIFICATIONS -> eligibleOrNot(id, ReadinessIssue.APP_NOTIFICATIONS_OFF, requestable = true)
             PromptId.FULL_SCREEN -> eligibleOrNot(id, ReadinessIssue.FULL_SCREEN_DENIED)
@@ -114,7 +116,7 @@ class StartupPromptStarvationSimulationTest {
         suspend fun run() {
             startProcess()
             for (day in 0 until DAYS) {
-                // The provider mock records every call; 90 days of them only cost heap.
+                
                 clearMocks(providers, answers = false, recordedCalls = true, childMocks = false, exclusionRules = false)
                 val count = 1 + random.nextInt(MAX_SESSIONS_PER_DAY)
                 val guaranteed = random.nextInt(count)
@@ -214,11 +216,11 @@ class StartupPromptStarvationSimulationTest {
             test.runCurrent()
         }
 
-        /** The host: unmounts what the coordinator removed, mounts the current ticket, plays a behaviour. */
+        
         private suspend fun render(day: Long): After {
             val ticket = coordinator.current.value
             if (mountedSeq != null && ticket?.seq != mountedSeq) {
-                // Removed by the coordinator: with a gate active it was preempted and does not count.
+                
                 if (gates.value.isNotEmpty()) mountedId?.let { shownThisSession[it] = (shownThisSession[it] ?: 1) - 1 }
                 mountedSeq = null
                 mountedId = null
@@ -266,7 +268,7 @@ class StartupPromptStarvationSimulationTest {
             unmount()
             presentable = false
             report()
-            // The user denies whenever the system asks; after two denials it answers silently.
+            
             val rationaleAfter = if (systemDenials >= 2) {
                 false
             } else {
@@ -304,7 +306,7 @@ class StartupPromptStarvationSimulationTest {
         }
     }
 
-    /** Latest value only, no write log: the simulation writes for 90 days. Writers run on the test scheduler, one at a time. */
+    
     private class MemoryDataStore : DataStore<Preferences> {
         private val state = MutableStateFlow(emptyPreferences())
         override val data: Flow<Preferences> get() = state

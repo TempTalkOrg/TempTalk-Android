@@ -45,11 +45,11 @@ import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/**
- * The enable-lock binding choice ([ScreenLockContract.Stage.ChoosingBinding]) belongs to the ViewModel:
- * a fold, rotation or tab switch only unmounts its dialog, and the choice returns with the visible top.
- * Only the user's own dismiss cancels it (PR #1461 review).
- */
+
+
+
+
+
 @HiltAndroidTest
 @RunWith(RobolectricTestRunner::class)
 @Config(application = FoldableTestApplication_Application::class, sdk = [34])
@@ -72,7 +72,7 @@ class ScreenLockBindingChoiceVisibilityTest {
     @Before fun setup() {
         every { com.difft.android.base.utils.application } returns androidx.test.core.app.ApplicationProvider.getApplicationContext<com.difft.android.base.application.ScopeApplication>()
         hilt.inject()
-        // No lock yet and nothing bound: enabling a lock must first ask for an email or phone binding.
+        
         users.update { account = "test-user-001"; email = null; phoneNumber = null; pattern = null; passcode = null }
         controller = Robolectric.buildActivity(ScreenLockVisibilityTestActivity::class.java).setup().visible()
     }
@@ -119,7 +119,7 @@ class ScreenLockBindingChoiceVisibilityTest {
 @AndroidEntryPoint
 class ScreenLockVisibilityTestActivity : FragmentActivity()
 
-/** Detail host whose per-page visible-top owner is driven by the test, with real cover transactions. */
+
 class ScreenLockVisibilityHost : Fragment(), DetailStackHost {
     companion object { const val CONTENT = 0x012304aa }
     private val owner = object : LifecycleOwner {

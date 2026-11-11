@@ -13,11 +13,11 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
-/**
- * A sheet that dismisses itself while its view is created (e.g. a restored confidential sheet
- * without its message, #1440) is detached before the posted onShow callback runs. The listener
- * must skip the configuration instead of calling `requireActivity()`.
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class BaseBottomSheetDialogFragmentDetachTest {

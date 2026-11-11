@@ -16,20 +16,20 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/**
- * "Protect IP address in calls" decoupling: the CALL plane must route through the
- * proxy ONLY when the proxy is active AND the protect toggle is ON, while the IM
- * plane stays governed by [ProxyConfigProvider.isEnabled] / [current] alone.
- *
- * Covers the call-plane views added for the feature: [currentForCall],
- * [isEnabledForCall], [isProtectCallIpEnabled], [setProtectCallIp], and the
- * companion mirrors [isProxyActiveForCall] / [isProxyForCallQuicEnabled] /
- * [isProxyForCallActiveWithoutQuic].
- */
+
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 class ProxyConfigProviderProtectCallTest {
 
-    /** Minimal in-memory [UserManager] (same contract as the save-behavior test). */
+    
     private class FakeUserManager : UserManager {
         private var current: UserData? = UserData()
         override fun setUserData(userData: UserData, commit: Boolean) {
@@ -54,7 +54,7 @@ class ProxyConfigProviderProtectCallTest {
         return provider to userManager
     }
 
-    /** Non-QUIC TURN-less link: enough to make the proxy "active" once enabled. */
+    
     private val validLink: String = ProxyConfig(
         host = "1.2.3.4",
         port = 443,
@@ -66,12 +66,12 @@ class ProxyConfigProviderProtectCallTest {
         val (provider, _) = makeProvider()
         assertTrue(provider.save(validLink, enabled = true))
 
-        // IM plane is active.
+        
         assertTrue(provider.isEnabled)
         assertNotNull(provider.current)
         assertTrue(ProxyConfigProvider.isProxyActive)
 
-        // Call plane is DIRECT (protect defaults OFF).
+        
         assertFalse(provider.isProtectCallIpEnabled)
         assertNull(provider.currentForCall)
         assertFalse(provider.isEnabledForCall)
@@ -91,11 +91,11 @@ class ProxyConfigProviderProtectCallTest {
         assertEquals(provider.current?.toShareLink(), provider.currentForCall?.toShareLink())
         assertTrue(provider.isEnabledForCall)
         assertTrue(ProxyConfigProvider.isProxyActiveForCall)
-        // Non-QUIC link → call plane is proxied but must force WSS (no QUIC relay).
+        
         assertFalse(ProxyConfigProvider.isProxyForCallQuicEnabled)
         assertTrue(ProxyConfigProvider.isProxyForCallActiveWithoutQuic)
 
-        // Intent is persisted to the encrypted store.
+        
         assertTrue(userManager.getUserData()?.proxyProtectCallIp == true)
     }
 
@@ -106,7 +106,7 @@ class ProxyConfigProviderProtectCallTest {
         provider.setProtectCallIp(true)
         assertTrue(ProxyConfigProvider.isProxyActiveForCall)
 
-        // Disable the proxy (IM plane off) WITHOUT clearing the protect intent.
+        
         assertTrue(provider.setEnabled(false))
 
         assertFalse(provider.isEnabled)

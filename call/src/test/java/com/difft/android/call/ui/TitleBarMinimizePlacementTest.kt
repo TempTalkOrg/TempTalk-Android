@@ -25,11 +25,11 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import kotlin.math.abs
 
-/**
- * Minimize placement in the production title bar (#1451): a bare title-bar icon with the bottom bar,
- * gone from the title bar when the window shows the side rail (the rail carries it, see
- * `CallSideRailLayoutTest`). The title stays centred on the window in both placements.
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(application = TestScopeApplication::class, sdk = [30])

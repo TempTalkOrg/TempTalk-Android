@@ -29,17 +29,16 @@ import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import java.util.concurrent.TimeUnit
 
-/**
- * The contact card's More / common groups from a sheet (design §3.6, T11, T40, T60), through the
- * production [ContactCardNavigation]: a sheet shown from a conversation page pushes onto that
- * page's stack; a sheet on the home screen pushes only over the conversation it was shown over;
- * otherwise the destination's shell opens. The push is made before the sheet's real dismiss.
- */
+
+
+
+
+
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [33])
 class UnderDialogNavigationTest {
 
-    /** A sheet holding the card as a child page, like ContactDetailBottomSheetDialogFragment. */
+    
     class Sheet : DialogFragment() {
         val card: Fragment get() = childFragmentManager.findFragmentByTag("card")!!
 
@@ -93,6 +92,22 @@ class UnderDialogNavigationTest {
     fun `T11 - a sheet over a hosted conversation pushes onto its stack and goes away`() {
         launch("w840dp-h900dp")
         val sheet = showSheet(host.pages(TAB_CHATS).single().childFragmentManager)
+
+        ContactCardNavigation.push(sheet.card, Settings(), sheet, overConversation = null)
+        settle()
+
+        assertEquals(listOf("conv:y:0", "settings"), labels())
+        assertFalse(sheet.isAdded)
+        assertNull(startedShell())
+    }
+
+    @Test
+    fun `T11 - a sheet shown by a page's nested fragment (a pager tab) pushes onto that page's stack`() {
+        launch("w840dp-h900dp")
+        val page = host.pages(TAB_CHATS).single()
+        val tab = Fragment()
+        page.childFragmentManager.beginTransaction().add(tab, "tab").commitNow()
+        val sheet = showSheet(tab.childFragmentManager)
 
         ContactCardNavigation.push(sheet.card, Settings(), sheet, overConversation = null)
         settle()
@@ -158,7 +173,7 @@ class UnderDialogNavigationTest {
         val sheet = showSheet(host.pages(TAB_CHATS).single().childFragmentManager)
 
         ContactCardNavigation.push(sheet.card, Settings(), sheet, overConversation = null)
-        controller!!.recreate() // the queued push goes with the instance, as any queued stack change
+        controller!!.recreate() 
         settle()
 
         assertEquals(listOf("conv:y:0"), labels())

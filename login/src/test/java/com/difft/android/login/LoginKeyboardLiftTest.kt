@@ -25,11 +25,11 @@ import org.robolectric.annotation.GraphicsMode
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/**
- * The login, bind-account and verify-code forms on a folded outer screen (about 347 x 509 dp)
- * with the keyboard open: the real layouts, the pages' own lift wiring and a keyboard inset
- * delivered through the window-insets animation, asserted on where the views end up.
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(application = TestScopeApplication::class, sdk = [34], qualifiers = "w347dp-h509dp-xhdpi")
@@ -40,7 +40,7 @@ class LoginKeyboardLiftTest {
     private val density get() = controller.get().resources.displayMetrics.density
     private fun dp(value: Int) = (value * density).toInt()
 
-    /** Mounts [content] as the page root, padded for a status bar the way the base activity pads it. */
+    
     private fun mount(content: (FragmentActivity) -> ViewGroup): ViewGroup {
         controller = Robolectric.buildActivity(FragmentActivity::class.java)
         controller.get().setTheme(com.difft.android.base.R.style.Theme_Chative)
@@ -54,7 +54,7 @@ class LoginKeyboardLiftTest {
 
     private fun idle() = shadowOf(Looper.getMainLooper()).idle()
 
-    /** A keyboard [heightDp] tall, mid-animation at its final height, so only the animation drives the lift. */
+    
     private fun showKeyboard(root: ViewGroup, heightDp: Int): Int {
         val animation = WindowInsetsAnimation(WindowInsets.Type.ime(), null, 250)
         root.dispatchWindowInsetsAnimationPrepare(animation)
@@ -68,7 +68,7 @@ class LoginKeyboardLiftTest {
     private fun View.windowTop(): Int = IntArray(2).also { getLocationInWindow(it) }[1]
     private fun View.windowBottom(): Int = windowTop() + height
 
-    /** Top edge of the root's padded area, where lifted content is clipped. */
+    
     private fun ViewGroup.paddedTop(): Int = windowTop() - translationY.toInt() + paddingTop
 
     private fun assertAboveKeyboard(field: View, button: View, keyboardTop: Int) {
@@ -134,8 +134,8 @@ class LoginKeyboardLiftTest {
         assertTrue(binding.clAccount.windowTop() >= root.paddedTop(), "field lifted under the status bar")
     }
 
-    // A long validation error between the field and Next: the span no longer fits above the
-    // keyboard, so the field stays fully visible below the status bar and Next may be covered.
+    
+    
     @Test
     fun `bind account form with a tall error keeps the field visible`() {
         lateinit var binding: ActivityBindAccountBinding

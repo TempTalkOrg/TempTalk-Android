@@ -97,10 +97,10 @@ object GlobalConfigCrypto {
         return cipher.doFinal(ciphertextWithTag)
     }
 
-    /**
-     * HKDF-SHA256: Extract-then-Expand.
-     * JDK has no built-in HKDF, so we implement it manually.
-     */
+    
+
+
+
     private fun hkdfDerive(
         ikm: ByteArray,
         salt: ByteArray,

@@ -17,10 +17,10 @@ import androidx.compose.ui.unit.dp
 import com.difft.android.R
 import com.difft.android.base.ui.theme.DifftTheme
 
-/**
- * Centred opening of a decision page: a bare outline mark in the icon colour, the page title and
- * one or two lines of explanation.
- */
+
+
+
+
 @Composable
 fun MigrationHero(
     title: String,

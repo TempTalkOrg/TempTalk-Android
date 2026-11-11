@@ -7,14 +7,14 @@ import java.io.OutputStream
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 
-/**
- * Accumulates records and attachment bytes as a stream is produced or consumed and reports
- * [TransferProgress] to [onProgress], throttled to roughly one-percent steps so a hundred-thousand-
- * record history does not flood a StateFlow. The final `1.0` is always delivered.
- *
- * Totals may arrive after counting starts — the receiver only learns them from the manifest, which
- * is the first frame — so they are set through [start]; until then nothing is reported.
- */
+
+
+
+
+
+
+
+
 class ProgressReporter(private val onProgress: (Float) -> Unit) {
 
     @Volatile
@@ -55,13 +55,13 @@ class ProgressReporter(private val onProgress: (Float) -> Unit) {
     }
 }
 
-/** Wraps a byte source so every attachment payload byte it hands out is counted as it is read. */
+
 fun AttachmentByteSource.counting(onBytes: (Long) -> Unit): AttachmentByteSource =
     AttachmentByteSource { contentRef ->
         open(contentRef)?.let { AttachmentBytes(it.length, CountingInputStream(it.stream, onBytes)) }
     }
 
-/** Counts bytes as they are read through. Reports per read call, not per byte. */
+
 class CountingInputStream(delegate: InputStream, private val onBytes: (Long) -> Unit) : FilterInputStream(delegate) {
     override fun read(): Int = super.read().also { if (it >= 0) onBytes(1) }
 
@@ -69,7 +69,7 @@ class CountingInputStream(delegate: InputStream, private val onBytes: (Long) -> 
         super.read(b, off, len).also { if (it > 0) onBytes(it.toLong()) }
 }
 
-/** Counts bytes as they are written through. Reports per write call, not per byte. */
+
 class CountingOutputStream(delegate: OutputStream, private val onBytes: (Long) -> Unit) : FilterOutputStream(delegate) {
     override fun write(b: Int) {
         out.write(b)
@@ -77,7 +77,7 @@ class CountingOutputStream(delegate: OutputStream, private val onBytes: (Long) -
     }
 
     override fun write(b: ByteArray, off: Int, len: Int) {
-        // FilterOutputStream's default loops over write(int); go straight to the delegate instead.
+        
         out.write(b, off, len)
         if (len > 0) onBytes(len.toLong())
     }

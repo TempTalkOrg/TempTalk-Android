@@ -14,10 +14,10 @@ object AudioDeviceUtil {
     private const val TYPE_WIRED_HEADSET = AudioDeviceInfo.TYPE_WIRED_HEADSET
     private const val TYPE_WIRED_HEADPHONES = AudioDeviceInfo.TYPE_WIRED_HEADPHONES
 
-    /**
-     * Checks if a Bluetooth (BLE/SCO) or wired headset is currently connected.
-     * @return true if a supported headset is connected, false otherwise
-     */
+    
+
+
+
     fun isBluetoothOrWiredHeadsetConnected(context: Context): Boolean {
 
         val bleOrWiredDevices = when {

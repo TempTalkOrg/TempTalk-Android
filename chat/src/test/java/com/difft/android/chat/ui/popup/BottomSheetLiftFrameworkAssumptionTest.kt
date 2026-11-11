@@ -12,14 +12,14 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/**
- * FA1, FA2 — Framework Assumption Tests against the real Material [BottomSheetBehavior], no mocks.
- *
- * The entire lift model assumes that writing the sheet child's `layoutParams.height` is SUFFICIENT
- * to move the sheet's top edge — no state change, no `setExpandedOffset`. That is a property of
- * `isFitToContents = true`, not of this project's code, so it is pinned here. FA2 pins the second
- * assumption: `peekHeight` is written on every geometry pass and must never trigger a settle.
- */
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28])
 class BottomSheetLiftFrameworkAssumptionTest {
@@ -65,7 +65,7 @@ class BottomSheetLiftFrameworkAssumptionTest {
         parent.layout(0, 0, PARENT_WIDTH, PARENT_HEIGHT)
     }
 
-    /** FA1 — growing the child's height alone lifts the sheet's top edge by the same amount. */
+    
     @Test
     fun `FA1 changing only the child height moves the expanded sheet top edge`() {
         val sheet = buildSheet(childHeight = 600)
@@ -79,7 +79,7 @@ class BottomSheetLiftFrameworkAssumptionTest {
         assertEquals(PARENT_HEIGHT - 900, sheet.child.top)
     }
 
-    /** FA2 — writing peekHeight while expanded must not change the state or start a settle. */
+    
     @Test
     fun `FA2 setting peekHeight while expanded does not change the sheet state`() {
         val sheet = buildSheet(childHeight = 600)

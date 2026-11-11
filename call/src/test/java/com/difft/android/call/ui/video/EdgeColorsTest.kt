@@ -1,5 +1,12 @@
 package com.difft.android.call.ui.video
 
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.currentTime
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -8,12 +15,12 @@ import org.junit.Test
 private const val BLACK = 0xFF000000.toInt()
 private const val WHITE = 0xFFFFFFFF.toInt()
 
-/** Edge colours for the ambient letterbox (call-layout simulator `src/sim/letterbox.ts`). */
+
 class EdgeColorsTest {
 
     @Test
     fun `each side averages its outermost row or column into eight samples, toned`() {
-        // 16 × 8: the left half black, the right half white.
+        
         val w = 16
         val h = 8
         val pixels = IntArray(w * h) { i -> if (i % w < w / 2) BLACK else WHITE }
@@ -54,5 +61,37 @@ class EdgeColorsTest {
         assertEquals(0.025f, nextEdgeScale(0.05f, 64), 1e-6f)
         assertEquals(0.01f, nextEdgeScale(0.01f, 640), 1e-6f)
         assertEquals(0.5f, nextEdgeScale(0.2f, 4), 1e-6f)
+    }
+
+    @Test
+    fun `a playing video is sampled twice a second`() = runTest {
+        val armedAt = mutableListOf<Long>()
+        val loop = launch { edgeSampleLoop(Channel(Channel.CONFLATED)) { done -> armedAt += currentTime; done() } }
+        advanceTimeBy(1_100)
+        loop.cancel()
+        assertEquals(listOf(0L, 500L, 1_000L), armedAt)
+    }
+
+    @Test
+    fun `a paused video arms no more than the one listener waiting for its next frame`() = runTest {
+        var armed = 0
+        val loop = launch { edgeSampleLoop(Channel(Channel.CONFLATED)) { armed++ } }
+        advanceTimeBy(2_100)
+        loop.cancel()
+        assertEquals(1, armed)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `a frame of a new shape is sampled at once, even while a listener waits`() = runTest {
+        val shapes = Channel<Unit>(Channel.CONFLATED)
+        val armedAt = mutableListOf<Long>()
+        val loop = launch { edgeSampleLoop(shapes) { armedAt += currentTime } }
+        advanceTimeBy(120)
+        shapes.trySend(Unit)
+        runCurrent()
+        advanceTimeBy(2_000)
+        loop.cancel()
+        assertEquals("one for the new shape beside the one waiting, then no more", listOf(0L, 120L), armedAt)
     }
 }

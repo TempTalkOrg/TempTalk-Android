@@ -8,11 +8,11 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * Wire conformance for reverse pairing. The peer implementations are written against the field names
- * in the cross-platform plan, so a rename here is a silent interop break; and `pairToken` must stay
- * off a phone-to-phone `prepare-upload` so that path is byte-identical to what shipped.
- */
+
+
+
+
+
 class ReversePairDtosTest {
 
     private val request = ReversePairRequest(

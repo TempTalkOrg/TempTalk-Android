@@ -6,12 +6,12 @@ import org.junit.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/**
- * Cold-start `/keys?beginTimestamp=` reconciliation in [MessageArchiveManager.pendingResetIdentityKeyRecords].
- * The guard does not depend on whether the endpoint echoes the boundary record back (observed: it
- * does not): a record already processed for the same reset time is skipped either way, while a later
- * reset by the same user must still be re-queued.
- */
+
+
+
+
+
+
 class ResetIdentityKeyPendingRecordsTest {
 
     private fun remote(uid: String, resetTime: Long) = PublicKeyInfo(uid, "key", 1, resetTime)

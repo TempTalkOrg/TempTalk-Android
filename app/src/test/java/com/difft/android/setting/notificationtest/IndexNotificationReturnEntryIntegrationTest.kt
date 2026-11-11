@@ -64,12 +64,12 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.util.ReflectionHelpers
 
-/**
- * Calls the real IndexActivity.onNewIntent on a constructed, uncreated Activity, borrowing a real
- * navigator/Fragment stack from the Hilt pane host. This isolates entry-point generation, Intent
- * identity, cleanup and queued presentation; it does not claim full Index startup/lifecycle or
- * Android task-stack/device coverage. No handler or navigation decision is copied into the test.
- */
+
+
+
+
+
+
 @HiltAndroidTest
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -115,7 +115,7 @@ class IndexNotificationReturnEntryIntegrationTest {
         pane = Robolectric.buildActivity(NotificationPaneWiringTestActivity::class.java).setup().visible()
         shadowOf(Looper.getMainLooper()).idle()
 
-        // get() attaches a real Activity but deliberately does not invoke its large onCreate.
+        
         entry = Robolectric.buildActivity(IndexActivity::class.java)
         assertEquals(Lifecycle.State.INITIALIZED, entry.get().lifecycle.currentState)
         ReflectionHelpers.setField(entry.get(), "navigator", nav)
@@ -125,7 +125,7 @@ class IndexNotificationReturnEntryIntegrationTest {
 
     @After
     fun tearDown() {
-        // An uncreated Activity has no lifecycle to destroy. Cancel its actual entry coroutine scope.
+        
         if (::entry.isInitialized) entry.get().lifecycleScope.cancel()
         pane?.let { controller ->
             if (controller.get().lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) controller.pause()
@@ -154,7 +154,7 @@ class IndexNotificationReturnEntryIntegrationTest {
 
     private fun deliver(intent: Intent) {
         compose.runOnUiThread { entry.newIntent(intent) }
-        assertSame(intent, entry.get().intent) // Production onNewIntent must call setIntent.
+        assertSame(intent, entry.get().intent) 
         assertEquals(Lifecycle.State.INITIALIZED, entry.get().lifecycle.currentState)
     }
 
@@ -175,7 +175,7 @@ class IndexNotificationReturnEntryIntegrationTest {
         return entered to release
     }
 
-    /** Observes real fragment creation so a briefly inserted, then overwritten fallback cannot pass. */
+    
     private fun recordNotificationCreations(): MutableList<Fragment> {
         val created = mutableListOf<Fragment>()
         pane!!.get().supportFragmentManager.registerFragmentLifecycleCallbacks(
@@ -213,7 +213,7 @@ class IndexNotificationReturnEntryIntegrationTest {
         val committedVersion = nav.requestVersion
         deliver(intent(route))
         idle()
-        assertEquals(committedVersion, nav.requestVersion) // Duplicate was consumed before another presentation.
+        assertEquals(committedVersion, nav.requestVersion) 
         assertEquals(listOf(page, coveredBy), nav.retainedMePages())
         coVerify(exactly = 0) { poster.cancel(any(), any()) }
         coVerify(exactly = 0) { repository.record(any(), any(), any(), any()) }
@@ -273,7 +273,7 @@ class IndexNotificationReturnEntryIntegrationTest {
         deliver(intent(route))
         assertTrue(entered.isCompleted)
         val ordinary = Intent(context, IndexActivity::class.java)
-        deliver(ordinary) // Real generic no-payload path returns without unrelated startup dependencies.
+        deliver(ordinary) 
         compose.runOnUiThread { release.complete(Unit) }
         idle()
         assertSame(ordinary, entry.get().intent)
@@ -315,7 +315,7 @@ class IndexNotificationReturnEntryIntegrationTest {
         compose.runOnUiThread { pane!!.start().resume().visible() }
         idle()
         assertEquals(listOf(newer), nav.retainedMePages())
-        assertTrue(created.isEmpty()) // Stronger than the final root: no obsolete fallback ever mounted.
+        assertTrue(created.isEmpty()) 
     }
 
     @Test

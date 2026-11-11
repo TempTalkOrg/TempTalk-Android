@@ -12,7 +12,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 
-/** The group fetch de-duplication that GroupUtil relies on: a joiner gets the leader's result, never a bare skip. */
+
 class GroupSingleFlightTest {
     private val flight = SingleFlight<String, String>()
 
@@ -53,12 +53,12 @@ class GroupSingleFlightTest {
     }
 
     @Test fun `a caller marked after an in-flight run waits it out and runs its own fetch`(): Unit = runBlocking {
-        // Single-threaded event loop: each yield() lets the launched runs reach their suspension point.
+        
         val release = CompletableDeferred<Unit>()
         val runs = mutableListOf<String>()
         val stale = async { flight.run("group") { runs += "stale"; release.await(); "stale" } }
         yield()
-        // The server accepted a write after the stale GET was sent; its snapshot cannot prove the write.
+        
         val accepted = flight.mark()
         val refresh = async { flight.run("group", startedAfter = accepted) { runs += "fresh"; "fresh" } }
         yield()
@@ -68,7 +68,7 @@ class GroupSingleFlightTest {
         assertEquals("fresh", withTimeout(5_000) { refresh.await() })
         assertEquals(listOf("stale", "fresh"), runs)
 
-        // A run that began after the mark still satisfies a later marked caller without a second GET.
+        
         val before = flight.mark()
         val release2 = CompletableDeferred<Unit>()
         val leader = async { flight.run("group") { runs += "after-mark"; release2.await(); "after-mark" } }

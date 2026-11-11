@@ -5,13 +5,13 @@ import org.difft.app.database.models.MessageModel
 const val DEFAULT_ROOM_ID: String = "peer"
 const val DEFAULT_PEER_ID: String = "peer"
 
-/**
- * A minimally populated [MessageModel] for pagination / hydration tests.
- *
- * [timeStamp] defaults to [systemShowTimestamp] because the two agree for every normal message;
- * pass them apart only when a case needs the failure-anchoring distinction (the window is keyed on
- * `systemShowTimestamp`, `ScrollAction.ToMessage` on `timeStamp`).
- */
+
+
+
+
+
+
+
 fun buildMessageModel(
     id: String,
     systemShowTimestamp: Long,
@@ -30,13 +30,13 @@ fun buildMessageModel(
     this.messageText = messageText
 }
 
-/**
- * [count] messages with strictly increasing timestamps, ids `"m0".."m{count-1}"`.
- *
- * Strictly unique timestamps are a precondition of every pagination case: SQLite does not order
- * ties on `ORDER BY systemShowTimestamp` deterministically, and an in-memory fake cannot reproduce
- * that non-determinism — cases must stay out of that domain.
- */
+
+
+
+
+
+
+
 fun buildMessageSequence(
     count: Int,
     startTs: Long = 1_000L,

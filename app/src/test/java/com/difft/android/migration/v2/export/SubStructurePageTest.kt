@@ -8,11 +8,11 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * The prefetched page answers per message exactly what the per-message queries answered: the
- * message's own rows in row order, and its forward-owned rows tagged with the host message and the
- * forward node's own sentAt.
- */
+
+
+
+
+
 class SubStructurePageTest {
 
     private fun att(dbId: Int, messageId: String? = null, forwardPk: Long? = null) = AttachmentModel().apply {
@@ -58,7 +58,7 @@ class SubStructurePageTest {
         assertEquals(listOf("att-90", "att-91", "att-92"), owned.map { it.model.id })
         assertTrue(owned.all { it.owner == AttachmentOwner.FORWARD && it.hostMessageId == "m-fwd" })
         assertEquals(listOf("u-a" to 1_000L, "u-b" to 2_000L, "u-b" to 2_000L), owned.map { it.ownerAuthor to it.ownerSentAt })
-        // A message without a forward context, or with one the page did not see, owns nothing.
+        
         assertTrue(page.ownedAttachmentsOf(msg("m-plain")).isEmpty())
         assertTrue(page.ownedAttachmentsOf(msg("m-other", contextId = 41L)).isEmpty())
     }

@@ -20,16 +20,16 @@ import javax.inject.Inject
 import com.difft.android.base.R as BaseR
 import com.difft.android.chat.R as ChatR
 
-/**
- * Posts the test notifications through the app's real MESSAGE and CALL channels (#1350). Each test
- * uses its own run tag and immutable pending-intent identity, with a bounded system timeout.
- */
+
+
+
+
 class NotificationTestPoster @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val runs: NotificationTestRuns,
 ) {
 
-    /** True only when the notification was handed to the system; a missing channel or failure is false. */
+    
     suspend fun post(run: NotificationTestRun): Boolean = withContext(Dispatchers.Main.immediate) {
         currentCoroutineContext().ensureActive()
         if (!runs.owns(run)) return@withContext false
@@ -93,7 +93,7 @@ class NotificationTestPoster @Inject constructor(
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
     )
 
-    /** CLEAR_TASK affects only the separate CALL task affinity. */
+    
     private fun callScreenIntent(run: NotificationTestRun): PendingIntent = PendingIntent.getActivity(
         context,
         CALL_SCREEN_REQUEST_CODE,

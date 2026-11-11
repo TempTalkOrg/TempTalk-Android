@@ -22,7 +22,7 @@ class ChatRefreshHeaderView @JvmOverloads constructor(
 
     override fun onFinish(refreshLayout: RefreshLayout, success: Boolean): Int {
         super.onFinish(refreshLayout, success)
-        return 0  //延迟50毫秒之后再弹回
+        return 0  
     }
 
     override fun onStateChanged(refreshLayout: RefreshLayout, oldState: RefreshState, newState: RefreshState) {

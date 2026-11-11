@@ -24,6 +24,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.style.TextAlign
@@ -34,13 +36,13 @@ import com.difft.android.base.ui.compose.DifftButton
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.utils.openExternalBrowser
 
-/**
- * Inner content of the E2EE explainer sheet (icon/title/body/protected-card/caveat/actions).
- * No dialog chrome — callers ([E2eeInfoSheet.show] / [E2eeInfoSheetDialog]) supply the
- * ModalBottomSheet host and DifftTheme(darkTheme=) wrapping. [onDismissRequest] is invoked
- * by BOTH the primary button and the "Learn more" link (which also opens [learnMoreUrl]
- * in the external browser BEFORE requesting dismiss — close sheet, then browser).
- */
+
+
+
+
+
+
+
 @Composable
 fun E2eeInfoSheetContent(
     learnMoreUrl: String,
@@ -52,15 +54,21 @@ fun E2eeInfoSheetContent(
         onDismissRequest()
         context.openExternalBrowser(learnMoreUrl)
     }
-    val maxHeight = (LocalConfiguration.current.screenHeightDp * 0.78f).dp
+    
+    
+    val containerHeight = LocalWindowInfo.current.containerSize.height
+    val windowHeight = if (containerHeight > 0) {
+        with(LocalDensity.current) { containerHeight.toDp() }
+    } else {
+        LocalConfiguration.current.screenHeightDp.dp
+    }
+    val maxHeight = windowHeight * 0.78f
 
     Column(
         modifier = modifier
             .heightIn(max = maxHeight)
             .verticalScroll(rememberScrollState())
-            // Mock's 32dp sheet-top padding assumed the grabber floats OUTSIDE the sheet;
-            // the shared drag handle already contributes its bottom padding below the pill, so only
-            // the remainder is added here to keep the visual grabber→icon distance at 32dp.
+            
             .padding(top = DifftTheme.spacing.insetXXLarge - DifftBottomSheetDefaults.DragHandleBottomPadding, bottom = 16.dp)
             .padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(28.dp),
@@ -73,7 +81,7 @@ fun E2eeInfoSheetContent(
                 Icon(
                     ImageVector.vectorResource(R.drawable.base_tabler_lock),
                     contentDescription = null,
-                    tint = DifftTheme.colors.primary,
+                    tint = DifftTheme.colors.icon,
                     modifier = Modifier.size(32.dp),
                 )
                 Text(
@@ -105,7 +113,7 @@ fun E2eeInfoSheetContent(
                     color = DifftTheme.colors.textSecondary,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .drawTopBorder(DifftTheme.colors.line)
+                        .drawTopBorder(DifftTheme.colors.divider)
                         .padding(top = 16.dp),
                 )
             }
@@ -125,8 +133,7 @@ fun E2eeInfoSheetContent(
             ) {
                 Text(
                     stringResource(R.string.e2ee_learn_more),
-                    // h6, not p3: TextButton's slot style is labelLarge, so this label already
-                    // rendered Medium before the type scale.
+                    
                     style = DifftTheme.typography.h6,
                     color = DifftTheme.colors.textInfo,
                 )
@@ -151,14 +158,18 @@ private fun ProtectedItemRow(@DrawableRes icon: Int, label: String) {
     }
 }
 
-/** 1dp hairline drawn along the top edge only — used to separate the caveat text from the
- * protected-content list above it inside the same card. Local to this file: the only sheet
- * that needs a top-only border, not promoted to a shared :base Modifier utility. */
+
+
+
 private fun Modifier.drawTopBorder(color: Color): Modifier = drawBehind {
+    
+    
     drawLine(
         color = color,
-        start = Offset(0f, 0f),
-        end = Offset(size.width, 0f),
-        strokeWidth = 1.dp.toPx(),
+        start = Offset(0f, HALF_PIXEL),
+        end = Offset(size.width, HALF_PIXEL),
+        strokeWidth = 1f,
     )
 }
+
+private const val HALF_PIXEL = 0.5f

@@ -33,17 +33,17 @@ import org.robolectric.shadows.ShadowAlarmManager
 import org.robolectric.shadows.ShadowSystemClock
 import java.time.Duration
 
-/**
- * Drives the production [WebSocketHealthMonitor] health-check loop (on the real `appScope`)
- * with a real [KeepAliveWakeAlarm] and asserts the wake-alarm contract from issue #1325:
- * a connected socket in keep-alive mode keeps an elapsed-realtime wake armed, firing it sends
- * a keep-alive and re-arms, a socket that connects later is covered once it connects,
- * FCM mode arms nothing and stopping the monitor disarms. Each keep-alive sent in keep-alive
- * mode also arms a response deadline: a response cancels it, a miss force-disconnects.
- *
- * Timing is real (the monitor is bound to the process scope), so assertions poll with a
- * generous deadline instead of a virtual clock.
- */
+
+
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [31])
 class WebSocketHealthMonitorWakeAlarmTest {
@@ -64,7 +64,7 @@ class WebSocketHealthMonitorWakeAlarmTest {
         val userManager = mockk<UserManager>(relaxed = true)
         every { userManager.getUserData() } returns userData
 
-        // Same shape as production: replay = 1, `.value` reads the replay cache.
+        
         stateFlow = MutableSharedFlow(replay = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
         connection = mockk(relaxed = true)
         every { connection.webSocketConnectionState } returns stateFlow
@@ -120,7 +120,7 @@ class WebSocketHealthMonitorWakeAlarmTest {
         stateFlow.tryEmit(WebSocketConnectionState.CONNECTED)
         monitor.monitor(connection)
         val wake = awaitAlarms { it.size == 1 }.single()
-        // The alarm is armed just before the loop subscribes to wake events; let it subscribe.
+        
         Thread.sleep(SETTLE_MS)
         wake.onAlarmListener!!.onAlarm()
         awaitAlarms { alarms -> alarms.any { it.isResponseDeadline() } }
@@ -136,10 +136,10 @@ class WebSocketHealthMonitorWakeAlarmTest {
         every { userData.keepAliveEnabled } returns true
         stateFlow.tryEmit(WebSocketConnectionState.CONNECTED)
         monitor.monitor(connection)
-        // Paused Robolectric clock: move past the monitor's initial response timestamp.
+        
         ShadowSystemClock.advanceBy(Duration.ofSeconds(1))
         val wake = awaitAlarms { it.size == 1 }.single()
-        // The alarm is armed just before the loop subscribes to wake events; let it subscribe.
+        
         Thread.sleep(SETTLE_MS)
         wake.onAlarmListener!!.onAlarm()
         val deadline = awaitAlarms { alarms -> alarms.any { it.isResponseDeadline() } }.single { it.isResponseDeadline() }

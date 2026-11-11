@@ -29,14 +29,14 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/**
- * An attachment row is inserted with the "bytes present" status before its byte frame arrives. When
- * the frame carries nothing — empty, unopenable, or failing mid-write — the row must be demoted to
- * the pointer-only status, so the app re-downloads instead of opening a file that is not there.
- *
- * The demotion is applied after the inserts flush: the row is still buffered in its batch when the
- * frame fails, so an immediate update would find no row to correct.
- */
+
+
+
+
+
+
+
+
 class AttachmentBytesAbsentTest {
 
     @get:Rule
@@ -44,13 +44,13 @@ class AttachmentBytesAbsentTest {
 
     private val room = "room-1"
 
-    /** `AttachmentStatus.SUCCESS.code` — what a row claims until its bytes are known to be missing. */
+    
     private val statusSuccess = 3
 
-    /** `AttachmentStatus.EXPIRED.code` — the terminal state for a pointer nothing can ever fetch. */
+    
     private val statusExpired = 5
 
-    /** The importer decodes keys with the Android Base64, a stub on the plain JVM. */
+    
     @Before
     fun stubBase64() {
         mockkStatic(Base64::class)
@@ -76,7 +76,7 @@ class AttachmentBytesAbsentTest {
         )
     )
 
-    /** A source that had bytes but no server id and no type (Desktop, or a never-uploaded row). */
+    
     private fun untypedAttachment(id: String, messageRef: String) = NeutralRecord.Attachment(
         NeutralAttachment(
             stableId = id, messageRef = messageRef, contentType = null, size = 10,
@@ -109,7 +109,7 @@ class AttachmentBytesAbsentTest {
         val target = InMemoryWcdbWriteTarget()
         val importer = importerOver(target)
         importer.onRecord(message("m1"))
-        // Absent id, the 0 sentinel older Android containers wrote, and an empty key all mean "none".
+        
         importer.onRecord(pointer("a-null", serverAttachmentId = null, encryptionKey = "a2V5"))
         importer.onRecord(pointer("a-zero", serverAttachmentId = 0L, encryptionKey = "a2V5"))
         importer.onRecord(pointer("a-nokey", serverAttachmentId = 42L, encryptionKey = ""))
@@ -161,7 +161,7 @@ class AttachmentBytesAbsentTest {
         importer.onRecord(message("m-1"))
         importer.onRecord(attachment("att-empty", "m-1"))
         importer.onRecord(attachment("att-ok", "m-1"))
-        // The frame is reported while both inserts are still buffered in the batch.
+        
         importer.onAttachmentBytesAbsent("att-empty")
         importer.finish()
 
@@ -176,8 +176,8 @@ class AttachmentBytesAbsentTest {
         importer.onRecord(message("m-1"))
         importer.onRecord(attachment("att-broken", "m-1"))
 
-        // The real seam the orchestrator hands to the reader: the first write failure deletes the
-        // partial file and fires the failure hook once.
+        
+        
         val partial = tmp.newFile("att-broken.part")
         val out = FaultIsolatingOutputStream(partial, ThrowingOutputStream()) {
             importer.onAttachmentBytesAbsent("att-broken")
@@ -196,8 +196,8 @@ class AttachmentBytesAbsentTest {
         val target = spyk(InMemoryWcdbWriteTarget())
         val importer = importerOver(target)
 
-        // An unknown-kind message cascades: its attachment record is skipped and its frame discarded,
-        // so there is no row to correct and no write to make.
+        
+        
         importer.onRecord(message("m-alien", ContentKind.UNKNOWN))
         importer.onRecord(attachment("att-alien", "m-alien"))
         importer.onRecord(message("m-1"))
@@ -211,7 +211,7 @@ class AttachmentBytesAbsentTest {
         assertEquals(statusSuccess, statusOf(target, "att-ok"), "an unrelated row is untouched")
     }
 
-    /** Fails every write, the way a full or revoked staging volume does. */
+    
     private class ThrowingOutputStream : OutputStream() {
         override fun write(b: Int): Unit = throw IOException("disk gone")
         override fun write(b: ByteArray, off: Int, len: Int): Unit = throw IOException("disk gone")

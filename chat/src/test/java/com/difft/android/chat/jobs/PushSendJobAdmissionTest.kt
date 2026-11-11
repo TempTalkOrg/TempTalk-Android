@@ -20,11 +20,11 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
-/**
- * Send admission of [PushSendJob] under the migration message pause (#1382): a send that is not
- * admitted ends the run as a deferral before any network call, and an admitted send keeps its
- * ticket open until the job runner closes it.
- */
+
+
+
+
+
 class PushSendJobAdmissionTest {
 
     @Before
@@ -84,7 +84,7 @@ class PushSendJobAdmissionTest {
         job.closeRunResources()
     }
 
-    /** The receipt job's catch-all rethrows; a refusal must bypass it and still be a deferral. */
+    
     @Test
     fun `a job with a catch-all around its send is deferred without calling the sender`() = runTest {
         val sender = mockk<NewSignalServiceMessageSender>()

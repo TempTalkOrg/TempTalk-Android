@@ -4,7 +4,7 @@ import com.difft.android.call.ui.tabletop.TabletopGeometry
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/** Tabletop dock rows ([dockSlots]) and the More sheet's quick actions beside the dock ([moreQuickActions]). */
+
 class DockSlotsTest {
 
     private val dock = TabletopGeometry(bandTopPx = 1127, bandBottomPx = 1237, widthPx = 1672, heightPx = 2364, density = 2.75f)

@@ -9,10 +9,10 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * The listener that outlives its transfer: closed to new sessions at once, stopped when the window
- * runs out, stopped early when a newer listener needs the port, and never stopped twice.
- */
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class ReceiverLingerTest {
 
@@ -50,7 +50,7 @@ class ReceiverLingerTest {
         assertEquals(1, first.stops)
         assertEquals(0, second.stops)
 
-        // The first listener's window would have fired here; it must not stop the second.
+        
         advanceTimeBy(500); runCurrent()
         assertEquals(0, second.stops)
         advanceTimeBy(500); runCurrent()
@@ -69,7 +69,7 @@ class ReceiverLingerTest {
         advanceTimeBy(2_000); runCurrent()
         assertEquals(1, listener.stops)
 
-        // Nothing kept: a no-op.
+        
         linger.stopNow()
         assertFalse(FakeListener().closed)
     }

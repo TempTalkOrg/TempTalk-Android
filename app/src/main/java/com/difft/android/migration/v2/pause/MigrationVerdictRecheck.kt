@@ -26,24 +26,24 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.cancellation.CancellationException
 
-/**
- * Re-asks the receiver's `/status` while a pause awaits a decision (#1382 A07), owned by the app
- * rather than the send screen: every [INTERVAL_MS] while the app is in the foreground, with the one
- * pending verdict of that record's session, until a definite answer settles it. With no receipt
- * left (none was kept, or it outlived [PendingVerdictStore.MAX_AGE_MS]) only the auth probe remains,
- * and the record is not cleared for it.
- *
- * Only one question is in flight at a time: the loop and the send screen's re-check both go through
- * [probe]. The transfer's own `VerdictWatch` runs before the record reaches
- * [MigrationPausePhase.AWAITING_DECISION], so the two never poll together.
- */
+
+
+
+
+
+
+
+
+
+
+
 @Singleton
 class MigrationVerdictRecheck @Inject constructor(
     private val pause: MigrationMessagePause,
     private val pendingStore: PendingVerdictStore,
     private val settlement: SenderVerdictSettlement,
 ) {
-    /** One `/status` question to the receiver; a seam for tests. */
+    
     internal var probeVerdict: suspend (SenderSessionRef) -> Verdict = VerdictProbe::check
 
     private val probeMutex = Mutex()
@@ -54,10 +54,10 @@ class MigrationVerdictRecheck @Inject constructor(
         scope.launch { run(foregroundStates()) }
     }
 
-    /** One `/status` question, never concurrent with another from this process. */
+    
     suspend fun probe(session: SenderSessionRef): Verdict = probeMutex.withLock { probeVerdict(session) }
 
-    /** Re-checks while [foreground] is true and the stored record awaits a decision. */
+    
     internal suspend fun run(foreground: Flow<Boolean>, intervalMs: Long = INTERVAL_MS) {
         combine(pause.onChanged, foreground) { state, inForeground -> if (inForeground) undecided(state) else null }
             .distinctUntilChanged()
@@ -71,8 +71,8 @@ class MigrationVerdictRecheck @Inject constructor(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                // A read that failed is not "no receipt": the pause state does not change, so
-                // collectLatest would never restart this loop. Try again on the next beat.
+                
+                
                 L.w { "[MigrationPause] event=recheck_read_failed owner=${target.owner.take(8)} error=${e.javaClass.simpleName}" }
                 delay(intervalMs)
                 continue
@@ -83,7 +83,7 @@ class MigrationVerdictRecheck @Inject constructor(
             }
             val verdict = probe(pending.session)
             val result = settlement.settle(target.owner, target.sessionId, SenderVerdictSettlement.outcomeOf(verdict), SOURCE)
-            // A settled record changes the pause state, which ends this loop through collectLatest.
+            
             if (verdict !is Verdict.Unknown && result.proceeds) return
             delay(intervalMs)
         }
@@ -112,7 +112,7 @@ class MigrationVerdictRecheck @Inject constructor(
     }
 
     internal companion object {
-        /** The auth probe's period: both questions run on the same foreground beat. */
+        
         const val INTERVAL_MS = 10_000L
         const val SOURCE = "foreground_recheck"
     }

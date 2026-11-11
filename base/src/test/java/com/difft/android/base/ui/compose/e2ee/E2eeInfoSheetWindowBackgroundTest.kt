@@ -13,15 +13,15 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import kotlin.test.assertEquals
 
-/**
- * M23 (issue #1127, family G cleanup): [E2eeInfoSheet.show] mounts a ComposeView wrapped in
- * [DifftTheme] directly onto the host Activity's own root content view (via
- * [com.difft.android.base.widget.ComposeActivityMount]) — not a separate dialog window — so it
- * does not own the host window. It now migrates to `DifftTheme(applyWindowBackground = false)`
- * and drops the `OnPreDrawListener` snapshot/restore patch entirely: there is no
- * longer a write to restore, so this test asserts the stronger "never touched" invariant
- * directly instead of simulating the predraw dispatch the old restore-based mechanism needed.
- */
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34])

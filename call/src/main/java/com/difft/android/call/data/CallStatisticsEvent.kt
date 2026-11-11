@@ -1,9 +1,9 @@
 package com.difft.android.call.data
 
-/**
- * Typed event definitions for call statistics logging.
- * Each subclass maps to a server-side event name and carries its own detail fields.
- */
+
+
+
+
 sealed class CallStatisticsEvent(val eventName: String) {
 
     abstract fun toDetails(): Map<String, String>

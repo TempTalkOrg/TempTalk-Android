@@ -21,17 +21,12 @@ import org.junit.Before
 import org.junit.Test
 import kotlin.test.assertEquals
 
-/**
- * Phase 4: verify [ActivityNoticeDispatcher.dispatchCopyNotice] propagates the new
- * [combinedForwardMode] parameter into [MessageActivityNoticeData], and that the early-return
- * guards still hold (empty authors / non-positive count → no job enqueued).
- *
- * NOTE: We resolve JobManager via [ApplicationDependencies.getJobManager] inside @Before
- * (not via a per-class companion mock). [ApplicationDependencies] is process-singleton and
- * `isInitialized()` short-circuits re-init — whichever test class loads first wins. Reading
- * the live instance and re-stubbing it here keeps this test order-independent. clearMocks
- * in @After leaves the JobManager mock empty so the next test's @Before re-stubs cleanly.
- */
+
+
+
+
+
+
 class ActivityNoticeDispatcherTest {
 
     private lateinit var jobManager: JobManager
@@ -61,8 +56,8 @@ class ActivityNoticeDispatcherTest {
     }
 
     private companion object {
-        // Operator id passed explicitly to dispatchCopyNotice — differs from every test
-        // conversation so the Saved guard stays inert unless a test uses it as the source.
+        
+        
         const val MY_ID = "+myself"
     }
 
@@ -172,8 +167,8 @@ class ActivityNoticeDispatcherTest {
 
     @Test
     fun `dispatchCopyNotice — Saved (source equals myId) drops silently`() {
-        // PRD v2.0 §改动1 条件②: copying inside the user's own Saved conversation has no audience.
-        // A foreign author is supplied so only the Saved guard can suppress it.
+        
+        
         dispatcher.dispatchCopyNotice(
             sourceConversation = For.Account(MY_ID),
             sourceAuthorIds = listOf("+a"),

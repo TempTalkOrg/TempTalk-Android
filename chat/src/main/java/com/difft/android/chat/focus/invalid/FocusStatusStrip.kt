@@ -24,10 +24,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.chat.R
 
-/**
- * Home status strip for the invalid focus state: "No focus group selected - all groups stay muted",
- * with "Settings" and a close x. Tapping the strip or "Settings" opens Me > Notifications.
- */
+
+
+
+
 @Composable
 fun FocusStatusStrip(
     controller: FocusInvalidController,
@@ -67,7 +67,7 @@ fun FocusStatusStrip(
         Text(
             text = stringResource(R.string.focus_strip_action),
             style = DifftTheme.typography.p3,
-            color = DifftTheme.colors.textInfo,
+            color = DifftTheme.colors.primary,
             modifier = Modifier.padding(start = 12.dp),
         )
         Icon(
@@ -82,7 +82,7 @@ fun FocusStatusStrip(
     }
 }
 
-/** Mounts [FocusStatusStrip] into the layout's [ComposeView] slot; the host only supplies the settings action. */
+
 fun ComposeView.bindFocusStatusStrip(controller: FocusInvalidController, onOpenSettings: () -> Unit) {
     setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
     setContent { DifftTheme { FocusStatusStrip(controller, onOpenSettings) } }

@@ -11,14 +11,14 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import kotlin.test.assertTrue
 
-/**
- * Manifest fact underpinning CriticalAlertActivityWindowBackgroundTest (M21/M22): pins that
- * AndroidManifest.xml really does declare android:theme="@style/TransparentActivityTheme" for
- * CriticalAlertActivity, and that this style resource resolves to a translucent, transparent
- * window background. Does not construct CriticalAlertActivity itself: it is @AndroidEntryPoint,
- * and this repo has no Hilt-Robolectric harness for constructing Hilt activities directly in unit
- * tests (mirrors `LinkedDevicesBackButtonTest`'s manifest-only approach for the same reason).
- */
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 class CriticalAlertActivityManifestThemeTest {
 

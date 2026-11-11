@@ -14,10 +14,10 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 import java.util.concurrent.atomic.AtomicInteger
 
-/**
- * The debounced save and DraftViewModel.flushNow write the same room from different coroutines;
- * [DraftWriter] serializes them and never lets an older draft replace a newer one.
- */
+
+
+
+
 class DraftWriterTest {
 
     private val repository: DraftRepository = mockk(relaxed = true)

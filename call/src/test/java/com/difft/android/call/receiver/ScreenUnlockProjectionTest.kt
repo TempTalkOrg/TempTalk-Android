@@ -17,11 +17,11 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import util.ScreenLockUtil
 
-/**
- * The unlock receiver brings the call page back to the front from the projection a real session
- * writes (`isInCalling` through `beginPresence` / `endPresence`) combined with the page's window flags
- * (`isInForeground`, `isInPipMode`, reset when the last call page goes away). Row T5-07 (L07, L08).
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [33])
 class ScreenUnlockProjectionTest {

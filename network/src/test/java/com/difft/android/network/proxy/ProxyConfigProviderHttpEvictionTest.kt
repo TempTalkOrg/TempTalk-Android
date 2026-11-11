@@ -14,14 +14,14 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import kotlin.test.assertTrue
 
-/**
- * [ProxyConfigProvider] must evict the HTTP connection pools (via
- * [ProxyHttpConnectionRegistry]) on a REAL proxy state change — the HTTP
- * counterpart of the IM-WebSocket reconnect — and NOT on no-op writes.
- *
- * Without this, OkHttp keep-alive would reuse the stale tunnel/direct socket and
- * requests would keep flowing through the old route after the toggle.
- */
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 class ProxyConfigProviderHttpEvictionTest {
 
@@ -62,24 +62,24 @@ class ProxyConfigProviderHttpEvictionTest {
     @Test
     fun `disabling proxy evicts http pools`() {
         val (provider, registry) = makeProvider()
-        assertTrue(provider.save(validLink, enabled = true)) // off -> on (1)
-        provider.setEnabled(false)                           // on -> off (2)
+        assertTrue(provider.save(validLink, enabled = true)) 
+        provider.setEnabled(false)                           
         verify(exactly = 2) { registry.evictAll() }
     }
 
     @Test
     fun `clear after active state evicts http pools`() {
         val (provider, registry) = makeProvider()
-        assertTrue(provider.save(validLink, enabled = true)) // (1)
-        provider.clear()                                     // (2)
+        assertTrue(provider.save(validLink, enabled = true)) 
+        provider.clear()                                     
         verify(exactly = 2) { registry.evictAll() }
     }
 
     @Test
     fun `no-op save does not evict http pools`() {
         val (provider, registry) = makeProvider()
-        assertTrue(provider.save(validLink, enabled = true)) // (1)
-        assertTrue(provider.save(validLink, enabled = true)) // no change -> no evict
+        assertTrue(provider.save(validLink, enabled = true)) 
+        assertTrue(provider.save(validLink, enabled = true)) 
         verify(exactly = 1) { registry.evictAll() }
     }
 

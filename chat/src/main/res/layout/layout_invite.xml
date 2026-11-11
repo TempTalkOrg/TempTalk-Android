@@ -6,17 +6,16 @@
     android:layout_height="match_parent"
     android:orientation="vertical">
 
-
     <androidx.appcompat.widget.AppCompatImageView
         android:id="@+id/iv_close"
-        android:layout_width="60dp"
-        android:layout_height="60dp"
-        android:background="@null"
-        android:padding="18dp"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="8dp"
         android:src="@drawable/ic_close"
-        app:layout_constraintRight_toRightOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toTopOf="parent"
-        app:tint="@color/t.primary" />
+        app:tint="@color/icon" />
 
     <androidx.cardview.widget.CardView
         android:id="@+id/cv_content"
@@ -64,32 +63,6 @@
                 android:layout_gravity="center_horizontal"
                 android:layout_marginTop="20dp"
                 tools:src="@drawable/ps_ic_placeholder" />
-
-            <!--            <LinearLayout-->
-            <!--                android:id="@+id/ll_regenerate"-->
-            <!--                android:layout_width="wrap_content"-->
-            <!--                android:layout_height="wrap_content"-->
-            <!--                android:layout_gravity="center_horizontal"-->
-            <!--                android:layout_marginTop="20dp"-->
-            <!--                android:orientation="horizontal">-->
-
-            <!--                <androidx.appcompat.widget.AppCompatImageView-->
-            <!--                    android:layout_width="16dp"-->
-            <!--                    android:layout_height="16dp"-->
-            <!--                    android:layout_gravity="center_vertical"-->
-            <!--                    android:src="@drawable/ic_invite_regenerate"-->
-            <!--                    android:tint="@color/t.third" />-->
-
-            <!--                <androidx.appcompat.widget.AppCompatTextView-->
-            <!--                    android:layout_width="wrap_content"-->
-            <!--                    android:layout_height="wrap_content"-->
-            <!--                    android:layout_gravity="center_vertical"-->
-            <!--                    android:layout_marginStart="5dp"-->
-            <!--                    android:includeFontPadding="false"-->
-            <!--                    android:text="@string/invite_regenerate"-->
-            <!--                    android:textColor="@color/t.third"-->
-            <!--                    android:textSize="12sp" />-->
-            <!--            </LinearLayout>-->
 
             <androidx.appcompat.widget.AppCompatTextView
                 android:id="@+id/tv_code"

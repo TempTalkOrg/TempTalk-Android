@@ -14,12 +14,12 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowDisplayManager
 
-/**
- * #1454: a fold that resizes the window to the outer panel but leaves the activity at its
- * inner-panel configuration. The window then reads LARGER than the panel, which a window never
- * can; [OrientationPolicy.resolveShortSideDp] must let the panel mode decide instead of letting
- * the stale window floor release the portrait lock.
- */
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33], application = Application::class)
 class OrientationPolicyStaleWindowTest {

@@ -15,10 +15,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.difft.android.base.ui.theme.DifftTheme
 
-/**
- * The progress page's bar and reading. A [progress] in `[0, 1]` draws a determinate bar; anything
- * else draws the indeterminate one. [metric] is the line under the bar.
- */
+
+
+
+
 @Composable
 fun MigrationProgressBlock(
     progress: Float?,
@@ -57,7 +57,7 @@ fun MigrationProgressBlock(
     }
 }
 
-/** Formats `62% · 7.72 GB / 12.40 GB`; with no total known, the percentage alone. */
+
 fun formatTransferMetric(context: Context, progress: Float, totalBytes: Long): String {
     val pct = (progress.coerceIn(0f, 1f) * PERCENT).toInt()
     if (totalBytes <= 0L) return "$pct%"
@@ -65,11 +65,11 @@ fun formatTransferMetric(context: Context, progress: Float, totalBytes: Long): S
     return "$pct% · ${formatMigrationBytes(context, done)} / ${formatMigrationBytes(context, totalBytes)}"
 }
 
-/**
- * Every byte total the migration screens show, in one place. The long system format keeps two
- * decimals below 100 GB (`1.27 GB`), which is what iOS shows for the same total; the short one rounds
- * to one decimal.
- */
+
+
+
+
+
 fun formatMigrationBytes(context: Context, bytes: Long): String = Formatter.formatFileSize(context, bytes)
 
 private const val PERCENT = 100

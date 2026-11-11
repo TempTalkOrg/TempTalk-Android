@@ -50,7 +50,6 @@ fun ScreenShareSpeakerStatusView(modifier: Modifier, activeSpeaker: Participant,
     val isActiveSpeakerSpeaking by activeSpeaker::isSpeaking.flow.collectAsState()
     val effectiveIsSpeaking = isActiveSpeakerSpeaking && speakingEnabled
 
-    // monitor audio muted state
     LaunchedEffect(audioPub) {
         val pub = audioPub ?: return@LaunchedEffect
         pub::muted.flow.collect { muted -> audioMuted = muted }
@@ -81,7 +80,6 @@ fun ScreenShareSpeakerStatusView(modifier: Modifier, activeSpeaker: Participant,
             )
         }
 
-        // 使用when表达式简化条件判断
         val painter = when {
             audioMuted -> painterResource(id = R.drawable.call_icon_microphone_close)
             !effectiveIsSpeaking -> painterResource(id = R.drawable.ic_silent)
@@ -89,7 +87,7 @@ fun ScreenShareSpeakerStatusView(modifier: Modifier, activeSpeaker: Participant,
         }
 
         val tintColor = when {
-            audioMuted -> Color.Unspecified // 不设置颜色，或者根据需要设置
+            audioMuted -> Color.Unspecified
             else -> Palette.Blue200
         }
 

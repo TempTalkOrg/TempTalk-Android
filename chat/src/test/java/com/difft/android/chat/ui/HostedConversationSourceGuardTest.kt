@@ -7,25 +7,16 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlin.test.fail
 
-/**
- * Source-shape guard for conversation pages that IndexActivity hosts in its per-tab detail stacks
- * (design: foldable detail stacks, §3.4 / §4 "Guard", "Current chat", "Unread mark"):
- * - a hosted page never finishes the Activity (that closes the home screen) or casts it to
- *   ChatActivity; it goes through `detailNavigation()` / its own arguments;
- * - every Activity-dispatcher back callback is registered with `detailBackOwner()`, so covered
- *   and hidden pages never take Back;
- * - the current-chat set is written only from onResume (onPause removes), so a page restored
- *   covered or in a hidden tab is not "current";
- * - every owner of a ChatMessageViewModel calls `onShown()` from onResume, which opens the room;
- * - every ComposeDialogManager message or bottom dialog is closed with the page's view
- *   (`dismissWithView`), since it is mounted on the home screen, not the page;
- * - (foldable phase 2, design §3.13) the hand list covers every page a `DetailDestination` builds
- *   and its same-package content files; hosted pages use no Activity-owned API (intent, results,
- *   system-bar padding, Activity pagers), never start a destination's shell directly, push with
- *   their own page as `from`; Compose destination pages consume the container's insets; the
- *   wait-showing utilities release only their own claim and hosted callers pass their wait.
- * Rules are pure functions in [HostedSourceGuards], proven on fixtures by HostedSourceGuardsTest.
- */
+
+
+
+
+
+
+
+
+
+
 class HostedConversationSourceGuardTest {
 
     private val hostedFiles = listOf(
@@ -39,6 +30,8 @@ class HostedConversationSourceGuardTest {
         "chat/src/main/java/com/difft/android/chat/contacts/contactsdetail/ContactDetailFragment.kt",
         "chat/src/main/java/com/difft/android/chat/contacts/contactsdetail/ContactDetailScreen.kt",
         "chat/src/main/java/com/difft/android/chat/contacts/contactsdetail/ContactDetailBottomSheetDialogFragment.kt",
+        "chat/src/main/java/com/difft/android/chat/contacts/groupcard/GroupCardFragment.kt",
+        "chat/src/main/java/com/difft/android/chat/contacts/groupcard/GroupCardBottomSheetDialogFragment.kt",
         "chat/src/main/java/com/difft/android/chat/ui/SingleChatSettingFragment.kt",
         "chat/src/main/java/com/difft/android/chat/group/GroupInfoFragment.kt",
         "chat/src/main/java/com/difft/android/chat/group/GroupInfoHeaderBinder.kt",
@@ -49,6 +42,7 @@ class HostedConversationSourceGuardTest {
         "chat/src/main/java/com/difft/android/chat/ui/MessageDetailFragment.kt",
         "chat/src/main/java/com/difft/android/chat/ui/GroupInCommonFragment.kt",
         "chat/src/main/java/com/difft/android/chat/group/GroupMembersSearchFragment.kt",
+        "chat/src/main/java/com/difft/android/chat/group/GroupMemberListScreen.kt",
         "chat/src/main/java/com/difft/android/chat/search/SearchMessageFragment.kt",
         "chat/src/main/java/com/difft/android/chat/ui/EmojiReactionFragment.kt",
         "chat/src/main/java/com/difft/android/chat/ui/EmojiReactionTabFragment.kt",
@@ -63,6 +57,11 @@ class HostedConversationSourceGuardTest {
         "chat/src/main/java/com/difft/android/chat/setting/translate/TranslateSettingsContent.kt",
         "chat/src/main/java/com/difft/android/chat/group/GroupManagementFragment.kt",
         "chat/src/main/java/com/difft/android/chat/group/GroupSelectionFragments.kt",
+        "chat/src/main/java/com/difft/android/chat/group/create/CreateGroupFragment.kt",
+        "chat/src/main/java/com/difft/android/chat/focus/settings/FocusGroupPickerFragment.kt",
+        "chat/src/main/java/com/difft/android/chat/focus/settings/FocusGroupPickerScreen.kt",
+        "chat/src/main/java/com/difft/android/chat/focus/settings/FocusOthersNotifyFragment.kt",
+        "chat/src/main/java/com/difft/android/chat/focus/settings/StillNotifyScreen.kt",
         "app/src/main/java/com/difft/android/setting/AccountFragment.kt",
         "app/src/main/java/com/difft/android/setting/PrivacySettingFragment.kt",
         "app/src/main/java/com/difft/android/setting/ChatSettingsFragment.kt",
@@ -103,7 +102,7 @@ class HostedConversationSourceGuardTest {
         "app/src/main/java/com/difft/android/search/SearchMoreFragment.kt",
     )
 
-    /** Utilities hosted pages call that show the shared wait dialog themselves. */
+    
     private val waitUtilities = listOf(
         "chat/src/main/java/com/difft/android/chat/ui/SelectChatsUtils.kt",
         "chat/src/main/java/com/difft/android/chat/util/SaveAttachmentUtil.kt",
@@ -132,8 +131,8 @@ class HostedConversationSourceGuardTest {
 
     @Test
     fun `hosted pages show wait dialogs only through their page-scoped claim`() {
-        // The dialog is mounted on the home screen: a direct showWait outlives a closed page, and a
-        // global or per-Activity dismissWait closes another page's claim. Use PageWait.
+        
+        
         val direct = Regex("""ComposeDialogManager\.(showWait|dismissWait)\(""")
         val violations = hostedFiles.flatMap { path ->
             val source = read(path)
@@ -144,8 +143,8 @@ class HostedConversationSourceGuardTest {
 
     @Test
     fun `hosted pages bind every message and bottom dialog to their view`() {
-        // The dialog is mounted on the home screen: one left up after the page closes runs its
-        // callbacks against a detached page. Wrap the show call: dismissWithView(ComposeDialogManager.show…(…)).
+        
+        
         val show = Regex("""ComposeDialogManager\.(showMessageDialog|showMessageDialogForJava|showBottomDialog)\(""")
         val calls = hostedFiles.flatMap { path ->
             val source = read(path)
@@ -158,13 +157,13 @@ class HostedConversationSourceGuardTest {
         assertTrue(violations.isEmpty(), "wrap in dismissWithView(...):\n${violations.joinToString("\n")}")
     }
 
-    /**
-     * Utilities that show the shared wait dialog themselves must take the hosted page's PageWait,
-     * so a page closed mid-request does not strand the dialog on the home screen.
-     */
+    
+
+
+
     @Test
     fun `hosted pages pass their PageWait to wait-showing utilities`() {
-        // The whole call line: the arguments themselves contain parentheses.
+        
         val call = Regex("""AvatarPreviewLauncher\.preview\w+\([^\n]*""")
         val calls = hostedFiles.flatMap { path ->
             val source = read(path)
@@ -230,8 +229,9 @@ class HostedConversationSourceGuardTest {
         }
         assertTrue(Regex("""onVisibleTopAgain \{\s*sendAndUpdateMessageRead\(\)\s*checkAndRecordConfidentialPlaceholders\(\)""")
             .containsMatchIn(source), "catch up read and seen when the list is the visible top again")
-        // A jump opened from a hosted search page lands while that page's keyboard closes.
-        assertTrue(source.contains("jumpTarget.reanchorOnLayout(delta)"), "re-apply a pending jump when the list grows")
+        
+        
+        assertTrue(source.contains("jumpTarget.reanchorForBottomChange("), "re-apply a pending jump when the list grows")
         assertTrue(source.contains("jumpTarget.set(position)"), "a message jump records its target")
     }
 
@@ -252,20 +252,23 @@ class HostedConversationSourceGuardTest {
 
     @Test
     fun `hosted pages with a search field follow the detail keyboard policy`() {
-        // Search pages open the keyboard only on a fresh open: the layout's autofocus would also
-        // fire after a fold recreation, so it is off when hosted.
+        
+        
         listOf(
             "chat/src/main/java/com/difft/android/chat/search/SearchMessageFragment.kt",
-            "chat/src/main/java/com/difft/android/chat/group/GroupMembersSearchFragment.kt",
             "app/src/main/java/com/difft/android/search/GlobalSearchFragment.kt",
         ).forEach { path ->
             val source = read(path)
             assertTrue(source.contains("detailKeyboard(showOnFirstOpen = true"), "$path: detailKeyboard")
             assertTrue(source.contains("if (isInDetailStack()) binding.searchInput.autoFocus = false"), "$path: layout autofocus off when hosted")
         }
+        
+        
+        val members = read("chat/src/main/java/com/difft/android/chat/group/GroupMembersSearchFragment.kt")
+        assertTrue(members.contains("detailKeyboard(showOnFirstOpen = false"), "GroupMembersSearchFragment: detailKeyboard")
         val commonGroups = read("chat/src/main/java/com/difft/android/chat/ui/GroupInCommonFragment.kt")
         assertTrue(commonGroups.contains("detailKeyboard("), "GroupInCommonFragment: hide the keyboard when covered, lease below API 30")
-        // Search layer pages take the keyboard back when the one-pane conversation layer over them pops (D1).
+        
         listOf(
             "chat/src/main/java/com/difft/android/chat/search/SearchMessageFragment.kt",
             "app/src/main/java/com/difft/android/search/GlobalSearchFragment.kt",

@@ -29,8 +29,9 @@ import javax.inject.Named
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.cancellation.CancellationException
+import com.difft.android.chat.group.canInviteGroupMembers
 
-/** App lifetime owner of accepted membership changes and their independent local follow-ups. */
+
 @Singleton
 class GroupMutationRepository @Inject constructor(
     private val groups: GroupRepo,
@@ -70,12 +71,12 @@ class GroupMutationRepository @Inject constructor(
         val keyJobs: GroupKeyDistributor.PendingMembers?,
         val keyRequired: Boolean,
         val refreshed: Boolean = false,
-        /** Fetch-order mark taken when the server accepted the change; the refresh must start after it. */
+        
         val refreshAfter: Long? = null,
     )
 
     sealed interface Outcome {
-        /** [status] is the server status (0 for local rejections); [detail] names rejected members when known. */
+        
         data class Rejected(val reason: String? = null, val status: Int = 0, val detail: String? = null) : Outcome
         data class Applied(val pending: Pending) : Outcome
         data class AppliedFollowupFailed(
@@ -129,7 +130,7 @@ class GroupMutationRepository @Inject constructor(
                 is Change.Members -> {
                     if (change.ids.isEmpty()) return Outcome.Rejected()
                     if (change.add) {
-                        if (group.invitationRule != 2 && self.role > GROUP_ROLE_ADMIN) return Outcome.Rejected()
+                        if (!canInviteGroupMembers(self.role, group.invitationRule)) return Outcome.Rejected()
                         if (change.ids.any { it in members }) return Outcome.Rejected()
                     } else if (change.ids.any { uid ->
                         val target = members[uid]
@@ -142,7 +143,7 @@ class GroupMutationRepository @Inject constructor(
             var keyJobs: GroupKeyDistributor.PendingMembers? = null
             var bindings: List<GroupMemberBinding>? = null
             if (change is Change.Members && change.add && encrypted) {
-                // Known encrypted groups must never degrade to unsigned membership requests.
+                
                 val key = crypto.getRGroupBytes(gid) ?: return Outcome.Rejected()
                 bindings = signer.sign(key, change.ids)
                 when (val preparation = distributor.prepareMembers(gid, change.ids, true, session.creatorLogin)) {
@@ -183,7 +184,7 @@ class GroupMutationRepository @Inject constructor(
         var refreshed = pending.refreshed
         if (!refreshed) {
             try {
-                // Only a GET started after acceptance may satisfy the refresh; null is a failed fetch, never subject removal.
+                
                 refreshed = groupUtil.fetchAndSaveSingleGroupInfo(pending.gid, true, GroupWriteSession(pending.accountId, pending.creatorLogin),
                     startedAfter = pending.refreshAfter) != null
             } catch (e: CancellationException) {

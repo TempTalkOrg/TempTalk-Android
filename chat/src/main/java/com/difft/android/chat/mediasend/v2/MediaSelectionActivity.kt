@@ -20,7 +20,7 @@ import com.difft.android.chat.util.WindowUtil
 
 class MediaSelectionActivity : BaseActivity(), MediaReviewFragment.Callback {
 
-    // Disable auto padding - this Activity uses fullscreen layout with FullscreenHelper
+    
     override fun shouldApplySystemBarsPadding(): Boolean = false
 
     companion object {
@@ -64,18 +64,13 @@ class MediaSelectionActivity : BaseActivity(), MediaReviewFragment.Callback {
         val factory = MediaSelectionViewModel.Factory(initialMedia, MediaSelectionRepository(this), confidentialMode, showConfidentialToggle)
         viewModel = ViewModelProvider(this, factory)[MediaSelectionViewModel::class.java]
 
-//        onBackPressedDispatcher.addCallback(OnBackPressed())
     }
 
-//    private inner class OnBackPressed : OnBackPressedCallback(true) {
-//        override fun handleOnBackPressed() {
-//            finish()
-//        }
-//    }
 
-    override fun onSentWithResult(mediaSendActivityResult: MediaSendActivityResult) {
-        setResult(RESULT_OK, Intent().apply { putExtra(MediaSendActivityResult.EXTRA_RESULT, mediaSendActivityResult) })
+    override fun onSentWithResult(outcome: MediaSendOutcome) {
+        setResult(RESULT_OK, Intent().apply { putExtra(MediaSendActivityResult.EXTRA_RESULT, outcome.result) })
         finish()
+        outcome.retireDraftSources()
     }
 
     override fun onSentWithoutResult() {
@@ -84,10 +79,7 @@ class MediaSelectionActivity : BaseActivity(), MediaReviewFragment.Callback {
         finish()
     }
 
-    /**
-     * Stays on the review screen: finishing here discarded the typed caption and the whole selection
-     * to report a failure, and the throwable itself was dropped without a trace.
-     */
+    
     override fun onSendError(error: Throwable) {
         val failure = MediaFailureClassifier.classifyThrown(error)
         MediaSendFailureNotice.showThrown(this, failure) {

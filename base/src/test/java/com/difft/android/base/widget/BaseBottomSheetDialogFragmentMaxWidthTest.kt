@@ -13,12 +13,12 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
-/**
- * Wide-screen contract for [BaseBottomSheetDialogFragment] (issue #1197): the 640dp cap must live
- * on [com.google.android.material.bottomsheet.BottomSheetBehavior.setMaxWidth] so the very first
- * layout pass is already capped. The previous implementation resized the sheet in `onShow`, which
- * flashed one full-width frame before snapping to 640dp.
- */
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], qualifiers = "w1000dp-h800dp")
 class BaseBottomSheetDialogFragmentMaxWidthTest {

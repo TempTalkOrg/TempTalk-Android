@@ -36,7 +36,7 @@ import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
-// All wcdb calls in this class run on Dispatchers.IO.
+
 @Suppress("BlockingWcdbInSuspend")
 @Singleton
 class DBMessageStore
@@ -45,13 +45,13 @@ constructor(
     private val dbRoomStore: DBRoomStore,
 ) : MessageStore {
 
-    /**
-     * Serialises the two translate write paths. Both read the `translate` row for a messageId and
-     * then insert when it is missing; the batch flush and a single user action can run that
-     * read-then-insert concurrently for the same message, and the second insert would hit the
-     * unique `messageId` index. One in-process lock is enough — the `translate` table is only ever
-     * written from here.
-     */
+    
+
+
+
+
+
+
     private val translateWriteMutex = Mutex()
 
     override fun putWhenNonExist(vararg messages: Message): Int {
@@ -59,9 +59,9 @@ constructor(
         val startTime = System.currentTimeMillis()
         var inserted = 0
         try {
-            // #971: batch-granularity Performance trace (one start/stop per batch on the
-            // ingest thread) so p99 ingest latency is visible without per-message observer cost.
-            // Scope = the DB write only; trackRoom (a flow emit) stays outside for clean attribution.
+            
+            
+            
             tracedPerf("wcdb_put_messages_batch", mapOf("count" to messages.size.toLong())) {
                 messages.forEach { message ->
                     if (!processingMessageIds.add(message.id)) {
@@ -76,7 +76,7 @@ constructor(
                     }
                 }
             }
-            // Notify only after a successful batch insert (an insert failure rethrows above and skips this).
+            
             messages.groupBy { it.forWhat.id }.forEach { (roomId, _) ->
                 RoomChangeTracker.trackRoom(roomId, RoomChangeType.MESSAGE)
             }
@@ -94,12 +94,8 @@ constructor(
     companion object {
         private val processingMessageIds = ConcurrentHashMap.newKeySet<String>()
 
-        // #969 in-flight room deletes: a second delete for the SAME room while one is in
-        // flight would run a second paged-delete loop with its own snapshot, interleaving
-        // page deletes and double-firing trackRoom. We skip the duplicate (the in-flight
-        // loop already covers this room) and, if it was a legitimately newer delete, redeem
-        // it via pendingRedeleteRoomIds once the in-flight loop releases. Same structure as
-        // processingMessageIds above.
+        
+        
         private val deletingRoomIds = ConcurrentHashMap.newKeySet<String>()
         private val pendingRedeleteRoomIds = ConcurrentHashMap<String, () -> Boolean>()
         private val allowLegacyDelete: () -> Boolean = { true }
@@ -107,8 +103,8 @@ constructor(
 
     override fun deleteMessage(messageIds: List<String>) {
         appScope.launch {
-            // Fail-soft: skip if the cipher key is unavailable. Guarded before the catch below so
-            // WCDBKeyUnavailableException isn't silently swallowed there, losing fail-soft telemetry.
+            
+            
             if (wcdb.isDbInaccessible) {
                 L.w { "[Message] skip deleteMessage, DB inaccessible" }
                 return@launch
@@ -127,13 +123,10 @@ constructor(
 
     override fun removeRoomAndMessages(roomId: String, commitAllowed: (() -> Boolean)?) {
         if (commitAllowed?.invoke() == false) return
-        // #969 per-room guard: take the in-flight mark SYNCHRONOUSLY here (outside appScope.launch)
-        // so two rapid calls can't both launch before either adds — putting the add inside the
-        // coroutine would race the guard away. A duplicate while one is in flight is skipped; if it
-        // was a legitimately newer delete (new messages arrived past the in-flight snapshot), it is
-        // re-driven once via pendingRedeleteRoomIds when the in-flight loop releases (ARCH-CRIT-1).
+        
+        
         if (!deletingRoomIds.add(roomId)) {
-            // A queued unguarded redelete must not inherit a session guard that may have ended by then.
+            
             pendingRedeleteRoomIds.compute(roomId) { _, queued ->
                 if (queued === allowLegacyDelete || commitAllowed == null) allowLegacyDelete else commitAllowed
             }
@@ -142,37 +135,26 @@ constructor(
         }
         appScope.launch {
             try {
-                // The caller's session can end after this work was queued, or between pages.
+                
                 if (commitAllowed?.invoke() == false) return@launch
-                // Fail-soft: skip if the cipher key is unavailable. Both guards stay inside try
-                // so either early return still releases deletingRoomIds in finally.
+                
+                
                 if (wcdb.isDbInaccessible) {
                     L.w { "[Message] skip removeRoomAndMessages, DB inaccessible: $roomId" }
                     return@launch
                 }
-                // Snapshot the upper bound BEFORE deleting anything, so concurrent inserts during
-                // the paged delete (room still valid + server still pushing) are NOT swept in. The
-                // match set is fixed at snapshot time (databaseId is the monotonic autoincrement PK)
-                // → the paged loop is guaranteed to converge. New messages (databaseId > snapshotMax)
-                // survive; if the room is still valid it legitimately rebuilds with only those newer
-                // messages. (#969)
+                
+                
+                
+                
+                
+                
                 val snapshotMax = maxMessageDatabaseId(roomId)
 
-                // Delete the room row FIRST so the conversation disappears from the list
-                // immediately — a user-initiated delete should feel instant. Then page-delete
-                // its messages. Deleting messages first instead would keep the room visible for the
-                // whole paged-delete window (~100ms × pages).
-                //
-                // Two ways message rows can outlive the room row here: an interrupted paged delete,
-                // or — new with #969 — messages that arrived past snapshotMax (deliberately preserved).
-                // If the room is still active these are reclaimed when the next incoming message
-                // re-creates the room row (the rows re-attach to the rebuilt room). Rows for a room
-                // that is NEVER re-created stay as orphans: cleanEmptyRooms only sweeps rooms that
-                // still EXIST in the room table, so it does NOT reclaim room-less message rows.
-                // True room-less orphan reclamation remains the tracked #909 follow-up.
-                //
-                // Deleting the room row does not affect the databaseId-bounded message delete below
-                // (independent tables, no FK cascade).
+                
+                
+                
+                
                 if (commitAllowed?.invoke() == false) return@launch
                 wcdb.room.deleteObjects(DBRoomModel.roomId.eq(roomId))
                 deleteMessagesPaged(
@@ -183,17 +165,17 @@ constructor(
                 RoomChangeTracker.trackRoom(roomId, RoomChangeType.MESSAGE)
                 L.i { "[Message] remove room and messages success: $roomId (snapshotMax=$snapshotMax)" }
             } catch (e: CancellationException) {
-                // Don't swallow cancellation — re-throw to honor structured concurrency and avoid
-                // logging a normal scope teardown as an error. The finally below still runs, so the
-                // guard is released either way. (#972 review)
+                
+                
+                
                 throw e
             } catch (e: Exception) {
                 L.e { "[Message] Failed to remove room and messages: ${e.stackTraceToString()}" }
             } finally {
-                // Always release the guard — success, exception, or cancellation — otherwise the
-                // room could never be deleted again. If a newer delete was queued while this one
-                // ran, re-drive it once: it takes a fresh snapshot covering any messages that
-                // arrived past this loop's snapshotMax. Idempotent — a no-op if the room is empty.
+                
+                
+                
+                
                 deletingRoomIds.remove(roomId)
                 val queuedGuard = pendingRedeleteRoomIds.remove(roomId)
                 if (queuedGuard != null) {
@@ -213,10 +195,10 @@ constructor(
         try {
             val realMessageId = reaction.realSource?.mapToMessageId()?.idValue ?: return
             wcdb.db.runTransaction {
-                // target-scoping: reaction target must exist and belong to this conversation, otherwise defer/drop to prevent cross-conversation injection.
+                
                 val targetMessage = wcdb.message.getFirstObject(DBMessageModel.id.eq(realMessageId))
                 if (targetMessage == null) {
-                    // Target message not arrived yet: don't blindly insert an orphan; defer and re-check after it arrives.
+                    
                     if (reactionMessageId != null && envelopeBytes != null) {
                         savePendingMessage(reactionMessageId, reaction.realSource.timestamp, envelopeBytes)
                         L.i { "[Message] updateMessageReaction: target $realMessageId absent, defer via savePendingMessage." }
@@ -283,9 +265,9 @@ constructor(
         }
     }
 
-    // ----------------------------------------------------
-    // updateMessageTranslateData
-    // ----------------------------------------------------
+    
+    
+    
     override suspend fun updateMessageTranslateData(
         conversationId: String,
         messageId: String,
@@ -295,8 +277,8 @@ constructor(
             L.w { "[Translate] skip non-persistable status=${translateData.translateStatus} messageId=$messageId" }
             return
         }
-        // Fail-soft: a translation finished on a global scope can land after logout deleted the
-        // database, and the cipher key is gone with it.
+        
+        
         if (wcdb.isDbInaccessible) {
             L.w { "[Translate] skip single write, DB inaccessible messageId=$messageId" }
             return
@@ -348,15 +330,15 @@ constructor(
             L.w { "[Translate] batch dropped $skipped non-persistable entries of ${dataByMessageId.size}" }
         }
         if (persistable.isEmpty()) return
-        // Fail-soft, same reason as the single-message path above.
+        
         if (wcdb.isDbInaccessible) {
             L.w { "[Translate] skip batch write of ${persistable.size}, DB inaccessible" }
             return
         }
 
         translateWriteMutex.withLock {
-            // One query for the messages: a revoked or deleted message is filtered out here, so no
-            // orphan translate row is ever written.
+            
+            
             val existingIds = wcdb.message.getOneColumnString(
                 DBMessageModel.id,
                 DBMessageModel.roomId.eq(conversationId)
@@ -367,15 +349,15 @@ constructor(
                 return
             }
 
-            // One query for the existing translate rows; whatever is missing is inserted below.
+            
             val existingRows = wcdb.translate.getAllObjects(
                 DBTranslateModel.messageId.`in`(*existingIds.toTypedArray())
             ).associateBy { it.messageId }
 
             var updated = 0
             var inserted = 0
-            // Deliberately no transaction: each row write is atomic on its own, and a partial batch
-            // only means those messages get re-translated the next time the conversation is opened.
+            
+            
             persistable.forEach { (messageId, translateData) ->
                 if (messageId !in existingIds) return@forEach
                 val existing = existingRows[messageId]
@@ -448,9 +430,9 @@ constructor(
         wcdb.deleteDatabaseFile()
     }
 
-    // ----------------------------------------------------
-    // selectableMessageCount
-    // ----------------------------------------------------
+    
+    
+    
     fun selectableMessageCount(forWhat: For): Int {
         return wcdb.message.getValue(
             DBMessageModel.databaseId.count(),
@@ -463,11 +445,9 @@ constructor(
         val expression = DBMessageModel.roomId.eq(conversationId)
             .and(DBMessageModel.readTime.le(0L).or(DBMessageModel.readTime.isNull()))
             .and(DBMessageModel.systemShowTimestamp.le(readMaxTimestamp).or(DBMessageModel.systemShowTimestamp.eq(readMaxTimestamp)))
-        // #909 #4: drop the unbounded getAllObjects load — updateValue is a no-op on an
-        // empty match set, so the isNotEmpty() guard was pure overhead. No load needed.
-        // #1020 Phase 2: SET readTime = readAt (actual read moment); readMaxTimestamp only bounds
-        // row selection. The readTime<=0 guard above keeps it write-once and also releases a migrated
-        // row's "not started" sentinel on the first real read event.
+        
+        
+        
         wcdb.message.updateValue(
             readAt,
             DBMessageModel.readTime,
@@ -491,5 +471,5 @@ constructor(
     }
 }
 
-/** Insert batches slower than this are logged even when they hold a single message. */
+
 private const val SLOW_INSERT_MS = 100L

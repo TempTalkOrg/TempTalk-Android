@@ -19,37 +19,37 @@ import androidx.compose.ui.tooling.preview.Preview
 import com.difft.android.base.R
 import com.difft.android.base.ui.theme.DifftTheme
 
-/**
- * Single-select settings cell (Figma `12405:30459`): a label, an optional explanation line, and a
- * 24dp checkmark on the trailing edge while [selected].
- *
- * Selection is the caller's: the row renders [selected] and reports taps, it holds no state and
- * never compares values itself, so a page keeps its own equality rule (nullable Int, Float, enum).
- *
- * No placeholder occupies the trailing edge while unselected, and none is needed: the label column
- * claims the free space with `weight(1f)`, so it does not shift, and 10 + 24 + 10 stays inside the
- * 52dp row minimum, so the row does not change height either.
- *
- * A [description] switches the row to the composed form (label column of two lines); the row then
- * grows past 52dp instead of clipping. The label is always a single line (ellipsized), the
- * description wraps.
- *
- * The checkmark is decorative (`contentDescription = null`): selection is conveyed by the label the
- * user just tapped, and this kit carries no accessibility semantics (project decision).
- *
- * Inside a [DifftSettingsGroup] no divider is passed — the group produces the hairlines:
- * ```
- * DifftSettingsGroup(footer = { DifftSettingsCaption(explanation) }) {
- *     options.forEach { option ->
- *         DifftSettingsOptionRow(
- *             label = labelOf(option),
- *             selected = option == current,
- *             onClick = { onSelect(option) },
- *         )
- *     }
- * }
- * ```
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 @Composable
 fun DifftSettingsOptionRow(
     label: String,
@@ -92,7 +92,7 @@ fun DifftSettingsOptionRow(
                 Text(
                     text = description,
                     style = DifftSettingsDefaults.OptionDescriptionTextStyle,
-                    color = DifftTheme.colors.textInfo,
+                    color = DifftTheme.colors.primary,
                 )
             }
         }

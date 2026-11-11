@@ -60,7 +60,7 @@ import util.concurrent.SimpleTask
 import java.io.ByteArrayOutputStream
 import java.util.Objects
 
-// Faithful 1:1 Java->Kotlin port; splitting into smaller pieces is tracked as a follow-up.
+
 @Suppress("LargeClass")
 class ImageEditorFragment : Fragment(), ImageEditorHudV2.EventListener, MediaSendPageFragment, TextEntryDialogFragment.Controller {
 
@@ -133,8 +133,8 @@ class ImageEditorFragment : Fragment(), ImageEditorHudV2.EventListener, MediaSen
 
         val mediaConstraints: MediaConstraints = PushMediaConstraints(SentMediaQuality.HIGH)
 
-        // Dynamic size limit based on device memory to prevent OOM
-        // Low memory devices: 1600 (10MB), Normal devices: 2560 (26MB) vs original 4096 (67MB)
+        
+        
         val baseDimension = if (Util.isLowMemory(requireContext())) 1600 else 2560
         imageMaxWidth = Math.min(baseDimension, mediaConstraints.getImageMaxWidth(requireContext()))
         imageMaxHeight = Math.min(baseDimension, mediaConstraints.getImageMaxHeight(requireContext()))
@@ -256,8 +256,8 @@ class ImageEditorFragment : Fragment(), ImageEditorHudV2.EventListener, MediaSen
     }
 
     override fun onDestroyView() {
-        // Clean up all blurred bitmaps when fragment view is destroyed
-        // This prevents memory leaks when user leaves the editor
+        
+        
         clearBlurredBitmaps()
 
         imageEditorView = null
@@ -514,15 +514,15 @@ class ImageEditorFragment : Fragment(), ImageEditorHudV2.EventListener, MediaSen
                 getString(R.string.MediaReviewImagePageFragment__youll_lose_any_changes),
                 getString(R.string.MediaReviewImagePageFragment__discard),
                 getString(android.R.string.cancel),
-                true, // showCancel
-                true, // cancelable
+                true, 
+                true, 
                 {
                     imageEditorHud!!.setMode(ImageEditorHudV2.Mode.NONE)
                     controller.onCancelEditing()
                     Unit
                 },
-                null, // onCancel
-                null  // onDismiss
+                null, 
+                null  
             )
         } else {
             imageEditorHud!!.setMode(ImageEditorHudV2.Mode.NONE)
@@ -659,13 +659,13 @@ class ImageEditorFragment : Fragment(), ImageEditorHudV2.EventListener, MediaSen
     }
 
     private fun performSaveToDisk() {
-        // Check view lifecycle before accessing
+        
         if (imageEditorView == null) {
             L.w { "[ImageEditor] Cannot save: view is null" }
             return
         }
 
-        // Get model on UI thread before passing to worker thread
+        
         val model = imageEditorView!!.getModel()
         if (model == null) {
             L.w { "[ImageEditor] Cannot save: model is null" }
@@ -679,14 +679,14 @@ class ImageEditorFragment : Fragment(), ImageEditorHudV2.EventListener, MediaSen
         }
 
         SimpleTask.run({ renderToSingleUseBlob(context, model) }, { uri ->
-            // Check if fragment is still attached when callback executes
+            
             if (!isAdded || getContext() == null) {
                 L.w { "[ImageEditor] Save completed but fragment is detached" }
                 return@run
             }
 
-            // renderToSingleUseBlob returns null when the underlying render fails
-            // (source image deleted mid-edit, OOM, createDraftAttachment IO error, etc.).
+            
+            
             if (uri == null) {
                 L.w { "[ImageEditor] Save aborted: render returned null" }
                 Toast.makeText(requireContext(), R.string.operation_failed, Toast.LENGTH_SHORT).show()
@@ -932,11 +932,11 @@ class ImageEditorFragment : Fragment(), ImageEditorHudV2.EventListener, MediaSen
         imageEditorView!!.getModel().setSelected(if (selected) editorElement else null)
     }
 
-    /**
-     * Clears blurred bitmaps from the main image renderer to free memory.
-     * Called after editing is complete to reduce memory footprint.
-     * Blurred bitmaps will be recreated if needed during rendering (e.g., when sending).
-     */
+    
+
+
+
+
     fun clearBlurredBitmaps() {
         if (imageEditorView != null && imageEditorView!!.getModel() != null) {
             val model = imageEditorView!!.getModel()
@@ -1022,7 +1022,7 @@ class ImageEditorFragment : Fragment(), ImageEditorHudV2.EventListener, MediaSen
 
         private const val SELECT_STICKER_REQUEST_CODE = 124
 
-        // Getters: the system density changes with the display-size setting while the process lives.
+        
         private val DRAW_HUD_PROTECTION get() = ViewUtil.dpToPx(72)
         private val CROP_HUD_PROTECTION get() = ViewUtil.dpToPx(144)
 
@@ -1061,9 +1061,9 @@ class ImageEditorFragment : Fragment(), ImageEditorHudV2.EventListener, MediaSen
                 image = editorModel.render(context, FontTypefaceProvider())
 
                 image.compress(Bitmap.CompressFormat.JPEG, 80, outputStream)
-                // Free the uncompressed pixel data (~10-48MB) before the blocking I/O wait below;
-                // finally's null-guard then no-ops on success and still recycles if compress threw
-                // after a successful render.
+                
+                
+                
                 image.recycle()
                 image = null
 
@@ -1072,12 +1072,12 @@ class ImageEditorFragment : Fragment(), ImageEditorHudV2.EventListener, MediaSen
                     .withMimeType(MediaUtil.IMAGE_JPEG)
                     .createForDraftAttachmentAsync(context).get()
             } catch (e: Exception) {
-                // Covers RuntimeException(GlideException) from UriGlideRenderer when the source
-                // file vanished mid-edit, createDraftAttachment IO failures, and OOM.
+                
+                
                 L.w(e) { "[ImageEditorFragment] renderToSingleUseBlob failed" }
-                // Restore the worker thread's interrupt flag if it was cleared by either
-                // a direct InterruptedException (from createDraftAttachmentAsync().get()) or
-                // an InterruptedException wrapped into RuntimeException by UriGlideRenderer.
+                
+                
+                
                 if (e is InterruptedException || e.cause is InterruptedException) {
                     Thread.currentThread().interrupt()
                 }

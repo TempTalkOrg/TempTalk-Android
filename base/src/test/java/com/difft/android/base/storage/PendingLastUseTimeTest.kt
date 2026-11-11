@@ -20,18 +20,18 @@ import org.robolectric.annotation.Config
 import java.io.File
 import kotlin.test.assertEquals
 
-/**
- * Unit tests for [PendingLastUseTime] (issue #725 §10.1).
- *
- * Verifies:
- *  - [PendingLastUseTime.current] reflects the latest [PendingLastUseTime.record] value.
- *  - [PendingLastUseTime.flush] writes to the DataStore.
- *  - A no-op flush (no record) does not write — short-circuits on `isDirty=false`.
- *  - [PendingLastUseTime.loadInitial] populates the in-memory holder from the persisted value.
- *
- * Robolectric is used so a real PreferenceDataStore can be backed by the
- * Robolectric sandbox file system.
- */
+
+
+
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(manifest = Config.NONE)
 class PendingLastUseTimeTest {
@@ -73,11 +73,11 @@ class PendingLastUseTimeTest {
 
     @Test
     fun `flush without record is a no-op`() = runTest {
-        // Seed DataStore with a known value to detect any unwanted write.
+        
         dataStore.edit { it[AppStateKeys.LAST_USE_TIME] = 42L }
-        // No `record()` call — isDirty stays false.
+        
         holder.flush(dataStore)
-        // Stored value untouched.
+        
         assertEquals(42L, dataStore.data.first()[AppStateKeys.LAST_USE_TIME])
     }
 
@@ -98,9 +98,9 @@ class PendingLastUseTimeTest {
     fun `second flush without new record is no-op`() = runTest {
         holder.record(100L)
         holder.flush(dataStore)
-        // Overwrite the on-disk value directly.
+        
         dataStore.edit { it[AppStateKeys.LAST_USE_TIME] = 999L }
-        // Holder is now clean (isDirty=false), so this should not overwrite the 999.
+        
         holder.flush(dataStore)
         assertEquals(999L, dataStore.data.first()[AppStateKeys.LAST_USE_TIME])
     }

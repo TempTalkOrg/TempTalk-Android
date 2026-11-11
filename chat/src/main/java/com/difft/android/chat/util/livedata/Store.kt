@@ -8,12 +8,12 @@ import com.difft.android.base.concurrent.AppExecutors
 import com.difft.android.chat.util.concurrent.SerialExecutor
 import java.util.concurrent.Executor
 
-/**
- * Manages a state to be updated from a view model and provide direct and live access. Updates
- * occur serially on the same executor to allow updating in a thread safe way. While not every
- * state update is guaranteed to be emitted, no update action will be dropped and state that is
- * emitted will be accurate.
- */
+
+
+
+
+
+
 open class Store<State>(initialState: State) {
 
     private val liveStore: LiveDataStore = LiveDataStore(initialState)

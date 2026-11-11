@@ -11,11 +11,11 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
-/**
- * The chat-list row's vertical padding sets the row height (52dp avatar + 2 x 10dp padding = 72dp),
- * which decides how many conversations a short foldable cover screen shows at once. It matches the
- * iOS cell (52pt avatar, 10pt vertical insets).
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33])
 class RecentChatRowPaddingTest {

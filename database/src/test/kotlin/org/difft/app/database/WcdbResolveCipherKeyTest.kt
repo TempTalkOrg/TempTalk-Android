@@ -24,19 +24,19 @@ import kotlin.test.assertNotSame
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
-/**
- * Contract tests for [WCDB.resolveCipherKeyOnce]:
- *
- * - Cache-failure unmask + preserved cause: the first throw is the original (live-stack)
- *   exception; the second is a new instance whose `cause` chains back to it, while
- *   [WCDBKeyManager.getOrCreateKey] is hit exactly once — the cache holds the original failure
- *   Result untouched; only the throw site wraps.
- * - Success cache: repeated calls return the same [ByteArray], hitting the Keystore only once.
- * - `@Synchronized` self-serialization: two threads racing `resolveCipherKeyOnce()` from cold
- *   observe a single `getOrCreateKey` invocation and the same key — this is the shared
- *   check-then-act body the `db` lazy funnels into. The `@Synchronized` is a cheap defensive
- *   guard against any future second entry point bypassing the db-lazy lock.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class WcdbResolveCipherKeyTest {
@@ -136,7 +136,7 @@ class WcdbResolveCipherKeyTest {
             val key = ByteArray(48)
             every { WCDBKeyManager.getOrCreateKey(any()) } answers {
                 callCount.incrementAndGet()
-                Thread.sleep(1) // widen the check-then-act window
+                Thread.sleep(1) 
                 key
             }
             val wcdb = WCDB(ctx, TestScope())

@@ -13,23 +13,23 @@ import java.net.URL
 import java.util.Locale
 import javax.net.ssl.HttpsURLConnection
 
-/**
- * Low-level file-system helpers (origin: Blankj AndroidUtilCode FileUtils/FileIOUtils, trimmed to
- * the members actually used in this codebase). App-domain file operations live in
- * [com.difft.android.base.utils.FileUtil].
- */
+
+
+
+
+
 object FileSystemUtils {
 
     private const val BUFFER_SIZE = 524288
 
-    /** Return the name of file. */
+    
     @JvmStatic
     fun getFileName(file: File?): String {
         if (file == null) return ""
         return getFileName(file.absolutePath)
     }
 
-    /** Return the name of file. */
+    
     @JvmStatic
     fun getFileName(filePath: String?): String {
         if (TextUtils.isEmpty(filePath)) return ""
@@ -37,18 +37,18 @@ object FileSystemUtils {
         return if (lastSep == -1) filePath else filePath.substring(lastSep + 1)
     }
 
-    /** Return the length (recursively for a directory). */
+    
     @JvmStatic
     fun getLength(filePath: String?): Long = getLength(getFileByPath(filePath))
 
-    /** Return the length (recursively for a directory). */
+    
     @JvmStatic
     fun getLength(file: File?): Long {
         if (file == null) return 0
         return if (file.isDirectory) getDirLength(file) else getFileLength(file)
     }
 
-    /** Return the length of file, resolving http(s) URLs via a HEAD-like content-length probe. */
+    
     @JvmStatic
     fun getFileLength(filePath: String): Long {
         val isURL = filePath.matches("[a-zA-z]+://[^\\s]*".toRegex())
@@ -68,7 +68,7 @@ object FileSystemUtils {
         return getFileLength(getFileByPath(filePath))
     }
 
-    /** Convert bytes to an upper-case hex string. */
+    
     @JvmStatic
     fun bytesToHex(input: ByteArray): String {
         val sb = StringBuilder(128)
@@ -82,7 +82,7 @@ object FileSystemUtils {
         return sb.toString().uppercase(Locale.ROOT)
     }
 
-    /** Decode a condensed hex digest string to bytes. */
+    
     @JvmStatic
     @Throws(IOException::class)
     fun decodeDigestHex(encoded: String): ByteArray {
@@ -109,12 +109,12 @@ object FileSystemUtils {
         return out
     }
 
-    /** Copy the directory or file. */
+    
     @JvmStatic
     fun copy(srcPath: String?, destPath: String?): Boolean =
         copy(getFileByPath(srcPath), getFileByPath(destPath))
 
-    // region internal helpers (transitive closure of the public methods above)
+    
 
     private fun getFileByPath(filePath: String?): File? =
         if (TextUtils.isEmpty(filePath)) null else File(filePath!!)
@@ -221,5 +221,5 @@ object FileSystemUtils {
         }
     }
 
-    // endregion
+    
 }

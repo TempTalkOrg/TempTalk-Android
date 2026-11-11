@@ -28,12 +28,12 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowPowerManager
 
-/**
- * Screen-off during voice-message playback: the proximity wake lock is held exactly while the
- * player is pinned to the earpiece, and only inside an enabled playback session.
- *
- * Verify: :chat:testDebugUnitTest
- */
+
+
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [33])
@@ -89,8 +89,8 @@ class VoiceMessageProximityLockTest {
 
     @Test
     fun `a rejected earpiece route never holds the lock`() = runTest(testDispatcher) {
-        // Audio stays on the speaker when the platform refuses the preferred device; a dark screen
-        // next to an audibly playing speaker is the misfire this guards against.
+        
+        
         builtinOutputsOnly()
         setMediaPlayer(mockk<MediaPlayer>(relaxed = true).also { every { it.setPreferredDevice(any()) } returns false })
         VoiceMessageProximityLock.enable()
@@ -116,7 +116,7 @@ class VoiceMessageProximityLockTest {
     fun `a late near after playback stopped is ignored`() = runTest(testDispatcher) {
         builtinOutputsOnly()
         VoiceMessageProximityLock.enable()
-        VoiceMessageProximityLock.disable() // pause/complete/release happened first
+        VoiceMessageProximityLock.disable() 
 
         AudioMessageManager.applyProximityRoute(isNear = true)
 
@@ -138,20 +138,20 @@ class VoiceMessageProximityLockTest {
 
     @Test
     fun `sync converges on the live desired state, not on a captured argument`() = runTest(testDispatcher) {
-        // appScope is a multi-threaded pool in production, so two launched syncs may run in either
-        // order. The unconfined test dispatcher runs them in call order; what this pins is that an
-        // EXTRA sync after the last request is a no-op — the state it reads is the live one, so
-        // whichever sync happens to run last cannot undo the latest request.
+        
+        
+        
+        
         builtinOutputsOnly()
         VoiceMessageProximityLock.enable()
         AudioMessageManager.applyProximityRoute(isNear = true)
         val lock = ShadowPowerManager.getLatestWakeLock()
         assertTrue(lock.isHeld)
 
-        VoiceMessageProximityLock.disable() // pause
-        VoiceMessageProximityLock.enable() // resume
-        AudioMessageManager.applyProximityRoute(isNear = true) // still at the ear
-        VoiceMessageProximityLock.sync() // a straggler from the pause
+        VoiceMessageProximityLock.disable() 
+        VoiceMessageProximityLock.enable() 
+        AudioMessageManager.applyProximityRoute(isNear = true) 
+        VoiceMessageProximityLock.sync() 
 
         assertTrue(lock.isHeld)
     }

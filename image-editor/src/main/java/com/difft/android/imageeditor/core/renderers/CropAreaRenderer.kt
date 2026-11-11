@@ -12,13 +12,13 @@ import com.difft.android.imageeditor.core.Bounds
 import com.difft.android.imageeditor.core.Renderer
 import com.difft.android.imageeditor.core.RendererContext
 
-/**
- * Renders a box outside of the current crop area using [R.color.crop_area_renderer_outer_color]
- * and around the edge it renders the markers for the thumbs using [R.color.crop_area_renderer_edge_color],
- * [R.dimen.crop_area_renderer_edge_thickness] and [R.dimen.crop_area_renderer_edge_size].
- *
- * Hit tests outside of the bounds.
- */
+
+
+
+
+
+
+
 @Parcelize
 class CropAreaRenderer(
     @ColorInt private val color: Int,

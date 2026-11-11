@@ -21,15 +21,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import com.difft.android.base.R
+import com.difft.android.base.ui.compose.DialogStatusBarSettingEffect
 import com.difft.android.base.ui.theme.DifftTheme
 
-/**
- * 等待对话框 (替换WaitDialog)
- */
 @Composable
 fun WaitDialog(
     isVisible: Boolean,
-    message: String = "", // 默认不显示文字
+    message: String = "",
     cancelable: Boolean = true,
     layoutId: Int? = null,
     onViewCreated: (View) -> Unit = {},
@@ -38,7 +36,7 @@ fun WaitDialog(
     if (isVisible) {
         val bgColor = DifftTheme.colors.backgroundPopup
         val textColor = DifftTheme.colors.textPrimary
-        val progressColor = DifftTheme.colors.textInfo
+        val progressColor = DifftTheme.colors.primary
 
         Dialog(
             onDismissRequest = if (cancelable) onDismiss else {
@@ -46,7 +44,7 @@ fun WaitDialog(
             }
         ) {
             DialogAnchor.Effect()
-            // 如果有自定义布局，使用透明背景
+            DialogStatusBarSettingEffect()
             if (layoutId != null) {
                 AndroidView(
                     factory = { context ->
@@ -58,7 +56,6 @@ fun WaitDialog(
                     }
                 )
             } else {
-                // 默认的等待对话框
                 Card(
                     modifier = Modifier
                         .wrapContentWidth()
@@ -69,7 +66,7 @@ fun WaitDialog(
                     Column(
                         modifier = Modifier
                             .wrapContentWidth()
-                            .padding(if (message.isNotEmpty()) 24.dp else 20.dp), // 有文字时用24dp，无文字时用20dp
+                            .padding(if (message.isNotEmpty()) 24.dp else 20.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         CircularProgressIndicator(

@@ -18,12 +18,12 @@ import retrofit2.http.POST
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
-/**
- * Fileshare authenticates on the `token` field of each request body, not on the `Authorization`
- * header — so the header is removed rather than left carrying a credential this service never
- * validates. Body-token rejections are retried by
- * [com.difft.android.network.auth.withInvalidTokenRetry] at each call site (issues #1235, #1231).
- */
+
+
+
+
+
+
 @Auth(AuthStyle.NONE)
 interface FileShareService {
     @POST("v1/file/isExists")
@@ -32,18 +32,10 @@ interface FileShareService {
     @POST("v1/file/uploadInfo")
     fun uploadInfo(@Body uploadInfoReq: UploadInfoReq): Call<BaseResponse<UploadInfoResp>>
 
-    /**
-     * Download file from server
-     * Status codes:
-     * - 0: OK
-     * - 1: INVALID_PARAMETER
-     * - 2: NO_PERMISSION (download authorization expired, 30 days) — file expired
-     * - 9: NO_SUCH_FILE
-     * - 12: storage object already purged (35 days) — file expired
-     *   (2 and 12 semantics confirmed by the file-share server team, 2026-09-17; 12 is not in the
-     *   published STATUS enum)
-     * - 99: OTHER_ERROR
-     */
+    
+
+
+
     @POST("v1/file/download")
     fun download(@Body downloadReq: DownloadReq): Call<BaseResponse<DownloadResp>>
 }
@@ -54,12 +46,12 @@ class FileShareRepo @Inject constructor() {
     lateinit var fileShareClient: ChativeHttpClient
 
     private val customConnectionSpec = ConnectionSpec.Builder(ConnectionSpec.RESTRICTED_TLS)
-        .tlsVersions(TlsVersion.TLS_1_2, TlsVersion.TLS_1_3) // 指定TLS版本为TLS 1.2  TLS 1.3
+        .tlsVersions(TlsVersion.TLS_1_2, TlsVersion.TLS_1_3)
         .build()
 
-    // OSS uploads/downloads target object-storage URLs (pre-signed) that are
-    // outside our auth domain — ChativeHttpClient's HeaderInterceptor would
-    // inject auth headers the OSS provider rejects.
+    
+    
+    
     @SuppressLint("ChativeHttpClientRequired")
     private var ossClient = OkHttpClient.Builder()
         .connectTimeout(TimeUnit.SECONDS.toMillis(30), TimeUnit.MILLISECONDS)
@@ -162,14 +154,9 @@ data class DownloadResp(
     val urls: List<String>? = null
 )
 
-/**
- * 附件类型定义
- * - NORMAL: 普通附件 (默认值 0)
- * - VOICE: 语音消息附件 (1)
- * - LARGE: 大附件，大于200M (2)
- */
+
 object AttachmentUploadType {
-    const val NORMAL = 0    // 普通附件
-    const val VOICE = 1     // 语音消息附件
-    const val LARGE = 2     // 大附件（>200M）
+    const val NORMAL = 0
+    const val VOICE = 1
+    const val LARGE = 2
 }

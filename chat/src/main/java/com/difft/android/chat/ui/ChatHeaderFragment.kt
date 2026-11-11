@@ -14,14 +14,15 @@ import com.difft.android.base.utils.globalServices
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.base.utils.DualPaneUtils.setupDynamicBackButton
+import com.difft.android.base.ui.sidechrome.sideChromeBar
 import com.difft.android.base.utils.pane.detailNavigation
 import com.difft.android.chat.R
 import com.difft.android.chat.common.header.CommonHeaderFragment
 import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.chat.contacts.data.isOfficialAccount
 import com.difft.android.chat.databinding.ChatFragmentHeaderBinding
-import com.difft.android.chat.group.CreateGroupActivity
-import com.difft.android.chat.setting.archive.toArchiveTimeDisplayText
+import com.difft.android.chat.group.create.openCreateGroupFromConversation
+import com.difft.android.chat.setting.archive.bindCompactExpiry
 import com.difft.android.chat.setting.viewmodel.ChatSettingViewModel
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import dagger.hilt.android.AndroidEntryPoint
@@ -41,12 +42,12 @@ import org.difft.app.database.wcdb
 
 @AndroidEntryPoint
 class ChatHeaderFragment : CommonHeaderFragment() {
-    // Wait dialog claim scoped to this page (released with its view, dismissed by token only).
+    
     private val pageWait = PageWait(this)
 
-    // Use parent fragment as ViewModel owner when nested (in ChatFragment),
-    // otherwise use activity (when directly in ChatActivity).
-    // Parent fragment initializes ViewModels in onCreateView before child fragments are created.
+    
+    
+    
     private val chatViewModel: ChatMessageViewModel by viewModels(
         ownerProducer = { parentFragment ?: requireActivity() }
     )
@@ -63,12 +64,15 @@ class ChatHeaderFragment : CommonHeaderFragment() {
         savedInstanceState: Bundle?
     ): View {
         binding = ChatFragmentHeaderBinding.inflate(inflater, container, false)
+        ChatHeaderChrome.apply(
+            this, binding.ibBack, binding.titlePill, binding.imageviewTitleAvatar, binding.titleText,
+            binding.nameRow, binding.timerRow, binding.actionsCapsule,
+        )
 
         chatSettingViewModel.conversationSet
             .filterNotNull()
             .onEach {
                 initView(null)
-                // 更新 archiveTime UI
                 updateArchiveTimeUI(it.messageExpiry)
             }
             .launchIn(viewLifecycleOwner.lifecycleScope)
@@ -95,8 +99,8 @@ class ChatHeaderFragment : CommonHeaderFragment() {
             initView(null)
         }.launchIn(viewLifecycleOwner.lifecycleScope)
 
-        // Self-heal the badge + official branch if the cache populates after this header was bound
-        // during the pre-preload window (initView always ends in the same state for the same inputs, so re-running is idempotent).
+        
+        
         OfficialAccountCache.state
             .map { chatViewModel.forWhat.id in it }
             .distinctUntilChanged()
@@ -104,22 +108,17 @@ class ChatHeaderFragment : CommonHeaderFragment() {
             .onEach { initView(null) }
             .launchIn(viewLifecycleOwner.lifecycleScope)
 
-        // 给整个 header 区域添加点击事件，跳转到单聊设置页面
         binding.root.setOnClickListener {
             detailNavigation().push(this, SingleChatSettingDestination(chatViewModel.forWhat.id))
         }
 
-//        binding.imageviewMenuMore.setOnClickListener {
-//            SingleChatSettingActivity.startActivity(requireActivity(), chatViewModel.forWhat.id)
-//        }
 
-        // 观察选择状态来切换返回按钮行为
         chatViewModel.selectMessagesState.onEach {
             setupDynamicBackButton(
                 backButton = binding.ibBack,
                 isEditMode = it.editModel,
                 backIconRes = com.difft.android.base.R.drawable.chative_ic_back,
-                closeIconRes = R.drawable.chat_icon_close,
+                closeIconRes = R.drawable.chat_ic_close_24,
                 onExitEditMode = { chatViewModel.selectModel(false) },
             )
         }.launchIn(viewLifecycleOwner.lifecycleScope)
@@ -132,10 +131,9 @@ class ChatHeaderFragment : CommonHeaderFragment() {
         binding.imageviewBotBadge.isVisible = contact.id.isOfficialAccount()
 
         if (contact.id == globalServices.myId || contact.id.isOfficialAccount()) {
-            binding.imageviewAddContact.visibility = View.GONE
-            binding.imageviewCreateGroup.visibility = View.GONE
-            binding.buttonCall.visibility = View.GONE
+            showActions(call = false, addContact = false, createGroup = false)
         }
+        if (contact.id == globalServices.myId) binding.imageviewTitleAvatar.showFavorites() else binding.imageviewTitleAvatar.setAvatar(contact)
         if (contact.id == globalServices.myId) {
             binding.textviewNickname.text = getString(com.difft.android.base.R.string.chat_favorites)
         } else if (contact.id.isOfficialAccount()) {
@@ -148,33 +146,45 @@ class ChatHeaderFragment : CommonHeaderFragment() {
                     wcdb.contactor.getFirstObject(DBContactorModel.id.eq(contact.id)) != null
                 }
                 if (!isAdded || view == null) return@launch
-                // Icons keep their current visibility until the lookup returns and are then set in one
-                // pass, so the frequent re-runs of initView don't hide-then-reshow them.
-                binding.imageviewAddContact.isVisible = !isFriend
-                binding.imageviewCreateGroup.isVisible = isFriend
-                if (isFriend) {
-                    binding.imageviewCreateGroup.setOnClickListener {
-                        CreateGroupActivity.startActivity(requireActivity(), arrayListOf(contact.id))
-                    }
-
-                    binding.buttonCall.setOnClickListener {
-                        // viewLifecycleOwner scope + post-suspend isAdded/view guard; activity?: avoids requireActivity() ISE.
-                        viewLifecycleOwner.lifecycleScope.launch {
-                            val chatRoomName = withContext(Dispatchers.IO) {
-                                chatViewModel.chatUIData.value.contact?.getDisplayNameForUI() ?: ""
-                            }
-                            val act = activity ?: return@launch
-                            if (!isAdded || view == null) return@launch
-                            chatViewModel.startCall(act, chatRoomName)
-                        }
-                    }
-                } else {
-                    binding.imageviewAddContact.setOnClickListener { requestAddFriend() }
-                }
-
+                
+                
                 val shouldHideCallButton = !isFriend || chatSettingViewModel.currentConversationSet?.blockStatus == 1
-                binding.buttonCall.visibility = if (shouldHideCallButton) View.GONE else View.VISIBLE
+                showActions(
+                    call = !shouldHideCallButton,
+                    addContact = !isFriend,
+                    createGroup = isFriend,
+                    onCall = ::startCall,
+                    onAddContact = ::requestAddFriend,
+                    onCreateGroup = { openCreateGroupFromConversation(this@ChatHeaderFragment, contact.id) },
+                )
             }
+        }
+    }
+
+    
+    private fun showActions(
+        call: Boolean,
+        addContact: Boolean,
+        createGroup: Boolean,
+        onCall: (() -> Unit)? = null,
+        onAddContact: (() -> Unit)? = null,
+        onCreateGroup: (() -> Unit)? = null,
+    ) {
+        val bar = sideChromeBar()
+        bar.setAction(ACTION_CALL, binding.buttonCall, R.drawable.chat_fragment_header_call, getString(R.string.chat_action_call), call, onClick = onCall, floatInPlace = false)
+        bar.setAction(ACTION_ADD_CONTACT, binding.imageviewAddContact, R.drawable.chat_icon_add_contact, getString(R.string.chat_option_add_contact), addContact, onClick = onAddContact, floatInPlace = false)
+        bar.setAction(ACTION_CREATE_GROUP, binding.imageviewCreateGroup, R.drawable.chat_icon_create_group, getString(R.string.chat_option_create_group), createGroup, onClick = onCreateGroup, floatInPlace = false)
+    }
+
+    private fun startCall() {
+        
+        viewLifecycleOwner.lifecycleScope.launch {
+            val chatRoomName = withContext(Dispatchers.IO) {
+                chatViewModel.chatUIData.value.contact?.getDisplayNameForUI() ?: ""
+            }
+            val act = activity ?: return@launch
+            if (!isAdded || view == null) return@launch
+            chatViewModel.startCall(act, chatRoomName)
         }
     }
 
@@ -204,16 +214,13 @@ class ChatHeaderFragment : CommonHeaderFragment() {
         }
     }
 
-    /**
-     * 更新 archiveTime UI 显示
-     */
     private fun updateArchiveTimeUI(archiveTime: Long) {
-        if (archiveTime > 0L) {
-            binding.textviewTimer.visibility = View.VISIBLE
-            val text = " [" + archiveTime.toArchiveTimeDisplayText() + "]"
-            binding.textviewTimer.text = text
-        } else {
-            binding.textviewTimer.visibility = View.GONE
-        }
+        bindCompactExpiry(binding.timerRow, binding.textviewTimer, archiveTime)
+    }
+
+    private companion object {
+        const val ACTION_CALL = "call"
+        const val ACTION_ADD_CONTACT = "add_contact"
+        const val ACTION_CREATE_GROUP = "create_group"
     }
 }

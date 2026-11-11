@@ -7,11 +7,11 @@ import android.view.MotionEvent
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.chat.ui.SafeTextView
 
-/**
- * Custom TextView for text preview.
- * Now primarily used with custom TextSelectionManager for selection handling.
- * Blocks double-tap to prevent accidental word selection when using system selection.
- */
+
+
+
+
+
 class SelectableTextView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
@@ -30,7 +30,7 @@ class SelectableTextView @JvmOverloads constructor(
         private const val DOUBLE_TAP_SLOP = 100f
     }
 
-    // Text-selection gesture — handled by selection state, not click.
+    
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
         when (event.action) {
@@ -39,7 +39,7 @@ class SelectableTextView @JvmOverloads constructor(
                 val dx = event.x - lastDownX
                 val dy = event.y - lastDownY
 
-                // Check if this is a double-tap
+                
                 isDoubleTap = (currentTime - lastDownTime < DOUBLE_TAP_TIMEOUT) &&
                         (dx * dx + dy * dy < DOUBLE_TAP_SLOP * DOUBLE_TAP_SLOP)
 
@@ -47,7 +47,7 @@ class SelectableTextView @JvmOverloads constructor(
                 lastDownX = event.x
                 lastDownY = event.y
 
-                // If double-tap detected, consume to prevent word selection
+                
                 if (isDoubleTap) {
                     return true
                 }
@@ -68,7 +68,7 @@ class SelectableTextView @JvmOverloads constructor(
         return try {
             super.onTouchEvent(event)
         } catch (e: NullPointerException) {
-            // Handle NPE when Editor is not ready
+            
             L.w { "[SelectableTextView] onTouchEvent NPE when Editor not ready: ${e.message}" }
             true
         }

@@ -15,19 +15,19 @@ import androidx.compose.ui.res.stringResource
 import com.difft.android.base.widget.DifftComposeView
 import com.difft.android.call.R
 
-/**
- * XML-hostable shell around [IncomingCallSlider] for the View-based incoming-call screen, shown
- * instead of the tap buttons when the call itself lit the screen.
- *
- * The host must give an explicit width (`match_parent` with the design's side margins): the track
- * fills the width it is offered. Icons are the project's own glyphs (tabler phone, hang-up).
- *
- * Unlike the toggle shells, the gesture lives in the composition rather than in a View click: the
- * whole point is that nothing click-like can activate it, so there is no View-level click path to
- * own. The shell contributes theming, lazy composition, the enabled state, [touchObserver] (every
- * pointer event that reaches the row, for the accept/reject log line) and pauses the idle nudge
- * while the row is not shown.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
 class IncomingCallSliderView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
@@ -37,7 +37,7 @@ class IncomingCallSliderView @JvmOverloads constructor(
     var onAnswer: (() -> Unit)? = null
     var onDecline: (() -> Unit)? = null
 
-    /** Sees every pointer event dispatched into this row before the composition handles it. */
+    
     var touchObserver: ((MotionEvent) -> Unit)? = null
 
     private var shownState by mutableStateOf(false)

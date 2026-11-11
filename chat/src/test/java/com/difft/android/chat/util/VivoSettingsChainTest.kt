@@ -15,7 +15,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** vivo OriginOS 6+ direct pages for auto-start and background power, and their eligibility rules. */
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class VivoSettingsChainTest {
@@ -59,7 +59,7 @@ class VivoSettingsChainTest {
 
     @Test
     fun `vivo rows need OriginOS 6 and a startable page`() {
-        // Nothing registered: not resolvable.
+        
         assertFalse(AutoStartPermissionHelper.canOpenAutoStartSettings(context, OemBrand.VIVO, 6))
         assertFalse(BackgroundActivityPermissionHelper.canOpenBackgroundActivitySettings(context, OemBrand.VIVO, 6))
 

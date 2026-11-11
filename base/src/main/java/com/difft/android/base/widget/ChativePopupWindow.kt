@@ -7,6 +7,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
+import android.graphics.Rect
 import android.graphics.drawable.Drawable
 import android.os.Build
 import android.util.AttributeSet
@@ -15,6 +16,7 @@ import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
 import android.view.View.MeasureSpec
+import android.view.ViewTreeObserver
 import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.PopupWindow
@@ -101,23 +103,14 @@ class ChativePopupView @JvmOverloads constructor(
                         itemBinding.imageviewRight.visibility = View.GONE
                     }
 
-//                    item.fitImageSize?.let {
-//                        if (it) {
-//                            itemBinding.imageviewRight.scaleType = ImageView.ScaleType.FIT_XY
-//                            itemBinding.imageviewIcon.scaleType = ImageView.ScaleType.FIT_XY
-//                        } else {
-//                            itemBinding.imageviewRight.scaleType = ImageView.ScaleType.CENTER
-//                            itemBinding.imageviewIcon.scaleType = ImageView.ScaleType.CENTER
-//                        }
-//                    }
 
                     itemBinding.textviewLabel.text = item.label
 
                     val iconColor = item.iconColor ?: ContextCompat.getColor(context, R.color.icon)
                     ImageViewCompat.setImageTintList(itemBinding.imageviewIcon, ColorStateList.valueOf(iconColor))
 
-                    // Label defaults to the text token; an item that tints its icon (destructive
-                    // rows pass `error`) still carries that colour through to the label.
+                    
+                    
                     val labelColor = item.textColor
                         ?: item.iconColor
                         ?: ContextCompat.getColor(context, R.color.t_primary)
@@ -147,8 +140,13 @@ class ChativePopupView @JvmOverloads constructor(
     }
 
     fun setCardBackgroundColor(cardBackgroundColor: Int) {
-        binding.root.setCardBackgroundColor(cardBackgroundColor)
+        binding.root.applyFloatingSurface(menuCornerPx(), fillColor = cardBackgroundColor, clipsContent = true)
     }
+
+    private fun menuCornerPx(): Float = resources.getDimension(R.dimen.radius_floating)
+
+    
+    internal val rows: View get() = binding.linearlayoutConatiner
 
     fun setTitle(title: String, titleTextColor: Int?) {
         binding.menuTitle.text = title
@@ -164,7 +162,8 @@ class ChativePopupView @JvmOverloads constructor(
             layoutInflater, this, true
         )
 
-        // Padding to accommodate CardView shadow (elevation = 4dp)
+        
+        binding.root.applyFloatingSurface(menuCornerPx(), clipsContent = true)
         ViewCompat.setPaddingRelative(this, 16.dp, 8.dp, 16.dp, 8.dp)
         clipToPadding = false
         clipChildren = false
@@ -203,13 +202,13 @@ object ChativePopupWindow {
             MeasureSpec.makeMeasureSpec(h, MeasureSpec.AT_MOST)
         )
 
-        val popupWindow = PopupWindow(view, view.measuredWidth, view.measuredHeight)
+        val popupWindow = FloatingMenuPopupWindow(view, view.measuredWidth, view.measuredHeight)
         popupWindow.isOutsideTouchable = true
+        popupWindow.growFrom(anchorView.centerOnScreen())
         popupWindow.showAsDropDown(anchorView)
         return popupWindow
     }
 
-    @SuppressLint("ClickableViewAccessibility")
     fun showAsDropDown2(
         anchorView: View,
         items: List<ChativePopupView.Item>,
@@ -217,6 +216,34 @@ object ChativePopupWindow {
         title: String? = null,
         titleTextColor: Int? = null
     ): PopupWindow? {
+        val popupWindow = buildPopup(anchorView, items, cardBackgroundColor, title, titleTextColor) ?: return null
+        popupWindow.growFrom(anchorView.centerOnScreen())
+        popupWindow.showAsDropDown(anchorView)
+        return popupWindow
+    }
+
+    
+
+
+
+    fun showBesideBarButton(anchorView: View, buttonBoundsInWindow: Rect, items: List<ChativePopupView.Item>): PopupWindow? {
+        val popupWindow = buildPopup(anchorView, items, null, null, null) ?: return null
+        val gap = BAR_MENU_GAP_DP.dp
+        val x = (buttonBoundsInWindow.left - gap - popupWindow.width).coerceAtLeast(gap)
+        val window = IntArray(2).also(anchorView.rootView::getLocationOnScreen)
+        popupWindow.growFrom(window[0] + buttonBoundsInWindow.centerX(), window[1] + buttonBoundsInWindow.centerY())
+        popupWindow.showAtLocation(anchorView, Gravity.TOP or Gravity.LEFT, x, buttonBoundsInWindow.top)
+        return popupWindow
+    }
+
+    @SuppressLint("ClickableViewAccessibility")
+    private fun buildPopup(
+        anchorView: View,
+        items: List<ChativePopupView.Item>,
+        cardBackgroundColor: Int?,
+        title: String?,
+        titleTextColor: Int?
+    ): FloatingMenuPopupWindow? {
         val context = anchorView.context
         val view = ChativePopupView(context)
         view.items = items
@@ -228,7 +255,6 @@ object ChativePopupWindow {
             view.setTitle(title, titleTextColor)
         }
 
-        // Get screen dimensions for measuring view size
         val (w, h) = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             val windowManager =
                 ContextCompat.getSystemService(context, WindowManager::class.java) ?: return null
@@ -242,24 +268,21 @@ object ChativePopupWindow {
             MeasureSpec.makeMeasureSpec(h, MeasureSpec.AT_MOST)
         )
 
-        // Create and configure the PopupWindow
-        val popupWindow = PopupWindow(view, view.measuredWidth, view.measuredHeight)
+        val popupWindow = FloatingMenuPopupWindow(view, view.measuredWidth, view.measuredHeight)
         popupWindow.isOutsideTouchable = true
-        popupWindow.isFocusable = true // Make the popup focusable to intercept outside clicks
-        popupWindow.setBackgroundDrawable(Color.TRANSPARENT.toDrawable()) // Transparent background
+        popupWindow.isFocusable = true 
+        popupWindow.setBackgroundDrawable(Color.TRANSPARENT.toDrawable())
 
-        // Set a touch interceptor to handle outside clicks without propagating
+        
         popupWindow.setTouchInterceptor { _, event ->
             if (event.action == MotionEvent.ACTION_OUTSIDE) {
-                popupWindow.dismiss() // Dismiss the popup
-                true // Indicate that we've handled the touch event
+                popupWindow.dismiss()
+                true
             } else {
                 false
             }
         }
 
-        // Show the popup
-        popupWindow.showAsDropDown(anchorView)
         return popupWindow
     }
 
@@ -280,7 +303,6 @@ object ChativePopupWindow {
             title?.let { setTitle(it, titleTextColor) }
         }
 
-        // 测量弹窗内容的宽高
         popupView.measure(
             MeasureSpec.UNSPECIFIED,
             MeasureSpec.UNSPECIFIED
@@ -288,30 +310,83 @@ object ChativePopupWindow {
         val popupWidth = popupView.measuredWidth
         val popupHeight = popupView.measuredHeight
 
-        // 确定 X 和 Y 坐标（使用 anchorView 的根视图尺寸以支持多窗口模式）
+        
         val rootView = anchorView.rootView
         val screenWidth = rootView.width
         val screenHeight = rootView.height
 
-        // 水平居中计算
         val adjustedX = when {
-            touchX - popupWidth / 2 < 0 -> 0 // 左侧超出屏幕
-            touchX + popupWidth / 2 > screenWidth -> screenWidth - popupWidth // 右侧超出屏幕
+            touchX - popupWidth / 2 < 0 -> 0
+            touchX + popupWidth / 2 > screenWidth -> screenWidth - popupWidth
             else -> touchX - popupWidth / 2
         }
 
-        // 垂直位置
         val adjustedY = when {
-            touchY + popupHeight > screenHeight -> screenHeight - popupHeight // 靠下对齐
+            touchY + popupHeight > screenHeight -> screenHeight - popupHeight
             else -> touchY
         }
 
-        // 创建并显示 PopupWindow
-        val popupWindow = PopupWindow(popupView, popupWidth, popupHeight, true)
+        val popupWindow = FloatingMenuPopupWindow(popupView, popupWidth, popupHeight, focusable = true)
         popupWindow.isOutsideTouchable = true
         popupWindow.setBackgroundDrawable(Color.TRANSPARENT.toDrawable())
+        popupWindow.growFrom(touchX, touchY)
         popupWindow.showAtLocation(anchorView, Gravity.NO_GRAVITY, adjustedX, adjustedY)
         return popupWindow
     }
 
+}
+
+private const val BAR_MENU_GAP_DP = 8
+
+private fun View.centerOnScreen(): Pair<Int, Int> {
+    val at = IntArray(2).also(::getLocationOnScreen)
+    return at[0] + width / 2 to at[1] + height / 2
+}
+
+
+
+
+
+
+class FloatingMenuPopupWindow(
+    private val menu: ChativePopupView,
+    width: Int,
+    height: Int,
+    focusable: Boolean = false,
+) : PopupWindow(menu, width, height, focusable) {
+    private var leaving = false
+
+    init {
+        animationStyle = 0
+    }
+
+    fun growFrom(point: Pair<Int, Int>) = growFrom(point.first, point.second)
+
+    
+    fun growFrom(x: Int, y: Int) {
+        menu.alpha = 0f
+        menu.viewTreeObserver.addOnPreDrawListener(object : ViewTreeObserver.OnPreDrawListener {
+            override fun onPreDraw(): Boolean {
+                menu.viewTreeObserver.removeOnPreDrawListener(this)
+                val at = IntArray(2).also(menu::getLocationOnScreen)
+                menu.pivotX = (x - at[0]).toFloat()
+                menu.pivotY = (y - at[1]).toFloat()
+                FloatingMenuMotion.grow(menu, menu.rows)
+                return true
+            }
+        })
+    }
+
+    override fun dismiss() {
+        if (leaving) return
+        
+        if (!isShowing || !menu.isAttachedToWindow || menu.context.getSafeActivity()?.isFinishing == true) {
+            dismissNow()
+            return
+        }
+        leaving = true
+        FloatingMenuMotion.shrink(menu, ::dismissNow)
+    }
+
+    private fun dismissNow() = super.dismiss()
 }

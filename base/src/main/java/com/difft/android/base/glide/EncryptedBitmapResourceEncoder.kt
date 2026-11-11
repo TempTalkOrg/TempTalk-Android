@@ -10,13 +10,13 @@ import com.difft.android.base.log.lumberjack.L
 import java.io.BufferedOutputStream
 import java.io.File
 
-/**
- * Writes a decoded [Bitmap] into Glide's RESOURCE disk cache, compressing it and then encrypting the
- * bytes via [EncryptedCacheCoder]. The companion read path is [EncryptedCacheResourceDecoder].
- *
- * Mirrors Glide's own [BitmapEncoder] compression-format / quality selection, so behavior matches the
- * default encoder except the output stream is encrypted.
- */
+
+
+
+
+
+
+
 class EncryptedBitmapResourceEncoder(
     private val coder: EncryptedCacheCoder
 ) : ResourceEncoder<Bitmap> {

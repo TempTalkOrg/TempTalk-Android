@@ -4,7 +4,7 @@ class PictureSelectorStyle {
 
     private var titleBarStyleField: TitleBarStyle? = null
 
-    /** Getter never returns null (1:1 with the Java getter). */
+    
     var titleBarStyle: TitleBarStyle?
         get() = titleBarStyleField ?: TitleBarStyle()
         set(value) {
@@ -29,7 +29,7 @@ class PictureSelectorStyle {
 
     private var windowAnimationStyleField: PictureWindowAnimationStyle? = null
 
-    /** Lazily initializes the default window-animation style (1:1 with the Java getter). */
+    
     var windowAnimationStyle: PictureWindowAnimationStyle?
         get() {
             if (windowAnimationStyleField == null) {

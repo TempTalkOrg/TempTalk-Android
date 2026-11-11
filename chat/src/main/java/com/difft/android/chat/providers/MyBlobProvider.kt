@@ -37,25 +37,25 @@ class MyBlobProvider private constructor() {
         return FileInputStream(file)
     }
 
-    /**
-     * Deletes a blob owned by this provider. Ownership is structural: a file-scheme uri whose path
-     * resolves inside an app-private root. A uri outside that domain is REFUSED rather than
-     * attempted, so shared-storage media stays untouched by construction instead of by a delete
-     * that merely happens to fail — and whose failure nobody could observe.
-     *
-     * The gate lives here and nowhere else: callers pass the uri they own, this is the only place
-     * that decides whether the path belongs to us.
-     *
-     * No `exists()` pre-check: `File.delete()` already reports false for a missing file, so the
-     * probe only bought an extra IO round trip while letting existence take part in the decision.
-     *
-     * @return true only when a file was actually removed.
-     */
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
     fun delete(uri: Uri): Boolean {
         val scheme = uri.scheme
-        // A null scheme is legal input: callers build uris straight from bare absolute paths. Only
-        // schemes that clearly belong to someone else are refused, which also keeps a content uri
-        // out of File(): its path is a pseudo path such as /external/images/media/123.
+        
+        
+        
         if (scheme != null && scheme != ContentResolver.SCHEME_FILE) {
             L.w { "[Blob] delete refused: unsupported scheme=$scheme" }
             return false
@@ -66,7 +66,7 @@ class MyBlobProvider private constructor() {
             return false
         }
         if (!AppPrivateStorage.isAppPrivate(path)) {
-            // Deliberately without the path: a shared-storage path carries the user's own file name.
+            
             L.w { "[Blob] delete refused: path is outside app-private storage" }
             return false
         }
@@ -110,12 +110,12 @@ class MyBlobProvider private constructor() {
                     StreamUtil.copy(data, outputStream)
                     uri
                 } catch (e: IOException) {
-                    // Delegates to the outer delete so the write-failure cleanup path gets the same
-                    // ownership gate and the same failure log as every other caller.
+                    
+                    
                     delete(uri)
                     L.w(e) { "Error during write!" }
-                    // Wrap so Future.get() callers still see the original IOException
-                    // via ExecutionException.getCause().
+                    
+                    
                     throw CompletionException(e)
                 }
             }, AppExecutors.Default)

@@ -27,11 +27,11 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/**
- * Room errors are handled by the session from start to end, page or not: a tip as an app toast,
- * then the end of the call. No page lifecycle gates it, a pending delayed end outlives the page,
- * and nothing is done once the call is ending or ended. Robolectric for `ToastUtil` and resources.
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [33])
 class CallSessionErrorTest {

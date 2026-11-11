@@ -11,7 +11,7 @@
             <solid android:color="@color/ps_color_transparent" />
             <stroke
                 android:width="1dp"
-                android:color="@color/t.info" />
+                android:color="@color/primary" />
         </shape>
     </item>
 
@@ -26,7 +26,7 @@
             <size
                 android:width="9dp"
                 android:height="9dp" />
-            <solid android:color="@color/t.info" />
+            <solid android:color="@color/primary" />
         </shape>
     </item>
 

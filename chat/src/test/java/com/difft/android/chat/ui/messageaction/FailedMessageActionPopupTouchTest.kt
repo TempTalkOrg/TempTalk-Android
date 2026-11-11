@@ -29,16 +29,16 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import kotlin.math.roundToInt
 
-/**
- * F1-F3 (#1294): outside-tap hit-test and placement of the real [FailedMessageActionPopup].
- *
- * F1 pins the hit-test contract: a tap inside the laid-out menu bounds (panel corner / arrow strip,
- * not an action) never dismisses; the outside-tap handler hit-tests against those laid-out bounds.
- *
- * Expected px values derive from the same `Int.dp` conversion the popup uses: that extension reads
- * the first Robolectric application's density in the JVM, so literal xxhdpi values would break
- * when this class runs after an mdpi test.
- */
+
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(application = TestScopeApplication::class, sdk = [34], qualifiers = "w411dp-h891dp-xxhdpi")
@@ -125,7 +125,7 @@ class FailedMessageActionPopupTouchTest {
         f.show()
 
         composeRule.onNodeWithTag(FAILED_POPUP_MENU_TAG).performTouchInput {
-            // Above and past the right edge: the menu starts at the left padding, so a tap to its left is off-screen.
+            
             click(Offset(width + 40f, -40f))
         }
         composeRule.waitForIdle()
@@ -147,7 +147,7 @@ class FailedMessageActionPopupTouchTest {
         val bounds = f.menuBounds()
         assertTrue("bounds=$bounds content=$content", bounds.top >= content.top + pad)
         assertEquals(content.bottom - pad, bounds.bottom)
-        // Failed messages are outgoing: the right edge follows the bubble, not the content padding.
+        
         assertEquals(content.right - bubbleEndInset, bounds.right)
     }
 

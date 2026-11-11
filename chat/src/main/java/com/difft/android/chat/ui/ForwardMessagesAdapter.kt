@@ -1,5 +1,6 @@
 package com.difft.android.chat.ui
 
+import androidx.annotation.ColorInt
 import android.annotation.SuppressLint
 import android.content.Context
 import android.view.LayoutInflater
@@ -15,25 +16,21 @@ import com.difft.android.messageserialization.db.store.formatBase58Id
 import com.difft.android.messageserialization.db.store.getDisplayNameWithoutRemarkForUI
 import difft.android.messageserialization.model.Forward
 
-/**
- * 获取转发消息的预览文本
- */
 internal fun getForwardText(context: Context, forward: Forward): String {
     return if (!forward.forwards.isNullOrEmpty()) {
         context.getString(R.string.chat_message_chat_history)
     } else if (forward.attachments?.isNotEmpty() == true) {
         context.getString(R.string.chat_message_attachment)
     } else {
-        // Normalize so historically stored raw forwards also render with line breaks here.
+        
         forward.text?.normalizeNewlines() ?: ""
     }
 }
 
-/**
- * 合并转发消息的预览列表 Adapter
- */
 class ForwardMessagesAdapter(
-    private val contactorCache: MessageContactsCacheUtil
+    private val contactorCache: MessageContactsCacheUtil,
+    
+    @ColorInt private val textColor: Int,
 ) : ListAdapter<Forward, ForwardMessagesItemViewHolder>(
     object : DiffUtil.ItemCallback<Forward>() {
         override fun areItemsTheSame(oldItem: Forward, newItem: Forward): Boolean =
@@ -53,12 +50,10 @@ class ForwardMessagesAdapter(
     override fun onBindViewHolder(holder: ForwardMessagesItemViewHolder, position: Int) {
         val data = getItem(position)
         holder.setContent(data, contactorCache)
+        holder.setTextColor(textColor)
     }
 }
 
-/**
- * 合并转发消息的预览列表 ViewHolder
- */
 class ForwardMessagesItemViewHolder(parentView: ViewGroup) : RecyclerView.ViewHolder(run {
     val inflater = LayoutInflater.from(parentView.context)
     ChatItemForwardHistoryBinding.inflate(inflater, parentView, false).root
@@ -66,10 +61,13 @@ class ForwardMessagesItemViewHolder(parentView: ViewGroup) : RecyclerView.ViewHo
     private var binding: ChatItemForwardHistoryBinding =
         ChatItemForwardHistoryBinding.bind(itemView)
 
+    fun setTextColor(@ColorInt color: Int) {
+        binding.textContent.setTextColor(color)
+    }
+
     @SuppressLint("SetTextI18n")
     fun setContent(forward: Forward, contactorCache: MessageContactsCacheUtil) {
         val text = getForwardText(binding.textContent.context, forward)
-        // 从缓存中获取联系人信息
         val author = contactorCache.getContactor(forward.author)
         binding.textContent.text = if (author != null) {
             "${author.getDisplayNameWithoutRemarkForUI()}: $text"

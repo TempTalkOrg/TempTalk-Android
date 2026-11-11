@@ -14,17 +14,17 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/**
- * Verifies the measure-time middle-ellipsize contract of [MiddleEllipsisTextView]:
- * overflowing file names keep their tail (extension) visible, fitting names pass
- * through untouched, and the result is stable across repeated measure passes
- * (the no-flicker guarantee relies on convergence within one measure).
- *
- * [GraphicsMode.Mode.NATIVE] is required for real text measurement — legacy shadows
- * report ~1px per character, so nothing would ever overflow.
- *
- * Run: :chat:testDebugUnitTest
- */
+
+
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33])
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -39,8 +39,8 @@ class MiddleEllipsisTextViewTest {
             textSize = 14f
             maxLines = 2
             ellipsize = TextUtils.TruncateAt.END
-            // TextView.checkForRelayout dereferences layoutParams on setText; a view in a
-            // real hierarchy always has one
+            
+            
             layoutParams = ViewGroup.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT)
         }
     }
@@ -77,7 +77,7 @@ class MiddleEllipsisTextViewTest {
         assertTrue("tail (extension) must stay visible: $shown", shown.endsWith(".pdf"))
         assertTrue("result must fully render within two lines", rendersFully())
 
-        // The ellipsis lands near the visual center of the last line
+        
         val layout = view.layout!!
         val ellipsisX = layout.getPrimaryHorizontal(shown.indexOf("…"))
         assertTrue(
@@ -113,7 +113,7 @@ class MiddleEllipsisTextViewTest {
         view.text = full
         measure(200)
         val shown = view.text.toString()
-        // Every char must pair correctly — a split surrogate would break the sequence
+        
         var i = 0
         while (i < shown.length) {
             val c = shown[i]

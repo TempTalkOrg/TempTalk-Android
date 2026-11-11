@@ -17,7 +17,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** #1350: when a notification test may start, and when a running one is voided (design T11 to T13). */
+
 class NotificationTestRulesTest {
 
     private val loud = ChannelReading(IMPORTANCE_HIGH, hasSound = true)
@@ -87,7 +87,7 @@ class NotificationTestRulesTest {
         assertNull(precheck(NotificationTestKind.BANNER, call = low))
     }
 
-    // T11
+    
     @Test
     fun `a denied full-screen permission on API 34 blocks the call test and leads to its page`() {
         assertEquals(
@@ -98,7 +98,7 @@ class NotificationTestRulesTest {
         assertNull(precheck(NotificationTestKind.BANNER, fullScreen = false))
     }
 
-    // T13
+    
     @Test
     fun `Do Not Disturb blocks every test without a settings page, after any definite problem`() {
         NotificationTestKind.entries.forEach {
@@ -116,7 +116,7 @@ class NotificationTestRulesTest {
         assertTrue(NotificationTestRules.isDndOn(NotificationManager.INTERRUPTION_FILTER_NONE))
     }
 
-    // T12, T13
+    
     @Test
     fun `a run counts while locked or with the screen still off, and Do Not Disturb stays off`() {
         assertEquals(VoidReason.UNLOCKED, NotificationTestRules.voidReason(NotificationTestKind.CALL, keyguardLocked = false, interactive = true, dndOn = false))
@@ -124,11 +124,11 @@ class NotificationTestRulesTest {
         assertEquals(VoidReason.DND, NotificationTestRules.voidReason(NotificationTestKind.CALL, keyguardLocked = true, interactive = false, dndOn = true))
         assertEquals(VoidReason.DND, NotificationTestRules.voidReason(NotificationTestKind.CALL, keyguardLocked = false, interactive = false, dndOn = true))
         assertNull(NotificationTestRules.voidReason(NotificationTestKind.CALL, keyguardLocked = true, interactive = false, dndOn = false))
-        // Woken onto the lock screen still tests the lock-screen path.
+        
         assertNull(NotificationTestRules.voidReason(NotificationTestKind.CALL, keyguardLocked = true, interactive = true, dndOn = false))
-        // No secure lock, or a lock delay: the screen staying off is enough.
+        
         assertNull(NotificationTestRules.voidReason(NotificationTestKind.CALL, keyguardLocked = false, interactive = false, dndOn = false))
-        // The lock-screen test has nothing to judge without a locked keyguard.
+        
         assertEquals(
             VoidReason.NOT_LOCKED,
             NotificationTestRules.voidReason(NotificationTestKind.LOCKSCREEN, keyguardLocked = false, interactive = false, dndOn = false),

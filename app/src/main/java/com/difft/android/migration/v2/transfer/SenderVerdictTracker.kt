@@ -9,22 +9,22 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
-/**
- * The sender role's memory of its receiver session beyond the upload connection, and the decisions
- * that follow from it: what to persist once the body is on the wire, what a verdict read from
- * `/status` makes of the transfer, and whether a user's cancel can still be honoured or must first
- * be put to the receiver. Owned by the transfer service; holds no Android types.
- */
+
+
+
+
+
+
 internal class SenderVerdictTracker(
     private val pendingStore: PendingVerdictStore,
     private val scope: CoroutineScope,
     private val cancelAskTimeoutMs: Long = CANCEL_ASK_TIMEOUT_MS,
-    /** `POST /cancel` to the receiver; answers with a [CancelState], or null when it gave none. */
+    
     private val askReceiver: suspend (SenderSessionRef) -> String? = { s ->
         SenderHttpClient(s.ip, s.port, s.fingerprint).cancel(s.sessionId, s.sessionToken)
     },
 ) {
-    /** The session the receiver opened for the current send; null before `prepare-upload` and between sends. */
+    
     @Volatile private var session: SenderSessionRef? = null
 
     fun reset() {
@@ -35,22 +35,22 @@ internal class SenderVerdictTracker(
         session = ref
     }
 
-    /**
-     * The last body byte left: from here the outcome must survive this process, so a link's receipt
-     * goes to disk. Only when [persist], i.e. no pause: a paused export wrote its receipt with the
-     * commit marker, and a late save here could resurrect one a settlement already deleted (#1382
-     * A11). Nothing is saved for a receiver that does not answer `/status`.
-     */
+    
+
+
+
+
+
     fun onBodySent(persist: Boolean = true) {
         if (!persist) return
         val current = session?.takeIf { it.supportsStatus } ?: return
         scope.launch { pendingStore.save(PendingVerdict(current, System.currentTimeMillis())) }
     }
 
-    /**
-     * What a verdict from `/status` makes the transfer. The pending record is settled by the caller
-     * through `SenderVerdictSettlement`, which keeps it only for an unknown verdict.
-     */
+    
+
+
+
     fun stateFor(verdict: Verdict): TransferState = when (verdict) {
         Verdict.Succeeded -> TransferState.Sent
         is Verdict.Ended -> {
@@ -63,24 +63,24 @@ internal class SenderVerdictTracker(
         }
     }
 
-    /**
-     * Whether a user's cancel must be put to the receiver before this side acts on it: only while
-     * the body is in and the verdict outstanding, and only with a receiver that can answer.
-     */
+    
+
+
+
     fun mustAskReceiver(current: TransferState): Boolean = session?.supportsStatus == true && current.isAwaitingVerdict()
 
     enum class CancelDecision {
-        /** Past the receiver's commit point: the import goes on, and so does the wait. */
+        
         KEEP_WAITING,
 
-        /** The receiver stopped or rolled back: this side is cancelled. */
+        
         CANCELLED,
 
-        /** No usable answer: the receiver may have finished, failed or vanished. The data stays. */
+        
         UNKNOWN,
     }
 
-    /** Asks the receiver what a cancel does to the data now, and says what this side should become. */
+    
     suspend fun askCancel(): CancelDecision {
         val current = session ?: return CancelDecision.UNKNOWN
         val answer = withTimeoutOrNull(cancelAskTimeoutMs) { askReceiver(current) }
@@ -94,13 +94,13 @@ internal class SenderVerdictTracker(
     }
 
     companion object {
-        /** How long a cancel waits for the receiver to say what it did before the outcome is called unknown. */
+        
         const val CANCEL_ASK_TIMEOUT_MS = 5_000L
 
-        /** The receiver reported its import as failed; the reason is on its screen, not on the wire. */
+        
         const val REASON_PEER_FAILED = "peer-failed"
 
-        /** A receiver-reported end, in the vocabulary `classifyFailure` reads. */
+        
         fun reasonFor(verdict: Verdict.Ended): String =
             if (verdict.terminal == TransferTerminal.CANCELLED) MigrationError.SourceUnavailable.code else REASON_PEER_FAILED
     }

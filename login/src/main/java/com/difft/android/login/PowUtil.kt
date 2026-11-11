@@ -13,19 +13,16 @@ object PowUtil {
 
     private const val ALGORITHM = "SHA-256"
 
-    // 根据 uuid, timestamp, version 和 solution 进行 PoW 验证
     private fun verifySolution(uuid: String, timestamp: Long, version: Int, solution: String, difficulty: Int): Boolean {
         return try {
             val data = "$uuid$timestamp$version$solution"
 
-            // 计算 SHA-256 哈希值
             val digest = MessageDigest.getInstance(ALGORITHM)
             val hash = digest.digest(data.toByteArray())
 
-            // 将哈希转换为十六进制字符串
             val hexHash = hash.joinToString("") { String.format("%02x", it) }
 
-            // 检查哈希值的前 difficulty 位是否为 "1"
+            
             hexHash.startsWith("1".repeat(difficulty))
         } catch (e: NoSuchAlgorithmException) {
             L.w { "[PowUtil] error: ${e.stackTraceToString()}" }
@@ -33,7 +30,7 @@ object PowUtil {
         }
     }
 
-    // Generate a solution meeting the difficulty requirement (runs on Dispatchers.Default to avoid blocking the main thread)
+    
     suspend fun generateSolution(uuid: String, timestamp: Long, version: Int, difficulty: Int): String = withContext(Dispatchers.Default) {
         L.i { "[PowUtil] start generate solution, difficulty=$difficulty" }
 
@@ -48,7 +45,7 @@ object PowUtil {
                 result = candidate
             }
             attempts++
-            // Yield every 1000 iterations to support cooperative cancellation
+            
             if (attempts % 1000 == 0) yield()
         }
 

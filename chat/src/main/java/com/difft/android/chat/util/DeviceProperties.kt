@@ -5,9 +5,9 @@ import android.content.Context
 import android.net.ConnectivityManager
 import androidx.annotation.RequiresApi
 
-/**
- * Easy access to various properties of the device, typically to make performance-related decisions.
- */
+
+
+
 object DeviceProperties {
 
     @JvmStatic
@@ -48,13 +48,13 @@ object DeviceProperties {
     }
 
     enum class DataSaverState(val isEnabled: Boolean, val isRestricted: Boolean) {
-        /** Data saver is enabled system-wide, and we are subject to the restrictions. */
+        
         ENABLED(true, true),
 
-        /** Data saver is enabled system-wide, but the user has exempted us by giving us 'unrestricted access' to data in the system settings */
+        
         ENABLED_BUT_EXEMPTED(true, false),
 
-        /** Data saver is disabled. */
+        
         DISABLED(false, false)
     }
 }

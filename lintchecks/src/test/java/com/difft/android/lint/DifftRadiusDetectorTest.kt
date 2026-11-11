@@ -28,8 +28,8 @@ class DifftRadiusDetectorTest {
             )
             .issues(DifftRadiusDetector.ISSUE)
             .allowMissingSdk()
-            // @JvmOverloads cannot be applied to functions with value-class parameters, so that
-            // harness mode rewrites the Dp stubs into something the Kotlin compiler rejects.
+            
+            
             .skipTestModes(TestMode.JVM_OVERLOADS)
             .run()
             .expectErrorCount(2)
@@ -59,7 +59,7 @@ class DifftRadiusDetectorTest {
             )
             .issues(DifftRadiusDetector.ISSUE)
             .allowMissingSdk()
-            // Same value-class stubs as above: keep the @JvmOverloads harness mode off everywhere.
+            
             .skipTestModes(TestMode.JVM_OVERLOADS)
             .run()
             .expectClean()
@@ -92,7 +92,7 @@ class DifftRadiusDetectorTest {
             )
             .issues(DifftRadiusDetector.ISSUE)
             .allowMissingSdk()
-            // Same value-class stubs as above: keep the @JvmOverloads harness mode off everywhere.
+            
             .skipTestModes(TestMode.JVM_OVERLOADS)
             .run()
             .expectClean()
@@ -127,7 +127,7 @@ class DifftRadiusDetectorTest {
             )
             .issues(DifftRadiusDetector.ISSUE)
             .allowMissingSdk()
-            // Same value-class stubs as above: keep the @JvmOverloads harness mode off everywhere.
+            
             .skipTestModes(TestMode.JVM_OVERLOADS)
             .run()
             .expectClean()
@@ -147,8 +147,8 @@ class DifftRadiusDetectorTest {
             """,
         ).indented()
 
-        // File name matters: Kotlin compiles top-level functions into `<FileName>Kt`, which the
-        // detector matches on.
+        
+        
         val SHAPE_STUB = kotlin(
             "src/androidx/compose/foundation/shape/RoundedCornerShape.kt",
             """

@@ -10,27 +10,27 @@ import com.android.tools.lint.detector.api.Severity
 import com.intellij.psi.PsiMethod
 import org.jetbrains.uast.UCallExpression
 
-/**
- * Detects construction of raw `okhttp3.OkHttpClient` outside the network
- * layer. Business modules MUST go through `ChativeHttpClient` to get:
- *   - Authentication interceptor (HeaderInterceptor)
- *   - TLS pinning / official SSL socket factory
- *   - Shared connection pool (avoids `pthread_create` OOM from
- *     ConnectionPool / Dispatcher leak — see WebSocketConnection.kt:62)
- *   - URL routing (UrlManager)
- *
- * Two construction patterns trigger:
- *   - `OkHttpClient()` direct constructor call
- *   - `OkHttpClient.Builder()` (Kotlin) / `new OkHttpClient.Builder()` (Java)
- *
- * EXEMPTIONS (configured in lint.xml as path-based ignores):
- *   - `network/` module — contains ChativeHttpClient itself + low-level
- *     WebSocket + SpeedTest clients with documented circular-dep rationale.
- *
- * If a legitimate non-network-layer exception exists (e.g. third-party SDK
- * OSS upload outside our auth domain), suppress at the call site with
- * `@SuppressLint("ChativeHttpClientRequired")` AND a comment explaining why.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 class ChativeHttpClientDetector : Detector(), Detector.UastScanner {
 
     override fun getApplicableConstructorTypes(): List<String> = listOf(
@@ -57,7 +57,7 @@ class ChativeHttpClientDetector : Detector(), Detector.UastScanner {
                 "(non-auth domain, e.g. OSS uploads), suppress with " +
                 "`@SuppressLint(\"ChativeHttpClientRequired\")` plus a code comment " +
                 "explaining why.",
-            quickfixData = null, // Replacement is semantic — no mechanical quick-fix.
+            quickfixData = null, 
         )
     }
 

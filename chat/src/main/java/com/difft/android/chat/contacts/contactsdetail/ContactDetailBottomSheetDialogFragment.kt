@@ -1,28 +1,30 @@
 package com.difft.android.chat.contacts.contactsdetail
 
+import android.content.Context
 import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentActivity
 import androidx.fragment.app.FragmentManager
+import androidx.lifecycle.LifecycleOwner
 import com.difft.android.base.widget.BaseBottomSheetDialogFragment
+import com.difft.android.chat.contacts.cardPreloadEntryPoint
+import com.difft.android.chat.contacts.contactsdetail.mvi.ContactDetailContract.Input
+import com.difft.android.chat.contacts.showCardAfterLocalRead
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import dagger.hilt.android.AndroidEntryPoint
 
-/**
- * BottomSheet dialog for displaying contact details.
- * Uses [ContactDetailFragment] as content.
- */
+
+
+
+
 @AndroidEntryPoint
 class ContactDetailBottomSheetDialogFragment : BaseBottomSheetDialogFragment() {
 
-    // Contact detail is also a full page and paints the page colour itself; keep the container on
-    // that colour so its bg.elevated cards keep contrast and the drag handle shows no seam.
-    override fun getContainerBackgroundRes(): Int = com.difft.android.base.R.drawable.base_bg_bottom_sheet_page
-
     companion object {
-        private const val TAG = "ContactDetailBottomSheet"
+        internal const val TAG = "ContactDetailBottomSheet"
+        private const val ARG_CUSTOM_ID = "ARG_CUSTOM_ID"
         private const val ARG_CONTACT_ID = "ARG_CONTACT_ID"
         private const val ARG_CONTACT_NAME = "ARG_CONTACT_NAME"
         private const val ARG_SOURCE_TYPE = "ARG_SOURCE_TYPE"
@@ -30,6 +32,8 @@ class ContactDetailBottomSheetDialogFragment : BaseBottomSheetDialogFragment() {
         private const val ARG_AVATAR = "ARG_AVATAR"
         private const val ARG_JOINED_AT = "ARG_JOINED_AT"
         private const val ARG_OVER_CONVERSATION = "ARG_OVER_CONVERSATION"
+        private const val ARG_FULL_CONVERSATION = "ARG_FULL_CONVERSATION"
+        private const val ARG_PRELOAD_KEY = "ARG_PRELOAD_KEY"
 
         private fun newInstance(
             contactId: String,
@@ -39,25 +43,31 @@ class ContactDetailBottomSheetDialogFragment : BaseBottomSheetDialogFragment() {
             avatar: String? = null,
             joinedAt: String? = null,
             overConversation: String? = null,
+            customId: String? = null,
+            fullConversation: Boolean = false,
+            preloadKey: String? = null,
         ): ContactDetailBottomSheetDialogFragment {
             return ContactDetailBottomSheetDialogFragment().apply {
                 arguments = Bundle().apply {
                     putString(ARG_CONTACT_ID, contactId)
+                    putString(ARG_CUSTOM_ID, customId)
                     putString(ARG_CONTACT_NAME, contactName)
                     putString(ARG_SOURCE_TYPE, sourceType)
                     putString(ARG_SOURCE, source)
                     putString(ARG_AVATAR, avatar)
                     putString(ARG_JOINED_AT, joinedAt)
                     putString(ARG_OVER_CONVERSATION, overConversation)
+                    putBoolean(ARG_FULL_CONVERSATION, fullConversation)
+                    putString(ARG_PRELOAD_KEY, preloadKey)
                 }
             }
         }
 
-        /**
-         * Show contact detail bottom sheet from an Activity. [overConversation] is the conversation
-         * on screen behind the sheet when it is shown from one (a message link), null when shown
-         * from the list; the card pushes onto the home stack only over that conversation.
-         */
+        
+
+
+
+
         fun show(
             activity: FragmentActivity,
             contactId: String,
@@ -67,14 +77,23 @@ class ContactDetailBottomSheetDialogFragment : BaseBottomSheetDialogFragment() {
             avatar: String? = null,
             joinedAt: String? = null,
             overConversation: String? = null,
+            customId: String? = null,
+            fullConversation: Boolean = false,
         ) {
-            newInstance(contactId, contactName, sourceType, source, avatar, joinedAt, overConversation)
-                .show(activity.supportFragmentManager, TAG)
+            val manager = activity.supportFragmentManager
+            if (manager.isStateSaved) return
+            val input = Input(contactId, customId, contactName, avatar, joinedAt, sourceType, source)
+            present(activity, activity, manager, input) { key ->
+                newInstance(contactId, contactName, sourceType, source, avatar, joinedAt, overConversation, customId,
+                    fullConversation, key)
+            }
         }
 
-        /**
-         * Show contact detail bottom sheet from a Fragment.
-         */
+        
+
+
+
+
         fun show(
             fragment: Fragment,
             contactId: String,
@@ -84,45 +103,59 @@ class ContactDetailBottomSheetDialogFragment : BaseBottomSheetDialogFragment() {
             avatar: String? = null,
             joinedAt: String? = null
         ) {
-            newInstance(contactId, contactName, sourceType, source, avatar, joinedAt)
-                .show(fragment.parentFragmentManager, TAG)
+            val manager = fragment.childFragmentManager
+            if (manager.isStateSaved) return
+            val input = Input(contactId, contactName = contactName, avatar = avatar, joinedAt = joinedAt,
+                sourceType = sourceType, source = source)
+            
+            
+            present(fragment.requireContext(), fragment, manager, input) { key ->
+                newInstance(contactId, contactName, sourceType, source, avatar, joinedAt, fullConversation = true,
+                    preloadKey = key)
+            }
         }
 
-        /**
-         * Show contact detail bottom sheet with FragmentManager.
-         */
-        fun show(
-            fragmentManager: FragmentManager,
-            contactId: String,
-            contactName: String? = null,
-            sourceType: String? = null,
-            source: String? = null,
-            avatar: String? = null,
-            joinedAt: String? = null
+        
+        private fun present(
+            context: Context,
+            owner: LifecycleOwner,
+            manager: FragmentManager,
+            input: Input,
+            sheet: (preloadKey: String?) -> ContactDetailBottomSheetDialogFragment,
         ) {
-            newInstance(contactId, contactName, sourceType, source, avatar, joinedAt)
-                .show(fragmentManager, TAG)
+            val entry = context.cardPreloadEntryPoint()
+            showCardAfterLocalRead(owner, manager, TAG, entry.cardPreloads(),
+                read = { entry.cardPreloader().contact(input) }) { key -> sheet(key).show(manager, TAG) }
         }
     }
 
-    /** See [show]: kept in the arguments, so a sheet restored after a fold keeps its origin. */
+    
     val overConversation: String? get() = arguments?.getString(ARG_OVER_CONVERSATION)
+
+    val opensFullConversation: Boolean get() = arguments?.getBoolean(ARG_FULL_CONVERSATION) == true
 
     override fun getContentFragment(): Fragment {
         return ContactDetailFragment.newInstance(
             contactId = arguments?.getString(ARG_CONTACT_ID) ?: "",
+            customId = arguments?.getString(ARG_CUSTOM_ID),
             contactName = arguments?.getString(ARG_CONTACT_NAME),
             sourceType = arguments?.getString(ARG_SOURCE_TYPE),
             source = arguments?.getString(ARG_SOURCE),
             avatar = arguments?.getString(ARG_AVATAR),
-            joinedAt = arguments?.getString(ARG_JOINED_AT)
+            joinedAt = arguments?.getString(ARG_JOINED_AT),
+            preloadKey = arguments?.getString(ARG_PRELOAD_KEY),
         )
     }
 
-    // Auto fit-to-contents: return 0 to enable fit-to-contents mode
+    override fun onDismiss(dialog: android.content.DialogInterface) {
+        super.onDismiss(dialog)
+        (activity as? ContactDetailActivity)?.takeUnless { it.isChangingConfigurations }?.finish()
+    }
+
+    
     override fun getPeekHeightRatio(): Float = 0f
 
-    // No need for expandable in fit-to-contents mode
+    
     override fun isExpandable(): Boolean = false
 
     private var sheetView: View? = null
@@ -133,20 +166,20 @@ class ContactDetailBottomSheetDialogFragment : BaseBottomSheetDialogFragment() {
     override fun onBottomSheetReady(sheet: View, behavior: BottomSheetBehavior<*>) {
         sheetView = sheet
         sheetBehavior = behavior
-        // Edit mode may have been requested before the dialog showed (e.g. recreation mid-edit),
-        // in which case both requests were only recorded and are applied now.
+        
+        
         if (expandedForEditing) applyExpansion()
         if (!dismissGesturesEnabled) applyDismissGestures()
     }
 
-    /**
-     * Remark edit mode pushes the half-height card to full height (the app's usual full-screen sheet)
-     * so the keyboard leaves room for the content; leaving edit mode restores auto height. Swiping
-     * down still dismisses unless [setDismissGesturesEnabled] locked it for an unsaved change.
-     *
-     * Idempotent: the binder re-emits the current mode on every lifecycle restart. The request is
-     * recorded even before the sheet exists and applied from [onBottomSheetReady].
-     */
+    
+
+
+
+
+
+
+
     fun setExpandedForEditing(expanded: Boolean) {
         if (expanded == expandedForEditing) return
         expandedForEditing = expanded
@@ -160,21 +193,21 @@ class ContactDetailBottomSheetDialogFragment : BaseBottomSheetDialogFragment() {
         sheet.layoutParams = sheet.layoutParams.apply {
             height = if (expanded) ViewGroup.LayoutParams.MATCH_PARENT else ViewGroup.LayoutParams.WRAP_CONTENT
         }
-        // Keep the base fit-to-contents mode so the only stops are EXPANDED and HIDDEN; fitToContents=false
-        // would add a HALF_EXPANDED stop a slow drag settles on. skipCollapsed drops the 16:9 auto-peek
-        // stop a full-height sheet would otherwise park at instead of dismissing.
+        
+        
+        
         behavior.skipCollapsed = expanded
         behavior.peekHeight = BottomSheetBehavior.PEEK_HEIGHT_AUTO
         behavior.state = BottomSheetBehavior.STATE_EXPANDED
     }
 
-    /**
-     * Swipe-to-dismiss and scrim taps cannot show the unsaved-changes prompt, so they are switched
-     * off while a remark draft differs from the stored remark; close / back still prompt.
-     *
-     * Like [setExpandedForEditing] the request is recorded even before the sheet exists, so a
-     * recreation mid-edit re-applies the lock from [onBottomSheetReady].
-     */
+    
+
+
+
+
+
+
     fun setDismissGesturesEnabled(enabled: Boolean) {
         if (enabled == dismissGesturesEnabled) return
         dismissGesturesEnabled = enabled

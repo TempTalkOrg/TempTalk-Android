@@ -11,7 +11,7 @@ class PatternTrailStateTest {
     fun `each segment holds for the delay, then is wiped towards its end while fading`() {
         val trail = state()
         trail.onDotAdded(0)
-        trail.onDotAdded(1_000) // segment 0 drawn at 1000
+        trail.onDotAdded(1_000) 
 
         assertEquals(1f, trail.segmentAlpha(0, 1_100), 0f)
         assertEquals(0f, trail.wipeProgress(0, 1_100), 0f)
@@ -24,9 +24,9 @@ class PatternTrailStateTest {
     fun `fast drawing keeps several segments visible, each on its own clock`() {
         val trail = state()
         trail.onDotAdded(0)
-        trail.onDotAdded(100) // segment 0
-        trail.onDotAdded(200) // segment 1
-        trail.onDotAdded(300) // segment 2
+        trail.onDotAdded(100) 
+        trail.onDotAdded(200) 
+        trail.onDotAdded(300) 
 
         assertEquals(1f, trail.segmentAlpha(0, 250), 0f)
         assertEquals(1f, trail.segmentAlpha(1, 250), 0f)
@@ -56,7 +56,7 @@ class PatternTrailStateTest {
         assertEquals(0.5f, trail.pulseAlpha(1, 225), 0.001f)
         assertEquals(0f, trail.pulseAlpha(1, 350), 0f)
 
-        // Reaching another dot does not cut the previous flash short.
+        
         trail.onDotAdded(200)
         assertEquals(0.6f, trail.pulseAlpha(1, 200), 0.001f)
         assertEquals(1f, trail.pulseAlpha(2, 200), 0f)

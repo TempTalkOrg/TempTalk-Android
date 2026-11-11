@@ -18,12 +18,12 @@ class PatternLockView @JvmOverloads constructor(
     defStyleAttr: Int = 0
 ) : View(context, attrs, defStyleAttr) {
 
-    // Pattern view modes
+    
     enum class PatternViewMode {
         CORRECT, WRONG
     }
 
-    // Dot state
+    
     data class Dot(
         val id: Int,
         val row: Int,
@@ -33,7 +33,7 @@ class PatternLockView @JvmOverloads constructor(
         var isSelected: Boolean = false
     )
 
-    // Listener interface
+    
     interface PatternLockViewListener {
         fun onStarted()
         fun onProgress(progressPattern: MutableList<Dot>)
@@ -41,15 +41,14 @@ class PatternLockView @JvmOverloads constructor(
         fun onCleared()
     }
 
-    // Properties
+    
     private var dotCount = 3
-    // dp conversions use this view's own resources: the app-wide density can be stale after a
-    // display-size change while the process stays alive, which mis-sized the dots and the cap.
+    
     private val Int.dp: Int get() = (this * resources.displayMetrics.density).toInt()
 
-    private val dotSize = 16.dp // 固定16dp
-    private val outerCircleSize = 32.dp // 外圈直径32dp
-    // Bold and one text tone stronger than the dots so the fading trail stays visible.
+    private val dotSize = 16.dp
+    private val outerCircleSize = 32.dp
+    
     private val pathWidth = 14.dp
     private var normalStateColor = Color.GRAY
     private var disabledStateColor = Color.GRAY
@@ -63,20 +62,20 @@ class PatternLockView @JvmOverloads constructor(
     private var dotAnimationDuration = 200L
     private var pathEndAnimationDuration = 100L
 
-    // Internal state
+    
     private var currentViewMode = PatternViewMode.CORRECT
     private val dots = mutableListOf<Dot>()
     private val selectedDots = mutableListOf<Dot>()
     private val listeners = mutableListOf<PatternLockViewListener>()
     private var isPatternDrawingStarted = false
-    private var isTouchActive = false // 标记触摸是否处于激活状态
-    // Set on release in transient mode: the finished gesture is no longer drawn.
+    private var isTouchActive = false
+    
     private var isSelectionHidden = false
     private val releaseFade = PatternReleaseFade()
     private var currentX = 0f
     private var currentY = 0f
-    private val touchRadius = 48.dp / 2f // 固定触摸半径，Android推荐的最小触摸目标（24dp）
-    private val initialTouchRadius = 72.dp.toFloat() // 初始触摸半径（72dp），配合路径检测机制
+    private val touchRadius = 48.dp / 2f 
+    private val initialTouchRadius = 72.dp.toFloat() 
     private val startSlideMaxDistance = 100.dp.toFloat()
 
     private var grid = PatternGrid(dotCount)
@@ -85,7 +84,7 @@ class PatternLockView @JvmOverloads constructor(
     private val trail = PatternTrailState()
     private val delayedClear = Runnable { clearPattern() }
 
-    // Paint objects
+    
     private val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
     }
@@ -108,14 +107,13 @@ class PatternLockView @JvmOverloads constructor(
     }
 
     private fun setupDefaultColors() {
-        // 未选中的点颜色为icon色
         normalStateColor = ContextCompat.getColor(context, R.color.t_third)
-        // 禁用状态的点颜色为bg_disable
-        disabledStateColor = ContextCompat.getColor(context, R.color.bg_disable)
-        // 选中时的点颜色为t_primary
+        
+        disabledStateColor = ContextCompat.getColor(context, R.color.bg4)
+        
         selectedStateColor = ContextCompat.getColor(context, R.color.t_primary)
-        // 外圈颜色为bg_disable
-        outerCircleColor = ContextCompat.getColor(context, R.color.bg_disable)
+        
+        outerCircleColor = ContextCompat.getColor(context, R.color.bg4)
         correctStateColor = ContextCompat.getColor(context, R.color.t_third)
         wrongStateColor = ContextCompat.getColor(context, R.color.t_third)
     }
@@ -145,19 +143,17 @@ class PatternLockView @JvmOverloads constructor(
         val heightMode = MeasureSpec.getMode(heightMeasureSpec)
         val heightSize = MeasureSpec.getSize(heightMeasureSpec)
 
-        // 获取可用宽度
         val availableWidth = when (widthMode) {
             MeasureSpec.EXACTLY, MeasureSpec.AT_MOST -> widthSize
-            else -> MAX_SIZE_DP.dp // Default size if no constraints
+            else -> MAX_SIZE_DP.dp 
         }
 
-        // 获取可用高度
         val availableHeight = when (heightMode) {
             MeasureSpec.EXACTLY, MeasureSpec.AT_MOST -> heightSize
-            else -> availableWidth // 如果高度没有约束，使用宽度（保证正方形）
+            else -> availableWidth
         }
 
-        // Square of the smaller available side, never larger than MAX_SIZE_DP
+        
         val size = minOf(availableWidth, availableHeight, MAX_SIZE_DP.dp)
         setMeasuredDimension(size, size)
     }
@@ -171,12 +167,11 @@ class PatternLockView @JvmOverloads constructor(
         val viewWidth = width.toFloat()
         val viewHeight = height.toFloat()
 
-        // 留出外圈的半径空间，确保边缘的点选中时外圈不被裁减
+        
         val outerRadius = outerCircleSize.toFloat() / 2
         val availableWidth = viewWidth - 2 * outerRadius
         val availableHeight = viewHeight - 2 * outerRadius
 
-        // 计算点之间的间距
         val horizontalSpacing = if (dotCount > 1) availableWidth / (dotCount - 1) else 0f
         val verticalSpacing = if (dotCount > 1) availableHeight / (dotCount - 1) else 0f
 
@@ -211,8 +206,8 @@ class PatternLockView @JvmOverloads constructor(
         postInvalidateOnAnimation()
     }
 
-    // Captures the lit dots as the gesture ends, before the selection is hidden; the path itself
-    // disappears at once.
+    
+    
     private fun captureReleaseFade(now: Long) {
         releaseFade.clear()
         dots.forEach { dot ->
@@ -233,7 +228,7 @@ class PatternLockView @JvmOverloads constructor(
             canvas.drawLine(x1, y1, x2, y2, pathPaint)
         }
 
-        // Draw line to current touch position if pattern is being drawn
+        
         if (isPatternDrawingStarted && selectedDots.isNotEmpty()) {
             val lastDot = selectedDots.last()
             val (startX, startY) = PatternGrid.edgePoint(lastDot.centerX, lastDot.centerY, currentX, currentY, outerRadius)
@@ -242,7 +237,7 @@ class PatternLockView @JvmOverloads constructor(
         }
     }
 
-    // Segments between selected dots, edge of ring to edge of ring, the fading ones wiped from their start.
+    
     private inline fun forEachVisibleSegment(now: Long, block: (Float, Float, Float, Float, Float) -> Unit) {
         val outerRadius = outerCircleSize.toFloat() / 2
         for (i in 0 until selectedDots.size - 1) {
@@ -260,20 +255,20 @@ class PatternLockView @JvmOverloads constructor(
     private fun withAlpha(color: Int, alpha: Float): Int =
         Color.argb((Color.alpha(color) * alpha).roundToInt(), Color.red(color), Color.green(color), Color.blue(color))
 
-    // Opacity of the segment between selected dots [index] and [index] + 1.
+    
     private fun pathAlpha(index: Int, now: Long): Float = when {
         isSelectionHidden -> 0f
         else -> trail.segmentAlpha(index, now)
     }
 
-    // Opacity of the selected look of a dot: 0 = plain dot, 1 = fully selected.
+    
     private fun dotLitAlpha(dot: Dot, now: Long): Float {
         val index = selectedDots.indexOf(dot)
         return when {
             index < 0 -> 0f
             isSelectionHidden -> 0f
             isInStealthMode -> trail.pulseAlpha(index, now)
-            // Selected dots stay lit while only the line fades (AOSP): a used dot visibly cannot be re-added.
+            
             else -> 1f
         }
     }
@@ -282,7 +277,6 @@ class PatternLockView @JvmOverloads constructor(
         dots.forEach { dot ->
             val litAlpha = dotLitAlpha(dot, now)
             if (litAlpha < 1f) {
-                // 未选中的点：根据是否禁用显示不同颜色
                 dotPaint.color = if (isInputEnabled) normalStateColor else disabledStateColor
                 canvas.drawCircle(dot.centerX, dot.centerY, dotSize.toFloat() / 2, dotPaint)
             }
@@ -290,7 +284,7 @@ class PatternLockView @JvmOverloads constructor(
         }
     }
 
-    // Selected look: outer ring (32dp, bg_disable) + inner dot (16dp, t_primary).
+    
     private fun drawLitDot(canvas: Canvas, x: Float, y: Float, alpha: Float) {
         dotPaint.color = withAlpha(outerCircleColor, alpha)
         canvas.drawCircle(x, y, outerCircleSize.toFloat() / 2, dotPaint)
@@ -298,7 +292,7 @@ class PatternLockView @JvmOverloads constructor(
         canvas.drawCircle(x, y, dotSize.toFloat() / 2, dotPaint)
     }
 
-    // Pattern-drawing gesture — view is not click-actionable.
+    
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
         if (!isInputEnabled) return false
@@ -331,18 +325,16 @@ class PatternLockView @JvmOverloads constructor(
     }
 
     private fun handleTouchStart() {
-        // A new gesture never merges with the previous one or its pending delayed clear.
+        
         removeCallbacks(delayedClear)
         releaseFade.clear()
         if (selectedDots.isNotEmpty() || isSelectionHidden) clearPattern()
 
-        // 总是激活触摸追踪，提高响应性
         isTouchActive = true
         legacyTracker.down(currentX, currentY)
         if (applySelection(selector.down(currentX, currentY))) {
             isPatternDrawingStarted = true
             notifyPatternStarted()
-            // 立即重绘以提供视觉反馈
             invalidate()
         }
     }
@@ -352,7 +344,7 @@ class PatternLockView @JvmOverloads constructor(
 
         legacyTracker.move(currentX, currentY)
 
-        // Historical samples first so a fast swipe cannot jump over a dot.
+        
         val countBefore = selectedDots.size
         for (i in 0 until event.historySize) {
             applySelection(selector.move(event.getHistoricalX(i), event.getHistoricalY(i)))
@@ -364,7 +356,7 @@ class PatternLockView @JvmOverloads constructor(
                 isPatternDrawingStarted = true
                 notifyPatternStarted()
             }
-            // Dots beyond the start dot are progress, also when the same event started the pattern.
+            
             if (selectedDots.size > 1) notifyPatternProgress()
         }
 
@@ -374,22 +366,21 @@ class PatternLockView @JvmOverloads constructor(
     private fun handleTouchEnd() {
         if (isPatternDrawingStarted) {
             isPatternDrawingStarted = false
-            // The lit dots fade out from a snapshot; the path and the selection are hidden at once.
+            
             captureReleaseFade(SystemClock.uptimeMillis())
             isSelectionHidden = true
             notifyPatternComplete()
             invalidate()
         }
-        // 重置触摸激活状态
         isTouchActive = false
     }
 
-    // A cancelled gesture is dropped: nothing is reported as complete.
+    
     private fun handleTouchCancel() {
         clearPattern()
     }
 
-    // Selects the dots in order and reports whether any was new.
+    
     private fun applySelection(ids: List<Int>): Boolean {
         ids.forEach { selectDot(dots[it]) }
         return ids.isNotEmpty()
@@ -425,7 +416,7 @@ class PatternLockView @JvmOverloads constructor(
         listeners.forEach { it.onCleared() }
     }
 
-    // Public API methods
+    
     fun addPatternLockListener(listener: PatternLockViewListener) {
         listeners.add(listener)
     }
@@ -434,13 +425,13 @@ class PatternLockView @JvmOverloads constructor(
         listeners.remove(listener)
     }
 
-    /**
-     * Dots the retired selection rule would have picked for the last gesture (see
-     * [LegacyPatternTracker]); valid inside [PatternLockViewListener.onComplete].
-     */
+    
+
+
+
     val legacyPattern: List<Dot> get() = legacyTracker.selected.map { dots[it] }
 
-    /** Clears after [delayMs]; a new touch or an explicit clear cancels it. */
+    
     fun clearPatternDelayed(delayMs: Long) {
         removeCallbacks(delayedClear)
         postDelayed(delayedClear, delayMs)
@@ -478,23 +469,21 @@ class PatternLockView @JvmOverloads constructor(
 
     fun setInputEnabled(inputEnabled: Boolean) {
         isInputEnabled = inputEnabled
-        invalidate() // 重绘以更新圆点颜色
+        invalidate()
     }
 
     fun setTactileFeedbackEnabled(tactileFeedbackEnabled: Boolean) {
         isTactileFeedbackEnabled = tactileFeedbackEnabled
     }
 
-    // Setters for customization
+    
     fun setDotCount(count: Int) {
         dotCount = count
         initializeDots()
         requestLayout()
     }
 
-    // 移除了点大小和路径宽度的setter方法，因为现在是固定值
 
-    // 移除了颜色setter方法，因为现在颜色是固定的
 
     fun setDotAnimationDuration(duration: Long) {
         dotAnimationDuration = duration
@@ -505,8 +494,8 @@ class PatternLockView @JvmOverloads constructor(
     }
 
     companion object {
-        // Whole view including the outer rings; narrow or short windows (split screen, small
-        // phones) still shrink it.
+        
+        
         const val MAX_SIZE_DP = 260
     }
 }

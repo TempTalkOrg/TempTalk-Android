@@ -10,30 +10,30 @@ import org.difft.app.database.wcdb
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * A room's pin as [FocusPinCoordinator] reads it: the stored pin, the `focusPin` ownership mark, and
- * whether the chat list shows the row (`lastActiveTime != 0`).
- */
+
+
+
+
 data class FocusPinState(val pinned: Boolean, val focusPin: Int, val visible: Boolean = true)
 
-/**
- * The room-table operations behind [FocusPinCoordinator] (design §1.2 / §1.3). All blocking; the
- * coordinator runs them on IO under its own lock. Every write refreshes the chat list.
- */
+
+
+
+
 interface FocusPinStore {
-    /** Rooms whose `focusPin` is not [ROOM_FOCUS_PIN_NONE], as roomId to mark. */
+    
     fun ownedRooms(): Map<String, Int>
 
-    /** The room's pin state, or null when it has no row. */
+    
     fun pinState(gid: String): FocusPinState?
 
-    /** Creates the room when missing and makes it visible (`lastActiveTime == 0` rooms are filtered out of the list). */
+    
     fun ensureVisibleRoom(gid: String, now: Long)
 
-    /** Writes `pinnedTime` and `focusPin` in one statement. */
+    
     fun writePin(gid: String, pinnedTime: Long?, focusPin: Int)
 
-    /** Writes `focusPin` only. */
+    
     fun writeMark(gid: String, focusPin: Int)
 }
 

@@ -18,12 +18,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/**
- * Handles outbound call control messages (reject, cancel, hangup, joined).
- *
- * All four operations share the same pattern:
- * resolve target → encrypt → build [ControlMessageRequestBody] → POST via [LCallHttpService].
- */
+
+
+
+
+
+
 internal class CallControlMessageSender(
     private val callService: LCallHttpService,
     private val callMessageCreator: CallMessageCreator,

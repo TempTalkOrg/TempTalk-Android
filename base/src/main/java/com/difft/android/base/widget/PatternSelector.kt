@@ -3,14 +3,14 @@ package com.difft.android.base.widget
 import kotlin.math.abs
 import kotlin.math.hypot
 
-/**
- * Builds the dot sequence of a gesture from touch samples.
- *
- * Before the first dot the start is acquired like the legacy rule (generous radius around the touch
- * point, plus a short slide towards a nearby dot). Afterwards every sample is tested as a segment
- * from the previous sample, so a fast swipe cannot skip a dot it crossed; a dot two cells away in a
- * straight line pulls in the unused middle dot first. A dot is used at most once.
- */
+
+
+
+
+
+
+
+
 internal class PatternSelector(
     private val grid: PatternGrid,
     private val hitRadius: Float,
@@ -31,14 +31,14 @@ internal class PatternSelector(
         started = false
     }
 
-    /** Returns the dots newly selected by this sample, in selection order. */
+    
     fun down(x: Float, y: Float): List<Int> {
         reset()
         downX = x
         downY = y
         prevX = x
         prevY = y
-        // The start radius is generous and overlaps neighbours: take the nearest dot.
+        
         val start = grid.nearestDotAt(x, y, startRadius)
         if (start < 0) return emptyList()
         started = true
@@ -46,7 +46,7 @@ internal class PatternSelector(
         return listOf(start)
     }
 
-    /** Feed samples in time order (historical first, then the current one). */
+    
     fun move(x: Float, y: Float): List<Int> {
         val added = ArrayList<Int>(2)
         if (!started) {
@@ -91,7 +91,7 @@ internal class PatternSelector(
         return -1
     }
 
-    /** The cell between two dots exactly two apart in a row, column or diagonal, else -1. */
+    
     private fun middleDot(from: Int, to: Int): Int {
         val dRow = grid.row(to) - grid.row(from)
         val dColumn = grid.column(to) - grid.column(from)

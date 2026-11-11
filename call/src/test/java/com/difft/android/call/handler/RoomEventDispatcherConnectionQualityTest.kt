@@ -28,20 +28,12 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/**
- * Regression coverage for the two [RoomEventDispatcher] methods the weak-network feature rewires
- * (cases C10-C12 of the test contract).
- *
- * `onConnectionQualityChanged` is a shared entry point: besides feeding the new verdict unit it also
- * drives the post-call rating trigger (`feedbackBinder.currentCallNetworkPoor`). Its input set (local
- * events only), its classifier (`quality !in {EXCELLENT, GOOD}`, which counts UNKNOWN as poor) and its
- * last-reading-wins write semantics must stay exactly as they were — the render-side level mapping
- * deliberately classifies UNKNOWN differently, and aligning the two would silently change how often
- * the rating sheet appears.
- *
- * C12 covers the removal of the old 60 s debounced toast chain: a weak network must no longer push an
- * error into `roomCtl.collectError` at all.
- */
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [33])
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -59,7 +51,7 @@ class RoomEventDispatcherConnectionQualityTest {
     private val timeoutMonitor get() = f.timeoutMonitor
     private val networkQuality get() = f.networkQuality
 
-    /** Every host.onNetworkPoorStateChanged(poor) value, in order. */
+    
     private val networkPoorCalls get() = f.networkPoorCalls
 
     @Before
@@ -89,9 +81,7 @@ class RoomEventDispatcherConnectionQualityTest {
     private fun qualityEvent(participant: Participant, quality: ConnectionQuality) =
         RoomEvent.ConnectionQualityChanged(room, participant, quality)
 
-    // ------------------------------------------------------------------ C10a
-    // A remote POOR reading now reaches the verdict unit (that is the new feature), but it must NOT
-    // touch the rating trigger: "was MY network bad" would otherwise become "was anyone's".
+    
     @Test
     fun `remote quality feeds the verdict unit without touching the rating chain`() {
         val dispatcher = buildDispatcher()
@@ -102,7 +92,6 @@ class RoomEventDispatcherConnectionQualityTest {
         verify(exactly = 1) { networkQuality.onQualityChanged("+123.1", ConnectionQuality.POOR, false) }
     }
 
-    // ------------------------------------------------------------------ C10b/c/d
     @Test
     fun `local quality keeps the original poor classification including UNKNOWN`() {
         val dispatcher = buildDispatcher()
@@ -112,15 +101,14 @@ class RoomEventDispatcherConnectionQualityTest {
         dispatch(dispatcher, qualityEvent(local, ConnectionQuality.EXCELLENT))
         dispatch(dispatcher, qualityEvent(local, ConnectionQuality.UNKNOWN))
 
-        // UNKNOWN counts as poor here on purpose — the render-side mapping treats it as EXCELLENT so
-        // no badge flashes before the first stats batch, but changing it here would change the rating
-        // sheet's trigger rate.
+        
+        
+        
         assertEquals(listOf(true, false, true), networkPoorCalls)
         verify(exactly = 3) { networkQuality.onQualityChanged("self.1", any(), true) }
     }
 
-    // ------------------------------------------------------------------ C11
-    // The verdict cleanup sits ABOVE the switch/reconnect guard, and that guard is untouched.
+    
     @Test
     fun `participant disconnected clears the verdict even while the switch guard is active`() {
         every { roomCtl.callStatus } returns MutableStateFlow(CallStatus.SWITCHING_SERVER)
@@ -132,9 +120,7 @@ class RoomEventDispatcherConnectionQualityTest {
         verify(exactly = 0) { timeoutMonitor.onParticipantDisconnected(any()) }
     }
 
-    // ------------------------------------------------------------------ C12
-    // The 60 s debounced toast chain is gone: no NetworkConnectionPoorException producer remains, so
-    // a weak network can never reach CallErrorHandler's `else` branch (which ends the call).
+    
     @Test
     fun `repeated local poor readings never raise a call error`() {
         val dispatcher = buildDispatcher()

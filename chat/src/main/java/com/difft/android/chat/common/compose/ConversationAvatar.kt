@@ -14,11 +14,11 @@ import com.difft.android.chat.common.GroupAvatarView
 import com.difft.android.network.group.GroupAvatarData
 import org.difft.app.database.models.ContactorModel
 
-/**
- * Compose wrappers over the legacy avatar views so Compose screens render exactly the same
- * bitmap/letter/remark chain the XML screens do. Glide gets an explicit target size because the
- * AndroidView measure pass runs after the first `update`, which otherwise yields a 0-size request.
- */
+
+
+
+
+
 @Composable
 fun ContactAvatar(
     contactor: ContactorModel,
@@ -36,10 +36,10 @@ fun ContactAvatar(
     )
 }
 
-/**
- * Letter-only avatar for callers with no [ContactorModel]. Same AvatarView chain as
- * [ContactAvatar], letter branch only; [id] seeds the background colour.
- */
+
+
+
+
 @Composable
 fun LetterAvatar(
     firstLetter: String?,

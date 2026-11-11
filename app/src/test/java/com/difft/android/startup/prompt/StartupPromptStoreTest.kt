@@ -26,7 +26,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/** The prompt store on a real file-backed app_state DataStore: round trip, pinned JSON names, corruption, atomic edits. */
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = Application::class)
 class StartupPromptStoreTest {

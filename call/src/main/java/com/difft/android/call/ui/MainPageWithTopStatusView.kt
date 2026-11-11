@@ -30,9 +30,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
@@ -57,6 +60,7 @@ import com.difft.android.call.data.WeakNetworkBanner
 import com.difft.android.call.ui.actionbar.rememberCallSideRail
 import com.difft.android.call.ui.actionbar.rememberChromeAlpha
 import com.difft.android.call.ui.actionbar.rememberChromeVisible
+import com.difft.android.call.ui.actionbar.rememberMinimizeStart
 import com.difft.android.call.ui.actionbar.rememberTitleRowTop
 import com.difft.android.call.ui.alert.CallCriticalAlertView
 import com.difft.android.call.ui.tabletop.LocalCallTabletop
@@ -81,20 +85,20 @@ fun MainPageWithTopStatusView(
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
     val callDuration by viewModel.timerManager.callDurationText.collectAsState("00:00")
-    // 1v1 进入 CONNECTED 后计时还要等对端 RTC 通道就绪，这段时间悬浮条显示「连接中…」,
-    // title 第二行保持静态 E2EE 文案而不是静止的 00:00。
+    
+    
     val callTimerRunning by viewModel.timerManager.callTimerRunning.collectAsState(false)
     val callStatus by viewModel.callStatus.collectAsState()
     val mediaSendIssue by viewModel.mediaSendIssue.collectAsState()
     val countDownEnabled by viewModel.timerManager.countDownEnabled.collectAsState(false)
     val callType by viewModel.callType.collectAsState()
     val screenSharingUser by viewModel.screenSharingUser.collectAsState()
-    // Independent collectAsState of `participants` — StateFlow supports multiple collectors
-    // natively, this is not a leak; kept separate from any sibling composable's collector so
-    // this file's recomposition scope stays decoupled.
+    
+    
+    
     val participants by viewModel.participants.collectAsState()
-    // Title bar is a light node, so a collector here is cheap — unlike the participant tiles,
-    // where the badge owns its own collector to keep the video renderers out of the scope.
+    
+    
     val networkQuality by viewModel.callUiController.networkQuality.collectAsState()
 
     val contactorCacheManager = remember {
@@ -130,27 +134,37 @@ fun MainPageWithTopStatusView(
         callIntent = callIntent,
         callTimerRunning = callTimerRunning,
         mediaSendIssue = mediaSendIssue,
-        // Headcount, not `isOneVOneCall`: the peer banner and the tile badge split on how many
-        // people are in the call, so a 2-person group call must take the banner branch too. This
-        // list is exactly `localParticipant + room.remoteParticipants`, so ringing invitees are
-        // correctly excluded.
+        
+        
+        
+        
         weakNetwork = WeakNetworkBanner.resolve(networkQuality, participants.size),
     )
-    // Every scenario collapses on tap; in bar mode an open panel also fades the chrome out without
-    // touching the toggle itself (beside the side rail it does not, #1451).
+    
+    
     val isTopVisible by rememberChromeVisible(viewModel.callUiController, viewModel.callUiController.showTopStatusViewEnabled)
     val topAlpha = rememberChromeAlpha(viewModel.callUiController, viewModel.callUiController.showTopStatusViewEnabled)
-    val titleCutoutExtra = rememberTitleCutoutExtra(isLandscape, isUserSharingScreen)
+    
+    
+    val overPicture = isUserSharingScreen || LocalCallTabletop.current != null
+    val titleCutoutExtra = rememberTitleCutoutExtra(isLandscape, isUserSharingScreen, overPicture)
+    val rowTop = titleCutoutExtra + if (!isLandscape || !isUserSharingScreen) {
+        WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + LCallUiConstants.TOP_BAR_MARGIN_TOP_DP.dp
+    } else {
+        0.dp
+    }
+    val barBottom = rowTop + LCallUiConstants.TOP_BAR_HEIGHT_DP.dp
 
-    // 关键：`tapInterceptor` 只挂在内层 [TopStatusBar]（52dp 高，与全 app 标题栏一致），而不是
-    // 整个 Column。该 Column 是 Material `Surface` 的直接子节点，Surface 会把
-    // 最小约束传播给子节点，使 Column 实际铺满全屏；若把 pointerInput 挂在
-    // 这里，它会覆盖在屏幕共享视频（AndroidView）之上并“捕获”整屏手势区域，
-    // 导致控制栏隐藏后整页无法双指缩放。Column 仅保留 `alpha` 做视觉隐藏（不
-    // 进入指针命中测试），与底部控制栏的做法保持一致。
+    
+    
+    
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            
+            .graphicsLayer { alpha = topAlpha.value }
+            
+            .then(if (overPicture) Modifier.drawBehind { drawTopShade(barBottom.toPx()) } else Modifier)
             .then(
                 if (!isLandscape || !isUserSharingScreen) {
                     Modifier.windowInsetsPadding(WindowInsets.statusBars)
@@ -161,9 +175,7 @@ fun MainPageWithTopStatusView(
                 } else {
                     Modifier.padding(top = titleCutoutExtra, bottom = LCallUiConstants.TOP_BAR_MARGIN_BOTTOM_DP.dp)
                 }
-            )
-            // Read in the draw phase only: the 200ms fade never recomposes this subtree.
-            .graphicsLayer { alpha = topAlpha.value },
+            ),
         verticalArrangement = Arrangement.Top,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -175,6 +187,8 @@ fun MainPageWithTopStatusView(
             isTopVisible = isTopVisible,
             isLandscape = isLandscape,
             isUserSharingScreen = isUserSharingScreen,
+            rowTop = rowTop,
+            minimizeAside = overPicture,
             windowZoomOutAction = windowZoomOutAction,
             onE2eeHintClick = onE2eeHintClick,
         ) {
@@ -195,7 +209,7 @@ fun MainPageWithTopStatusView(
             )
         }
 
-        // 悬浮条不进 PiP:PiP 窗口装不下 notification 胶囊,title 的 E2EE/时长仍在。
+        
         if (!isInPipMode) {
             CallStatusNotificationBar(
                 status = statusNotification,
@@ -205,8 +219,7 @@ fun MainPageWithTopStatusView(
 
         val criticalAlertScope = rememberCoroutineScope()
         if (viewModel.is1v1ShowCriticalAlertEnable(callStatus)) {
-            // 规则上与悬浮条不并存(critical alert 只在 1v1 等待接听阶段出现,该阶段悬浮条为空),
-            // 8dp 为防御性间距——将来若新增可并存的状态,两条不至于粘连。
+            
             Box(modifier = Modifier.padding(top = 8.dp)) {
                 CallCriticalAlertView(
                     clicked = {
@@ -218,14 +231,23 @@ fun MainPageWithTopStatusView(
     }
 }
 
-/**
- * How far the title row moves below its status-bar rule to clear the display cutout (#1451). A
- * landscape share draws the row from the window top, elsewhere it starts under the status bar.
- */
+private fun DrawScope.drawTopShade(bottomPx: Float) {
+    drawRect(
+        brush = Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.4f), Color.Transparent), endY = bottomPx),
+        size = Size(size.width, bottomPx),
+    )
+}
+
+private val MINIMIZE_TARGET_SIZE = 44.dp
+
+
+
+
+
 @Composable
-private fun rememberTitleCutoutExtra(isLandscape: Boolean, isUserSharingScreen: Boolean): Dp {
+private fun rememberTitleCutoutExtra(isLandscape: Boolean, isUserSharingScreen: Boolean, minimizeAside: Boolean): Dp {
     val baseTop = if (isLandscape && isUserSharingScreen) 0.dp else WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val extra = (rememberTitleRowTop(baseTop, alignWithRail = !isUserSharingScreen) - baseTop).coerceAtLeast(0.dp)
+    val extra = (rememberTitleRowTop(baseTop, alignWithRail = !isUserSharingScreen, minimizeAside = minimizeAside) - baseTop).coerceAtLeast(0.dp)
     val extraDp = extra.value.toInt()
     val baseDp = baseTop.value.toInt()
     LaunchedEffect(extraDp) {
@@ -234,10 +256,10 @@ private fun rememberTitleCutoutExtra(isLandscape: Boolean, isUserSharingScreen: 
     return extra
 }
 
-/**
- * 顶部状态栏容器：左侧缩小按钮 + 中间状态内容
- * With the side rail shown the minimize button moves to the rail's top, so the leading slot is empty (#1451).
- */
+
+
+
+
 @Composable
 private fun TopStatusBar(
     modifier: Modifier = Modifier,
@@ -245,38 +267,32 @@ private fun TopStatusBar(
     isTopVisible: Boolean,
     isLandscape: Boolean,
     isUserSharingScreen: Boolean,
+    
+    rowTop: Dp,
+    minimizeAside: Boolean,
     windowZoomOutAction: () -> Unit,
     onE2eeHintClick: () -> Unit,
     statusContent: @Composable () -> Unit,
 ) {
-    // Over a share, and half open flat where the cards start at the top (decision 23), the bar lies
-    // on the picture and gets a gradient.
-    val overPicture = isUserSharingScreen || LocalCallTabletop.current != null
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(LCallUiConstants.TOP_BAR_HEIGHT_DP.dp)
-            .then(
-                if (overPicture) Modifier.background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            Color.Black.copy(alpha = 0.4f),
-                            Color.Transparent
-                        ),
-                    )
-                ) else Modifier
-            ),
+            .height(LCallUiConstants.TOP_BAR_HEIGHT_DP.dp),
     ) {
-        // With the side rail minimize moves onto the rail (#1451); the title stays centred either way.
+        
         val onRail = rememberCallSideRail() != null
-        if (!isInPipMode && !onRail) {
-            val controlPadding = if (!isLandscape) 16.dp else 18.dp
+        val showMinimize = !isInPipMode && !onRail
+        val basePadding = if (!isLandscape) 16.dp else 18.dp
+        val controlPadding = if (minimizeAside) rememberMinimizeStart(rowTop, basePadding) else basePadding
+        
+        val titleInset = if (showMinimize) controlPadding + MINIMIZE_TARGET_SIZE else 0.dp
+        if (showMinimize) {
             Box(
                 modifier = Modifier
                     .testTag("call_topbar_zoom_out")
                     .align(Alignment.CenterStart)
                     .padding(start = controlPadding)
-                    .size(44.dp)
+                    .size(MINIMIZE_TARGET_SIZE)
                     .clickable(
                         onClick = windowZoomOutAction,
                         indication = null,
@@ -293,16 +309,17 @@ private fun TopStatusBar(
             }
         }
 
-        // Screen-sharing excludes the E2EE surface entirely. isTopVisible prevents hidden-header
-        // taps from stealing tapInterceptor's gesture; !isInPipMode mirrors every existing :call
-        // sheet. The `clickable` modifier is mounted ONLY when this is true — `clickable(enabled
-        // = false)` still unconditionally consumes the down/up pointer events (Compose Foundation),
-        // which would silently swallow taps instead of letting them fall through to the ancestor
-        // tapInterceptor.
+        
+        
+        
+        
+        
+        
         val canClickE2eeHeader = isTopVisible && !isInPipMode && !isUserSharingScreen
         Box(
             modifier = Modifier
                 .align(Alignment.Center)
+                .padding(horizontal = titleInset)
                 .testTag("call_topbar_status_click_target")
                 .then(
                     if (canClickE2eeHeader) {
@@ -322,11 +339,10 @@ private fun TopStatusBar(
     }
 }
 
-/**
- * 通话状态内容：title 负责名字、E2EE/时长与「等待接听…」(呼叫进程,含 E2EE 轮换,PR#1125
- * 需求、与 Mac 一致);连接健康度状态(连接中/重连/连接中断/发送异常)由
- * [CallStatusNotificationBar] 悬浮条承载,联通即消失。
- */
+
+
+
+
 @Composable
 private fun CallStatusContent(
     callStatus: CallStatus,
@@ -347,8 +363,7 @@ private fun CallStatusContent(
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // callTimerRunning 是「通话中途」的判别:RECONNECTING/SWITCHING_SERVER 等中途瞬态
-        // 也保持名字+时长常驻(状态在悬浮条,与时长共存),不回落到接通前的 E2EE 占位。
+        
         if (callStatus == CallStatus.CONNECTED || callStatus == CallStatus.RECONNECTED || callTimerRunning) {
             ConnectedStatusContent(
                 callDuration = callDuration,
@@ -367,7 +382,7 @@ private fun CallStatusContent(
                 shouldAnimate = rememberShouldAnimateCallStatus(isInPipMode),
             )
         } else {
-            // 连接类状态在悬浮条,title 静态显示 E2EE 提示。
+            
             EncryptedStatusRow(
                 textStyle = DifftTheme.typography.p3.copy(color = DifftTheme.colors.textPrimary),
                 testTag = "call_topbar_status_text",
@@ -388,32 +403,34 @@ private fun ConnectedStatusContent(
     viewModel: LCallViewModel,
     callConfig: CallConfig,
 ) {
-    // 计时未就绪(1v1 等对端 RTC)时第二行保持 E2EE 文案;时长开始后常驻,不再被任何
-    // 状态顶掉——瞬态状态(含 media send issue)都在悬浮条里,与时长共存。
+    
     val callTimerRunning by viewModel.timerManager.callTimerRunning.collectAsState(false)
 
     if (isUserSharingScreen && screenSharingUser?.identity?.value != null) {
         screenShareUserName?.let { name ->
-            // Append the duration only once the timer runs: `callDuration` is the raw ticker
-            // text, so during the media-ready gate it would read as a frozen "00:00" (the exact
-            // bug the timer gate exists for) — and the floating pill already says "Connecting…".
-            val shareTitle = "${StringUtil.truncateWithEllipsis(name, PARTICIPANT_NAME_MAX_LENGTH)}${ResUtils.getString(R.string.call_screen_sharing_title)}"
-            Text(
-                modifier = Modifier.testTag("call_topbar_call_duration"),
-                text = if (callTimerRunning) "$shareTitle $callDuration" else shareTitle,
+            
+            
+            
+            val shareSuffix = ResUtils.getString(R.string.call_screen_sharing_title) +
+                if (callTimerRunning) " $callDuration" else ""
+            NameWithSuffix(
+                name = name,
+                suffix = shareSuffix,
                 style = DifftTheme.typography.p3,
                 color = Color.White,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                suffixModifier = Modifier.testTag("call_topbar_call_duration"),
             )
         }
     } else if (!isUserSharingScreen) {
-        // Gated on isUserSharingScreen, not isOneVOneCall: during the transient where sharing has
-        // started but the sharer's identity hasn't resolved yet, neither branch renders — showing
-        // no title is preferred over showing an ambiguous one.
-        // Pre-truncate BOTH branches: maxLines/ellipsis alone don't bound Compose text-measurement
-        // cost for long strings (main-thread ANR, see the getCallRoomName precedent).
-        val headerTitle = if (isOneVOneCall) oneOnOnePeerName?.let { StringUtil.truncateWithEllipsis(it, 25) } else StringUtil.truncateWithEllipsis(viewModel.getCallRoomName(), 25)
+        
+        
+        
+        
+        val headerTitle = if (isOneVOneCall) {
+            oneOnOnePeerName?.let { StringUtil.truncateWithEllipsis(it, NAME_MEASURE_CAP) }
+        } else {
+            StringUtil.truncateWithEllipsis(viewModel.getCallRoomName(), NAME_MEASURE_CAP)
+        }
         if (!headerTitle.isNullOrEmpty()) {
             Text(
                 modifier = Modifier.testTag("call_topbar_room_name"),
@@ -428,9 +445,7 @@ private fun ConnectedStatusContent(
 
     if (!isUserSharingScreen) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            // Literal Color.White (not DifftTheme.colors.*) is intentional: this subtree is
-            // forced dark-theme (CallContent.kt:90) and every other text/icon in this function
-            // already uses literal colors.
+            
             Icon(
                 imageVector = ImageVector.vectorResource(id = com.difft.android.base.R.drawable.base_tabler_lock),
                 contentDescription = null,
@@ -451,9 +466,9 @@ private fun ConnectedStatusContent(
                 Box(
                     modifier = Modifier
                         .padding(horizontal = 8.dp)
-                        .width(1.dp)
+                        .width(DifftTheme.hairline)
                         .height(10.dp)
-                        .background(color = DifftTheme.colors.line)
+                        .background(color = DifftTheme.colors.divider)
                 )
 
                 CountDownTimerView(

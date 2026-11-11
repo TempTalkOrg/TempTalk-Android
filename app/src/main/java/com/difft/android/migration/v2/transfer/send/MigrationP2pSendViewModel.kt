@@ -36,109 +36,109 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-/**
- * MVI ViewModel for the send screen, the mirror of
- * [com.difft.android.migration.v2.transfer.login.MigrationP2pReceiveViewModel] in the sender role.
- *
- * The send runs on [MigrationTransferService]'s scope, not here: this view model starts and cancels
- * it through the service, and re-attaches on init by collecting [MigrationTransferStateHolder] and
- * mapping the role-agnostic [TransferState] into the UI state, so an Activity recreated mid-send
- * re-binds to the in-flight transfer. The scanned QR is kept locally and only that raw string is
- * passed to the service; the account, environment and transfer key are read live inside the
- * controller and never marshalled through an Intent extra or logged. `onCleared` does not cancel the
- * transfer — the service owns it.
- */
+
+
+
+
+
+
+
+
+
+
+
+
 class MigrationP2pSendViewModel(
     private val appContext: Context,
-    // Sizes shown on the pairing page; null (tests, demo) shows no estimate. Runs off the main thread.
+    
     private val estimator: (suspend () -> ExportEstimate)? = null,
-    // The decision was already made on the page that opened this one (the Desktop-login confirmation):
-    // start as soon as the payload is in, with this attachment choice, instead of showing Ready.
+    
+    
     private val autoStart: Boolean = false,
     private val initialIncludeAttachments: Boolean = true,
-    // Same-device no-login credential handoff: this send carries the login session itself, so it is
-    // gated on a user-presence check and its failure screen is gated on the peer's answer.
+    
+    
     private val credentialHandoff: Boolean = false,
-    // Whether this install may still hand its session over, re-checked here because it is the last
-    // point before the user commits: null = allowed, otherwise the wire token to show.
+    
+    
     private val handoffBlockReason: (() -> String?)? = null,
-    // Which user-presence check applies on this device (App Lock / device credential / none).
+    
     private val authMethod: (() -> HandoffAuthPolicy.Method)? = null,
-    // Free-space verdict for (estimate, includeAttachments). Same-device only — both apps share one
-    // volume there, so the sender can answer for the receiver.
+    
+    
     private val spaceVerdict: ((ExportEstimate, Boolean) -> HandoffSpaceCheck.Verdict)? = null,
-    // Ask the new app, in-session, whether it nonetheless finished. Gates the restart affordance.
+    
     private val reconcile: (suspend () -> MigrationHandoffReconciler.Outcome)? = null,
-    // Desktop link, account switch: the Desktop holds `prepare-upload` until its user confirms, so
-    // the sender must retry through the wait instead of failing on the first timeout.
+    
+    
     private val awaitPeerConfirm: Boolean = false,
-    // Settles which of a code's advertised addresses answers (TCP + TLS + pin race); null (tests)
-    // keeps the code's first address. Runs only when the code carries more than one.
+    
+    
     private val resolveEndpoint: (suspend (QrPayload) -> QrPayload?)? = null,
-    // Tells the receiver its code was read; null (tests) means the confirmation page opens at once.
+    
     private val claimPairing: (suspend (QrPayload) -> SenderHttpClient.PairingClaim)? = null,
-    // The send whose verdict this device never learned, if any; null (tests) means none is ever pending.
+    
     private val loadPendingVerdict: (suspend () -> PendingVerdict?)? = null,
     private val clearPendingVerdict: (suspend () -> Unit)? = null,
-    // One `/status` question to the receiver of a pending send.
+    
     private val probeVerdict: (suspend (SenderSessionRef) -> Verdict)? = null,
-    // Settles a re-checked verdict: the message pause and the pending record in one write (#1382);
-    // false when the pause did not take it, so the page shows no final result. Null (tests) falls
-    // back to clearing the pending record on a definite verdict.
+    
+    
+    
     private val settleVerdict: (suspend (SenderSessionRef, Verdict) -> Boolean)? = null,
-    // Phone-to-phone replacement (not a Desktop link): the send pauses messaging (#1382).
+    
     private val deviceReplacement: Boolean = false,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<MigrationP2pSendState>(MigrationP2pSendState.Idle)
     val state: StateFlow<MigrationP2pSendState> = _state.asStateFlow()
 
-    /** The paired device's name, kept beyond Ready so the in-flight and done screens can still show it. */
+    
     private val _targetAlias = MutableStateFlow<String?>(null)
     val targetAlias: StateFlow<String?> = _targetAlias.asStateFlow()
 
-    /** True when the receiver is the new app on this device, paired over loopback. */
+    
     private val _sameDevice = MutableStateFlow(false)
     val sameDevice: StateFlow<Boolean> = _sameDevice.asStateFlow()
 
     private val _effects = Channel<MigrationP2pSendEffect>(Channel.BUFFERED)
     val effects = _effects.receiveAsFlow()
 
-    /** Raw scanned QR, passed straight to the service and never decoded into identity here. */
+    
     private var scannedRaw: String? = null
 
-    /** The scanned peer's name, kept across the auth step so Ready can still name the target. */
+    
     private var pendingAlias: String? = null
 
-    /** At most one reconciliation in flight; a second trigger while it runs is a no-op. */
+    
     private var reconcileJob: Job? = null
 
-    /** At most one verdict re-check in flight. */
+    
     private var recheckJob: Job? = null
 
-    /** Handoff: the confirmation page to return to after the user-presence prompt. */
+    
     private var readyBeforeAuth: MigrationP2pSendState.Ready? = null
 
-    /** Handoff: user presence has been proven once in this session. */
+    
     private var authConfirmed = false
 
-    /** The size the progress reading is measured against; 0 until the estimate lands. */
+    
     private var estimatedTotalBytes = 0L
 
-    /** True once this screen has asked the service to send; a screen left before that owes the peer a cancel. */
+    
     var sendStarted: Boolean = false
         private set
 
     init {
-        // A terminal holder value at page-open is left over from a previous attempt, since this view
-        // model has not started anything yet. The holder is a process singleton, so a prior Failed,
-        // Sent or Cancelled would otherwise be replayed every time the page reopens, pinning a stale
-        // error page; the outcome is per-attempt, so clear it on a fresh open. A non-terminal value is
-        // a live transfer the user backgrounded, so keep it and let the collector below re-attach.
+        
+        
+        
+        
+        
         if (MigrationTransferStateHolder.state.value.isTerminal()) {
             MigrationTransferStateHolder.reset()
         }
-        // Re-attach: fold the live service-owned transfer state into the send UI state.
+        
         viewModelScope.launch {
             MigrationTransferStateHolder.state.collect { mapTransfer(it) }
         }
@@ -150,8 +150,8 @@ class MigrationP2pSendViewModel(
                 }
             }
         }
-        // A send this process never saw the end of: ask the receiver before showing anything else.
-        // Only when nothing is running — a live transfer in the holder is already being watched.
+        
+        
         if (MigrationTransferStateHolder.state.value == TransferState.Idle) {
             viewModelScope.launch {
                 val pending = loadPendingVerdict?.invoke() ?: return@launch
@@ -173,8 +173,8 @@ class MigrationP2pSendViewModel(
             MigrationP2pSendIntent.Cancel -> MigrationTransferService.cancel(appContext)
             MigrationP2pSendIntent.Close -> emit(MigrationP2pSendEffect.Finish)
             is MigrationP2pSendIntent.SetIncludeAttachments -> _state.update { s ->
-                // The space verdict is a function of the payload, so it must re-run on every toggle —
-                // dropping attachments is exactly the remedy the screen offers when it does not fit.
+                
+                
                 if (s is MigrationP2pSendState.Ready) withSpaceVerdict(s.copy(includeAttachments = intent.include)) else s
             }
             MigrationP2pSendIntent.ReturnToPeer -> emit(MigrationP2pSendEffect.ReturnToPeerApp)
@@ -184,7 +184,7 @@ class MigrationP2pSendViewModel(
             MigrationP2pSendIntent.RecheckVerdict -> viewModelScope.launch {
                 val pending = loadPendingVerdict?.invoke()
                 if (pending == null) {
-                    // Nothing to ask about any more: the record aged out, or was never written.
+                    
                     _state.update { MigrationP2pSendState.Unconfirmed(MigrationP2pSendState.Unconfirmed.Phase.UNREACHABLE) }
                 } else {
                     recheckVerdict(pending.session)
@@ -202,13 +202,13 @@ class MigrationP2pSendViewModel(
         }
     }
 
-    /**
-     * The failure screen came back to the front while the new app may have finished behind it. A no-op
-     * outside handoff mode and off the failure screen.
-     */
+    
+
+
+
     fun onScreenResumed() {
         if (credentialHandoff && _state.value is MigrationP2pSendState.Failed) startReconcile()
-        // Back in front with an unconfirmed result: the first thing to do is ask, not to assume.
+        
         val unconfirmed = _state.value as? MigrationP2pSendState.Unconfirmed ?: return
         if (unconfirmed.phase == MigrationP2pSendState.Unconfirmed.Phase.IDLE ||
             unconfirmed.phase == MigrationP2pSendState.Unconfirmed.Phase.UNREACHABLE
@@ -217,10 +217,10 @@ class MigrationP2pSendViewModel(
         }
     }
 
-    /**
-     * Ask the receiver how the pending send ended and show that. A definite answer — either way —
-     * ends the pending record; no answer keeps it, with the page saying to look at the new device.
-     */
+    
+
+
+
     private fun recheckVerdict(session: SenderSessionRef) {
         val probe = probeVerdict ?: return
         if (recheckJob?.isActive == true) return
@@ -249,10 +249,10 @@ class MigrationP2pSendViewModel(
         }
     }
 
-    /**
-     * A definite verdict ends the pending record; any verdict may move the message pause. False
-     * when the pause did not take it (#1382 A11).
-     */
+    
+
+
+
     private suspend fun settle(session: SenderSessionRef, verdict: Verdict): Boolean {
         val settlement = settleVerdict
         if (settlement != null) return settlement(session, verdict)
@@ -260,7 +260,7 @@ class MigrationP2pSendViewModel(
         return true
     }
 
-    /** Fill in the pairing page's size figures once they are known; a stale result never overwrites a later state. */
+    
     private fun estimateSize() {
         val estimate = estimator ?: return
         viewModelScope.launch(Dispatchers.IO) {
@@ -271,11 +271,11 @@ class MigrationP2pSendViewModel(
         }
     }
 
-    /**
-     * What the holder says about a transfer this screen must not shadow. The scan and the start must
-     * both read it and agree, or the screen offers a start the service will refuse. An idle listener
-     * does not count as in flight — the service evicts it for a start.
-     */
+    
+
+
+
+
     private fun inFlightOrNull(): TransferState? = MigrationTransferStateHolder.state.value.takeIf {
         it != TransferState.Idle &&
             !it.isTerminal() &&
@@ -284,11 +284,11 @@ class MigrationP2pSendViewModel(
     }
 
     private fun onScanned(raw: String) {
-        // A transfer is still running: this screen is showing it (the holder collector re-attached on
-        // open), and a scan must not replace that with a pairing page whose start button the service
-        // would refuse. While a phone-to-phone send runs, messaging is paused (#1382): no message
-        // notification or call rings, so only a system or user-initiated interruption (a Home press,
-        // another app) leaves this page; coming back through the scanner is still an ordinary path.
+        
+        
+        
+        
+        
         inFlightOrNull()?.let { live ->
             L.w { "[MigrationV2][P2P][Tx] scan ignored: transfer in flight (${live::class.simpleName})" }
             emit(MigrationP2pSendEffect.Toast(appContext.getString(R.string.migration_p2p_send_transfer_in_flight)))
@@ -300,8 +300,8 @@ class MigrationP2pSendViewModel(
             _state.update { MigrationP2pSendState.Idle }
             return
         }
-        // A computer's export code reaching this screen by any route other than its scanner: this
-        // device would send to the computer, which only gives.
+        
+        
         if (payload.direction == TransferDirection.DOWNLOAD) {
             L.w { "[MigrationV2][P2P][Tx] scan declined kind=computer_export" }
             emit(MigrationP2pSendEffect.Toast(appContext.getString(ChatR.string.scan_computer_export_code_hint)))
@@ -318,10 +318,10 @@ class MigrationP2pSendViewModel(
             onTargetSettled(raw, payload)
             return
         }
-        // Several addresses advertised: find the one that answers before the first request goes
-        // out, and hand the service a code that names only that address, so the claim, the upload
-        // and the session record all agree on it. No winner keeps the first address and lets the
-        // connection fail where it always did.
+        
+        
+        
+        
         pendingAlias = payload.alias
         _targetAlias.value = payload.alias
         viewModelScope.launch {
@@ -342,21 +342,21 @@ class MigrationP2pSendViewModel(
         pendingAlias = payload.alias
         _targetAlias.value = payload.alias
         _sameDevice.value = payload.ip == PeerApps.LOOPBACK_IP
-        // Do not log the transfer key.
+        
         L.i { "[MigrationV2][P2P][Tx] scanned target ${payload.alias} @ ${payload.ip}:${payload.port} autoStart=$autoStart" }
-        // Handoff: a blocked hand-over (switch off, session gone) is shown instead of a page that
-        // could never start. The user-presence step itself waits for the start tap.
+        
+        
         if (credentialHandoff && blockIfNeeded()) return
         claimThenReady(payload)
     }
 
-    /**
-     * Tell the receiver its code was read before the confirmation page opens, so the code stops
-     * rotating there while the user reads the page. A code that has already rotated is refused now,
-     * with the scanner still at hand, instead of after the user has read the page and tapped start.
-     * Same device and the Desktop link path go straight to the page. No answer at all means the
-     * peer is unreachable (not on one network): fail now rather than after start; a 404 is an accept.
-     */
+    
+
+
+
+
+
+
     private fun claimThenReady(payload: QrPayload) {
         val claim = claimPairing
         if (claim == null || _sameDevice.value || autoStart) {
@@ -375,7 +375,7 @@ class MigrationP2pSendViewModel(
         }
     }
 
-    /** The scanned code is no good: say why and open the scanner again. */
+    
     private fun rescan(messageRes: Int) {
         emit(MigrationP2pSendEffect.Toast(appContext.getString(messageRes)))
         scannedRaw = null
@@ -383,7 +383,7 @@ class MigrationP2pSendViewModel(
         emit(MigrationP2pSendEffect.LaunchScanActivity)
     }
 
-    /** Handoff only: the authoritative gate re-check. True when the hand-over cannot proceed. */
+    
     private fun blockIfNeeded(): Boolean {
         val reason = handoffBlockReason?.invoke() ?: return false
         L.w { "[MigrationV2][Handoff] hand-over blocked reason=$reason" }
@@ -391,16 +391,16 @@ class MigrationP2pSendViewModel(
         return true
     }
 
-    /**
-     * Handoff only: the user-presence step, taken when the user taps start so the prompt is tied to
-     * the action being authorised rather than to opening the page. Returns true when an auth screen
-     * is now on its way and the send must wait for its verdict.
-     */
+    
+
+
+
+
     private fun requestAuth(ready: MigrationP2pSendState.Ready): Boolean {
         val effect = when (authMethod?.invoke() ?: HandoffAuthPolicy.Method.NONE) {
             HandoffAuthPolicy.Method.APP_LOCK -> MigrationP2pSendEffect.RequestAppLockAuth
             HandoffAuthPolicy.Method.DEVICE_CREDENTIAL -> MigrationP2pSendEffect.RequestDeviceCredentialAuth
-            // Nothing to verify against on this device; the start tap is the only gate left.
+            
             HandoffAuthPolicy.Method.NONE -> {
                 L.i { "[MigrationV2][Handoff] auth skipped: no device lock" }
                 return false
@@ -420,7 +420,7 @@ class MigrationP2pSendViewModel(
         startSend()
     }
 
-    /** A refused or dismissed prompt returns to the confirmation page; the user can try again. */
+    
     private fun onAuthFailed() {
         if (_state.value !is MigrationP2pSendState.Authenticating) return
         L.w { "[MigrationV2][Handoff] user presence not confirmed — staying on the confirmation page" }
@@ -432,21 +432,21 @@ class MigrationP2pSendViewModel(
         readyBeforeAuth = null
     }
 
-    /** The confirmation page: target, sizes, the attachment choice and the space verdict. */
+    
     private fun enterReady() {
         val alias = pendingAlias ?: return
-        // No transfer key on any state field.
+        
         _state.update { MigrationP2pSendState.Ready(alias, includeAttachments = initialIncludeAttachments) }
-        // The estimate feeds the progress reading either way, and it is what the page shows if an
-        // immediate start cannot proceed (the service refused it) and the user is left here.
+        
+        
         estimateSize()
         if (autoStart) startSend()
     }
 
-    /**
-     * Re-evaluate whether the selected payload fits. Cross-device cannot be answered here (the peer's
-     * volume is a different device), so the verdict is same-device only and otherwise reads as "fits".
-     */
+    
+
+
+
     private fun withSpaceVerdict(ready: MigrationP2pSendState.Ready): MigrationP2pSendState.Ready {
         val check = spaceVerdict ?: return ready
         val estimate = ready.estimate ?: return ready
@@ -463,8 +463,8 @@ class MigrationP2pSendViewModel(
     private fun startSend() {
         val ready = _state.value as? MigrationP2pSendState.Ready
         if (ready != null && !ready.spaceSufficient) {
-            // The screen already disables the button; this is the second half of the same rule, so a
-            // stale tap or an auto-start cannot slip past it.
+            
+            
             L.w { "[MigrationV2][Handoff] send refused: not enough free space" }
             return
         }
@@ -473,25 +473,25 @@ class MigrationP2pSendViewModel(
             emit(MigrationP2pSendEffect.Toast(appContext.getString(R.string.migration_p2p_send_scan_first)))
             return
         }
-        // Handoff: re-check the gate at the moment that matters, then prove user presence once. A
-        // confirmed auth carries over to a retry from the failure screen in the same session.
+        
+        
         if (credentialHandoff && !authConfirmed) {
             if (blockIfNeeded()) return
             if (ready != null && requestAuth(ready)) return
         }
-        // Reset the holder synchronously before the async start, so a stale terminal from a previous
-        // transfer is not replayed into this send. The holder is a process singleton shared by both
-        // roles, so the rule mirrors the service's: reset from a stale terminal or Idle; leave an idle
-        // listener for the service to evict; never shadow a transfer with bytes moving or landing.
+        
+        
+        
+        
         val holder = MigrationTransferStateHolder.state.value
         when {
             holder == TransferState.Idle || holder.isTerminal() -> MigrationTransferStateHolder.reset()
             holder is TransferState.WaitingForPeer || holder == TransferState.Starting ->
                 L.i { "[MigrationV2][P2P][Tx] send start: idle listener in the holder, the service evicts it" }
             else -> {
-                // Last resort: the scan gate above already turns a re-entry away, so reaching here means
-                // the holder changed between that check and this tap. Refusing is right; refusing in
-                // silence is not — the button would simply appear dead.
+                
+                
+                
                 L.w { "[MigrationV2][P2P][Tx] send start ignored: transfer in flight (${holder::class.simpleName})" }
                 emit(MigrationP2pSendEffect.Toast(appContext.getString(R.string.migration_p2p_send_transfer_in_flight)))
                 return
@@ -504,25 +504,25 @@ class MigrationP2pSendViewModel(
         L.i { "[MigrationV2][P2P][Tx] send start includeAttachments=$includeAttachments handoff=$credentialHandoff estimate=$estimatedTotalBytes" }
         MigrationTransferService.startSender(appContext, raw, includeAttachments, credentialHandoff, awaitPeerConfirm, deviceReplacement)
         sendStarted = true
-        // Same device: the user follows progress on the new app; the sender keeps running in its FGS.
+        
         if (_sameDevice.value) emit(MigrationP2pSendEffect.BringPeerToFront)
     }
 
-    /** Maps the role-agnostic transfer state into the sender UI state. */
+    
     private fun mapTransfer(transfer: TransferState) = _state.update { current ->
         when (transfer) {
-            // Idle is the pre-transfer reset state; keep whatever local pre-transfer state we are in.
+            
             TransferState.Idle -> current
             TransferState.Starting -> MigrationP2pSendState.Preparing
-            // The reading is measured against this end's own size estimate: the service does not
-            // know it, and the stream it counts is the one the estimate describes.
+            
+            
             is TransferState.Transferring -> MigrationP2pSendState.Transferring(transfer.progress, estimatedTotalBytes)
             TransferState.AwaitingVerdict -> MigrationP2pSendState.AwaitingVerdict
             TransferState.VerdictStalled -> MigrationP2pSendState.Unconfirmed(MigrationP2pSendState.Unconfirmed.Phase.WAITING)
-            // The service gave up waiting; the pending record stays for the user's own re-check.
+            
             TransferState.Unknown -> MigrationP2pSendState.Unconfirmed(MigrationP2pSendState.Unconfirmed.Phase.IDLE)
             TransferState.AwaitingPeerConfirm -> MigrationP2pSendState.AwaitingPeerConfirm
-            // Receiver-only states, never reached on the send screen; benign no-op.
+            
             is TransferState.WaitingForPeer,
             TransferState.Promoting,
             TransferState.Promoted,
@@ -533,8 +533,8 @@ class MigrationP2pSendViewModel(
             is TransferState.Failed -> {
                 L.w { "[MigrationV2][P2P][Tx] send failed reason=${transfer.reason}" }
                 if (credentialHandoff && reconcile != null) {
-                    // No 200 does not prove the new app did not finish. Ask it before offering a
-                    // restart; until it answers the screen shows "recovering" and offers nothing.
+                    
+                    
                     startReconcile()
                     MigrationP2pSendState.Failed(transfer.reason, retryEnabled = false)
                 } else {
@@ -545,11 +545,11 @@ class MigrationP2pSendViewModel(
         }
     }
 
-    /**
-     * Asks the new app whether it adopted the session and reflects the answer in the failure screen:
-     * only a reachable peer that did not adopt makes a restart safe. An unreachable peer leaves the
-     * state genuinely unknown, so the restart stays closed and a re-check is offered.
-     */
+    
+
+
+
+
     private fun startReconcile() {
         val ask = reconcile ?: return
         if (reconcileJob?.isActive == true) return
@@ -561,8 +561,8 @@ class MigrationP2pSendViewModel(
                 .onFailure { e -> L.w { "[MigrationV2][Handoff] reconcile failed: ${e.message}" } }
                 .getOrDefault(MigrationHandoffReconciler.Outcome.UNKNOWN)
             L.i { "[MigrationV2][Handoff] reconcile outcome=$outcome" }
-            // Signed out or already done: this process is on its way out, so publishing a new state
-            // would only make the dying screen flicker.
+            
+            
             if (outcome == MigrationHandoffReconciler.Outcome.SIGNED_OUT ||
                 outcome == MigrationHandoffReconciler.Outcome.ALREADY_DONE
             ) {
@@ -575,7 +575,7 @@ class MigrationP2pSendViewModel(
         }
     }
 
-    /** Only the same-device hand-over has a peer to ask; every other path retries by scanning. */
+    
     private fun requestFreshPairing() {
         if (!credentialHandoff) {
             L.w { "[MigrationV2][P2P][Tx] fresh pairing ignored: not a credential handoff" }
@@ -584,13 +584,13 @@ class MigrationP2pSendViewModel(
         emit(MigrationP2pSendEffect.RequestFreshPairing)
     }
 
-    /**
-     * The new app answered with a fresh pairing payload: pair with it through the ordinary scan path
-     * and start at once, so the retry costs one tap. Same-device pairing skips the claim and lands on
-     * the confirmation page synchronously; anything else means the payload was refused on the way in,
-     * and the state that produced (blocked, failed) is what the screen should keep showing. The
-     * proven user presence carries over within the session, so there is no second prompt.
-     */
+    
+
+
+
+
+
+
     fun onFreshPairing(raw: String) {
         onIntent(MigrationP2pSendIntent.QrScanned(raw))
         val paired = _state.value

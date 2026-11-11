@@ -7,21 +7,21 @@ import android.media.MediaMuxer
 import com.difft.android.base.log.lumberjack.L
 import java.io.File
 
-/**
- * AAC m4a encoder helper for [DualCandidateVoiceRecorder].
- *
- * Each instance owns one [MediaCodec] + [MediaMuxer]. [feed] accepts
- * normalized float32 PCM in [-1, 1]; we scale to int16 and hand the
- * bytes to the codec.
- *
- * Output drain is non-blocking on the hot path: after queueing input,
- * we call `drainOutput(blockMs = 0)` which returns immediately if no
- * output is ready. Output that arrives between feeds is picked up by the
- * next feed's drain (or by [signalEndOfStream]'s blocking drain). This
- * is the major performance win versus the demo's original 10 ms drain
- * timeout — without it the processor falls behind the mic and the
- * channel backlog grows linearly with recording length.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 internal class AacM4aEncoder(
     private val outputFile: File,
     private val sampleRate: Int,
@@ -117,22 +117,22 @@ internal class AacM4aEncoder(
     }
 
     private fun drainOutput(untilEos: Boolean) {
-        // Hot-path non-EOS drains use timeout 0 (non-blocking poll). Any
-        // output that isn't ready right now will be picked up by the
-        // next feed's drain.
-        //
-        // EOS path uses 10 ms per-dequeue timeout AND a wall-clock
-        // deadline so we never spin forever. Observed in-call (LiveKit
-        // already publishing the local mic) the `c2.android.aac.encoder`
-        // sometimes never emits BUFFER_FLAG_END_OF_STREAM after the
-        // empty `queueInputBuffer(... EOS)`, and an unbounded loop here
-        // locked the cleanup coroutine, which made
-        // `VoiceRecorderView.stopRecording()` hang on `awaitResult()`
-        // and the UI stuck in "release to send". Bounded wait lets
-        // `codec.stop()` / `muxer.stop()` in the `finally` block
-        // finalise whatever frames we have — worst case the file is
-        // missing the last ~40 ms of trailing audio, which is much
-        // better than the file never being delivered.
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
         val timeoutUs: Long = if (untilEos) 10_000L else 0L
         val deadlineMs: Long = if (untilEos) System.currentTimeMillis() + EOS_DRAIN_TIMEOUT_MS else Long.MAX_VALUE
         while (true) {
@@ -154,14 +154,14 @@ internal class AacM4aEncoder(
                 }
                 idx >= 0 -> {
                     val out = codec.getOutputBuffer(idx)
-                    // Some vendor AAC encoders (seen on certain Android 10/12
-                    // devices) emit a separate BUFFER_FLAG_CODEC_CONFIG buffer
-                    // *after* INFO_OUTPUT_FORMAT_CHANGED. Its payload is the
-                    // AudioSpecificConfig, which the muxer already stored via
-                    // addTrack(outputFormat). Writing it as a media sample
-                    // produces a bogus 2-byte leading frame that strict
-                    // decoders (desktop Chromium/Electron) reject, even though
-                    // ffmpeg tolerantly skips it. Never mux config buffers.
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
                     val isCodecConfig =
                         bufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0
                     if (out != null && !isCodecConfig && bufferInfo.size > 0 && muxerStarted) {
@@ -178,13 +178,13 @@ internal class AacM4aEncoder(
     }
 
     private companion object {
-        /**
-         * Wall-clock cap on how long we wait for the encoder to emit
-         * its EOS marker after the empty `BUFFER_FLAG_END_OF_STREAM`
-         * input. 1.5 s comfortably covers normal-load Pixel-class
-         * device; the in-call hang we observed was indefinite, so the
-         * exact value matters less than just *having* a bound.
-         */
+        
+
+
+
+
+
+
         const val EOS_DRAIN_TIMEOUT_MS = 1_500L
     }
 }

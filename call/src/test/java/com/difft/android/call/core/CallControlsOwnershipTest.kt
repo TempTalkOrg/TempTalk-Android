@@ -16,17 +16,16 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
-/**
- * Outside a share the layout controller owns whether the controls are hidden (design §4.4): a tap
- * toggles it, the bars mirror its state, a panel opening reveals them, and the tabletop posture
- * keeps the toolbar.
- */
+
+
+
+
 class CallControlsOwnershipTest {
 
     private val layout = CallLayoutController(now = { 0.0 })
     private val ui = CallUiController()
 
-    /** What the view model does with each published state. */
+    
     private fun mirror() {
         val state = layout.state.value
         ui.applyLayoutControls(state.controlsHidden, state.plan?.posture == Posture.TABLETOP)

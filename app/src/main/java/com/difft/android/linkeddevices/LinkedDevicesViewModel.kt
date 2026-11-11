@@ -21,13 +21,13 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-/**
- * Drives the Linked Devices list screen (MVI). Holds no Android Context.
- *
- * Pushes the count into [LinkedDevicesCountStore] on every successful load so the Settings badge
- * reflects an unlink instantly. 401/403 → `SessionAuthGuard` (via `DeviceRepository`), which
- * confirms before logging out; this ViewModel only owns the resulting UI reaction.
- */
+
+
+
+
+
+
+
 @HiltViewModel
 class LinkedDevicesViewModel @Inject constructor(
     private val deviceRepository: DeviceRepository,
@@ -37,14 +37,14 @@ class LinkedDevicesViewModel @Inject constructor(
     data class UiState(
         val isLoading: Boolean = false,
         val isRefreshing: Boolean = false,
-        val hasLoadedOnce: Boolean = false, // only the first load spins full-screen; later loads never do
+        val hasLoadedOnce: Boolean = false, 
         val devices: List<DeviceUiState> = emptyList(),
     )
 
     sealed interface UiEvent {
         data object UnlinkFailed : UiEvent
 
-        // List fetch failed (non-cancellation, non-logout). One-shot toast; the list/entry stay put.
+        
         data object FetchFailed : UiEvent
     }
 
@@ -56,30 +56,30 @@ class LinkedDevicesViewModel @Inject constructor(
 
     private var loadJob: Job? = null
 
-    // Expect-more-devices poll: after the user starts linking from this screen, poll until a new
-    // device appears so a completed link reflects without a manual refresh.
+    
+    
     private var expectingMoreDevices = false
     private var baselineDeviceCount = 0
     private var pollTickCount = 0
     private var pollJob: Job? = null
 
-    /**
-     * Driven by each host's onResume. Dedupes concurrent refreshes; `force=true` (unlink/pull/poll)
-     * cancels an in-flight refresh so an unlink's re-fetch can never be swallowed and a stale
-     * pre-DELETE GET can never revive a removed row. `silent=true` (poll) suppresses the failure
-     * toast. Full-screen spinner shows only before the first successful load.
-     */
+    
+
+
+
+
+
     fun refresh(force: Boolean = false, silent: Boolean = false): Job? {
         val previous = loadJob
         if (previous?.isActive == true && !force) return previous
-        // Publish the successor BEFORE cancelling the old job: waiters resumed by that cancellation
-        // (unlink's settle loop) must already observe the new loadJob, or they would release their
-        // guard against a job that never fetched.
+        
+        
+        
         val next = viewModelScope.launch(start = CoroutineStart.LAZY) {
             _uiState.update { it.copy(isLoading = !it.hasLoadedOnce) }
             try {
                 val devices = deviceRepository.getDevices().map { it.toUiState() }
-                countStore.update(devices.size) // keep the Settings badge fresh
+                countStore.update(devices.size) 
                 L.i { "[LinkedDevices] refresh: loaded count=${devices.size}" }
                 _uiState.update {
                     it.copy(isLoading = false, isRefreshing = false, hasLoadedOnce = true, devices = devices)
@@ -90,15 +90,15 @@ class LinkedDevicesViewModel @Inject constructor(
             } catch (e: AuthorizationFailedException) {
                 _uiState.update { it.copy(isLoading = false, isRefreshing = false, hasLoadedOnce = true) }
                 L.i { "[LinkedDevices] refresh: auth failed code=${e.code}" }
-                clearExpecting() // session is gone; the silent poll must not keep firing
+                clearExpecting() 
             } catch (e: Exception) {
-                // Keep any list already shown; surface a one-shot toast unless this is a silent poll.
-                // A failed attempt still counts as the first load, so retries never respin the
-                // full-screen spinner over the Link New Device entry.
+                
+                
+                
                 L.w { "[LinkedDevices] refresh: failed silent=$silent: ${e.stackTraceToString()}" }
                 _uiState.update { it.copy(isLoading = false, isRefreshing = false, hasLoadedOnce = true) }
                 if (!silent) _events.trySend(UiEvent.FetchFailed)
-                // Arm the poll even when the first post-scan fetch fails, so linking still resolves.
+                
                 if (expectingMoreDevices) startExpectPollIfNeeded()
             }
         }
@@ -108,17 +108,17 @@ class LinkedDevicesViewModel @Inject constructor(
         return next
     }
 
-    /** Pull-to-refresh: forced fetch with the pull indicator shown until done. */
+    
     fun pullRefresh() {
         _uiState.update { it.copy(isRefreshing = true) }
         refresh(force = true)
     }
 
-    /**
-     * Tapping "Link New Device": records the current count as the baseline and starts a fresh poll
-     * session (re-entering the scan flow re-bases and re-counts). The poll stops once the count
-     * exceeds the baseline.
-     */
+    
+
+
+
+
     fun onLinkNewDeviceClicked() {
         baselineDeviceCount = _uiState.value.devices.size
         expectingMoreDevices = true
@@ -126,26 +126,26 @@ class LinkedDevicesViewModel @Inject constructor(
         L.i { "[LinkedDevices] expect-more: armed baseline=$baselineDeviceCount" }
     }
 
-    /** Host onPause/onStop: stop the poll timer but keep the expectation (resume re-arms it). */
+    
     fun stopExpecting() {
         pollJob?.cancel()
         pollJob = null
     }
 
-    /** After a successful load: satisfy, re-base, or (re)arm the expect-more poll. */
+    
     private fun onDevicesLoaded(count: Int) {
         if (!expectingMoreDevices) return
         if (count > baselineDeviceCount) {
             L.i { "[LinkedDevices] expect-more: satisfied count=$count baseline=$baselineDeviceCount" }
             clearExpecting()
         } else {
-            // A device was unlinked mid-session: re-base so a later +1 still satisfies.
+            
             if (count < baselineDeviceCount) baselineDeviceCount = count
             startExpectPollIfNeeded()
         }
     }
 
-    // Silent poll, capped at MAX_EXPECT_POLL_TICKS so abandoning the scan flow can't poll forever.
+    
     private fun startExpectPollIfNeeded() {
         if (pollJob?.isActive == true) return
         pollJob = viewModelScope.launch {
@@ -169,7 +169,7 @@ class LinkedDevicesViewModel @Inject constructor(
         pollJob = null
     }
 
-    /** Unlink then server-authoritative re-fetch. Never optimistically drops the row. */
+    
     fun unlink(deviceId: Int) {
         if (_uiState.value.devices.firstOrNull { it.id == deviceId }?.isUnlinking == true) return
         setUnlinking(deviceId, true)
@@ -177,12 +177,12 @@ class LinkedDevicesViewModel @Inject constructor(
             try {
                 deviceRepository.removeDevice(deviceId)
                 L.i { "[LinkedDevices] unlink: success id=$deviceId" }
-                // Re-fetch is the source of truth. Keep isUnlinking until it settles so a repeat
-                // tap cannot fire a duplicate DELETE, then clear unconditionally: a successful
-                // re-fetch replaces the list; a failed one keeps the old list and without the
-                // clear the row would stay stuck "unlinking". A concurrent force refresh (poll
-                // tick) may cancel-and-replace the job we started, and join() returns normally on
-                // cancellation — keep joining until the latest attempt settles.
+                
+                
+                
+                
+                
+                
                 refresh(force = true)
                 while (true) {
                     val attempt = loadJob ?: break
@@ -197,7 +197,7 @@ class LinkedDevicesViewModel @Inject constructor(
                 setUnlinking(deviceId, false)
             } catch (e: Exception) {
                 L.w { "[LinkedDevices] unlink: failed id=$deviceId: ${e.stackTraceToString()}" }
-                setUnlinking(deviceId, false) // list unchanged, row retryable
+                setUnlinking(deviceId, false) 
                 _events.trySend(UiEvent.UnlinkFailed)
             }
         }
@@ -208,7 +208,7 @@ class LinkedDevicesViewModel @Inject constructor(
             s.copy(devices = s.devices.map { if (it.id == deviceId) it.copy(isUnlinking = value) else it })
         }
 
-    // When lastSeen precedes created, show created.
+    
     private fun DeviceInfo.toUiState() = DeviceUiState(
         id = id,
         rawName = name,
@@ -217,7 +217,7 @@ class LinkedDevicesViewModel @Inject constructor(
     )
 
     private companion object {
-        const val EXPECT_POLL_INTERVAL_MS = 10_000L // 10s poll cadence
-        const val MAX_EXPECT_POLL_TICKS = 18        // 18 × 10s = 3 min cap per scan session
+        const val EXPECT_POLL_INTERVAL_MS = 10_000L 
+        const val MAX_EXPECT_POLL_TICKS = 18        
     }
 }

@@ -5,24 +5,24 @@ import androidx.fragment.app.DialogFragment
 import androidx.fragment.app.Fragment
 import com.difft.android.base.log.lumberjack.L
 
-/**
- * [DetailNavigation] for a page that is not inside a detail stack: a full-window shell Activity,
- * a popup Activity or a bottom sheet. It keeps the Activity behaviour those pages have today.
- */
+
+
+
+
 class ShellNavigation(private val fragment: Fragment) : DetailNavigation {
 
-    /** Starts the destination's shell Activity; [from] does not matter outside a stack. */
+    
     override fun push(from: Fragment, destination: DetailDestination): Boolean {
         val context = fragment.context ?: return false
         val intent = destination.shellIntent(context).putExtra(DetailShellPop.EXTRA_SUBJECT_ID, destination.subjectId)
         val host = fragment.activity as? DetailShellHost
-        // Reusable/task launches cannot authenticate a fresh linear child's result.
+        
         if (host != null && intent.isFreshDetailShellIntent()) return host.launchPush(intent)
         fragment.startActivity(Intent(intent).apply { removeExtra(DetailShellPop.EXTRA_REQUEST_ID) })
         return true
     }
 
-    /** Dismisses the nearest enclosing dialog (a contact sheet) before finishing the Activity. */
+    
     override fun pop(from: Fragment): Boolean = pop(from, 1)
 
     override fun pop(from: Fragment, count: Int): Boolean {

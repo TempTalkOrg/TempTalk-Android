@@ -20,12 +20,12 @@ import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
 
-/**
- * How the client tells "a peer from before the same-device migration existed" apart from "no peer":
- * an installed, trusted peer that registers no status provider is TooOld — every release of either
- * family before 2.4.4 — and is decided through the package manager, before any provider call. The
- * provider itself is unreachable in this JVM, so every path that goes on to call it ends Unavailable.
- */
+
+
+
+
+
+
 class MigrationStatusClientTest {
 
     private val peer = "org.difft.chative"
@@ -41,7 +41,7 @@ class MigrationStatusClientTest {
         mockkObject(PeerApps)
         every { PeerApps.peerPackage(context) } returns peer
         every { PeerApps.peerStatusAuthority(context) } returns authority
-        // The query bundle is built outside the guarded call; the android.jar stub would throw.
+        
         mockkConstructor(Bundle::class)
         every { anyConstructed<Bundle>().putString(any(), any()) } just Runs
     }

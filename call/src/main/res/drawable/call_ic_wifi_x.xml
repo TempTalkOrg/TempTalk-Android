@@ -1,15 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Figma ph:wifi-x-bold (node 17277:82, banner 16dp variant; the badge reuses the same
-     geometry at 14dp - a vector scales losslessly, so no second file is needed).
-     Weak-network indicator: wifi arcs plus an X, no rotation.
 
-     fillColor is @color/t.white, a deliberately non-theme token: this glyph is a white accent
-     on the fixed near-black badge (#0B0E11) and on the force-dark call pill. A theme text
-     token (@color/t.primary flips #1E2329 <-> #EAECEF) would render near-black on the badge
-     whenever the SYSTEM is in light mode - an XML drawable resolves @color/ through the
-     Android resource configuration, NOT through the Compose DifftTheme(darkTheme = true)
-     wrapper the call screen applies. t.white is pinned to #FFFFFF in BOTH
-     base values/colors.xml and values-night/colors.xml. Compose call sites tint on top. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="16dp"
     android:height="16dp"

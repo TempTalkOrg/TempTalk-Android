@@ -27,11 +27,11 @@ import kotlinx.serialization.json.Json
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Call service URL configuration manager: network fetch via [LCallHttpService.getServiceUrlV2],
- * memory + encrypted disk cache, versioning and TTL. Persists the complete [ServiceUrls] payload
- * and exposes the cached view through [getCachedServiceUrls] / [ensureServiceUrlsForCall].
- */
+
+
+
+
+
 @Singleton
 class CallServiceUrlManager @Inject constructor(
     private val statisticsLogManager: dagger.Lazy<CallStatisticsLogManager>,
@@ -57,30 +57,30 @@ class CallServiceUrlManager @Inject constructor(
 
     private val fetchMutex = Mutex()
 
-    /**
-     * Decoupled throttle for [onAppForegrounded]. Stamped on every foreground fetch **attempt**
-     * (regardless of outcome), so that an abnormal server response (e.g. `status=0` with
-     * `serviceUrls == null`) or a network error does not leave [memState] with
-     * `lastFetchedAtMillis == 0L` and defeat the 20-minute throttle on subsequent foreground events.
-     */
+    
+
+
+
+
+
     @Volatile
     private var lastForegroundAttemptAtMillis: Long = 0L
 
     private val foregroundRefreshMinIntervalMs = 20 * 60 * 1000L
 
-    /**
-     * Synthesizes a [ServiceUrls] from the proxy call tunnel domains
-     * (`proxy.tunnelDomains.call`, live-preferred + embedded fallback). While the
-     * proxy is active, call connections are forced onto these domains so the call
-     * domain stays inside the relay's `ssl_preread` whitelist.
-     *
-     * Only the DOMAIN is needed: under the proxy, the meeting connection planner
-     * connects by domain (WSS, or QUIC-over-proxy when the relay advertises `q`),
-     * never by IP — so no `addrs` are synthesized. The first domain becomes
-     * [ServiceUrls.primary]; the rest become [ServiceUrls.fallback]. Returns
-     * `null` when no proxy call domain is configured (callers then fail closed
-     * rather than connect direct).
-     */
+    
+
+
+
+
+
+
+
+
+
+
+
+
     private fun proxyServiceUrls(): ServiceUrls? {
         val domains = globalConfigsManagerLazy.get().getProxyTunnelCallDomains()
         val primaryDomain = domains.firstOrNull() ?: return null
@@ -92,18 +92,9 @@ class CallServiceUrlManager @Inject constructor(
         )
     }
 
-    /**
-     * Loads the persisted [CallServiceUrlDiskState] from [SecureConfigStore] into the
-     * in-memory cache. Must be invoked under [lock].
-     *
-     * **`runBlocking` bridge rationale**: the public surface of this class includes
-     * non-suspend accessors ([getCachedServiceUrls]) and sync `synchronized(lock) { ... }`
-     * blocks inside suspend methods. The DataStore is pre-warmed by `StoragePreloader`
-     * at application startup (issue #725 Task 2), so `.first()` returns from the
-     * in-memory cache without blocking on disk I/O. The bridge sits inside an
-     * already-IO-bound caller (every public method dispatches to [Dispatchers.IO]
-     * before touching this method) — see issue #725 design §3.7.
-     */
+    
+
+
     @Suppress("BanRunBlockingOutsideTests")
     private fun loadFromDiskLocked() {
         if (loadedFromDisk) return
@@ -123,10 +114,10 @@ class CallServiceUrlManager @Inject constructor(
         loadedFromDisk = true
     }
 
-    /**
-     * Persists [state] via [SecureConfigStore] and updates [memState]. Must be invoked
-     * under [lock]. Same `runBlocking` bridge rationale as [loadFromDiskLocked].
-     */
+    
+
+
+
     @Suppress("BanRunBlockingOutsideTests")
     private fun persistLocked(state: CallServiceUrlDiskState) {
         val encoded = json.encodeToString(state)
@@ -160,7 +151,7 @@ class CallServiceUrlManager @Inject constructor(
         )
     }
 
-    /** Collects connection endpoint strings from structured config (order: primary → fallback). */
+    
     private fun connectionEndpointsFromState(state: CallServiceUrlDiskState?): List<String> {
         val s = state?.serviceUrls?.toServiceUrls() ?: return FALLBACK_HARDCODED_URLS
         return connectionEndpointsFromServiceUrls(s)
@@ -182,11 +173,11 @@ class CallServiceUrlManager @Inject constructor(
         return if (ordered.isEmpty()) FALLBACK_HARDCODED_URLS else ordered.toList()
     }
 
-    /**
-     * Triggered on app foreground from [ProcessLifecycleOwner] / [util.AppForegroundObserver],
-     * i.e. on the **main thread**. The whole body is dispatched to [Dispatchers.IO] because the
-     * throttle check itself touches the DataStore on first access via [loadFromDiskLocked].
-     */
+    
+
+
+
+
     fun onAppForegrounded() {
         appScope.launch(Dispatchers.IO) {
             val now = System.currentTimeMillis()
@@ -194,10 +185,10 @@ class CallServiceUrlManager @Inject constructor(
                 loadFromDiskLocked()
                 memState?.lastFetchedAtMillis ?: 0L
             }
-            // Take the max so that other successful refresh paths (e.g. ensureServiceUrlsForCall,
-            // refreshAfterConnectionFailure) which update memState.lastFetchedAtMillis also count
-            // toward the foreground throttle, and so that failed attempts — which do NOT update
-            // memState — are still throttled via lastForegroundAttemptAtMillis.
+            
+            
+            
+            
             val throttleRef = maxOf(lastFetch, lastForegroundAttemptAtMillis)
             if (now - throttleRef < foregroundRefreshMinIntervalMs) return@launch
             lastForegroundAttemptAtMillis = now
@@ -205,19 +196,19 @@ class CallServiceUrlManager @Inject constructor(
         }
     }
 
-    /**
-     * For initiating calls: waits up to [timeoutMs] to fetch when cache is missing or expired, returns complete [ServiceUrls].
-     *
-     * Returns **null** if timed out or cache is still expired after fetch (e.g. network failure with stale data),
-     * preventing use of expired configuration as valid.
-     */
+    
+
+
+
+
+
     suspend fun ensureServiceUrlsForCall(timeoutMs: Long = 15_000L): ServiceUrls? {
-        // Proxy active for calls: hard-switch to the proxy call tunnel domains (no
-        // live fetch, no fallback) so the call domain stays whitelist-aligned with
-        // the relay. Gated on isEnabledForCall ("Protect IP address in calls") so
-        // calls fall back to live URLs (direct) when the toggle is off. Read the
-        // injected instance (not the static mirror) so the cold-start refresh
-        // self-heals before warmUp.
+        
+        
+        
+        
+        
+        
         if (proxyConfigProviderLazy.get().isEnabledForCall) {
             return proxyServiceUrls()
         }
@@ -271,7 +262,7 @@ class CallServiceUrlManager @Inject constructor(
     }
 
     private suspend fun doFetchAndCache(): List<String> {
-        // Login-state gate: with no persisted session token, serve the disk cache instead.
+        
         if (globalServices.userManager.getUserData()?.microToken.isNullOrEmpty()) {
             return synchronized(lock) {
                 loadFromDiskLocked()
@@ -323,14 +314,14 @@ class CallServiceUrlManager @Inject constructor(
         }
     }
 
-    /**
-     * Atomically merges the remote response with the current [memState] and persists the result.
-     *
-     * The read-merge-persist sequence must happen under a single lock acquisition; otherwise two
-     * concurrent refreshes (e.g. [onAppForegrounded] and [refreshAfterConnectionFailure]) can both
-     * read the same pre-update snapshot, compute their own merges, and race on the final persist —
-     * the later writer silently overwrites the earlier one with a stale-snapshot-based merge.
-     */
+    
+
+
+
+
+
+
+
     private fun mergeAndPersist(data: ServiceUrlDataV2, serverTimestamp: Long?): CallServiceUrlDiskState {
         val remote = data.serviceUrls
         val result = synchronized(lock) {
@@ -347,27 +338,27 @@ class CallServiceUrlManager @Inject constructor(
         return result
     }
 
-    /** Current in-memory/disk [ServiceUrls] (no expiration check), used to read refresh results after failover. */
+    
     fun getCachedServiceUrls(): ServiceUrls? {
-        // Proxy active for calls: keep parity with ensureServiceUrlsForCall — read the
-        // proxy call tunnel domains so failover paths don't fall back to live URLs.
+        
+        
         if (proxyConfigProviderLazy.get().isEnabledForCall) {
             return proxyServiceUrls()
         }
         return getUpstreamCachedServiceUrls()
     }
 
-    /**
-     * Raw persisted [ServiceUrls] straight from the disk/memory cache, WITHOUT the
-     * proxy-synthesis short-circuit in [getCachedServiceUrls]. This returns the real
-     * upstream servers (domain + IPs) returned by `serviceurl/v2`, regardless of the
-     * "Protect IP address in calls" proxy toggle.
-     *
-     * Diagnostics only (the Insider "Call service settings" screen surfaces these so
-     * the real servers are visible even while the proxy forces call connections onto
-     * the tunnel domains). NEVER use this for connection routing — under the proxy,
-     * calls must connect by tunnel domain, not by these IPs.
-     */
+    
+
+
+
+
+
+
+
+
+
+
     fun getUpstreamCachedServiceUrls(): ServiceUrls? {
         synchronized(lock) {
             loadFromDiskLocked()

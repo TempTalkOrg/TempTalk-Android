@@ -38,19 +38,12 @@ interface InviteCallHandlerEntryPoint {
     val wcdb: WCDB
 }
 
-/**
- * 会议邀请请求的状态枚举
- */
 enum class InviteRequestState {
-    SUCCESS,      // 邀请成功
-    FAILED,  // 邀请失败
+    SUCCESS,
+    FAILED,
 }
 
-/**
- * 统一管理邀请用户加入通话的逻辑
- * 负责构建排除列表、获取房间名称、处理邀请流程
- * 同时管理邀请页面的状态（联系人列表、搜索、已选成员等）
- */
+
 class InviteCallHandler(
     private val viewModel: LCallViewModel,
     private val callToChatController: LCallToChatController,
@@ -68,22 +61,18 @@ class InviteCallHandler(
         ).wcdb
     }
 
-    // 已选择的成员列表
     private val _selectedMembers = MutableStateFlow<List<InviteMember>>(emptyList())
     val selectedMembers: StateFlow<List<InviteMember>> = _selectedMembers.asStateFlow()
 
     private val _currentState = MutableStateFlow<InviteScreenState>(InviteScreenState.INITIAL)
     val currentState: StateFlow<InviteScreenState> = _currentState.asStateFlow()
 
-    // 联系人列表
     private val _contacts = MutableStateFlow<List<ContactorModel>>(emptyList())
     val contacts: StateFlow<List<ContactorModel>> = _contacts.asStateFlow()
 
-    // 搜索关键词
     private val _searchKeyword = MutableStateFlow<String>("")
     val searchKeyword: StateFlow<String> = _searchKeyword.asStateFlow()
 
-    // 过滤后的联系人列表（根据搜索关键词）
     private val _filteredContacts = MutableStateFlow<List<ContactorModel>>(emptyList())
     val filteredContacts: StateFlow<List<ContactorModel>> = _filteredContacts.asStateFlow()
 
@@ -93,11 +82,10 @@ class InviteCallHandler(
     private val _inMeetingIds = MutableStateFlow<Set<String>>(emptySet())
     val inMeetingIds: StateFlow<Set<String>> = _inMeetingIds.asStateFlow()
 
-    // 需要排除的用户ID列表（已在会议中的用户和自己）
+    
     private var excludedIds: Set<String> = emptySet()
 
     init {
-        // 初始化时设置排除列表包含自己
         excludedIds = setOf(globalServices.myId)
     }
 
@@ -109,14 +97,9 @@ class InviteCallHandler(
         _selectedContactIds.value = ids
     }
 
-    /**
-     * 邀请用户加入通话
-     *
-     * @param context Activity context，用于启动邀请界面和获取字符串资源
-     */
     fun inviteUsers(context: Context) {
         L.d { "[Call] InviteCallHandler inviteUsers" }
-        
+
         if (context !is Activity) {
             L.e { "[Call] InviteCallHandler context is not Activity" }
             return
@@ -126,26 +109,17 @@ class InviteCallHandler(
             val excludedIdsList = buildExcludedUserIds()
             L.d { "[Call] InviteCallHandler excludedIdsList: $excludedIdsList" }
             setExcludedIds(excludedIdsList)
-            // 初始化联系人列表
             loadContacts()
-            // 打开邀请页时默认展示联系人列表页
             setCurrentState(InviteScreenState.ADD_MEMBERS)
-            // 显示邀请页面
             viewModel.callUiController.setShowInviteViewEnable(true)
         }
     }
 
-    /**
-     * 设置需要排除的用户ID列表
-     */
     fun setExcludedIds(ids: List<String>) {
         excludedIds = ids.toSet() + globalServices.myId
         _inMeetingIds.value = ids.filter { it != globalServices.myId }.toSet()
     }
 
-    /**
-     * 加载联系人列表
-     */
     fun loadContacts() {
         scope.launch {
             try {
@@ -161,17 +135,11 @@ class InviteCallHandler(
         }
     }
 
-    /**
-     * 搜索联系人
-     */
     fun searchContacts(keyword: String) {
         _searchKeyword.value = keyword
         updateFilteredContacts()
     }
 
-    /**
-     * 更新过滤后的联系人列表
-     */
     fun updateFilteredContacts() {
         scope.launch {
             val keyword = _searchKeyword.value
@@ -193,9 +161,6 @@ class InviteCallHandler(
         }
     }
 
-    /**
-     * 添加选中的联系人到成员列表
-     */
     suspend fun addSelectedContacts(contactIds: List<String>) {
         try {
             val contactors = withContext(Dispatchers.IO) {
@@ -212,47 +177,30 @@ class InviteCallHandler(
         }
     }
 
-    /**
-     * 移除成员
-     */
     fun removeMember(member: InviteMember) {
         val newMembers = _selectedMembers.value.toMutableList()
         newMembers.remove(member)
         _selectedMembers.value = newMembers
     }
 
-    /**
-     * 清空已选择的成员
-     */
     fun clearSelectedMembers() {
         _selectedMembers.value = emptyList()
     }
 
-    /**
-     * 清空搜索关键词
-     */
     fun clearSearchKeyword() {
         _searchKeyword.value = ""
     }
 
-    /**
-     * 清空已选择的联系人 ID 列表
-     */
     fun clearSelectedContactIds() {
         _selectedContactIds.value = emptySet()
     }
 
-    /**
-     * 重置排除的 ID 列表，仅包含自己的 ID 和已经在会议中的参与者 ID
-     */
+    
     fun resetExcludedIds() {
         excludedIds = setOf(globalServices.myId)
         _inMeetingIds.value = emptySet()
     }
 
-    /**
-     * 重置当前状态为初始状态
-     */
     fun resetCurrentState() {
         _currentState.value = InviteScreenState.INITIAL
     }
@@ -265,19 +213,12 @@ class InviteCallHandler(
         resetExcludedIds()
     }
 
-    /**
-     * 构建需要排除的用户 ID 列表
-     * 包括：自己、已经在会议中的参与者
-     */
     private suspend fun buildExcludedUserIds(): List<String> {
         val excludedIds = mutableListOf<String>()
 
-        // 排除自己
         excludedIds.add(callToChatController.getMySelfUid())
 
-        // 排除已经在会议中的参与者
-        // 使用 participants StateFlow（含本地参与者，过滤出 RemoteParticipant 即远端集合），
-        // 避免在通话结束清理窗口内访问已 release 的 room getter 触发崩溃。
+        
         val remoteIdentities = viewModel.participants.value
             .filterIsInstance<RemoteParticipant>()
             .mapNotNull { it.identity?.value }
@@ -290,10 +231,7 @@ class InviteCallHandler(
         return excludedIds
     }
 
-    /**
-     * 从参与者值中提取用户 ID
-     * 处理包含 "." 的情况（如 "userId.deviceId"）
-     */
+    
     private fun extractUserId(participantValue: String): String {
         return if (participantValue.contains(".")) {
             participantValue.split(".")[0]
@@ -302,11 +240,7 @@ class InviteCallHandler(
         }
     }
 
-    /**
-     * 获取邀请用户时的房间名称
-     * 对于 1v1 或即时通话，使用自己的名称 + 标题后缀
-     * 对于群组通话，使用原始房间名称
-     */
+    
     private suspend fun getRoomNameForInvite(): String {
         return if (isInstantCallType()) {
             val mySelfName = withContext(Dispatchers.Default) {
@@ -319,11 +253,7 @@ class InviteCallHandler(
         }
     }
 
-    /**
-     * 获取邀请用户时的通话类型
-     * 对于 1v1 或即时通话，返回 INSTANT 类型
-     * 否则返回 GROUP 类型
-     */
+    
     private fun getCallTypeForInvite(): String {
         return if (isInstantCallType()) {
             CallType.INSTANT.type
@@ -332,9 +262,6 @@ class InviteCallHandler(
         }
     }
 
-    /**
-     * 判断是否为即时通话类型（1v1 或 INSTANT）
-     */
     private fun isInstantCallType(): Boolean {
         val currentCallType = viewModel.callType.value
         return currentCallType == CallType.ONE_ON_ONE.type || currentCallType == CallType.INSTANT.type

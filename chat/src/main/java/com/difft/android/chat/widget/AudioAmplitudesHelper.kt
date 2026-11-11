@@ -30,9 +30,9 @@ object AudioAmplitudesHelper {
     val amplitudeExtractionComplete: SharedFlow<TextChatMessage> = _amplitudeExtractionComplete
 
     fun extractAmplitudesFromAacFile(filePath: String, message: TextChatMessage) {
-        // Keyed by the copy's own local id, never the server-side attachment id: that id is shared by
-        // every copy of the same file, so it collapsed independent copies into one extraction and made
-        // the row update below land on whichever sibling the condition happened to match.
+        
+        
+        
         val localId = message.attachment?.localId?.takeIf { it.isNotEmpty() } ?: return
         if (processingMessages.containsKey(localId)) {
             L.d { "[AudioAmplitudesHelper] Attachment $localId is already being processed" }
@@ -55,11 +55,11 @@ object AudioAmplitudesHelper {
                     decodeAmplitudes(file) { isActive }
                 } ?: return@launch
 
-                // A pre-backfill row still has a NULL localId column while the domain object carries
-                // a synthesized transient id, so localId.eq alone matches nothing for it and the
-                // extraction would silently re-run on every bind. Those rows are rescued through the
-                // legacy id+message locator, scoped to un-backfilled rows only — the update can never
-                // cross into a sibling copy that already owns a persisted localId.
+                
+                
+                
+                
+                
                 val serverId = message.attachment?.id
                 val rowCondition = if (serverId.isNullOrEmpty()) {
                     DBAttachmentModel.localId.eq(localId)
@@ -79,7 +79,7 @@ object AudioAmplitudesHelper {
                 message.attachment?.amplitudes = integerAmplitudes
                 message.attachment?.totalTime = duration / 1000
 
-                // Emit completion event
+                
                 _amplitudeExtractionComplete.emit(message)
 
                 L.i { "[AudioAmplitudesHelper] extractAmplitudesFromAacFile success: ${message.id} ${integerAmplitudes}  ${duration / 1000} ${localId}" }
@@ -93,43 +93,39 @@ object AudioAmplitudesHelper {
         startIfUnclaimed(localId, job)
     }
 
-    /** Decodes up to the first 30 s of [file] into (duration µs, sampled amplitudes); null when it has no usable track. */
+    
     private fun decodeAmplitudes(file: File, isActive: () -> Boolean): Pair<Long, List<Float>>? {
         val extractor = MediaExtractor()
         extractor.setDataSource(file.absolutePath)
 
-        // 获取音频轨道
         val trackIndex = getAudioTrackIndex(extractor)
         extractor.selectTrack(trackIndex)
         val format = extractor.getTrackFormat(trackIndex)
         val type = format.getString(MediaFormat.KEY_MIME) ?: return null
 
-        // 获取音频时长（单位：微秒）
+        
         val duration = format.getLong(MediaFormat.KEY_DURATION)
-        // 限制只处理前30秒的音频（30秒 = 30,000,000微秒）
+        
         val maxProcessDuration = 30_000_000L
         val processDuration = minOf(duration, maxProcessDuration)
 
-        // 使用 MediaCodec 解码音频
         val codec = MediaCodec.createDecoderByType(type)
         codec.configure(format, null, null, 0)
         codec.start()
 
         val bufferInfo = MediaCodec.BufferInfo()
         val rawAmplitudes = mutableListOf<Float>()
-        val targetSampleCount = 100 // 采样数量
+        val targetSampleCount = 100
 
-        // 从解码器获取解码后的 PCM 数据
         while (isActive()) {
             val inputIndex = codec.dequeueInputBuffer(10000)
             if (inputIndex >= 0) {
                 val inputBuffer = codec.getInputBuffer(inputIndex) ?: return null
                 val sampleSize = extractor.readSampleData(inputBuffer, 0)
                 if (sampleSize < 0) {
-                    break  // 音频解码完成
+                    break
                 }
 
-                // 检查是否超过30秒
                 val sampleTime = extractor.sampleTime
                 if (sampleTime > processDuration) {
                     break
@@ -161,7 +157,7 @@ object AudioAmplitudesHelper {
         codec.release()
         extractor.release()
 
-        // 对原始振幅数据进行采样，确保均匀分布
+        
         val sampledAmplitudes = if (rawAmplitudes.size > targetSampleCount) {
             val step = rawAmplitudes.size.toFloat() / targetSampleCount
             (0 until targetSampleCount).map { i ->
@@ -172,18 +168,17 @@ object AudioAmplitudesHelper {
             rawAmplitudes
         }
 
-        // 将振幅值转换为整数，但保持Float类型
         val integerAmplitudes = sampledAmplitudes.map { amplitude ->
             amplitude.toInt().toFloat()
         }
         return duration to integerAmplitudes
     }
 
-    /**
-     * Claims the per-attachment slot before the job runs. One bubble is bound several times within
-     * milliseconds, and without this every bind would start its own extraction (each decrypting the
-     * whole file and writing the same row).
-     */
+    
+
+
+
+
     private fun startIfUnclaimed(localId: String, job: Job) {
         if (processingMessages.putIfAbsent(localId, job) != null) {
             job.cancel()
@@ -192,7 +187,7 @@ object AudioAmplitudesHelper {
         job.start()
     }
 
-    /** Startup sweep of waveform temps a killed process left in the internal cache (#1438). Call off the main thread. */
+    
     fun clearStaleTemps() {
         val processStartWallMs = System.currentTimeMillis() - (SystemClock.elapsedRealtime() - Process.getStartElapsedRealtime())
         val deleted = WaveformSource.clearStale(File(application.cacheDir, WaveformSource.TEMP_DIR_NAME), processStartWallMs)

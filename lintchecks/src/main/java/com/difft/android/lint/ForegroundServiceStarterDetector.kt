@@ -10,35 +10,22 @@ import com.android.tools.lint.detector.api.Severity
 import com.intellij.psi.PsiMethod
 import org.jetbrains.uast.UCallExpression
 
-/**
- * Detects direct `Service.startForeground(...)` calls inside Service
- * subclasses. The project's `ForegroundServiceStarter` helper (added in
- * PR #788, see `crash-8cd6fe30-fgs-not-allowed` memory) wraps this with
- * `ForegroundServiceStartNotAllowedException` handling — bypassing it
- * reintroduces the crash signature on Android 12+ background paths.
- *
- * Detection target: method `startForeground` defined on `android.app.Service`.
- * Both overloads `(int, Notification)` and `(int, Notification, int)`
- * resolve to `android.app.Service.startForeground` via the binder dispatch.
- *
- * EXEMPTIONS:
- *   - `base/src/main/java/com/difft/android/base/utils/ForegroundServiceStarter.kt`
- *     is the wrapper itself and is path-excluded in lint.xml.
- *   - `ignoreTestSources = true` (configured in root build.gradle.kts) keeps
- *     test fakes that subclass Service from triggering.
- *
- * Replacement: `ForegroundServiceStarter.startForegroundSafely(this, id, ...)`.
- */
+
+
+
+
+
+
 class ForegroundServiceStarterDetector : Detector(), Detector.UastScanner {
 
     override fun getApplicableMethodNames(): List<String> = listOf("startForeground")
 
     override fun visitMethodCall(context: JavaContext, node: UCallExpression, method: PsiMethod) {
         val evaluator = context.evaluator
-        // Walks the class hierarchy so a `startForeground` override declared
-        // on an intermediate base class (e.g. `class BaseFgService : Service`)
-        // still resolves as a Service-method call and triggers the rule.
-        // `isMemberInClass` alone would miss the override case.
+        
+        
+        
+        
         val inServiceHierarchy = evaluator.isMemberInClass(method, "android.app.Service") ||
             evaluator.extendsClass(method.containingClass, "android.app.Service", false)
         if (!inServiceHierarchy) return
@@ -51,7 +38,7 @@ class ForegroundServiceStarterDetector : Detector(), Detector.UastScanner {
                 "`ForegroundServiceStartNotAllowedException` crash signature on " +
                 "Android 12+. Call `ForegroundServiceStarter.startForegroundSafely(...)` " +
                 "from `base/utils/ForegroundServiceStarter.kt` instead.",
-            quickfixData = null, // Replacement requires reviewing return-value contract.
+            quickfixData = null, 
         )
     }
 

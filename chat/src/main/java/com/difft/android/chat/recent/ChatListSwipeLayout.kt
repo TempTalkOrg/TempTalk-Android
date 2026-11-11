@@ -4,36 +4,45 @@ import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
 import android.animation.ValueAnimator
 import android.content.Context
-import android.graphics.Color
-import android.graphics.drawable.ColorDrawable
+import android.graphics.Canvas
 import android.util.AttributeSet
-import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
+import android.view.VelocityTracker
 import android.view.View
 import android.view.ViewConfiguration
+import android.view.ViewGroup
+import android.view.animation.Interpolator
 import android.widget.FrameLayout
+import androidx.core.view.children
 import androidx.core.view.isVisible
 import com.difft.android.chat.R
 import kotlin.math.abs
+import kotlin.math.cos
+import kotlin.math.exp
+import kotlin.math.sin
+import kotlin.math.sqrt
 
-/**
- * Swipe-to-reveal row for the chat list (chat-list gesture design).
- *
- * Children by id: `swipe_start_actions` (revealed by swiping towards the end edge, one button),
- * `swipe_end_actions` (revealed by swiping towards the start edge, pin + delete) and
- * `swipe_foreground` (the row). Geometry is expressed in layout direction, so RTL mirrors.
- *
- * - horizontal travel over the touch slop and larger than the vertical travel starts a swipe; until
- *   then the list scrolls and the row's own click / long-press stay live
- * - on release: at least half of the action width revealed → snap open, otherwise spring back
- * - once the start button is revealed beyond its own width the uncovered area is painted in the
- *   button colour; past [FULL_SWIPE_FRACTION] of the row width the swipe is armed (haptic) and
- *   release runs [onFullSwipeStart] (reversible actions only)
- * - an open row closes on a tap on its foreground (the tap is consumed) while a tap on a revealed
- *   button reaches that button; a vertical drag on an open row scrolls the list as usual
- *
- * The adapter keeps at most one row open through [callback].
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 class ChatListSwipeLayout @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
@@ -44,7 +53,7 @@ class ChatListSwipeLayout @JvmOverloads constructor(
         fun onClosed(layout: ChatListSwipeLayout)
     }
 
-    /** Disabling while open closes the row, otherwise it would stay revealed and untappable. */
+    
     var swipeEnabled: Boolean = true
         set(value) {
             field = value
@@ -52,7 +61,7 @@ class ChatListSwipeLayout @JvmOverloads constructor(
         }
     var callback: Callback? = null
 
-    /** Runs when the start button is revealed past [FULL_SWIPE_FRACTION] of the row and released. */
+    
     var onFullSwipeStart: (() -> Unit)? = null
 
     private lateinit var startActions: View
@@ -60,7 +69,7 @@ class ChatListSwipeLayout @JvmOverloads constructor(
     private lateinit var foreground: View
 
     private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
-    private val actionWidthPx = resources.getDimensionPixelSize(R.dimen.chat_list_swipe_action_width)
+    private var velocityTracker: VelocityTracker? = null
     private var downX = 0f
     private var downY = 0f
     private var startOffset = 0f
@@ -69,21 +78,21 @@ class ChatListSwipeLayout @JvmOverloads constructor(
     private var fullSwipeArmed = false
     private var animator: ValueAnimator? = null
 
-    /** Where the running animation is heading; `null` when nothing animates. */
+    
     private var animationTarget: Float? = null
 
-    /**
-     * Target of an animation that a touch cancelled before any drag began. A touch that then
-     * ends without dragging (tap, or the list taking the gesture for a vertical scroll) resumes
-     * it, so a closing row keeps closing instead of being re-judged by the snap-open rule.
-     */
+    
+
+
+
+
     private var interruptedTarget: Float? = null
 
-    /** +1 for LTR, -1 for RTL: converts between logical "reveal" offsets and translationX. */
+    
     private val dir: Float
         get() = if (layoutDirection == LAYOUT_DIRECTION_RTL) -1f else 1f
 
-    /** Logical reveal: > 0 shows the start button, < 0 the end buttons. */
+    
     private val offset: Float
         get() = foreground.translationX * dir
 
@@ -98,7 +107,7 @@ class ChatListSwipeLayout @JvmOverloads constructor(
     }
 
     private val startWidth: Int
-        get() = if (startActions.isVisible) actionWidthPx else 0
+        get() = if (startActions.isVisible) startActions.measuredWidth else 0
 
     private val endWidth: Int
         get() = if (endActions.isVisible) endActions.measuredWidth else 0
@@ -111,40 +120,50 @@ class ChatListSwipeLayout @JvmOverloads constructor(
         when (ev.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 cancelAnimation()
+                velocityTracker?.recycle()
+                velocityTracker = VelocityTracker.obtain().also { it.addMovement(ev) }
                 downX = ev.x
                 downY = ev.y
                 startOffset = offset
                 dragging = false
                 fullSwipeArmed = false
-                // An open row: a tap on the foreground only closes it (consumed on UP below); a
-                // tap on a revealed button must still reach that button.
-                closeOnUp = isOpen && !isOnRevealedAction(ev.x)
+                
+                
+                closeOnUp = isOpen && !isOnRevealedAction(ev.x, ev.y)
             }
 
             MotionEvent.ACTION_MOVE -> {
-                val dx = ev.x - downX
-                val dy = ev.y - downY
-                if (!dragging && abs(dx) > touchSlop && abs(dx) > abs(dy)) {
-                    dragging = true
-                    interruptedTarget = null // the drag decides the new rest position
-                    parent?.requestDisallowInterceptTouchEvent(true)
-                    return true
-                }
+                velocityTracker?.addMovement(ev)
+                if (startDragPastSlop(ev)) return true
             }
 
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                
+                velocityTracker?.recycle()
+                velocityTracker = null
                 val wasCloseTap = closeOnUp && !dragging && ev.actionMasked == MotionEvent.ACTION_UP
                 closeOnUp = false
                 if (wasCloseTap) {
                     close()
-                    return true // the foreground gets CANCEL instead of a click
+                    return true 
                 }
-                // A touch that cancelled a snap animation and never became a drag (e.g. the list
-                // took over for a vertical scroll) leaves the row part-way: let it settle.
+                
+                
                 if (!dragging) settleIfPartial()
             }
         }
         return dragging
+    }
+
+    
+    private fun startDragPastSlop(ev: MotionEvent): Boolean {
+        val dx = ev.x - downX
+        val dy = ev.y - downY
+        if (dragging || abs(dx) <= touchSlop || abs(dx) <= abs(dy)) return false
+        dragging = true
+        interruptedTarget = null 
+        parent?.requestDisallowInterceptTouchEvent(true)
+        return true
     }
 
     private fun settleIfPartial() {
@@ -158,28 +177,37 @@ class ChatListSwipeLayout @JvmOverloads constructor(
         if (!atRest) settle(cancelled = true)
     }
 
+    
+
+
+
     override fun onTouchEvent(ev: MotionEvent): Boolean {
         if (!swipeEnabled) return false
         when (ev.actionMasked) {
             MotionEvent.ACTION_MOVE -> {
-                if (!dragging) return true
-                val logicalDx = (ev.x - downX) * dir
-                val maxStart = if (fullSwipeAvailable) width.toFloat() else startWidth.toFloat()
-                val target = (startOffset + logicalDx).coerceIn(-endWidth.toFloat(), maxStart)
-                applyOffset(target)
-                val armed = fullSwipeAvailable && target >= width * FULL_SWIPE_FRACTION
-                if (armed != fullSwipeArmed) {
-                    fullSwipeArmed = armed
-                    if (armed) performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                }
+                velocityTracker?.addMovement(ev)
+                if (!dragging && !startDragPastSlop(ev)) return true
+                val raw = startOffset + (ev.x - downX) * dir
+                applyOffset(rubberBanded(raw))
+                fullSwipeArmed = fullSwipeAvailable && raw >= width * FULL_SWIPE_FRACTION
                 return true
             }
 
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                val wasCloseTap = closeOnUp && !dragging && ev.actionMasked == MotionEvent.ACTION_UP
                 closeOnUp = false
+                velocityTracker?.addMovement(ev)
+                val velocity = velocityTracker?.run {
+                    computeCurrentVelocity(1000)
+                    xVelocity * dir
+                } ?: 0f
+                velocityTracker?.recycle()
+                velocityTracker = null
                 if (dragging) {
                     dragging = false
-                    settle(cancelled = ev.actionMasked == MotionEvent.ACTION_CANCEL)
+                    settle(cancelled = ev.actionMasked == MotionEvent.ACTION_CANCEL, velocity = velocity)
+                } else if (wasCloseTap) {
+                    close()
                 } else {
                     settleIfPartial()
                 }
@@ -189,27 +217,40 @@ class ChatListSwipeLayout @JvmOverloads constructor(
         return true
     }
 
-    private fun settle(cancelled: Boolean) {
+    
+    private fun rubberBanded(raw: Float): Float {
+        val maxStart = startWidth.toFloat()
+        val maxEnd = endWidth.toFloat()
+        return when {
+            raw > maxStart -> maxStart + (raw - maxStart) * RUBBER_BAND
+            raw < -maxEnd -> -maxEnd + (raw + maxEnd) * RUBBER_BAND
+            else -> raw
+        }
+    }
+
+    
+    private fun settle(cancelled: Boolean, velocity: Float = 0f) {
         val current = offset
+        val projected = current + velocity * VELOCITY_PROJECTION_S
         val start = startWidth
         val end = endWidth
         when {
             !cancelled && fullSwipeArmed -> {
                 fullSwipeArmed = false
-                animateTo(0f)
+                close(animate = false)
                 onFullSwipeStart?.invoke()
             }
-            current > 0 && start > 0 && current >= start / 2f -> animateTo(start.toFloat())
-            current < 0 && end > 0 && -current >= end / 2f -> animateTo(-end.toFloat())
+            current > 0 && start > 0 && projected > start / 2f -> animateTo(start.toFloat())
+            current < 0 && end > 0 && -projected > end / 2f -> animateTo(-end.toFloat())
             else -> animateTo(0f)
         }
     }
 
-    /** Closes the row; `animate = false` also drops any in-flight gesture state (rebind). */
+    
     fun close(animate: Boolean = true) {
         if (!::foreground.isInitialized) return
         if (animate) {
-            // Already closed, or already closing (scroll listeners call this per frame): no restart.
+            
             if ((animator == null && !isOpen) || animationTarget == 0f) return
             animateTo(0f)
         } else {
@@ -240,7 +281,8 @@ class ChatListSwipeLayout @JvmOverloads constructor(
         }
         animationTarget = target
         animator = ValueAnimator.ofFloat(from, target).apply {
-            duration = SNAP_DURATION_MS
+            duration = SPRING_DURATION_MS
+            interpolator = SPRING
             addUpdateListener { applyOffset(it.animatedValue as Float) }
             addListener(object : AnimatorListenerAdapter() {
                 private var cancelled = false
@@ -249,7 +291,7 @@ class ChatListSwipeLayout @JvmOverloads constructor(
                 }
 
                 override fun onAnimationEnd(animation: Animator) {
-                    // A cancelled animation left the row somewhere in between: no state change.
+                    
                     if (cancelled) return
                     animationTarget = null
                     animator = null
@@ -264,26 +306,87 @@ class ChatListSwipeLayout @JvmOverloads constructor(
         if (target == 0f) callback?.onClosed(this) else callback?.onOpened(this)
     }
 
-    /**
-     * Pure render-thread properties: translation of the row, and the layout's own background in
-     * the start-button colour once the reveal exceeds the button, so a full swipe reads as the
-     * button stretching over the row without a layout pass per frame.
-     */
+    
+
+
+
     private fun applyOffset(logical: Float) {
+        val wasOpen = isOpen
         foreground.translationX = logical * dir
-        val stretched = logical > startWidth
-        val wanted = if (stretched) (startActions.background as? ColorDrawable)?.color ?: Color.TRANSPARENT else Color.TRANSPARENT
-        if ((background as? ColorDrawable)?.color != wanted) setBackgroundColor(wanted)
+        
+        if (isOpen != wasOpen) invalidate()
+        revealButtons(startActions, logical.coerceAtLeast(0f), fromStart = true)
+        revealButtons(endActions, (-logical).coerceAtLeast(0f), fromStart = false)
     }
 
-    private fun isOnRevealedAction(x: Float): Boolean {
+    
+
+
+
+    private fun revealButtons(group: View, revealed: Float, fromStart: Boolean) {
+        if (group !is ViewGroup || !group.isVisible) return
+        group.children.filter { it.isVisible }.forEach { button ->
+            
+            val left = group.left + button.left
+            val right = group.left + button.right
+            val logicalStart = if (dir > 0) left else width - right
+            val logicalEnd = if (dir > 0) right else width - left
+            val fromEdge = if (fromStart) logicalStart else width - logicalEnd
+            val progress = if (button.width > 0) ((revealed - fromEdge) / button.width).coerceIn(0f, 1f) else 1f
+            button.scaleX = progress
+            button.scaleY = progress
+            button.alpha = REVEAL_MIN_ALPHA + (1f - REVEAL_MIN_ALPHA) * progress
+        }
+    }
+
+    
+
+
+
+    override fun drawChild(canvas: Canvas, child: View, drawingTime: Long): Boolean =
+        if (child !== foreground && !isOpen) false else super.drawChild(canvas, child, drawingTime)
+
+    
+
+
+
+
+    private fun isOnRevealedAction(x: Float, y: Float): Boolean {
         val current = offset
         val logicalX = if (dir < 0) width - x else x
-        return (current > 0 && logicalX < current) || (current < 0 && logicalX > width + current)
+        val group = when {
+            current > 0 && logicalX < current -> startActions
+            current < 0 && logicalX > width + current -> endActions
+            else -> return false
+        }
+        if (group !is ViewGroup || !group.isVisible) return false
+        return group.children.any { button ->
+            button.isVisible &&
+                x >= group.left + button.left && x < group.left + button.right &&
+                y >= group.top + button.top && y < group.top + button.bottom
+        }
+    }
+
+    
+
+
+
+    private class SpringInterpolator(private val damping: Float, private val stiffness: Float) : Interpolator {
+        private val damped = stiffness * sqrt(1f - damping * damping)
+
+        override fun getInterpolation(t: Float): Float {
+            if (t >= 1f) return 1f
+            val decay = exp(-damping * stiffness * t)
+            return 1f - decay * (cos(damped * t) + damping * stiffness / damped * sin(damped * t))
+        }
     }
 
     companion object {
         private const val FULL_SWIPE_FRACTION = 0.6f
-        private const val SNAP_DURATION_MS = 180L
+        private const val RUBBER_BAND = 0.18f
+        private const val VELOCITY_PROJECTION_S = 0.12f
+        private const val REVEAL_MIN_ALPHA = 0.3f
+        private const val SPRING_DURATION_MS = 360L
+        private val SPRING: Interpolator = SpringInterpolator(damping = 0.86f, stiffness = 10f)
     }
 }

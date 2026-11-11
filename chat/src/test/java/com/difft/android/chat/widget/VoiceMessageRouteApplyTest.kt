@@ -28,15 +28,15 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
-/**
- * T4-13 … T4-18 — player-scoped route application in `AudioMessageManager`.
- *
- * Every assertion targets `MediaPlayer.setPreferredDevice`; no test may observe a write to
- * `AudioManager`, which is a relaxed mock here precisely so an unexpected write would be visible.
- * T4-18 pins the sensor lifecycle symmetry: pausing releases the sensor, resuming re-arms it.
- *
- * Verify: :chat:testDebugUnitTest
- */
+
+
+
+
+
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [33])
@@ -56,8 +56,8 @@ class VoiceMessageRouteApplyTest {
         every { appScope } returns testScope
 
         audioManager = mockk(relaxed = true)
-        // ServiceUtil exposes @JvmStatic members, so Kotlin call sites bind to the static bridge:
-        // mockkObject would leave them running the real body.
+        
+        
         mockkStatic(ServiceUtil::class)
         every { ServiceUtil.getAudioManager(any()) } returns audioManager
 
@@ -154,12 +154,12 @@ class VoiceMessageRouteApplyTest {
     @Config(application = TestScopeApplication::class, sdk = [27])
     @Test
     fun `T4-19 on API 27 applyProximityRoute no-ops with zero global writes`() {
-        // `MediaPlayer#setPreferredDevice`/`AudioManager#setCommunicationDevice` are API 28/31 methods
-        // that don't exist at all on the API 27 android-all stub Robolectric loads for this test, so
-        // they can't even be referenced here (mockk verify would throw NoSuchMethodError resolving a
-        // symbol the real SDK 27 classfile doesn't declare) -- that absence IS the API surface this
-        // no-op path avoids touching. getDevices()/mode/isSpeakerphoneOn are available since API 1/23
-        // and stand in as the observable proxy for "no route enumeration or global write happened".
+        
+        
+        
+        
+        
+        
         every { audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS) } returns
             arrayOf(deviceOf(AudioDeviceInfo.TYPE_BUILTIN_EARPIECE), deviceOf(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER))
 

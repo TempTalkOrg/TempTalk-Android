@@ -22,7 +22,6 @@
         tools:text="Recording will stop in 3 seconds"
         tools:visibility="visible" />
 
-    <!-- 双按钮容器 -->
     <LinearLayout
         android:id="@+id/ll_action_buttons"
         android:layout_width="wrap_content"
@@ -36,7 +35,6 @@
         app:layout_constraintStart_toStartOf="parent"
         tools:visibility="visible">
 
-        <!-- Cancel 按钮列 -->
         <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -57,7 +55,7 @@
             <LinearLayout
                 android:id="@+id/btn_cancel"
                 android:layout_width="140dp"
-                android:layout_height="72dp"
+                android:layout_height="70dp"
                 android:background="@drawable/chat_voice_pill_bg_gray"
                 android:gravity="center"
                 android:orientation="horizontal"
@@ -85,7 +83,6 @@
             android:layout_width="32dp"
             android:layout_height="0dp" />
 
-        <!-- Add effect 按钮列 -->
         <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -106,7 +103,7 @@
             <LinearLayout
                 android:id="@+id/btn_add_effect"
                 android:layout_width="140dp"
-                android:layout_height="72dp"
+                android:layout_height="70dp"
                 android:background="@drawable/chat_voice_pill_bg_gray"
                 android:gravity="center"
                 android:orientation="horizontal"
@@ -125,8 +122,7 @@
         </LinearLayout>
     </LinearLayout>
 
-    <!-- 录音按钮 -->
-    <!-- Margins and height are set at runtime by VoiceRecorderView to cover the input field. -->
+    
     <LinearLayout
         android:id="@+id/ll_record"
         android:layout_width="0dp"
@@ -139,7 +135,6 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_goneMarginTop="0dp">
 
-        <!-- 波形动画控件 -->
         <com.difft.android.chat.widget.WaveformView
             android:id="@+id/waveform_view"
             android:layout_width="50dp"
@@ -153,7 +148,7 @@
             android:layout_height="match_parent"
             android:gravity="center"
             android:text="@string/chat_voice_release_to_send"
-            android:textColor="@color/t.primary.night"
+            android:textColor="@color/on_primary"
             android:textSize="14sp" />
 
     </LinearLayout>

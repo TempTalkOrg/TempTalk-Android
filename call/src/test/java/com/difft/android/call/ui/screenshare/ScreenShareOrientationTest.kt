@@ -13,12 +13,12 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/** [applyScreenShareOrientation] on a phone-sized display, flat and half open (design decision 38). */
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33], application = Application::class)
 class ScreenShareOrientationTest {
 
-    // A pending unfold release is process-wide state in OrientationPolicy; start clean.
+    
     @Before
     fun clearPendingUnfold() = OrientationPolicy.clearUnfoldPending()
 
@@ -48,7 +48,7 @@ class ScreenShareOrientationTest {
         assertEquals(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE, activity.requestedOrientation)
         assertEquals(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT, applyScreenShareOrientation(activity, halfOpen = true))
         assertEquals(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT, activity.requestedOrientation)
-        // Laid flat again, the share turns landscape again.
+        
         assertNull(applyScreenShareOrientation(activity, halfOpen = false))
         assertEquals(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE, activity.requestedOrientation)
     }

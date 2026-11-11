@@ -8,12 +8,12 @@ import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * `localId` round-trip across the attachment mappers, plus the two behaviours the rest of the
- * feature relies on: a NULL column never crashes a read, and `copy()` inherits the id.
- *
- * Pure mapper calls — no WCDB instance, no Android runtime.
- */
+
+
+
+
+
+
 class AttachmentLocalIdMapperTest {
 
     private fun domainAttachment(localId: String) = Attachment(
@@ -45,8 +45,8 @@ class AttachmentLocalIdMapperTest {
 
     @Test
     fun `a row with no server id and no content type still maps`() {
-        // Written by the migration importer for a source that had neither (a never-uploaded or
-        // Desktop-origin attachment); the read side must not fail the whole hydration over it.
+        
+        
         val model = row(localId = null).also {
             it.authorityId = null
             it.contentType = null
@@ -77,15 +77,15 @@ class AttachmentLocalIdMapperTest {
 
     @Test
     fun `an attachment with no server-side id persists NULL, never an empty string`() {
-        // Every send and receive path now builds its attachment without one: the server-side id is
-        // shared by every copy of a file, so nothing local may be located by it. An empty string
-        // stored here would make this row a candidate for the legacy `id.eq(<job's id>)` locator,
-        // which is exactly the cross-row write per-copy addressing removed.
+        
+        
+        
+        
         val fresh = domainAttachment("local-abc").copy(id = "")
 
         assertEquals(null, fresh.toAttachmentModel("msg-1").id)
         assertEquals(null, fresh.toAttachmentModel(7L).id)
-        // ...and it reads back as the empty domain value, not as a null that callers must guard.
+        
         assertEquals("", fresh.toAttachmentModel("msg-1").also { it.authorityId = 42L }.toAttachment().id)
     }
 
@@ -103,15 +103,15 @@ class AttachmentLocalIdMapperTest {
         val first = nullRow.toAttachment()
         val second = nullRow.toAttachment()
 
-        // Deterministic per row: repeated reads agree with each other (pre-backfill addressing —
-        // download directories, progress keys — stays stable across rebinds) and with the backfill
-        // stage, which persists exactly this value.
+        
+        
+        
         assertEquals(first.localId, second.localId)
         assertEquals(nullRow.synthesizedLocalId(), first.localId)
-        // Reads never write: persisting the backfill is the migration's job.
+        
         assertEquals(null, nullRow.localId)
-        // ...and the synthesized id must stay out of value equality, or two reads of one row would
-        // diff as different content and churn the message list.
+        
+        
         assertEquals(first, second)
     }
 

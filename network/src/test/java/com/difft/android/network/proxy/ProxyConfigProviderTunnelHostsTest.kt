@@ -17,22 +17,22 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
-/**
- * Integration tests for [ProxyConfigProvider.shouldTunnel], driven by the
- * tunnel-host whitelist (proxy chat domains ∪ proxy call domains). Both come
- * from `proxy.tunnelDomains` via [IGlobalConfigsManager.getProxyTunnelChatDomains]
- * / [IGlobalConfigsManager.getProxyTunnelCallDomains], which mockk returns as
- * STABLE list instances — so the provider's reference-keyed snapshot caches a
- * NON-EMPTY whitelist (recompute happens only when those list refs change). An
- * EMPTY derivation is not cached and `shouldTunnel` fails closed (tunnels
- * everything) so privacy holds whether or not the source recovers.
- *
- * Robolectric is retained for parity with the other proxy tests in this package.
- */
+
+
+
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 class ProxyConfigProviderTunnelHostsTest {
 
-    /** Minimal in-memory [UserManager]; persistence is incidental to these tests. */
+    
     private class FakeUserManager : UserManager {
         private var current: UserData? = UserData()
         override fun setUserData(userData: UserData, commit: Boolean) {
@@ -85,8 +85,8 @@ class ProxyConfigProviderTunnelHostsTest {
 
     @Test
     fun `shouldTunnel - matches an embedded call-service domain`() {
-        // Chat hosts present so the whitelist is real (not fail-closed): this
-        // exercises the call-domain membership / subdomain match specifically.
+        
+        
         val (provider, _) = makeProvider(
             chatDomains = listOf("chat.temptalk.net"),
             callDomains = listOf("pr7.ablivekit.org"),
@@ -130,9 +130,9 @@ class ProxyConfigProviderTunnelHostsTest {
 
     @Test
     fun `shouldTunnel - both sources empty fails closed and tunnels everything`() {
-        // Both embedded sources failed to parse/read -> empty whitelist. Fail
-        // closed: tunnel EVERY host rather than letting it leak to a direct
-        // (real-IP) connection while the proxy is active.
+        
+        
+        
         val (provider, _) = makeProvider(
             chatDomains = emptyList(),
             callDomains = emptyList(),
@@ -144,24 +144,24 @@ class ProxyConfigProviderTunnelHostsTest {
 
     @Test
     fun `shouldTunnel - empty chat hosts with call domains still fails closed`() {
-        // Mixed-failure: chat dimension missing but call domains present. A
-        // call-only partial whitelist would leave UrlManager's protocol.defaultHost
-        // fallback unmatched and route it DIRECT (IP leak). The chat-anchor policy
-        // collapses this to an empty whitelist -> fail closed -> tunnel everything.
+        
+        
+        
+        
         val (provider, _) = makeProvider(
             chatDomains = emptyList(),
             callDomains = listOf("pr7.ablivekit.org"),
         )
 
-        // The previously-leaking default chat host is now tunneled.
+        
         assertTrue(provider.shouldTunnel("chat.temptalk.net"))
         assertTrue(provider.shouldTunnel("anything.example"))
     }
 
     @Test
     fun `empty whitelist is not cached and re-derives on next call`() {
-        // First derivation yields empty (both sources empty) and must NOT be
-        // cached, so a later non-empty read can self-heal the whitelist.
+        
+        
         val (provider, gcm) = makeProvider(
             chatDomains = emptyList(),
             callDomains = emptyList(),
@@ -170,7 +170,7 @@ class ProxyConfigProviderTunnelHostsTest {
         provider.shouldTunnel("chat.temptalk.net")
         provider.shouldTunnel("chat.temptalk.net")
 
-        // Re-derived each call while empty (no caching of the empty result).
+        
         verify(atLeast = 2) { gcm.getProxyTunnelChatDomains() }
     }
 
@@ -183,9 +183,9 @@ class ProxyConfigProviderTunnelHostsTest {
 
         repeat(50) { assertTrue(provider.shouldTunnel("chat.temptalk.net")) }
 
-        // The source lists are read on every call (cheap O(1), and required to
-        // detect a live config change), but mockk returns the SAME list instances
-        // so the reference-keyed snapshot is reused — the union is computed once.
+        
+        
+        
         verify(atLeast = 1) { gcm.getProxyTunnelChatDomains() }
         verify(atLeast = 1) { gcm.getProxyTunnelCallDomains() }
     }
@@ -193,7 +193,7 @@ class ProxyConfigProviderTunnelHostsTest {
     @Test
     fun `whitelist re-derives when source domain list reference changes`() {
         val gcm = mockk<IGlobalConfigsManager>(relaxed = true)
-        // First config generation: only chat.temptalk.net is whitelisted.
+        
         every { gcm.getProxyTunnelChatDomains() } returns listOf("chat.temptalk.net")
         every { gcm.getProxyTunnelCallDomains() } returns emptyList()
         val provider = ProxyConfigProvider(
@@ -204,7 +204,7 @@ class ProxyConfigProviderTunnelHostsTest {
         assertTrue(provider.shouldTunnel("chat.temptalk.net"))
         assertFalse(provider.shouldTunnel("chat.chative.im"))
 
-        // Simulate a live config refresh swapping in a DIFFERENT list instance.
+        
         every { gcm.getProxyTunnelChatDomains() } returns listOf("chat.chative.im")
         assertTrue(provider.shouldTunnel("chat.chative.im"))
         assertFalse(provider.shouldTunnel("chat.temptalk.net"))
@@ -221,8 +221,8 @@ class ProxyConfigProviderTunnelHostsTest {
 
         provider.clear()
 
-        // Whitelist describes "which hosts WOULD be tunneled if the proxy were on",
-        // derived from static embedded assets — clearing the proxy must not wipe it.
+        
+        
         assertTrue(provider.shouldTunnel("chat.temptalk.net"))
         assertTrue(provider.shouldTunnel("pr7.ablivekit.org"))
     }

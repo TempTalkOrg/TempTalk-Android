@@ -32,26 +32,11 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/**
- * Regression coverage for [RoomEventDispatcher.restoreMediaAfterServerSwitch] — the fix for the
- * "mic/camera UI-vs-actual mismatch after a manual meeting server-node / connection-mode switch"
- * bug.
- *
- * Background: a manual switch does a full disconnect+reconnect
- * ([CallConnectionCoordinator.connectToRoomManualSwitch]) which destroys the local mic/camera
- * publications. The control toggles are driven by `roomCtl.micEnabled/cameraEnabled`, which the
- * switch never resets, so without a restore the UI keeps showing "on" while nothing is actually
- * published. On reconnect `onConnected` detects the manual switch (via
- * `connectionCoordinator.isManualSwitchReconnecting`) and calls `restoreMediaAfterServerSwitch()`
- * to re-apply the user's live intent.
- *
- * `restoreMediaAfterServerSwitch()` is `private` and its only production entry (`onConnected`) needs
- * heavy `Room` mocking (value-class `sid`/`identity`, participant maps). We invoke the REAL method
- * via reflection so the test exercises production logic directly (no re-implementation) while
- * keeping the mock surface small and robust. The assertions check exactly which
- * `setMicEnabled(enabled, publishMuted, isShowBarrage)` / `setCameraEnabled(enabled)` calls the
- * decision matrix produces.
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [33])
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -69,13 +54,13 @@ class RoomEventDispatcherManualSwitchMediaRestoreTest {
     private val coordinator get() = f.connectionCoordinator
     private val timeoutMonitor get() = f.timeoutMonitor
 
-    /** Records every host.setMicEnabled(enabled, publishMuted, isShowBarrage) invocation. */
+    
     private val setMicCalls get() = f.setMicCalls
 
-    /** Records every host.setCameraEnabled(enabled) invocation. */
+    
     private val setCameraCalls get() = f.setCameraCalls
 
-    /** Records duration-timer starts triggered by the media-ready gate. */
+    
     private val startCallTimerCalls get() = f.startCallTimerCalls
 
     @Before
@@ -131,10 +116,7 @@ class RoomEventDispatcherManualSwitchMediaRestoreTest {
         every { room.ttCallResp } returns resp
     }
 
-    // ---------------------------------------------------------------------------------
-    // Group meeting: mic ON + camera ON — the reported scenario. Both must be re-applied:
-    // mic unmuted (publishMuted=false) and silently (isShowBarrage=false), camera enabled.
-    // ---------------------------------------------------------------------------------
+    
     @Test
     fun `group manual switch with mic on and camera on re-enables both`() {
         stubMediaState(mic = true, camera = true)
@@ -145,9 +127,7 @@ class RoomEventDispatcherManualSwitchMediaRestoreTest {
         assertEquals(listOf(true), setCameraCalls)
     }
 
-    // ---------------------------------------------------------------------------------
-    // Camera OFF before the switch must NOT be spuriously enabled after reconnect.
-    // ---------------------------------------------------------------------------------
+    
     @Test
     fun `group manual switch with mic on and camera off leaves camera off`() {
         stubMediaState(mic = true, camera = false)
@@ -158,10 +138,8 @@ class RoomEventDispatcherManualSwitchMediaRestoreTest {
         assertEquals(emptyList<Boolean>(), setCameraCalls)
     }
 
-    // ---------------------------------------------------------------------------------
-    // Group + self-muted + server wants silence: re-publish a MUTED silence track so the
-    // participant keeps its presence slot, matching first-connect behavior (publishMuted=true).
-    // ---------------------------------------------------------------------------------
+    
+    
     @Test
     fun `group manual switch with mic off publishes muted silence when server requests it`() {
         stubMediaState(mic = false, camera = false)
@@ -173,9 +151,7 @@ class RoomEventDispatcherManualSwitchMediaRestoreTest {
         assertEquals(emptyList<Boolean>(), setCameraCalls)
     }
 
-    // ---------------------------------------------------------------------------------
-    // Group + self-muted + server does NOT request silence: publish nothing.
-    // ---------------------------------------------------------------------------------
+    
     @Test
     fun `group manual switch with mic off and no silence option publishes nothing`() {
         stubMediaState(mic = false, camera = false)
@@ -187,10 +163,8 @@ class RoomEventDispatcherManualSwitchMediaRestoreTest {
         assertEquals(emptyList<Boolean>(), setCameraCalls)
     }
 
-    // ---------------------------------------------------------------------------------
-    // 1v1 + self-muted: must NOT be force-unmuted on a node switch (no silence fallback for
-    // 1v1). Guards against re-introducing the "switch silently unmutes a muted user" bug.
-    // ---------------------------------------------------------------------------------
+    
+    
     @Test
     fun `one-on-one manual switch with mic off does not force unmute`() {
         stubMediaState(mic = false, camera = false)
@@ -201,9 +175,7 @@ class RoomEventDispatcherManualSwitchMediaRestoreTest {
         assertEquals(emptyList<Boolean>(), setCameraCalls)
     }
 
-    // ---------------------------------------------------------------------------------
-    // 1v1 + mic ON + camera ON: both re-applied (mic unmuted & silent, camera enabled).
-    // ---------------------------------------------------------------------------------
+    
     @Test
     fun `one-on-one manual switch with mic on and camera on re-enables both`() {
         stubMediaState(mic = true, camera = true)
@@ -214,12 +186,9 @@ class RoomEventDispatcherManualSwitchMediaRestoreTest {
         assertEquals(listOf(true), setCameraCalls)
     }
 
-    // ---------------------------------------------------------------------------------
-    // ParticipantDisconnected during a manual switch (status == SWITCHING_SERVER) is the
-    // old session tearing down — it must NOT arm the "participant left" timeout, otherwise it
-    // fires "对方未接听" ~60s after reconnect (the remote returns via initial sync, no
-    // ParticipantConnected event to cancel it).
-    // ---------------------------------------------------------------------------------
+    
+    
+    
     @Test
     fun `participant disconnect while switching server does not arm timeout`() {
         every { roomCtl.callStatus } returns MutableStateFlow(CallStatus.SWITCHING_SERVER)
@@ -230,9 +199,7 @@ class RoomEventDispatcherManualSwitchMediaRestoreTest {
         verify(exactly = 0) { timeoutMonitor.onParticipantDisconnected(any()) }
     }
 
-    // ---------------------------------------------------------------------------------
-    // Same guard for the failover retry window.
-    // ---------------------------------------------------------------------------------
+    
     @Test
     fun `participant disconnect during failover retry does not arm timeout`() {
         every { roomCtl.callStatus } returns MutableStateFlow(CallStatus.RECONNECTING)
@@ -244,10 +211,8 @@ class RoomEventDispatcherManualSwitchMediaRestoreTest {
         verify(exactly = 0) { timeoutMonitor.onParticipantDisconnected(any()) }
     }
 
-    // ---------------------------------------------------------------------------------
-    // A genuine remote leave during a live (CONNECTED) 1v1 call MUST still arm the timeout —
-    // the guard uses only the transient switch window, never the sticky manual-switch flag.
-    // ---------------------------------------------------------------------------------
+    
+    
     @Test
     fun `participant disconnect while connected arms one-on-one timeout`() {
         every { roomCtl.callStatus } returns MutableStateFlow(CallStatus.CONNECTED)
@@ -336,16 +301,9 @@ class RoomEventDispatcherManualSwitchMediaRestoreTest {
         assertEquals(0, startCallTimerCalls)
     }
 
-    // ---------------------------------------------------------------------------------
-    // Cancelling the teardown-armed timeout on a manual-switch Connected must not depend on
-    // the type the call resolves to afterwards.
-    //
-    // The timeout is armed only while the call is 1v1, but `onConnected` resolves the
-    // authoritative type before it branches, so the switch window itself can turn the call
-    // into instant — a third participant joins, or the server flips callType for an invite
-    // whose RoomUpdate the switch missed. If the cancel lived in the 1v1 branch, those cases
-    // would skip it and fire "对方未接听" ~60s later on a live call.
-    // ---------------------------------------------------------------------------------
+    
+    
+    
     @Test
     fun `manual switch cancels the armed timeout even when the type upgraded to instant`() {
         stubConnectedRoom(remoteCount = 2)
@@ -356,7 +314,7 @@ class RoomEventDispatcherManualSwitchMediaRestoreTest {
         verify(exactly = 1) { timeoutMonitor.cancelIfActive() }
     }
 
-    /** The pre-existing path, kept honest: a still-1v1 manual switch cancels as it always did. */
+    
     @Test
     fun `manual switch cancels the armed timeout when the call is still one-on-one`() {
         stubConnectedRoom(remoteCount = 1)
@@ -367,8 +325,8 @@ class RoomEventDispatcherManualSwitchMediaRestoreTest {
         verify(exactly = 1) { timeoutMonitor.cancelIfActive() }
     }
 
-    // A first connect arms nothing, so there is nothing to cancel; cancelling anyway would be
-    // harmless today but would hide a genuinely leaked timeout from this test.
+    
+    
     @Test
     fun `a non-switch connect does not cancel any timeout`() {
         stubConnectedRoom(remoteCount = 2)
@@ -379,16 +337,16 @@ class RoomEventDispatcherManualSwitchMediaRestoreTest {
         verify(exactly = 0) { timeoutMonitor.cancelIfActive() }
     }
 
-    /**
-     * Minimal `Room` surface that `onConnected` touches: the value-class sid/identity it reports for
-     * feedback, and a remote-participant map of the given size. A relaxed mock cannot supply the
-     * value classes, hence the explicit stubs.
-     *
-     * Media state is stubbed too because a manual-switch Connected always reaches
-     * `restoreMediaAfterServerSwitch`, which reads `roomCtl.micEnabled.value` — a relaxed StateFlow
-     * hands back an Object there and the cast fails. Muted with the camera off is the quiet choice:
-     * it drives no media calls, leaving the timeout assertions as the only thing under test.
-     */
+    
+
+
+
+
+
+
+
+
+
     private fun stubConnectedRoom(remoteCount: Int) {
         stubMediaState(mic = false, camera = false)
         val local = mockk<LocalParticipant>(relaxed = true)

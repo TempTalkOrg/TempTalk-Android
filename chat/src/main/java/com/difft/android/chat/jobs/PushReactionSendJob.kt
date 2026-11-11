@@ -84,8 +84,8 @@ open class PushReactionSendJob @AssistedInject constructor(
             }
             return
         }
-        // +1 (not maxOf(now, +1)) so rollback wins LWW against the original optimistic
-        // write but loses to any newer user action that's already in DB.
+        
+        
         val rollbackTimestamp = original.originTimestamp + 1
         val rollback = Reaction(
             emoji = original.emoji,
@@ -94,11 +94,11 @@ open class PushReactionSendJob @AssistedInject constructor(
             originTimestamp = rollbackTimestamp,
             realSource = original.realSource,
         )
-        // Synchronous: JobRunner already invokes onFailure() on Dispatchers.IO (see
-        // JobRunner.launchIn). updateMessageReaction is non-suspend (DBMessageStore.kt:106)
-        // and uses runTransaction internally. Calling it directly guarantees the rollback
-        // completes before the framework finishes terminal cleanup, even if the process
-        // is killed immediately after onFailure() returns.
+        
+        
+        
+        
+        
         messageStore.updateMessageReaction(
             textMessage.forWhat.id,
             rollback,

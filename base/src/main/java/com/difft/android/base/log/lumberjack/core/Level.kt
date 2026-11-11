@@ -13,8 +13,8 @@ enum class Level(
 
     TRACE(0),
     DEBUG(1),
-    INFO(2, Color.BLUE, "#ADD8E6".toColorInt() /* light blue */),
-    WARN(3, "#FFA500".toColorInt() /* orange */),
+    INFO(2, Color.BLUE, "#ADD8E6".toColorInt() ),
+    WARN(3, "#FFA500".toColorInt() ),
     ERROR(4, Color.RED),
     WTF(5, Color.RED, marker = "WTF-ERROR"),
     UNKNOWN(-1, android.R.color.transparent)

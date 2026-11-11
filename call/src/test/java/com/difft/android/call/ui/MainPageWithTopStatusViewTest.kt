@@ -12,6 +12,7 @@ import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
 import com.difft.android.base.call.CallType
@@ -43,20 +44,12 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/**
- * Integration tests for `MainPageWithTopStatusView.kt`'s title/notification-bar split: the title
- * carries name + E2EE/duration plus the call-progress "等待接听…" state (with the PR #1125 E2EE
- * crossfade, Mac parity), while connection-health statuses (connecting/reconnect-failed/
- * media-send issue) render in the `CallStatusNotificationBar` floating pill below it — which
- * also keeps that slot free for the critical-alert banner during the waiting phase. Also covers
- * `ConnectedStatusContent`'s lock icon + 1v1 title row and `TopStatusBar`'s
- * click-to-open-sheet gating.
- *
- * All lookups for tags nested inside `TopStatusBar`'s clickable click-target Box use
- * `useUnmergedTree = true`: `Modifier.clickable` merges descendant semantics upward into the
- * clickable node, so without it these tags are invisible in the default merged tree (an
- * `onAllNodesWithTag(...).isEmpty()` assertion would trivially pass either way).
- */
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(application = TestScopeApplication::class, sdk = [30])
@@ -68,7 +61,7 @@ class MainPageWithTopStatusViewTest {
     @After
     fun tearDown() {
         unmockkAll()
-        // Restore the animator scale so it never leaks into a later test in the same process.
+        
         android.provider.Settings.Global.putFloat(
             ApplicationProvider.getApplicationContext<Application>().contentResolver,
             android.provider.Settings.Global.ANIMATOR_DURATION_SCALE,
@@ -100,13 +93,10 @@ class MainPageWithTopStatusViewTest {
         }
     }
 
-    /**
-     * Wraps [MainPageWithTopStatusView] in an ancestor `Box` with its own independent click
-     * counter — used to prove a disabled click-target's tap physically falls through to an
-     * ancestor (not just that `onE2eeHintClick` was skipped). A disabled `clickable` that still
-     * consumes the down/up pointer events would swallow the tap here too, so `ancestorClicks`
-     * would stay 0 under that regression.
-     */
+    
+
+
+
     private fun setContentWithAncestorClickCounter(
         viewModel: LCallViewModel,
         callIntent: CallIntent,
@@ -160,10 +150,7 @@ class MainPageWithTopStatusViewTest {
         )
     }
 
-    // ---------------------------------------------------------------------------------
-    // T5-1..T5-3 — pre-connect title: 1v1 CALLING keeps the E2EE crossfade in the title (bar
-    // stays empty for the critical-alert banner); connection statuses live in the floating bar.
-    // ---------------------------------------------------------------------------------
+    
 
     @Test
     fun `T5-1 - one-on-one calling keeps the crossfade title and an empty floating bar`() {
@@ -171,16 +158,15 @@ class MainPageWithTopStatusViewTest {
         setContentWithViewModel(vm, callIntent, isInPipMode = false)
         composeTestRule.waitForIdle()
 
-        // Regression guard: `call_status_calling`'s zh VALUE must stay "等待接听…" (not the
-        // mock's "正在呼叫…"). Resolved via an explicit zh-qualified Resources instance —
-        // independent of this test JVM's default (non-zh) Robolectric locale.
+        
+        
         val context = ApplicationProvider.getApplicationContext<Application>()
         val zhConfig = android.content.res.Configuration(context.resources.configuration)
         zhConfig.setLocale(java.util.Locale.SIMPLIFIED_CHINESE)
         val zhResources = context.createConfigurationContext(zhConfig).resources
         assertEquals("等待接听…", zhResources.getString(R.string.call_status_calling))
 
-        // Crossfade (PR #1125): primary and encrypted nodes co-exist while animating.
+        
         composeTestRule.onNodeWithTag("call_topbar_status_text", useUnmergedTree = true).assertTextEquals(
             ResUtils.getString(R.string.call_status_calling)
         )
@@ -222,10 +208,7 @@ class MainPageWithTopStatusViewTest {
         )
     }
 
-    // ---------------------------------------------------------------------------------
-    // T5-4/T5-5 — floating bar visibility gates: PiP never shows it; a healthy connected
-    // call has no status to show.
-    // ---------------------------------------------------------------------------------
+    
 
     @Test
     fun `T5-4 - PiP mode never mounts the floating bar and freezes the crossfade`() {
@@ -234,7 +217,7 @@ class MainPageWithTopStatusViewTest {
         composeTestRule.waitForIdle()
 
         assertNotificationBarAbsent("the notification pill does not fit the PiP window")
-        // shouldAnimate=false in PiP: the crossfade renders exactly one static encrypted node.
+        
         composeTestRule.onNodeWithTag("call_topbar_status_text", useUnmergedTree = true).assertTextEquals(
             ResUtils.getString(R.string.call_status_encrypted)
         )
@@ -265,12 +248,9 @@ class MainPageWithTopStatusViewTest {
 
     @Test
     fun `T5-15 - backgrounded activity freezes the crossfade`() {
-        // Driving the REAL Activity below RESUMED via ActivityScenario.moveToState unregisters
-        // the composition from AndroidComposeTestRule's owner registry entirely ("No compose
-        // hierarchies found") — a ComposeTestRule limitation, not a production behavior.
-        // Providing a custom LifecycleOwner exercises the exact same production read
-        // (rememberShouldAnimateCallStatus's currentStateAsState) while keeping the real
-        // Activity RESUMED throughout.
+        
+        
+        
         val (vm, callIntent) = buildOneOnOneCallingViewModel()
         CallVmTestHarness.mockEntryPointAccessors()
         val lifecycleOwner = object : androidx.lifecycle.LifecycleOwner {
@@ -291,14 +271,14 @@ class MainPageWithTopStatusViewTest {
         }
         composeTestRule.waitForIdle()
 
-        // Sanity: RESUMED still animates (regression guard for the harness itself).
+        
         assertTrue(
             "sanity: RESUMED must still animate",
             composeTestRule.onAllNodesWithTag("call_topbar_status_text_encrypted", useUnmergedTree = true)
                 .fetchSemanticsNodes().isNotEmpty(),
         )
 
-        // STARTED (not RESUMED): the isAtLeast(RESUMED) gate flips isForeground to false.
+        
         composeTestRule.runOnIdle { lifecycleOwner.registry.currentState = androidx.lifecycle.Lifecycle.State.STARTED }
         composeTestRule.waitForIdle()
 
@@ -323,11 +303,7 @@ class MainPageWithTopStatusViewTest {
         assertNotificationBarAbsent("no transient status ⇒ no floating bar")
     }
 
-    // ---------------------------------------------------------------------------------
-    // T5-6 — 1v1 media-ready gate: CONNECTED but timer not yet running keeps the encrypted
-    // text in the duration slot and shows "Connecting…" in the bar (duration/status coexistence:
-    // the title never renders transient statuses anymore).
-    // ---------------------------------------------------------------------------------
+    
 
     @Test
     fun `T5-6 - connected before timer start shows encrypted duration slot and connecting bar`() {
@@ -340,7 +316,7 @@ class MainPageWithTopStatusViewTest {
         coEvery { contactorCacheManager.getDisplayNameById("u123") } returns "Alice"
         val vm = CallVmTestHarness.buildViewModel(callIntent, contactorCacheManager = contactorCacheManager)
         vm.participantManager.setParticipants(listOf(remote))
-        // Deliberately NOT starting the call timer — this is the media-ready gate window.
+        
 
         setContentWithViewModel(vm, callIntent, isOneVOneCall = true, contactorCacheManager = contactorCacheManager)
         composeTestRule.waitForIdle()
@@ -351,10 +327,7 @@ class MainPageWithTopStatusViewTest {
         assertNotificationBarText(ResUtils.getString(R.string.call_connecting_title))
     }
 
-    // ---------------------------------------------------------------------------------
-    // T5-7 — screen-share title during the media-ready gate: the raw ticker must not leak a
-    // frozen "00:00" next to the sharer's name (the 67edad0d1 bug class, screen-share path).
-    // ---------------------------------------------------------------------------------
+    
 
     @Test
     fun `T5-7 - screen-share title omits the duration until the call timer runs`() {
@@ -364,10 +337,11 @@ class MainPageWithTopStatusViewTest {
         val contactorCacheManager: ContactorCacheManager = mockk(relaxed = true)
         val sharer = mockk<RemoteParticipant>(relaxed = true)
         every { sharer.identity } returns Participant.Identity("u123")
-        coEvery { contactorCacheManager.getDisplayNameById("u123") } returns "Alice"
+        val name = "Alexandria Catherine Montgomery"
+        coEvery { contactorCacheManager.getDisplayNameById("u123") } returns name
         val vm = CallVmTestHarness.buildViewModel(callIntent, contactorCacheManager = contactorCacheManager)
         vm.participantManager.setScreenSharingUser(sharer)
-        // Deliberately NOT starting the call timer — the media-ready gate window.
+        
 
         setContentWithViewModel(
             vm, callIntent, isOneVOneCall = true, isUserSharingScreen = true,
@@ -379,15 +353,12 @@ class MainPageWithTopStatusViewTest {
         }
 
         composeTestRule.onNodeWithTag("call_topbar_call_duration", useUnmergedTree = true).assertTextEquals(
-            "Alice${ResUtils.getString(R.string.call_screen_sharing_title)}"
+            ResUtils.getString(R.string.call_screen_sharing_title)
         )
+        composeTestRule.onNodeWithText(name, useUnmergedTree = true).assertExists()
     }
 
-    // ---------------------------------------------------------------------------------
-    // T5-8 — mid-call reconnect coexistence: once the timer runs, RECONNECTING must keep the
-    // connected title (name + ticking duration) while the pill carries the connection status —
-    // never fall back to the pre-connect E2EE placeholder (Bugbot finding on PR #1150).
-    // ---------------------------------------------------------------------------------
+    
 
     @Test
     fun `T5-8 - mid-call RECONNECTING keeps name and duration in the title with connecting in the bar`() {
@@ -400,7 +371,7 @@ class MainPageWithTopStatusViewTest {
         coEvery { contactorCacheManager.getDisplayNameById("u123") } returns "Alice"
         val vm = CallVmTestHarness.buildViewModel(callIntent, contactorCacheManager = contactorCacheManager)
         vm.participantManager.setParticipants(listOf(remote))
-        // Mid-call: the timer started while CONNECTED and keeps running through the reconnect.
+        
         vm.timerManager.startCallTimer(System.currentTimeMillis()) { }
 
         setContentWithViewModel(vm, callIntent, isOneVOneCall = true, contactorCacheManager = contactorCacheManager)
@@ -419,9 +390,7 @@ class MainPageWithTopStatusViewTest {
         )
     }
 
-    // ---------------------------------------------------------------------------------
-    // T5-9/T5-10 — combos B/D: 1v1 peer name + lock icon / group room name + lock icon.
-    // ---------------------------------------------------------------------------------
+    
 
     @Test
     fun `T5-9 - combo B one-on-one connected shows peer name and lock icon before duration`() {
@@ -434,10 +403,7 @@ class MainPageWithTopStatusViewTest {
         coEvery { contactorCacheManager.getDisplayNameById("u123") } returns "Alice"
         val vm = CallVmTestHarness.buildViewModel(callIntent, contactorCacheManager = contactorCacheManager)
         vm.participantManager.setParticipants(listOf(remote))
-        // Production always pairs CallStatus.CONNECTED with timerManager.startCallTimer (see
-        // LCallViewModel's onConnected handling) — callTimerRunning gates the duration text
-        // (develop commit 67edad0d1, "gate 1v1 timer on media readiness"), so the harness must
-        // start it too or the duration slot renders the encrypted text instead.
+        
         vm.timerManager.startCallTimer(System.currentTimeMillis()) { }
 
         setContentWithViewModel(vm, callIntent, isOneVOneCall = true, contactorCacheManager = contactorCacheManager)
@@ -447,8 +413,7 @@ class MainPageWithTopStatusViewTest {
         }
 
         composeTestRule.onNodeWithTag("call_topbar_room_name", useUnmergedTree = true).assertTextEquals("Alice")
-        // Lock icon has no testTag (Icon composables carry no semantics text); its presence in
-        // the duration Row is verified by source diff review (ConnectedStatusContent §2).
+        
         composeTestRule.onNodeWithTag("call_topbar_call_duration", useUnmergedTree = true).assertTextEquals("00:00")
     }
 
@@ -460,21 +425,38 @@ class MainPageWithTopStatusViewTest {
         )
         CallVmTestHarness.stubCallStatus(CallStatus.CONNECTED, CallType.GROUP.type)
         val vm = CallVmTestHarness.buildViewModel(callIntent)
-        // See T5-9's comment: callTimerRunning must be started explicitly in this harness.
+        
         vm.timerManager.startCallTimer(System.currentTimeMillis()) { }
 
         setContentWithViewModel(vm, callIntent, isOneVOneCall = false)
         composeTestRule.waitForIdle()
 
-        // getCallRoomName() appends the participant count for non-1v1 calls; participants is
-        // empty here so it coerces to 1 — unchanged pre-existing behavior, not part of this task.
+        
         composeTestRule.onNodeWithTag("call_topbar_room_name", useUnmergedTree = true).assertTextEquals("Group Room (1)")
         composeTestRule.onNodeWithTag("call_topbar_call_duration", useUnmergedTree = true).assertTextEquals("00:00")
     }
 
-    // ---------------------------------------------------------------------------------
-    // T5-11..T5-14 — TopStatusBar click-to-open-sheet gating.
-    // ---------------------------------------------------------------------------------
+    @Test
+    fun `T5-17 - a long room name stays clear of minimize`() {
+        CallVmTestHarness.mockConstructionCollaborators()
+        val callIntent = CallVmTestHarness.buildCallIntent(
+            CallIntent.Action.JOIN_CALL, CallType.GROUP.type, roomName = "Quarterly planning ".repeat(4),
+        )
+        CallVmTestHarness.stubCallStatus(CallStatus.CONNECTED, CallType.GROUP.type)
+        val vm = CallVmTestHarness.buildViewModel(callIntent)
+        vm.timerManager.startCallTimer(System.currentTimeMillis()) { }
+
+        setContentWithViewModel(vm, callIntent, isOneVOneCall = false)
+        composeTestRule.waitForIdle()
+
+        val minimize = composeTestRule.onNodeWithTag("call_topbar_zoom_out", useUnmergedTree = true)
+            .fetchSemanticsNode().boundsInRoot
+        val title = composeTestRule.onNodeWithTag("call_topbar_status_click_target", useUnmergedTree = true)
+            .fetchSemanticsNode().boundsInRoot
+        assertTrue("title $title overlaps minimize $minimize", title.left >= minimize.right)
+    }
+
+    
 
     @Test
     fun `T5-11 - isTopVisible true, not PiP, not sharing screen invokes onE2eeHintClick once`() {
@@ -484,7 +466,7 @@ class MainPageWithTopStatusViewTest {
         val vm = CallVmTestHarness.buildViewModel(callIntent)
         var clicks = 0
 
-        // isOneVOneCall=true && !isUserSharingScreen ⇒ isTopVisible=true unconditionally.
+        
         setContentWithViewModel(
             vm, callIntent, isInPipMode = false, isOneVOneCall = true, isUserSharingScreen = false,
             onE2eeHintClick = { clicks++ },
@@ -502,12 +484,8 @@ class MainPageWithTopStatusViewTest {
         val callIntent = CallVmTestHarness.buildCallIntent(CallIntent.Action.JOIN_CALL, CallType.GROUP.type)
         CallVmTestHarness.stubCallStatus(CallStatus.CONNECTED, CallType.GROUP.type)
         val vm = CallVmTestHarness.buildViewModel(callIntent)
-        // Group call (isOneVOneCall=false) + showTopStatusViewEnabled=false ⇒ isTopVisible=false,
-        // which mounts the real ancestor `tapInterceptor(enabled = !isTopVisible)` on
-        // `TopStatusBar` — the actual production consumer the disabled click-target's tap must
-        // fall through to here (an external synthetic ancestor Box would sit OUTSIDE
-        // tapInterceptor and would never see the tap either way, since tapInterceptor
-        // legitimately claims it first).
+        
+        
         vm.callUiController.setShowTopStatusViewEnabled(false)
         var clicks = 0
 
@@ -517,9 +495,8 @@ class MainPageWithTopStatusViewTest {
         )
         composeTestRule.waitForIdle()
 
-        // useUnmergedTree = true: a disabled click target no longer mounts `clickable`, so it no
-        // longer declares its own `mergeDescendants` boundary and drops out of the default merged
-        // tree (its Text-carrying children get merged upward into the nearest boundary instead).
+        
+        
         composeTestRule.onNodeWithTag("call_topbar_status_click_target", useUnmergedTree = true).performClick()
         composeTestRule.waitForIdle()
 
@@ -553,12 +530,9 @@ class MainPageWithTopStatusViewTest {
         )
     }
 
-    // ---------------------------------------------------------------------------------
-    // T20a..T20d — weak-network banner end to end: snapshot -> WeakNetworkBanner.resolve ->
-    // callStatusNotification -> pill, plus the PiP exclusion and the isOneVOneCall wiring.
-    // ---------------------------------------------------------------------------------
+    
 
-    /** Connected group call with a running timer — the healthy baseline the banner sits on. */
+    
     private fun buildConnectedGroupViewModel(): Pair<LCallViewModel, CallIntent> {
         CallVmTestHarness.mockConstructionCollaborators()
         val callIntent = CallVmTestHarness.buildCallIntent(CallIntent.Action.JOIN_CALL, CallType.GROUP.type)
@@ -608,8 +582,8 @@ class MainPageWithTopStatusViewTest {
         CallVmTestHarness.stubCallStatus(CallStatus.CONNECTED, CallType.ONE_ON_ONE.type)
         val vm = CallVmTestHarness.buildViewModel(callIntent)
         vm.timerManager.startCallTimer(System.currentTimeMillis()) { }
-        // The headcount — local + one peer — is what turns a bad remote into a banner instead of a
-        // tile badge. The list the production wiring publishes is exactly local + the room's remotes.
+        
+        
         vm.participantManager.setParticipants(listOf(localParticipant(), remoteParticipant("alice")))
         sessionUi().setNetworkQuality(
             NetworkQualityView(remote = mapOf("alice" to NetworkQualityLevel.BAD)),
@@ -637,7 +611,7 @@ class MainPageWithTopStatusViewTest {
         assertNotificationBarAbsent("with three people the badge names the bad peer instead")
     }
 
-    /** The session-side writer of the VM built last (the network-quality field is session-written). */
+    
     private fun sessionUi() = CallVmTestHarness.lastHarness.run { uiWriter(sessions.last()) }
 
     private fun localParticipant(): Participant = mockk<LocalParticipant>(relaxed = true)

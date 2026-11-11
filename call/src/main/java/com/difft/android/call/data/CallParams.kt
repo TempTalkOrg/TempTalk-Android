@@ -26,7 +26,7 @@ enum class BottomCallEndAction {
     CANCEL
 }
 
-/** Call-end sheet button label — the design type scale's P2, centered. */
+
 val BottomButtonTextStyle: TextStyle
     @Composable
     @ReadOnlyComposable
@@ -45,27 +45,17 @@ enum class CallStatus {
     SWITCHING_SERVER
 }
 
-/**
- * UI-facing send-status presentation derived from the SDK's MediaSendConnectionState +
- * Room state (doc's unified priority mapping, SDK >= 2.27.0.2).
- * CONNECTION_RECOVERING - whole meeting link recovering (room reconnect / resume / network
- *   loss) -> reuse the existing connection presentation ("连接中…")
- * SEND_RECOVERING - room healthy but the publisher uplink is recovering or failed -> the
- *   single media-recovery hint (FAILED shares it; the SDK keeps recovering after FAILED)
- */
+
+
+
 enum class MediaSendIssueState {
     NONE,
     CONNECTION_RECOVERING,
     SEND_RECOVERING;
 
     companion object {
-        /**
-         * The doc-mandated unified priority mapping, pure so the acceptance cases are directly
-         * regression-testable. Terminal states hide everything; ROOM_RECOVERING joins the
-         * room-level RECONNECTING presentation; only a genuine uplink degradation while the room
-         * is healthy warns. CONNECTING is normal first-negotiation and never warns (the SDK's
-         * hasPublisherEverConnected gate).
-         */
+        
+
         fun resolve(roomState: Room.State, sendState: MediaSendConnectionState): MediaSendIssueState = when {
             roomState == Room.State.DISCONNECTED -> NONE
             roomState == Room.State.RECONNECTING ||
@@ -76,11 +66,11 @@ enum class MediaSendIssueState {
     }
 }
 
-/**
- * Represents how a call was terminated
- * LEAVE - Individual participant left the call
- * END - Call was terminated for all participants
- */
+
+
+
+
+
 enum class CallEndType {
     LEAVE,
     END

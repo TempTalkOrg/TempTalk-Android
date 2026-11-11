@@ -35,11 +35,11 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/**
- * #1354, sideload upgrade: the retry tap and the in-app start both go through
- * [AppUpgradeService.start], which starts nothing without a foreground channel, and the service
- * promotes only on a verified one.
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = SideloadTestApplication::class, sdk = [34])
 class AppUpgradeChannelTest {
@@ -70,7 +70,7 @@ class AppUpgradeChannelTest {
 
     private fun retryIntent() = AppUpgradeRetryReceiver.intent(app, "https://x/a.apk", "h", "/data/a.apk", true)
 
-    // The retry tap goes through the starter, which runs the channel preflight.
+    
     @Test
     fun retryTap_startsTheServiceAfterThePreflight() {
         AppUpgradeRetryReceiver().onReceive(app, retryIntent())
@@ -85,7 +85,7 @@ class AppUpgradeChannelTest {
         assertEquals(NotificationChannelIds.RUNNING_IN_BACKGROUND, NotificationChannelSpecs.verifiedForegroundChannel)
     }
 
-    // With no foreground channel the retry tap starts nothing.
+    
     @Test
     fun retryTap_startsNothingWithoutAForegroundChannel() {
         capNotificationChannels()
@@ -104,7 +104,7 @@ class AppUpgradeChannelTest {
         assertNull(shadowOf(app).nextStartedService)
     }
 
-    // The service promotes on a re-created RUNNING_IN_BACKGROUND channel.
+    
     @Test
     fun service_promotesOnTheRunningInBackgroundChannel() {
         val posted = slot<Notification>()
@@ -119,7 +119,7 @@ class AppUpgradeChannelTest {
         controller.destroy()
     }
 
-    // No channel → no startForeground; the failure is reported and the service stops.
+    
     @Test
     fun service_stopsWithoutPromotingWithoutAChannel() {
         mockkStatic(ForegroundServiceStarter::class)
@@ -142,7 +142,7 @@ class AppUpgradeChannelTest {
         every { EntryPoints.get(any(), AppUpgradeService.ServiceEntryPoint::class.java) } returns entryPoint
     }
 
-    /** The download coroutine fails at once without a network; wait for its completion broadcast. */
+    
     private fun awaitDownloadEnd() {
         val deadline = System.currentTimeMillis() + 5_000
         while (AppUpgradeService.isDownloading && System.currentTimeMillis() < deadline) {

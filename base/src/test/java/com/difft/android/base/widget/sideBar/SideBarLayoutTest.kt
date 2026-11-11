@@ -17,7 +17,7 @@ class SideBarLayoutTest {
 
     @Test
     fun `condensed rail alternates letters and dots and keeps both ends`() {
-        // 36 / 12 = 3 slots for 27 letters.
+        
         val slots = SideBarLayout.slots(letterCount = 27, available = 36f, minItemHeight = min)
 
         assertEquals(listOf(SideBarSlot.Letter(0), SideBarSlot.Dot(1, 25), SideBarSlot.Letter(26)), slots)

@@ -8,7 +8,7 @@ import com.difft.android.base.utils.pane.DetailShellActivity
 import dagger.hilt.android.AndroidEntryPoint
 import com.difft.android.base.R as BaseR
 
-/** Uses the production shell and request launchers, with unrelated orientation behavior disabled. */
+
 abstract class ShellOriginProtocolFixtureActivity : DetailShellActivity() {
     var finishCalls = 0
         private set
@@ -37,7 +37,7 @@ class ShellOriginParentTestActivity : ShellOriginProtocolFixtureActivity() {
     }
 
     companion object {
-        /** Public registry-state seeding for the synchronous restored-result registration window. */
+        
         var beforeShellCreate: ((ShellOriginParentTestActivity) -> Unit)? = null
     }
 }
@@ -45,7 +45,7 @@ class ShellOriginParentTestActivity : ShellOriginProtocolFixtureActivity() {
 @AndroidEntryPoint
 class ShellOriginChildTestActivity : ShellOriginProtocolFixtureActivity()
 
-/** A real Hilt Activity that deliberately does not participate in the shell result protocol. */
+
 @AndroidEntryPoint
 class ShellOriginPlainTestActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {

@@ -71,7 +71,7 @@ private fun ProxySettingsScreen(
     val state by viewModel.uiState.collectAsState()
     val visibleState by visibleOwner.lifecycle.currentStateFlow.collectAsState()
 
-    // Saveable: a rotation while the passphrase prompt is up must not drop the prompt.
+    
     var showPassphraseDialog by rememberSaveable { mutableStateOf(false) }
     var passphraseError by rememberSaveable { mutableStateOf(false) }
 
@@ -87,7 +87,7 @@ private fun ProxySettingsScreen(
                 showPassphraseDialog = true
             }
 
-            // Keep the dialog open, surface the error AND toast so the user can retry.
+            
             UiEvent.WrongPassphrase -> {
                 passphraseError = true
                 onToast(R.string.proxy_passphrase_wrong_toast)
@@ -100,7 +100,7 @@ private fun ProxySettingsScreen(
         }
     }
 
-    // Save runs off the main thread (PBKDF2 decrypt); outcomes arrive here.
+    
     LaunchedEffect(Unit) {
         visibleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
             viewModel.events.collect { handleEvent(it) }

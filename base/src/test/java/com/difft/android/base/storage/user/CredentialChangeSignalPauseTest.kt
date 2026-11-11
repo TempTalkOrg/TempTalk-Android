@@ -38,11 +38,11 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/**
- * The credential funnel of the migration message pause (#1382): any credential written through
- * [StorageBoundUserManagerImpl] reaches the scope check, so a pause kept closed by a logout reopens
- * when another login is installed in the same process, by whatever path.
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(manifest = Config.NONE)
 class CredentialChangeSignalPauseTest {
@@ -88,7 +88,7 @@ class CredentialChangeSignalPauseTest {
         assertNull(signal.credentialHash.value)
     }
 
-    // #1382 A04: a job added before the user data is read is tagged with the login read at that load.
+    
     @Test
     fun `the first load captures the login read then and never changes`() = runBlocking<Unit> {
         assertFalse(signal.isLoaded)
@@ -116,13 +116,13 @@ class CredentialChangeSignalPauseTest {
         pause.finish(owner, null, MigrationPauseOutcome.SUCCESS)
         loginScope.watchCredentialChanges(watcherScope)
 
-        // Kicked while awaiting the old login: the logout keeps messaging closed.
+        
         pause.clearForLogout()
         users.clearAuthOnly()
         delay(200)
         assertIs<MessagingPauseState.Paused>(gate.state)
 
-        // A credential arrives by a path other than the login screen (the migration credential install).
+        
         users.update(commit = true) { baseAuth = "auth-2" }
 
         withTimeout(5_000) { while (gate.state != MessagingPauseState.Open) delay(10) }

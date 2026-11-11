@@ -7,15 +7,15 @@ import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
-/**
- * The source key a favorite-without-download carries.
- *
- * `attachmentId` here is favorites-internal bookkeeping — it is persisted with the pending row and
- * never sent; the CONFIRMED favorite's outbound id comes from isExist/uploadInfo under the account.
- * It therefore takes the message attachment's LOCAL id, which identifies exactly one copy, instead of
- * the server-side id every copy of a file shares (and which is empty on rows written since the id
- * stopped being seeded).
- */
+
+
+
+
+
+
+
+
+
 class FavoriteMessageRefTest {
 
     private fun attachment(

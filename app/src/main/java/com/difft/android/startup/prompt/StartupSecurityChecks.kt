@@ -17,17 +17,17 @@ import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Security warnings, shown one at a time in declaration order. */
+
 enum class SecurityWarning(@param:StringRes val messageRes: Int) {
     SIGNATURE(R.string.app_sign_error_tips),
     EMULATOR(R.string.emulator_risk_tips),
     ROOT(R.string.root_risk_tips),
 }
 
-/**
- * Signature, emulator and root checks, run once per process (not per Activity recreation). "Ignore"
- * removes a warning for the rest of the process; the next cold start checks again.
- */
+
+
+
+
 @Singleton
 class StartupSecurityChecks @Inject constructor(
     @param:ApplicationContext private val context: Context,
@@ -36,7 +36,7 @@ class StartupSecurityChecks @Inject constructor(
 
     private val _pending = MutableStateFlow<List<SecurityWarning>>(emptyList())
 
-    /** Warnings still to show, in order; the gate is active while this is not empty. */
+    
     val pending: StateFlow<List<SecurityWarning>> = _pending.asStateFlow()
 
     fun ensureChecked() {

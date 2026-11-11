@@ -11,7 +11,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** One-time cleanup of decrypted copies left beside a usable ciphertext (#1438). */
+
 class RedundantPlaintextPurgeTest {
 
     @get:Rule
@@ -74,7 +74,7 @@ class RedundantPlaintextPurgeTest {
 
     @Test
     fun `a key that does not verify the ciphertext keeps the plaintext`() {
-        // e.g. the lookup fell back to a sibling row's key
+        
         val plaintext = copy("e", "voice.m4a", plaintext = true, ciphertext = true)
         val otherKey = Random(99).nextBytes(64)
 
@@ -102,7 +102,7 @@ class RedundantPlaintextPurgeTest {
     fun `only a complete pass over mounted external storage is recorded`() {
         val purge = LegacyPlaintextAttachmentMigration
         assertTrue(purge.mayStampRedundantPurge(complete = true, rootStorageState = android.os.Environment.MEDIA_MOUNTED))
-        // Internal fallback root while external storage was unmounted: leftovers live on the unscanned external tree.
+        
         assertFalse(purge.mayStampRedundantPurge(complete = true, rootStorageState = android.os.Environment.MEDIA_UNKNOWN))
         assertFalse(purge.mayStampRedundantPurge(complete = false, rootStorageState = android.os.Environment.MEDIA_MOUNTED))
     }

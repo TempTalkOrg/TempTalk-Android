@@ -41,7 +41,7 @@ internal const val TAG_BACKGROUND_SWITCH = "background_connection_switch"
 
 internal fun bgRowTag(row: BgRow): String = "background_row_${row.name}"
 
-/** Everything the page renders; the fragment owns the switch state and the system reads. */
+
 internal data class BackgroundConnectionPageState(
     val isBackgroundConnectionEnabled: Boolean,
     val brand: OemBrand,
@@ -51,11 +51,11 @@ internal data class BackgroundConnectionPageState(
     val scrollKey: Int = 0,
 )
 
-/**
- * Background connection page in the shared settings layout: the switch group, the system checks
- * the app can read, the skin's own switches (each with its hint inside the row) and one footer
- * sentence that links to the setup guide.
- */
+
+
+
+
+
 @Composable
 internal fun BackgroundConnectionPage(
     state: BackgroundConnectionPageState,
@@ -98,7 +98,7 @@ internal fun BackgroundConnectionPage(
 
             if (vendor.isNotEmpty()) {
                 Spacer(Modifier.height(DifftSettingsDefaults.GroupSpacing))
-                // The app cannot read these switches: the caption says so, each row names what to set.
+                
                 DifftSettingsGroup(
                     title = stringResource(ChatR.string.background_vendor_checks_title),
                     footer = { DifftSettingsCaption(stringResource(ChatR.string.background_vendor_checks_caption)) },
@@ -119,16 +119,16 @@ internal fun BackgroundConnectionPage(
     }
 }
 
-/**
- * One check row: label, status (warning colored only for a confirmed problem) and a chevron when
- * tapping opens something. The row the switch sent the user to fix is scrolled into view and its
- * label tinted.
- */
+
+
+
+
+
 @Composable
 private fun CheckRow(row: BgRow, state: BackgroundConnectionPageState, onRowClick: (BgRow) -> Unit, note: String? = null) {
     val status = statusOf(row, state.check)
     val highlighted = row == state.highlightedRow
-    // The battery row has nothing to open once the exemption is granted.
+    
     val onClick: (() -> Unit)? =
         if (row == BgRow.BATTERY_OPTIMIZATION && state.check.isIgnoringBatteryOpt) null else { { onRowClick(row) } }
     val requester = remember { BringIntoViewRequester() }
@@ -136,16 +136,16 @@ private fun CheckRow(row: BgRow, state: BackgroundConnectionPageState, onRowClic
         if (highlighted) requester.bringIntoView()
     }
     DifftSettingsRow(
-        // One semantics node per row (label + status) even without a click target, as the clickable rows are.
+        
         modifier = Modifier.bringIntoViewRequester(requester).semantics(mergeDescendants = true) {}.testTag(bgRowTag(row)),
         onClick = onClick,
-        // Keep the chevron's width when there is nothing to open, so the status column stays aligned.
+        
         trailing = if (onClick == null) ({ Spacer(Modifier.size(DifftSettingsDefaults.ChevronSize)) }) else null,
     ) {
         if (note == null) {
             CheckRowLine(row, status, highlighted)
         } else {
-            // The note sits under the label; the status centres on the whole row, like the chevron.
+            
             Column(Modifier.weight(1f)) {
                 CheckRowLabel(row, highlighted, Modifier)
                 Text(text = note, style = DifftSettingsDefaults.CaptionTextStyle, color = DifftTheme.colors.textTertiary)
@@ -186,7 +186,7 @@ private fun CheckRowStatus(status: BgStatus) {
     }
 }
 
-/** Standalone preview: owns the switch state the production caller normally supplies. */
+
 @Preview(showBackground = true, backgroundColor = 0xFFF5F5F5)
 @Composable
 private fun BackgroundConnectionPagePreview() {

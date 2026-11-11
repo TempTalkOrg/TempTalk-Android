@@ -9,7 +9,7 @@ import android.widget.ImageView
 object AnimUtils {
     const val DURATION = 250
 
-    /** Arrow rotate animation. */
+    
     @JvmStatic
     fun rotateArrow(arrow: ImageView, isFlag: Boolean) {
         val srcValue: Float
@@ -27,7 +27,7 @@ object AnimUtils {
         objectAnimator.start()
     }
 
-    /** Scale animation. */
+    
     @JvmStatic
     fun selectZoom(view: View) {
         val animatorSet = AnimatorSet()

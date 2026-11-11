@@ -29,23 +29,12 @@ import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowSystemClock
 import java.time.Duration
 
-/**
- * Host-layer coverage for [NetworkQualityCoordinator]. The verdict state machine itself is covered by
- * the pure-JVM `NetworkQualityTrackerTest`; what is asserted here is only what the host owns: the
- * drive sources (room events, room state, the merged send state, the 500 ms tick), the union of the
- * two suppression inputs, the re-seed ordering, the reverse cleanup, teardown, and the monotonic
- * clock.
- *
- * Robolectric rather than a plain JVM test because the coordinator logs through `L` and because C9
- * drives the real `SystemClock`.
- *
- * Virtual time: `nowProvider` reads the same [StandardTestDispatcher] scheduler the tick's `delay`
- * uses, so hysteresis boundaries land on exact millisecond values. C9 is the deliberate exception —
- * it must exercise the production default provider.
- *
- * The coordinator publishes into a real `CallSessionUiState` (row T3-14): every case here asserts the
- * session's `networkQuality` flow, and `stop()` publishes `NONE` into it.
- */
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [33])
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -67,12 +56,10 @@ class NetworkQualityCoordinatorTest {
     private var localQuality: ConnectionQuality = ConnectionQuality.EXCELLENT
     private var remoteQualities: Map<String, ConnectionQuality> = emptyMap()
 
-    /**
-     * Every distinct snapshot published to the session UI state, in order. Stands in for Turbine's
-     * `expectNoEvents()`: asserting the recorded size is unchanged after advancing virtual time is
-     * the same statement ("the tick really stopped"), and it stays deterministic under explicit
-     * virtual-time control.
-     */
+    
+
+
+
     private val published = mutableListOf<NetworkQualityView>()
 
     @Before
@@ -105,7 +92,9 @@ class NetworkQualityCoordinatorTest {
         nowProvider = { scheduler.currentTime },
     )
 
-    /** C9 only: exercises the production default `nowProvider` (SystemClock.elapsedRealtime). */
+    
+
+
     private fun coordinatorWithDefaultClock() = NetworkQualityCoordinator(
         scope = scope,
         roomState = roomState,
@@ -115,7 +104,7 @@ class NetworkQualityCoordinatorTest {
         uiState = uiState,
     )
 
-    /** Advances virtual time to exactly [target] and runs the task scheduled AT that instant. */
+    
     private fun advanceTo(target: Long) {
         scheduler.advanceTimeBy(target - scheduler.currentTime)
         scheduler.runCurrent()
@@ -123,17 +112,16 @@ class NetworkQualityCoordinatorTest {
 
     private fun view() = uiState.networkQuality.value
 
-    /** Starts the coordinator and lets the room-state collector process the current value. */
+    
     private fun startAndSettle(): NetworkQualityCoordinator =
         coordinator().also {
             it.start()
             scheduler.runCurrent()
         }
 
-    // ------------------------------------------------------------------ C1
-    // Mid-call mount: the room is ALREADY connected when start() runs, so the seed must come from
-    // the providers rather than from a state transition (a coordinator that only seeds on a
-    // false->true suppression flip would show nothing here).
+    
+    
+    
     @Test
     fun `mounting into an already connected room seeds from the providers`() {
         roomState.value = Room.State.CONNECTED
@@ -146,7 +134,6 @@ class NetworkQualityCoordinatorTest {
         assertEquals(NetworkQualityLevel.BAD, view().local)
     }
 
-    // ------------------------------------------------------------------ C2
     @Test
     fun `worsening publishes on the tick at 3000 not at 2500`() {
         roomState.value = Room.State.CONNECTED
@@ -160,7 +147,6 @@ class NetworkQualityCoordinatorTest {
         assertTrue("3.0s of POOR must publish", view().localIsBad)
     }
 
-    // ------------------------------------------------------------------ C3
     @Test
     fun `leaving CONNECTED empties the view and stops the tick`() {
         roomState.value = Room.State.CONNECTED
@@ -178,7 +164,6 @@ class NetworkQualityCoordinatorTest {
         assertEquals("the tick must be cancelled while suppressed", publishedCount, published.size)
     }
 
-    // ------------------------------------------------------------------ C4
     @Test
     fun `reconnecting restarts the timers instead of republishing the stale verdict`() {
         roomState.value = Room.State.CONNECTED
@@ -191,9 +176,9 @@ class NetworkQualityCoordinatorTest {
         scheduler.runCurrent()
         advanceTo(5_000)
 
-        // The SDK's cached local connectionQuality is still POOR across the outage, so the re-seed
-        // feeds the same reading back in. Clearing suppression BEFORE seeding is what stops it from
-        // republishing instantly.
+        
+        
+        
         roomState.value = Room.State.CONNECTED
         scheduler.runCurrent()
         assertFalse("the pre-outage verdict must not come back on reconnect", view().localIsBad)
@@ -204,7 +189,6 @@ class NetworkQualityCoordinatorTest {
         assertTrue("a still-bad link lights up again 3s after reconnect", view().localIsBad)
     }
 
-    // ------------------------------------------------------------------ C5
     @Test
     fun `reseed prunes remotes that are no longer in the room`() {
         roomState.value = Room.State.CONNECTED
@@ -230,7 +214,6 @@ class NetworkQualityCoordinatorTest {
         assertTrue(view().badRemoteIdentities.isEmpty())
     }
 
-    // ------------------------------------------------------------------ C6
     @Test
     fun `participant left publishes immediately without waiting for a tick`() {
         roomState.value = Room.State.CONNECTED
@@ -244,7 +227,6 @@ class NetworkQualityCoordinatorTest {
         assertTrue("a leaving participant's badge must clear now, not 500ms later", view().badRemoteIdentities.isEmpty())
     }
 
-    // ------------------------------------------------------------------ C7a
     @Test
     fun `local reading with a null identity still lands on the local entry`() {
         roomState.value = Room.State.CONNECTED
@@ -257,7 +239,6 @@ class NetworkQualityCoordinatorTest {
         assertTrue("the local entry must never appear as a remote", view().remote.isEmpty())
     }
 
-    // ------------------------------------------------------------------ C7b
     @Test
     fun `remote reading is keyed by its identity`() {
         roomState.value = Room.State.CONNECTED
@@ -270,7 +251,6 @@ class NetworkQualityCoordinatorTest {
         assertEquals(NetworkQualityLevel.EXCELLENT, view().local)
     }
 
-    // ------------------------------------------------------------------ C7c
     @Test
     fun `remote reading without an identity is dropped`() {
         roomState.value = Room.State.CONNECTED
@@ -282,7 +262,6 @@ class NetworkQualityCoordinatorTest {
         assertEquals("an unkeyable remote reading can be neither stored nor rendered", NetworkQualityView.NONE, view())
     }
 
-    // ------------------------------------------------------------------ C8
     @Test
     fun `stop clears the snapshot and start is re-entrant`() {
         roomState.value = Room.State.CONNECTED
@@ -298,18 +277,17 @@ class NetworkQualityCoordinatorTest {
         advanceTo(13_000)
         assertEquals("both jobs must be cancelled by stop()", publishedCount, published.size)
 
-        // The Room object survives a call, so a second call must be able to restart the same
-        // coordinator instance from a clean tracker.
+        
+        
         coordinator.start()
         scheduler.runCurrent()
         advanceTo(16_000)
         assertTrue("start() after stop() must seed and tick again", view().localIsBad)
     }
 
-    // ------------------------------------------------------------------ C13
-    // Whole-link recovery suppresses even though the room state itself never leaves CONNECTED. An
-    // implementation that judges suppression from `room.state` alone passes every case above and
-    // still leaves the hint on screen through an outage the user is already being told about.
+    
+    
+    
     @Test
     fun `link recovery suppresses the view while the room state stays connected`() {
         roomState.value = Room.State.CONNECTED
@@ -330,7 +308,7 @@ class NetworkQualityCoordinatorTest {
         advanceTo(13_000)
         assertEquals("the tick must be cancelled while suppressed", publishedCount, published.size)
 
-        // Leaving recovery re-seeds and restarts the delay, exactly like leaving a room outage.
+        
         mediaSendIssue.value = MediaSendIssueState.NONE
         scheduler.runCurrent()
         assertFalse("the pre-recovery verdict must not come back instantly", view().localIsBad)
@@ -341,7 +319,6 @@ class NetworkQualityCoordinatorTest {
         assertTrue("a still-bad link lights up again 3s later", view().localIsBad)
     }
 
-    // ------------------------------------------------------------------ C14
     @Test
     fun `an uplink-only issue does not suppress the verdict`() {
         roomState.value = Room.State.CONNECTED
@@ -350,8 +327,8 @@ class NetworkQualityCoordinatorTest {
         advanceTo(3_000)
         assertTrue(view().localIsBad)
 
-        // SEND_RECOVERING outranks the weak-network hint in the pill, but the verdict underneath must
-        // keep being maintained — otherwise the hint would re-earn its 3 s once the uplink recovers.
+        
+        
         mediaSendIssue.value = MediaSendIssueState.SEND_RECOVERING
         scheduler.runCurrent()
         advanceTo(20_000)
@@ -359,11 +336,10 @@ class NetworkQualityCoordinatorTest {
         assertTrue("an uplink issue is not a suppression input", view().localIsBad)
     }
 
-    // ------------------------------------------------------------------ C15
     @Test
     fun `mounting into an already recovering link stays empty`() {
-        // Both suppression halves are primed before either collector runs, so a mid-call mount can
-        // never seed a snapshot that the sibling flow immediately empties.
+        
+        
         roomState.value = Room.State.CONNECTED
         mediaSendIssue.value = MediaSendIssueState.CONNECTION_RECOVERING
         localQuality = ConnectionQuality.POOR
@@ -374,11 +350,8 @@ class NetworkQualityCoordinatorTest {
         assertEquals(NetworkQualityView(suppressed = true), view())
     }
 
-    // ------------------------------------------------------------------ C9 (framework assumption)
-    // The hysteresis MUST be driven by the monotonic clock (SystemClock.elapsedRealtime). A wall
-    // clock jumps backwards on time sync — a hint would stick on screen forever — and forwards on
-    // sleep/wake, skipping the delay altogether. This is the only executable guard on that choice,
-    // so it runs against the production default nowProvider, not an injected one.
+    
+    
     @Test
     fun `hysteresis follows the monotonic clock and not the wall clock`() {
         roomState.value = Room.State.CONNECTED
@@ -387,14 +360,14 @@ class NetworkQualityCoordinatorTest {
         coordinator.start()
         scheduler.runCurrent()
 
-        // (a) Ticks alone must not fill the delay: the clock is the source of truth, never the tick
-        // count or the coroutine scheduler's own time.
+        
+        
         advanceTo(2_000)
         assertFalse("four ticks with a frozen clock must not satisfy the 3s delay", view().localIsBad)
 
-        // (b) This advances elapsedRealtime by 3s while leaving the process wall clock
-        // (System.currentTimeMillis) untouched, so it publishes only if the provider really is the
-        // monotonic clock: a currentTimeMillis implementation would still measure ~0 ms elapsed.
+        
+        
+        
         ShadowSystemClock.advanceBy(Duration.ofSeconds(3))
         advanceTo(2_500)
         assertTrue("elapsedRealtime passing the 3s delay must publish", view().localIsBad)

@@ -23,19 +23,19 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/**
- * [DBMessageStore] fail-soft guards for the two user-initiated delete entry points. Both
- * `deleteMessage` and `removeRoomAndMessages` fast-skip on `wcdb.isDbInaccessible` before their
- * local `catch (Exception)` could otherwise swallow a `WCDBKeyUnavailableException`.
- *
- * Critical invariant for `removeRoomAndMessages`: the guard is the first statement inside the
- * `try` block, so `return@launch` still runs the `finally` that releases `deletingRoomIds` —
- * placed before `try {`, that room would be permanently un-deletable. This test asserts the release.
- *
- * The top-level `wcdb` and `appScope` accessors are replaced via `mockkStatic`; the relaxed [WCDB]
- * mock is only asked for `isDbInaccessible` (reaching a `Table` getter would load native `libWCDB`
- * and crash the host JVM), so green also proves no DB table was touched.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -70,7 +70,7 @@ class DBMessageStoreGuardTest {
         store.deleteMessage(listOf("m1", "m2"))
         advanceUntilIdle()
 
-        // Guard returned before wcdb.message + trackRoom; green == no WCDB Table touch.
+        
         verify(exactly = 0) { RoomChangeTracker.trackRoom(any(), any()) }
     }
 
@@ -81,9 +81,9 @@ class DBMessageStoreGuardTest {
             store.removeRoomAndMessages(roomId)
             advanceUntilIdle()
 
-            // No DB write happened (green == no WCDB Table touch) ...
+            
             verify(exactly = 0) { RoomChangeTracker.trackRoom(any(), any()) }
-            // ... AND the finally ran (guard is inside `try`), so the room is not permanently blocked.
+            
             assertFalse(
                 "finally must release deletingRoomIds after the guarded skip",
                 deletingRoomIdsContains(roomId)

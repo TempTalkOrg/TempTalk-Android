@@ -8,10 +8,10 @@ import org.junit.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/**
- * [AppForegroundObserver.hasUserFacingActivity] drives popup vs full-chat routing of notification
- * taps (#1427). Lifecycle callbacks are replayed in the orders observed on device.
- */
+
+
+
+
 class AppForegroundObserverUserFacingTest {
 
     private val started = mutableListOf<Activity>()
@@ -45,7 +45,7 @@ class AppForegroundObserverUserFacingTest {
         val index = activity()
         start(index)
         AppForegroundObserver.notifyActivityResumed(index)
-        // Pulling the shade and launching the trampoline pauses the page but does not stop it.
+        
 
         assertTrue(AppForegroundObserver.hasUserFacingActivity())
     }
@@ -55,9 +55,9 @@ class AppForegroundObserverUserFacingTest {
         val index = activity()
         start(index)
         AppForegroundObserver.notifyActivityResumed(index)
-        stop(index) // Home
+        stop(index) 
 
-        start(index) // HyperOS restarts it before the trampoline's onCreate
+        start(index) 
 
         assertFalse(AppForegroundObserver.hasUserFacingActivity())
     }
@@ -79,7 +79,7 @@ class AppForegroundObserverUserFacingTest {
         val call: Activity = mockk { every { isInPictureInPictureMode } answers { inPip } }
         start(call)
         AppForegroundObserver.notifyActivityResumed(call)
-        inPip = true // user leaves the call screen, which shrinks into PiP without stopping
+        inPip = true 
 
         assertFalse(AppForegroundObserver.hasUserFacingActivity())
     }

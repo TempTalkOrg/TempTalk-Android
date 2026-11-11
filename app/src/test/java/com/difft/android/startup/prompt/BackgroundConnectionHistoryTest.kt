@@ -10,7 +10,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** The background-connection slot keeps its dismissal history: floor, ladder and switch-off. */
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class BackgroundConnectionHistoryTest : StartupPromptCoordinatorTestBase() {
 
@@ -30,7 +30,7 @@ class BackgroundConnectionHistoryTest : StartupPromptCoordinatorTestBase() {
         c.onDeclined(ticket)
         assertEquals(now + 30 * day, record(bg)?.floorUntil)
 
-        // The problem goes away (service on), then comes back with another trigger.
+        
         answers[bg] = ProviderAnswer.NOT_ELIGIBLE
         changes.emit(Unit)
         runCurrent()
@@ -39,7 +39,7 @@ class BackgroundConnectionHistoryTest : StartupPromptCoordinatorTestBase() {
         assertEquals(now + 30 * day, record(bg)?.floorUntil)
         endSession()
 
-        // Evidence only follows the ladder: its one-day step has passed, so it prompts inside the floor.
+        
         triggers(BackgroundTrigger.FCM_UNAVAILABLE)
         now += 2 * day
         startSession(c)
@@ -69,7 +69,7 @@ class BackgroundConnectionHistoryTest : StartupPromptCoordinatorTestBase() {
         c.onDeclined(second)
         endSession()
 
-        // Second decline at day 2: late-delivery week ends day 9, ladder step (3 days) day 5.
+        
         triggers(BackgroundTrigger.LATE_DELIVERY)
         now += 6 * day
         startSession(c)
@@ -155,7 +155,7 @@ class BackgroundConnectionHistoryTest : StartupPromptCoordinatorTestBase() {
         assertFalse(record(bg)!!.switchedOff)
         assertEquals(now + 30 * day, record(bg)!!.floorUntil)
 
-        // No record is created by switching on when there was no history.
+        
         val clean = StartupPromptStore(com.difft.android.test.fakes.RecordingPreferencesDataStore(), com.google.gson.Gson())
         clean.recordBackgroundConnectionSwitch(on = true, now = now)
         assertTrue(clean.read().isEmpty())

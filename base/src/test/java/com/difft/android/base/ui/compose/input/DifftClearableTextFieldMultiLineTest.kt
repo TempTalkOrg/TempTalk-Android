@@ -24,10 +24,10 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import kotlin.test.assertTrue
 
-/**
- * Multi-line contract (issue #1209): with `clearMode = Never` and no fixed height the field wraps
- * its content, so a value long enough to wrap grows the field — bounded by `maxLines`.
- */
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34])
@@ -55,7 +55,7 @@ class DifftClearableTextFieldMultiLineTest {
         }
         val oneLine = rule.onNodeWithTag(TAG).getBoundsInRoot().height
 
-        // Long enough to wrap past three lines in a 200dp-wide field.
+        
         rule.runOnUiThread { state.value = List(60) { "wrap" }.joinToString(" ") }
         rule.waitForIdle()
         val wrapped = rule.onNodeWithTag(TAG).getBoundsInRoot()

@@ -4,17 +4,17 @@ import org.junit.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/**
- * Unit tests for [resolveBadge] — the per-tile render decision.
- *
- * Three regression guards live here:
- *  - the local tile never gets a badge. The banner announces a bad local link in every scene, so a
- *    local badge would report the same fault twice on the one tile the user cannot read as "that
- *    person is the problem".
- *  - the two-person hand-off is decided by HEADCOUNT, never by the layout or the call type: a
- *    2-person group call has tiles, yet "the other party" is unambiguous, so it takes the banner.
- *  - only the BAD tier renders, and only for an identity the snapshot actually names.
- */
+
+
+
+
+
+
+
+
+
+
+
 class NetworkQualityResolveTest {
 
     private val localIdentity = "self"
@@ -77,8 +77,8 @@ class NetworkQualityResolveTest {
 
     @Test
     fun `a suppressed snapshot badges nothing without reading the flag`() {
-        // A suppressed snapshot is already emptied upstream, so the decision falls out of the
-        // emptied values alone and never has to branch on `suppressed` (double suppression).
+        
+        
         assertFalse(badge(NetworkQualityView(suppressed = true), identity = "alice", participantCount = 3))
     }
 }

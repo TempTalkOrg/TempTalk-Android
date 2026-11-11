@@ -10,20 +10,20 @@ import android.provider.Settings
 import androidx.core.net.toUri
 import com.difft.android.base.log.lumberjack.L
 
-/**
- * Opens OEM or system settings pages, best effort.
- *
- * OEM component names are undocumented and change between ROM versions, so every caller treats
- * them as a guess: [openFirstAvailable] probes with
- * [android.content.pm.PackageManager.queryIntentActivities], and [openInOrder] walks an explicit
- * fallback chain; both end at (or include) the system app-details page, which exists everywhere.
- * OEM packages must be declared under `<queries>` or API 30+ hides them from the probe.
- */
+
+
+
+
+
+
+
+
+
 object OemSettingsLauncher {
 
-    /**
-     * @return true when some settings page was opened (including the app-details fallback).
-     */
+    
+
+
     fun openFirstAvailable(context: Context, intents: List<Intent>, tag: String): Boolean {
         val verified = intents.firstOrNull { intent ->
             runCatching { context.packageManager.queryIntentActivities(intent, 0).isNotEmpty() }.getOrDefault(false)
@@ -33,14 +33,14 @@ object OemSettingsLauncher {
         return openInOrder(context, ordered, tag)
     }
 
-    /** Starts the first intent that does not throw; every failure is logged and skipped. */
+    
     fun openInOrder(context: Context, intents: List<Intent>, tag: String, fix: String = tag): Boolean =
         startFirst(intents, tag, fix) { intent ->
             if (context !is Activity) intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             context.startActivity(intent)
         }
 
-    /** The chain walk behind [openInOrder]; [start] is the seam that tests replace. */
+    
     internal fun startFirst(intents: List<Intent>, tag: String, fix: String = tag, start: (Intent) -> Unit): Boolean {
         for ((index, intent) in intents.withIndex()) {
             val target = intent.component?.className ?: intent.action
@@ -66,11 +66,11 @@ object OemSettingsLauncher {
         else -> intent.action?.substringAfterLast('.') ?: "-"
     }
 
-    /**
-     * True when some intent resolves to a page this app can really start. A vendor page can resolve
-     * yet throw "not exported from uid 1000" for a third party, so a result only counts when it is
-     * exported and its required permission is absent or granted to us.
-     */
+    
+
+
+
+
     fun canResolveAny(context: Context, intents: List<Intent>): Boolean =
         intents.any { intent ->
             runCatching {
@@ -83,7 +83,7 @@ object OemSettingsLauncher {
             }.getOrDefault(false)
         }
 
-    /** The startable rule behind [canResolveAny]; [granted] answers whether we hold a permission. */
+    
     internal fun isStartable(exported: Boolean, permission: String?, granted: (String) -> Boolean): Boolean =
         exported && (permission.isNullOrEmpty() || granted(permission))
 

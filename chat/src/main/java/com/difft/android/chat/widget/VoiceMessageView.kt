@@ -1,5 +1,7 @@
 package com.difft.android.chat.widget
 
+import com.difft.android.chat.ui.BubblePalette
+import android.content.res.ColorStateList
 import android.annotation.SuppressLint
 import android.content.Context
 import android.util.AttributeSet
@@ -34,9 +36,9 @@ import com.difft.android.chat.dependencies.ApplicationDependencies
 import com.difft.android.chat.jobs.DownloadAttachmentJob
 import java.util.Date
 
-/**
- * Remember call release function when this view is not used anymore
- */
+
+
+
 class VoiceMessageView @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null
 ) : ConstraintLayout(context, attrs) {
@@ -45,17 +47,17 @@ class VoiceMessageView @JvmOverloads constructor(
 
     private var message: TextChatMessage? = null
     private var attachmentPath: String = ""
-    /** Download-progress key (see `getAttachmentIdForProgress`); NOT a message identity. */
+    
     private var currentAttachmentId: String? = null
 
-    /** Message identity, used to match playback/amplitude events that carry a whole message. */
+    
     private var currentMessageId: String? = null
 
-    // Callback for when playback starts on a confidential message (for view receipt)
+    
     var onConfidentialPlayStarted: ((TextChatMessage) -> Unit)? = null
     private var hasTriggeredConfidentialPlayStart = false
 
-    // Jobs for lifecycle-aware subscriptions
+    
     private var downloadProgressJob: Job? = null
     private var playStatusJob: Job? = null
     private var audioProgressJob: Job? = null
@@ -79,39 +81,39 @@ class VoiceMessageView @JvmOverloads constructor(
 
         binding.progressBar.visibility = View.GONE
         binding.tvDownloadHint.visibility = View.GONE
-        // A recycled holder may still carry the previous voice's play listener, which would make the
-        // control swallow taps meant for the bubble (expired toast, retry, tap-to-download). Start
-        // every bind unclickable; the ready path installs the listener again.
+        
+        
+        
         binding.playButton.setOnClickListener(null)
         binding.playButton.isClickable = false
         binding.playButton.isEnabled = true
 
         val progress = audioMessage.getAttachmentProgress()
-        // Same readability authority as the other attachment widgets: structural (uncached) check on
-        // the ciphertext, size-verified plaintext — a cached "exists" alone must not gate playback
-        // nor feed the status repair below.
+        
+        
+        
         val isFileValid = EncryptedAttachmentAccess.isReadable(attachmentPath, attachment.size)
-        // The file decides the state, never the message's direction (see AttachmentDownloadDecision):
-        // a readable file with progress running is an upload; anything else is a copy to fetch.
+        
+        
         val isUploading = AttachmentDownloadDecision.isUploadInFlight(isFileValid, progress)
-        // A readable file is the authority on "downloaded"; repair a lagging status before the
-        // branches below read it, so no branch can order a download for a file we have.
+        
+        
         if (isFileValid && !isUploading) AttachmentStatusRepair.markSuccessIfStale(attachment)
 
         if (AttachmentDownloadDecision.needsFetch(isFileValid)) {
-            // Priority 1: Show expired view if file has expired
+            
             if (AttachmentDownloadDecision.isExpired(attachment.status, progress)) {
                 showHintInsteadOfWaveform(context.getString(R.string.file_expired))
                 return
             }
 
-            // Priority 2: Show fail view if download failed
+            
             if (AttachmentDownloadDecision.isFailed(attachment.status, progress)) {
                 showHintInsteadOfWaveform(context.getString(R.string.download_failed))
                 return
             }
 
-            // Priority 2: Show download prompt for files > 10M
+            
             val fileSize = attachment.size
             if (AttachmentDownloadDecision.shouldPromptManualDownload(isFileValid, fileSize, progress)) {
                 val fileSizeText = FileUtil.readableFileSize(fileSize.toLong())
@@ -119,20 +121,20 @@ class VoiceMessageView @JvmOverloads constructor(
                 return
             }
         }
-        // Show content views (they will be properly configured below)
+        
         binding.playButton.visibility = View.VISIBLE
         binding.audioWaveProgressBar.visibility = View.VISIBLE
         binding.playTime.visibility = View.VISIBLE
 
-        // A readable file is playable, upload in flight or not: the send stages the finished voice at
-        // this path before uploading, so the waveform, duration and play control come up at once
-        // (as the image bubble previews its file mid-upload) instead of a blank control with no listener.
+        
+        
+        
         if (isFileValid) {
             setupAudioView()
         }
 
-        // Priority 3: Show progress or auto download (for files <= 10M). An outgoing upload owns the
-        // progress bar — the download decision sees its staged file and would call it READY.
+        
+        
         if (isUploading) {
             binding.progressBar.visibility = View.VISIBLE
             binding.progressBar.progress = progress ?: 0
@@ -147,7 +149,7 @@ class VoiceMessageView @JvmOverloads constructor(
             AttachmentDownloadAction.READY -> Unit
         }
 
-        // Sync play state UI - single source of truth
+        
         syncPlayStateUI()
     }
 
@@ -161,12 +163,12 @@ class VoiceMessageView @JvmOverloads constructor(
         super.onDetachedFromWindow()
     }
 
-    /**
-     * Expired / failed / tap-to-download: the status copy takes the waveform's slot and the duration
-     * goes away. The play button stays as a visual anchor but is inert — no bytes to play.
-     * Waveform and duration are INVISIBLE, not GONE: they keep the row's height, so the bubble does
-     * not shrink and grow as the attachment moves between states.
-     */
+    
+
+
+
+
+
     private fun showHintInsteadOfWaveform(hint: String) {
         binding.playButton.visibility = View.VISIBLE
         binding.playButton.isEnabled = false
@@ -179,7 +181,7 @@ class VoiceMessageView @JvmOverloads constructor(
     private fun setupSubscriptions() {
         val lifecycleScope = findViewTreeLifecycleOwner()?.lifecycleScope ?: return
 
-        // 1. Download progress subscription
+        
         if (downloadProgressJob == null) {
             lifecycleScope.launch {
                 FileUtil.progressUpdate
@@ -192,7 +194,7 @@ class VoiceMessageView @JvmOverloads constructor(
             }.also { downloadProgressJob = it }
         }
 
-        // 2. Play status subscription
+        
         if (playStatusJob == null) {
             lifecycleScope.launch {
                 AudioMessageManager.playStatusUpdate
@@ -205,7 +207,7 @@ class VoiceMessageView @JvmOverloads constructor(
             }.also { playStatusJob = it }
         }
 
-        // 3. Audio playback progress subscription
+        
         if (audioProgressJob == null) {
             lifecycleScope.launch {
                 AudioMessageManager.progressUpdate
@@ -220,7 +222,7 @@ class VoiceMessageView @JvmOverloads constructor(
             }.also { audioProgressJob = it }
         }
 
-        // 4. Amplitude extraction complete subscription
+        
         if (amplitudeJob == null) {
             lifecycleScope.launch {
                 AudioAmplitudesHelper.amplitudeExtractionComplete
@@ -247,11 +249,11 @@ class VoiceMessageView @JvmOverloads constructor(
         amplitudeJob = null
     }
 
-    /**
-     * Syncs play state UI based on AudioMessageManager's current state.
-     * This is the single source of truth for play/pause UI states.
-     * Called by both setAudioMessage() and playStatusJob subscription.
-     */
+    
+
+
+
+
     private fun syncPlayStateUI() {
         val msg = message ?: return
 
@@ -267,7 +269,7 @@ class VoiceMessageView @JvmOverloads constructor(
             val totalTime = msg.attachment?.totalTime ?: 0L
             binding.playTime.text = formatTime((totalTime * (1 - AudioMessageManager.currentProgress)).toLong())
         } else {
-            // Not playing - show default state
+            
             binding.playButton.setImageResource(R.drawable.ic_chat_audio_item_play)
             binding.audioWaveProgressBar.setProgress(0f)
             binding.playTime.text = formatTime(msg.attachment?.totalTime ?: 0)
@@ -282,14 +284,13 @@ class VoiceMessageView @JvmOverloads constructor(
         if ((attachment.totalTime == 0L || attachment.amplitudes.isNullOrEmpty())) {
             L.d { "[VoiceMessageView] start extract Amplitudes" }
             binding.audioWaveProgressBar.setAmplitudes(emptyList())
-            // A migrated row can carry the duration without a waveform: show what is known while the
-            // waveform is computed, instead of a zero that the extraction may never replace.
+            
+            
             binding.playTime.text = formatTime(attachment.totalTime ?: 0)
             message?.let {
                 AudioAmplitudesHelper.extractAmplitudesFromAacFile(attachmentPath, it)
             }
         } else {
-//            L.d { "[VoiceMessageView] no need extract Amplitudes:" + " ${attachment.amplitudes?.size}  ${attachment.totalTime}" }
             binding.audioWaveProgressBar.setAmplitudes(attachment.amplitudes ?: emptyList())
             binding.playTime.text = formatTime(attachment.totalTime ?: 0)
         }
@@ -306,7 +307,7 @@ class VoiceMessageView @JvmOverloads constructor(
                 attachmentPath,
                 attachment.authorityId,
                 key,
-                false // Audio files should never auto-save to photos
+                false 
             )
         )
     }
@@ -315,7 +316,7 @@ class VoiceMessageView @JvmOverloads constructor(
     private fun setupPlayButtonClickListener() {
         binding.playButton.setOnClickListener {
             message?.let { msg ->
-                // Trigger confidential play callback only once when first playing
+                
                 if (!hasTriggeredConfidentialPlayStart) {
                     hasTriggeredConfidentialPlayStart = true
                     onConfidentialPlayStarted?.invoke(msg)
@@ -335,7 +336,7 @@ class VoiceMessageView @JvmOverloads constructor(
                 val current = Date().time - time
                 if (current < 300) {
                     false
-                } else { //大于300视为长按
+                } else {
                     val itemView = LinkTextUtils.findParentChatMessageItemView(this)
                     if (itemView != null && !isLonePressPerformed) {
                         itemView.performLongClick()
@@ -356,12 +357,26 @@ class VoiceMessageView @JvmOverloads constructor(
         return "${minutes}:${seconds.toString().padStart(2, '0')}"
     }
 
-    // 设置已播放部分颜色
+    
+
+
+
+
+    internal fun applyPalette(palette: BubblePalette, highlight: Int? = null) {
+        binding.playButton.imageTintList = ColorStateList.valueOf(palette.text)
+        binding.ivAudioFile.imageTintList = ColorStateList.valueOf(palette.icon)
+        binding.tvFileName.setTextColor(palette.text)
+        binding.playTime.setTextColor(palette.text)
+        binding.tvDownloadHint.setTextColor(palette.meta)
+        binding.audioWaveProgressBar.setTrackColor(palette.barUnplayed)
+        binding.audioWaveProgressBar.setProgressColor(highlight ?: palette.barPlayed)
+        binding.audioWaveProgressBar.setCursorColor(highlight ?: palette.text)
+    }
+
     fun setProgressColor(color: Int) {
         binding.audioWaveProgressBar.setProgressColor(color)
     }
 
-    // 设置游标颜色
     fun setCursorColor(color: Int) {
         binding.audioWaveProgressBar.setCursorColor(color)
     }

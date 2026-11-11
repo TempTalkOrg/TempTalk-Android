@@ -25,13 +25,13 @@ import com.difft.android.login.PasscodeUtil
 import util.TimeUtils
 import kotlin.time.Duration.Companion.seconds
 
-/**
- * Timeout row label: zero means the lock engages immediately, any other value reads as a duration.
- * The instant string comes from the caller's context, the duration from [TimeUtils], so the label
- * matches the timeout row on the screen-lock page.
- *
- * Kept out of the composable so a test can assert the rule directly.
- */
+
+
+
+
+
+
+
 internal fun passcodeTimeoutLabel(context: Context, seconds: Int): String =
     if (seconds == 0) {
         context.getString(R.string.settings_screen_lock_timeout_instant)
@@ -39,14 +39,14 @@ internal fun passcodeTimeoutLabel(context: Context, seconds: Int): String =
         TimeUtils.millis2FitTimeSpan(seconds.seconds.inWholeMilliseconds, 3, false)
     }
 
-/**
- * Stateless body of the screen-lock timeout screen.
- *
- * [selected] is nullable because the stored value is read through `getUserData()`, which is null
- * when there is no user data; no row is marked then. Every tap reports through [onSelect],
- * including a tap on the already-selected row: the page stays open, and re-applying the same value
- * is a no-op for the host.
- */
+
+
+
+
+
+
+
+
 @Composable
 fun PasscodeTimeoutContent(
     selected: Int?,

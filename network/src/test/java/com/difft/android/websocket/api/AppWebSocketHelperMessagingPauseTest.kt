@@ -12,7 +12,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.whispersystems.signalservice.internal.websocket.WebSocketProtos.WebSocketRequestMessage
 
-/** G-R3 (#1382): frames consumed by the helper itself are ACKed only while messaging is open. */
+
 class AppWebSocketHelperMessagingPauseTest {
 
     private val connection: WebSocketConnection = mockk(relaxed = true)

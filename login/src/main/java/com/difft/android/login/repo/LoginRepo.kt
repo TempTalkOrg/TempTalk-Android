@@ -38,11 +38,11 @@ class LoginRepo @Inject constructor() {
     suspend fun verifyInvitationCode(code: String): BaseResponse<CodeResponse> =
         loginService.verifyInvitationCode(code)
 
-    /**
-     * `PUT /v1/accounts/code/{vcode}`. With a [transferProof] the server keeps the account's
-     * secondary devices signed in when the proof verifies; its verdict rides in a header and is only
-     * logged, since it changes nothing here. Non-2xx throws; a bodiless success is still a success.
-     */
+    
+
+
+
+
     suspend fun signIn(
         vcode: String,
         basicAuth: String,
@@ -62,11 +62,11 @@ class LoginRepo @Inject constructor() {
     suspend fun verifyEmail(email: String): BaseResponse<Any> =
         loginService.verifyEmail(mapOf("email" to email))
 
-    /**
-     * Every verification asks for a transfer token instead of a one-time code (`supportTransfer = 1`):
-     * while the token is unredeemed the account's other device keeps its session, and only
-     * [renewAccount] revokes it. A server with no other device answers with the plain code instead.
-     */
+    
+
+
+
+
     suspend fun verifyEmailCode(email: String, emailCode: String): BaseResponse<EmailVerifyData> =
         loginService.verifyEmailCode(verificationBody("email" to email, code = emailCode))
 
@@ -76,7 +76,7 @@ class LoginRepo @Inject constructor() {
     suspend fun verifyPhoneCode(phone: String, phoneCode: String): BaseResponse<EmailVerifyData> =
         loginService.verifyPhoneCode(verificationBody("phone" to phone, code = phoneCode))
 
-    /** Turns a transfer token into the account + one-time code; the server may revoke other devices here. */
+    
     suspend fun renewAccount(token: String): BaseResponse<EmailVerifyData> =
         loginService.renewAccount(mapOf("token" to token))
 
@@ -89,7 +89,7 @@ class LoginRepo @Inject constructor() {
     suspend fun renewIdentityKey(body: String): BaseResponse<Any> = loginService.resetIdentity(body)
 
     companion object {
-        /** `true` when the server kept the account's secondary devices on this sign-in; `false` for any other outcome. */
+        
         const val CONTINUATION_APPLIED_HEADER = "X-Continuation-Applied"
     }
 
@@ -101,7 +101,7 @@ class LoginRepo @Inject constructor() {
         return httpService.fetchSetProfile(
             ProfileRequestBody(
                 meetingVersion = LCallConstants.CALL_VERSION,
-                msgEncVersion = 2, // 1: Encryption Disabled, 2: Encryption Enabled
+                msgEncVersion = 2, 
             )
         )
     }

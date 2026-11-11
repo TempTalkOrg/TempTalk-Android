@@ -9,10 +9,10 @@ import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 
 object SystemWindowInsetsSetter {
-  /**
-   * Updates the view whenever a layout occurs to properly set the system bar insets. setPadding is safe here because it will only trigger an extra layout
-   * call IF the values actually changed.
-   */
+  
+
+
+
   fun attach(view: View, lifecycleOwner: LifecycleOwner, @WindowInsetsCompat.Type.InsetsType insetType: Int = WindowInsetsCompat.Type.systemBars()) {
     val listener = view.doOnEachLayout {
       val insets: Insets? = ViewCompat.getRootWindowInsets(view)?.getInsets(insetType)

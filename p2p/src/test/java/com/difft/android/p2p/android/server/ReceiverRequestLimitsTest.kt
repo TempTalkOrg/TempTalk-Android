@@ -21,12 +21,12 @@ import javax.net.ssl.SSLContext
 import javax.net.ssl.TrustManager
 import javax.net.ssl.X509TrustManager
 
-/**
- * The pairing window is open to anyone who accepts our certificate, so a control request must be
- * bounded before its body is read: an unbounded `Content-Length` would otherwise buy a large heap
- * allocation from an unauthenticated caller. A same-device receiver additionally takes itself off
- * the LAN — it advertises loopback alone, so that is all it listens on.
- */
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 class ReceiverRequestLimitsTest {
 
@@ -57,8 +57,8 @@ class ReceiverRequestLimitsTest {
     @Test
     fun `a loopback bind listens only on loopback, the default keeps the wildcard`() {
         val loopback = newServer()
-        // The literal the pairing payload advertises, not getLoopbackAddress(): that is ::1 on Android,
-        // which a peer dialling 127.0.0.1 cannot reach.
+        
+        
         loopback.start(0, InetAddress.getByName("127.0.0.1"))
         assertTrue("same-device receiver reachable off loopback", loopback.boundAddress!!.isLoopbackAddress)
         assertEquals("127.0.0.1", loopback.boundAddress!!.hostAddress)
@@ -80,14 +80,14 @@ class ReceiverRequestLimitsTest {
         ).also { servers += it }
     }
 
-    /** Sends [request] verbatim and returns the status line. */
+    
     private fun send(port: Int, request: String): String = trustAllSocket(port).use { socket ->
         socket.soTimeout = 5_000
         socket.getOutputStream().apply { write(request.toByteArray()); flush() }
         socket.getInputStream().bufferedReader().readLine().orEmpty()
     }
 
-    /** The certificate is not the subject here — accept whatever the server presents. */
+    
     private fun trustAllSocket(port: Int): Socket {
         val trustAll = object : X509TrustManager {
             override fun checkClientTrusted(chain: Array<out java.security.cert.X509Certificate>?, authType: String?) = Unit

@@ -23,14 +23,14 @@ import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import java.time.Duration
 
-/**
- * LR1-LR10 (#1294): with a [MessageActionOverlayLayout.recyclerView], a gesture outside the menu and
- * handles scrolls the list through `onTouchEvent` copies (the DOWN also through
- * `onInterceptTouchEvent`), offset into list coordinates; only a real tap dismisses.
- *
- * The list sits 100px below the overlay origin, so a forwarded copy is the overlay event shifted
- * up by 100. mdpi, so px == dp.
- */
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [34], qualifiers = "w800dp-h1400dp-mdpi")
 class MessageActionOverlayListRouteTest {
@@ -46,7 +46,7 @@ class MessageActionOverlayListRouteTest {
 
     private data class Rec(val via: String, val action: Int, val x: Float, val y: Float)
 
-    /** Records how each event reached the list; real scrolling still happens through super. */
+    
     private class RecordingRecyclerView(context: Context) : RecyclerView(context) {
         val events = mutableListOf<Rec>()
         var stopScrollCalls = 0
@@ -100,7 +100,7 @@ class MessageActionOverlayListRouteTest {
                 addView(this@Fixture.overlay, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
             })
             idle()
-            // Clear the long-press continuation guard with a gesture that reaches nothing.
+            
             send(MotionEvent.ACTION_DOWN, 10f, 5f)
             send(MotionEvent.ACTION_CANCEL, 10f, 5f)
             rv.events.clear()
@@ -115,13 +115,13 @@ class MessageActionOverlayListRouteTest {
             dispatch(MotionEvent.obtain(downTime, downTime + timeOffsetMs, action, x, y, 0))
         }
 
-        /** Pointer 0 at (300, 500) and pointer 1 at (500, 500), both still. */
+        
         fun sendTwoPointers(actionMasked: Int, actionIndex: Int, timeOffsetMs: Long) {
             val action = actionMasked or (actionIndex shl MotionEvent.ACTION_POINTER_INDEX_SHIFT)
             dispatch(obtain(action, timeOffsetMs, intArrayOf(0, 1), floatArrayOf(300f, 500f)))
         }
 
-        /** The final UP of pointer 1 after pointer 0 has lifted. */
+        
         fun sendSecondPointerUp(timeOffsetMs: Long) =
             dispatch(obtain(MotionEvent.ACTION_UP, timeOffsetMs, intArrayOf(1), floatArrayOf(500f)))
 
@@ -231,7 +231,7 @@ class MessageActionOverlayListRouteTest {
         val f = Fixture()
         val x = f.handle.left + f.handle.width / 2f
         val y = f.handle.top + f.handle.height / 2f
-        // RecyclerView calls stopScroll() itself during setup.
+        
         f.rv.stopScrollCalls = 0
 
         f.send(MotionEvent.ACTION_DOWN, x, y)
@@ -280,6 +280,24 @@ class MessageActionOverlayListRouteTest {
 
         assertEquals(0, dismissCount)
         assertTrue(!f.overlay.isGestureActive)
+    }
+
+    @Test
+    fun `LR11 a DOWN on the floating header or input over the list forwards nothing`() {
+        val f = Fixture()
+        
+        ChatContentBand.setInsets(f.rv, ChatChromeInsets(top = 150, bottom = 250))
+
+        f.send(MotionEvent.ACTION_DOWN, 300f, 200f)
+        f.send(MotionEvent.ACTION_MOVE, 300f, 400f, 50)
+        f.send(MotionEvent.ACTION_UP, 300f, 400f, 100)
+        f.send(MotionEvent.ACTION_DOWN, 300f, 1100f)
+        f.send(MotionEvent.ACTION_MOVE, 300f, 900f, 50)
+        f.send(MotionEvent.ACTION_UP, 300f, 900f, 100)
+        assertEquals(emptyList<Rec>(), f.rv.events)
+
+        f.send(MotionEvent.ACTION_DOWN, 300f, 500f)
+        assertEquals(Rec("intercept", MotionEvent.ACTION_DOWN, 300f, 400f), f.rv.events.first())
     }
 
     private companion object {

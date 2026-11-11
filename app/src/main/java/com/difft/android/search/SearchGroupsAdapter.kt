@@ -32,7 +32,7 @@ abstract class SearchGroupsAdapter : ListAdapter<GroupUIData, SearchGroupItemVie
 
     abstract fun onItemClick(group: GroupUIData)
 
-    /** Two-pane: the group whose conversation is open; its row is highlighted. */
+    
     var selectedId: String? = null
         set(value) {
             if (field == value) return

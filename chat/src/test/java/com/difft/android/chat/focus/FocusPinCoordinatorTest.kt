@@ -26,10 +26,10 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/**
- * The focus pin coordinator (design §1): automatic pin and its revocation, manual pins as permanent,
- * deleted rows, failure retry and the legacy opt-out import.
- */
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class FocusPinCoordinatorTest {
 
@@ -42,7 +42,7 @@ class FocusPinCoordinatorTest {
 
     private class Row(var pinnedTime: Long?, var focusPin: Int, var lastActiveTime: Long)
 
-    /** In-memory room table; [failCreate] mimics `createRoomIfNotExist` swallowing an insert failure. */
+    
     private class MemoryStore : FocusPinStore {
         val rows = LinkedHashMap<String, Row>()
         var failCreate = false
@@ -121,12 +121,12 @@ class FocusPinCoordinatorTest {
         assertEquals(1_000L, f.store.row("A").pinnedTime)
         assertEquals(ROOM_FOCUS_PIN_AUTO, f.store.row("A").focusPin)
 
-        // Already pinned before focus: focus moves to it and does not take ownership.
+        
         f.repository.apply(snapshot("P", version = 2), "test")
         runCurrent()
         assertEquals(ROOM_FOCUS_PIN_NONE, f.store.row("P").focusPin)
         assertEquals(1L, f.store.row("P").pinnedTime)
-        // ... and A's automatic pin is revoked by the switch.
+        
         assertNull(f.store.row("A").pinnedTime)
         assertEquals(ROOM_FOCUS_PIN_NONE, f.store.row("A").focusPin)
     }
@@ -154,20 +154,20 @@ class FocusPinCoordinatorTest {
         assertNull(f.store.row("A").pinnedTime)
         f.coordinator.reconcile()
         runCurrent()
-        assertNull(f.store.row("A").pinnedTime) // not pinned again
+        assertNull(f.store.row("A").pinnedTime) 
 
         f.coordinator.setGroupPin("A", pinned = true)
         runCurrent()
         f.repository.apply(snapshot(version = 2, enabled = false), "test")
         runCurrent()
-        assertEquals(1_000L, f.store.row("A").pinnedTime) // survives the end
+        assertEquals(1_000L, f.store.row("A").pinnedTime) 
         assertEquals(ROOM_FOCUS_PIN_NONE, f.store.row("A").focusPin)
     }
 
     @Test
     fun `a manual pin on a group that is not the target relinquishes a stale automatic mark`() = runTest {
         val f = setUp(rooms = { room("A"); room("B", focusPin = ROOM_FOCUS_PIN_AUTO, pinned = true) })
-        // B carries a stale automatic mark (its cleanup has not run); the user pins it explicitly.
+        
         f.coordinator.setGroupPin("B", pinned = true)
         runCurrent()
         assertEquals(ROOM_FOCUS_PIN_NONE, f.store.row("B").focusPin)
@@ -190,7 +190,7 @@ class FocusPinCoordinatorTest {
         runCurrent()
         assertFalse("A" in f.store.rows)
 
-        // A new message recreated the room: it is the focus group, so it is pinned again.
+        
         f.store.room("A")
         f.roomChanges.tryEmit(Unit)
         runCurrent()
@@ -200,7 +200,7 @@ class FocusPinCoordinatorTest {
     @Test
     fun `a deleted focus group is never re-created or revealed, even while its delete is still running`() = runTest {
         val f = setUp(rooms = { room("A") })
-        // The delete is asynchronous: the record is written, the row is still there when a pass runs.
+        
         f.coordinator.serialized { f.deleted.markDeleted("A") }
         f.coordinator.reconcile()
         runCurrent()
@@ -209,7 +209,7 @@ class FocusPinCoordinatorTest {
         runCurrent()
         assertFalse("A" in f.store.rows)
 
-        // Another screen creates a hidden row (lastActiveTime == 0): it stays hidden and unpinned.
+        
         f.store.rows["A"] = Row(null, ROOM_FOCUS_PIN_NONE, 0L)
         f.roomChanges.tryEmit(Unit)
         runCurrent()
@@ -241,7 +241,7 @@ class FocusPinCoordinatorTest {
         runCurrent()
         assertFalse("A" in f.store.rows)
 
-        // The picker clears the record after the focus write; that alone must trigger a pass.
+        
         f.deleted.clear("A")
         runCurrent()
         assertEquals(ROOM_FOCUS_PIN_AUTO, f.store.row("A").focusPin)
@@ -251,7 +251,7 @@ class FocusPinCoordinatorTest {
     fun `no row is created while the deleted-row records could not be read`() = runTest {
         val f = setUp(rooms = { room("B", focusPin = ROOM_FOCUS_PIN_AUTO, pinned = true) }, deletedStoreFails = true)
         assertFalse("A" in f.store.rows)
-        // Existing rows are still reconciled.
+        
         assertNull(f.store.row("B").pinnedTime)
     }
 

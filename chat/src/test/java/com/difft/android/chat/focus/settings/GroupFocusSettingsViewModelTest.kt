@@ -33,7 +33,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** State mapping of the group settings notification section: paused rows, captions, summaries, feature gate. */
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class GroupFocusSettingsViewModelTest {
 
@@ -90,7 +90,7 @@ class GroupFocusSettingsViewModelTest {
         foldOthers = false,
     )
 
-    /** The expected end label, built by the formatter itself: its time text varies with the JDK's locale data. */
+    
     private fun at(until: Long): FocusEnd.At =
         FocusTimeFormat.endLabel(until, now).let { FocusEnd.At(it.time, it.tomorrow) }
 
@@ -138,7 +138,7 @@ class GroupFocusSettingsViewModelTest {
         assertTrue(state.showMuteExceptions)
         assertTrue(state.notifyPaused)
         assertFalse(state.mutePaused)
-        // Never received from the server: read as the default, @Me only.
+        
         assertEquals(listOf(StillNotifyItem.MENTION_ME), state.muteExceptions)
         assertEquals(TakeoverCaption.ByMute(GlobalNotificationType.MENTION), state.takeoverCaption)
 
@@ -164,7 +164,7 @@ class GroupFocusSettingsViewModelTest {
         assertFalse(state.foldOthers)
         assertTrue(state.mutePaused)
         assertTrue(state.notifyPaused)
-        // Focus wins over the mute exceptions row.
+        
         assertFalse(state.showMuteExceptions)
         assertEquals(TakeoverCaption.ByFocus(muted = true, level = GlobalNotificationType.MENTION), state.takeoverCaption)
     }
@@ -232,7 +232,7 @@ class GroupFocusSettingsViewModelTest {
             vm.dispatch(Intent.ToggleFocus(true))
             assertEquals(Effect.RequestFocus(gid, "Self Group"), awaitItem())
 
-            // Turning off a group that is not the focus group does nothing.
+            
             vm.dispatch(Intent.ToggleFocus(false))
             expectNoEvents()
 

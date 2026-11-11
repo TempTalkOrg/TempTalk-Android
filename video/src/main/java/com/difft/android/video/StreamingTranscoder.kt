@@ -15,16 +15,16 @@ import java.text.NumberFormat
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
-/**
- * Create a transcoder over an abstract [VideoSource].
- *
- * [VideoSource] is the single place that decides how the source binds to the platform, so a
- * `file://` source still reaches the native file path here while a `content://` source is read
- * through its provider's file descriptor. Both are the same code path from this point on.
- *
- * @param source The video source to transcode
- * @param upperSizeLimit A upper size to transcode to. The actual output size can be up to 10% smaller.
- */
+
+
+
+
+
+
+
+
+
+
 class StreamingTranscoder
 @Throws(IOException::class, VideoSourceException::class)
 constructor(
@@ -57,18 +57,16 @@ constructor(
                 getDuration(mediaMetadataRetriever)
             }
         } finally {
-            // The retriever used to stay open until finalization. On the content path the
-            // descriptor it holds is one the media provider handed us, counted against that
-            // process's descriptor budget.
+            
             runCatching { mediaMetadataRetriever.release() }
                 .onFailure { L.w { "$TAG retriever release failed: ${it.javaClass.simpleName}" } }
         }
 
         inSize = source.sizeBytes
         if (inSize <= 0) {
-            // Must not fall through. For a compression-only request (options == null) an inSize of
-            // 0 makes transcodeRequired false below, and the unreadable original would be sent on
-            // untouched with no error anywhere.
+            
+            
+            
             throw VideoSourceException("Unable to determine input size scheme=${source.scheme}")
         }
         inputBitRate = TranscodingQuality.bitRate(inSize, duration)
@@ -215,7 +213,7 @@ constructor(
         }
     }
 
-    /** Local stand-in for Guava's CountingOutputStream — this branch ships without Guava. */
+    
     private class CountingOutputStream(
         inner: OutputStream
     ) : FilterOutputStream(inner) {
@@ -239,7 +237,7 @@ constructor(
     companion object {
         private const val TAG = "StreamingTranscoder"
 
-        /** Binds [source] onto [retriever], translating a bind failure into [VideoSourceException]. */
+        
         @Throws(VideoSourceException::class)
         private fun bindOrThrow(source: VideoSource, retriever: MediaMetadataRetriever) {
             try {

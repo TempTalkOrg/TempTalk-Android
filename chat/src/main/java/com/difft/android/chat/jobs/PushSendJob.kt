@@ -17,18 +17,18 @@ abstract class PushSendJob(
     private val messagingGate: MessagingGate,
 ) : com.difft.android.chat.jobs.BaseJob(parameters) {
 
-    /** Set by [admitSend] when this run was refused; read once [run] returns. */
+    
     @Volatile
     private var refusal: SendRefusal? = null
 
-    /**
-     * A refused admission decides the run's result, whatever [onPushSend] returned. A job that
-     * does not belong to the signed-in login is refused before [onPushSend] starts, so it does no
-     * network work at all, an attachment upload included (#1382 A04).
-     */
+    
+
+
+
+
     final override suspend fun run(): Result {
         refusal = null
-        // The refusal path takes the same ticket as a send, so a failure's writes are covered too.
+        
         if (sendLogin() != SendLogin.CURRENT) admitSend()
         val result = if (refusal == null) super.run() else null
         return when (refusal) {
@@ -38,18 +38,18 @@ abstract class PushSendJob(
         }
     }
 
-    /**
-     * Admits this run's send while messaging is open (#1382) and the job belongs to the
-     * signed-in login (A04). Call it immediately before the first network send and pass the
-     * ticket to the sender. The ticket is closed by the job runner after the run's result is
-     * recorded, so it also covers the message-state writes that follow the send, or the failure.
-     *
-     * Null means the send is refused: return from [onPushSend] at once, without throwing, so no
-     * catch maps it to a retry or a failure. When messaging is paused or still loading, or no
-     * login is signed in, the run ends as [Result.deferred]: the job is re-queued without
-     * consuming an attempt and stays held. When the job was created by another login, or carries
-     * no creator login, the run ends as [Result.failure], so [onFailure] marks its message failed.
-     */
+    
+
+
+
+
+
+
+
+
+
+
+
     protected fun admitSend(): MessagingTicket? {
         val ticket = messagingGate.tryAdmit(AdmissionKind.SEND, getFactoryKey())
         if (ticket == null) {
@@ -88,10 +88,10 @@ abstract class PushSendJob(
         if (exception is ServerRejectedException) {
             return false
         }
-        // issue #970 ②: target confirmed to have no valid keys (group invalid / account
-        // deregistered / server confirms empty) = permanent, stop retrying.
-        // NoValidRecipientKeysException is intentionally not an IOException subtype, so the
-        // trailing `is IOException` branch does not catch it.
+        
+        
+        
+        
         if (exception is NoValidRecipientKeysException) {
             return false
         }

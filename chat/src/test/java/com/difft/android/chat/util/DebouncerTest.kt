@@ -24,11 +24,11 @@ class DebouncerTest {
 
         debouncer.publish(runnable)
 
-        // Not yet fired.
+        
         mainLooper.idleFor(499, TimeUnit.MILLISECONDS)
         verify(exactly = 0) { runnable.run() }
 
-        // After threshold, fires once.
+        
         mainLooper.idleFor(2, TimeUnit.MILLISECONDS)
         verify(exactly = 1) { runnable.run() }
     }
@@ -41,7 +41,7 @@ class DebouncerTest {
 
         debouncer.publish(first)
         mainLooper.idleFor(400, TimeUnit.MILLISECONDS)
-        // Before first fires, republish — should cancel first and schedule second.
+        
         debouncer.publish(second)
 
         mainLooper.idleFor(499, TimeUnit.MILLISECONDS)
@@ -81,10 +81,10 @@ class DebouncerTest {
 
     @Test
     fun `MockK can mock Debouncer (open class)`() {
-        // Regression guard for jobmanager tests: if Debouncer becomes final,
-        // mockk<Debouncer> throws MockKException at runtime.
+        
+        
         val mock: Debouncer = mockk(relaxed = true)
-        mock.publish { /* no-op */ }
+        mock.publish {  }
         verify { mock.publish(any()) }
     }
 
@@ -98,16 +98,16 @@ class DebouncerTest {
             mainLooper.idleFor(50, TimeUnit.MILLISECONDS)
         }
 
-        // After all publishes, only ~500ms of idle has passed but each publish reset the timer.
-        // Let the timer finally expire.
+        
+        
         mainLooper.idleFor(201, TimeUnit.MILLISECONDS)
         verify(exactly = 1) { runnable.run() }
     }
 
     @Test
     fun `open publish and clear are overridable`() {
-        // Sanity: confirm the declared methods are callable on a subclass,
-        // which proves they're open.
+        
+        
         var publishCount = 0
         var clearCount = 0
         val sub = object : Debouncer(100) {

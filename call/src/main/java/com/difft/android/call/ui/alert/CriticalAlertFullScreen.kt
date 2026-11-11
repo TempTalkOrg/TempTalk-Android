@@ -49,12 +49,11 @@ fun AnimatedCssPoliceLightBar(modifier: Modifier = Modifier) {
 
     val infiniteTransition = rememberInfiniteTransition(label = "PoliceLightAnimation")
 
-    // 渐变动画：背景位置从0%到100%，对应background-position动画
     val gradientPosition by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(1000, easing = LinearEasing), // 1秒动画，对应CSS的1s
+            animation = tween(1000, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         )
     )
@@ -69,13 +68,9 @@ fun AnimatedCssPoliceLightBar(modifier: Modifier = Modifier) {
             val gradientWidth = w * gradientSize
             val gradientHeight = h * gradientSize
 
-            // 这意味着水平方向移动，垂直方向保持在50%
-            // 计算背景位置偏移
-            val offsetX = gradientPosition * (gradientWidth - w) // 从0到(gradientWidth - w)
-            val offsetY = (gradientHeight - h) * 0.5f // 垂直方向保持在50%
+            val offsetX = gradientPosition * (gradientWidth - w)
+            val offsetY = (gradientHeight - h) * 0.5f
 
-            // -45度意味着从左上到右下
-            // 颜色序列：红色 -> 黑色 -> 红色 -> 黑色
             val gradientStart = Offset(
                 x = -offsetX,
                 y = -offsetY
@@ -85,13 +80,12 @@ fun AnimatedCssPoliceLightBar(modifier: Modifier = Modifier) {
                 y = gradientHeight - offsetY
             )
 
-            // 创建渐变画笔，颜色序列对应CSS中的渐变
             val gradient = Brush.linearGradient(
                 colors = listOf(
-                    Color(0xFFFF0000), // #ff0000 红色
-                    Color(0xFF000000), // #000000 黑色
-                    Color(0xFFFF0000), // #ff0000 红色
-                    Color(0xFF000000)  // #000000 黑色
+                    Color(0xFFFF0000),
+                    Color(0xFF000000),
+                    Color(0xFFFF0000),
+                    Color(0xFF000000)
                 ),
                 start = gradientStart,
                 end = gradientEnd
@@ -124,13 +118,12 @@ fun CriticalAlertFullScreen(
                 .align(Alignment.Center)
                 .wrapContentWidth()
                 .clip(RoundedCornerShape(20.dp))
-                .background(ColorTokens.Dark.BackgroundTertiary) // 深灰主体背景
+                .background(ColorTokens.Dark.BackgroundTertiary)
         ) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.width(280.dp)
             ) {
-                // 顶部 CSS 动态渐变警灯效果
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -151,7 +144,6 @@ fun CriticalAlertFullScreen(
                             .clickable { onCloseClick() }
                     )
 
-                    // 图标（示意）
                     Icon(
                         painter = painterResource(id = com.difft.android.call.R.drawable.critical_tabler_bulb),
                         contentDescription = "Critical alert icon",
@@ -164,7 +156,6 @@ fun CriticalAlertFullScreen(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // Title
                 Text(
                     text = title,
                     style = DifftTheme.typography.h6,
@@ -174,7 +165,6 @@ fun CriticalAlertFullScreen(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Message
                 Text(
                     text = message,
                     style = DifftTheme.typography.p4,
@@ -184,8 +174,7 @@ fun CriticalAlertFullScreen(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // Content width, not fillMaxWidth: the alert card is a fixed narrow column and the
-                // design's sample is a content-width button.
+                
                 DifftButton(
                     text = stringResource(id = com.difft.android.call.R.string.join_call),
                     onClick = onJoinClick,

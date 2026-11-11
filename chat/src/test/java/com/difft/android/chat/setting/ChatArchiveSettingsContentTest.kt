@@ -19,14 +19,14 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/**
- * [ChatArchiveSettingsContent] contract (issue #1223): a stored value the server configuration no
- * longer offers is appended as the last row, and a tap reports the raw seconds value.
- *
- * The row labels go through `Long.toArchiveTimeDisplayText()` -> `TimeUtils.millis2FitTimeSpan` ->
- * `ResUtils.getString`, which needs an initialised `ApplicationHelper.instance`, hence
- * [TestScopeApplication].
- */
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(application = TestScopeApplication::class, sdk = [34])
@@ -49,7 +49,7 @@ class ChatArchiveSettingsContentTest {
         }
     }
 
-    // T22
+    
     @Test
     fun `a stored value outside the configured list is appended as the last row`() {
         setContent(options = listOf(NEVER, ONE_DAY), current = ONE_HOUR)
@@ -61,7 +61,7 @@ class ChatArchiveSettingsContentTest {
         assertTrue("expected the appended $hour row last", hour > day)
     }
 
-    // T23
+    
     @Test
     fun `a stored value already in the list is not duplicated`() {
         setContent(options = listOf(NEVER, ONE_DAY), current = ONE_DAY)
@@ -74,7 +74,7 @@ class ChatArchiveSettingsContentTest {
             .assertCountEquals(1)
     }
 
-    // T24
+    
     @Test
     fun `tapping an unselected row reports its raw value`() {
         setContent(options = listOf(NEVER, ONE_DAY), current = NEVER)

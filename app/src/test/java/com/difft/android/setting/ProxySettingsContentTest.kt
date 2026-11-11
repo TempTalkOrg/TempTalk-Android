@@ -28,10 +28,10 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/**
- * [ProxySettingsContent] contract (issue #1209): the body is stateless, so every branch of the
- * ViewModel's [UiState] can be rendered directly and every affordance reports through a callback.
- */
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34])
@@ -65,7 +65,7 @@ class ProxySettingsContentTest {
         }
     }
 
-    // T18
+    
     @Test
     fun `the default state renders both toggles, the address hint and the save button`() {
         setContent(UiState())
@@ -74,12 +74,12 @@ class ProxySettingsContentTest {
         composeTestRule.onNodeWithText(string(R.string.proxy_protect_call)).assertIsDisplayed()
         composeTestRule.onNodeWithText(string(R.string.proxy_address_hint)).assertIsDisplayed()
         composeTestRule.onNodeWithText(string(R.string.proxy_save)).assertExists()
-        // No probe has run, so the status group is absent entirely.
+        
         composeTestRule.onNodeWithText(string(R.string.proxy_status_available)).assertDoesNotExist()
         composeTestRule.onNodeWithText(string(R.string.proxy_status_unavailable)).assertDoesNotExist()
     }
 
-    // T19
+    
     @Test
     fun `a failed probe shows its status and offers a recheck`() {
         setContent(
@@ -94,14 +94,14 @@ class ProxySettingsContentTest {
         composeTestRule.onNodeWithText(string(R.string.proxy_status_unavailable))
             .performScrollTo()
             .assertIsDisplayed()
-        // The recheck affordance is icon-only; its label lives in the content description.
+        
         composeTestRule.onNodeWithContentDescription(string(R.string.proxy_recheck))
             .performScrollTo()
             .performClick()
         assertEquals(1, recheckCount)
     }
 
-    // T20
+    
     @Test
     fun `a successful probe offers no recheck`() {
         setContent(UiState(probe = ProbeState.ProxyAvailable))
@@ -112,7 +112,7 @@ class ProxySettingsContentTest {
         composeTestRule.onNodeWithContentDescription(string(R.string.proxy_recheck)).assertDoesNotExist()
     }
 
-    // T21
+    
     @Test
     fun `a probe in flight shows neither status text nor recheck`() {
         setContent(UiState(probe = ProbeState.Checking))
@@ -122,7 +122,7 @@ class ProxySettingsContentTest {
         composeTestRule.onNodeWithContentDescription(string(R.string.proxy_recheck)).assertDoesNotExist()
     }
 
-    // T22
+    
     @Test
     fun `read-only shows the in-call hint, disables save and blocks editing`() {
         setContent(UiState(readOnly = true, address = "ss://saved", savedAddress = "ss://other"))
@@ -130,15 +130,15 @@ class ProxySettingsContentTest {
         composeTestRule.onNodeWithText(string(R.string.proxy_call_in_progress_hint)).assertIsDisplayed()
         composeTestRule.onNodeWithText(string(R.string.proxy_save)).assertIsNotEnabled()
 
-        // Read-only, not disabled: the address stays on screen (selectable, copyable) while the
-        // field exposes no text-input action at all, so nothing can report an edit.
+        
+        
         composeTestRule.onNodeWithText("ss://saved").assertIsDisplayed()
         val editable = composeTestRule.onAllNodes(hasSetTextAction()).fetchSemanticsNodes()
         assertTrue("a read-only field must expose no set-text action", editable.isEmpty())
         assertTrue("a read-only field must not report edits", addressChanges.isEmpty())
     }
 
-    // T23
+    
     @Test
     fun `the protect-call row stays tappable while the proxy is off`() {
         setContent(UiState(useProxy = false, protectCallIp = false))
@@ -149,7 +149,7 @@ class ProxySettingsContentTest {
         assertEquals(listOf(true), protectCallChanges)
     }
 
-    // T24
+    
     @Test
     fun `typing in the address field reports the new value`() {
         setContent(UiState())

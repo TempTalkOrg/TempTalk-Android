@@ -19,7 +19,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import com.difft.android.base.R as BaseR
 
-/** Runs production page hosts and their detailBackOwner; does not emulate page visibility. */
+
 @AndroidEntryPoint
 class NotificationPaneWiringTestActivity : FragmentActivity(), PaneNavigator.Owner, DualPaneHost {
     lateinit var navigator: PaneNavigator
@@ -60,7 +60,7 @@ class NotificationPaneWiringTestActivity : FragmentActivity(), PaneNavigator.Own
             .pages().filterIsInstance<NotificationTestFragment>().single()
 }
 
-/** A Hilt Activity for the real BackgroundConnectionSettingsFragment, without application startup. */
+
 @AndroidEntryPoint
 class NotificationPlainWiringTestActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {

@@ -7,12 +7,12 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
 
-/**
- * [CriticalAlertCallGate] (#1381): a critical alert is for the current call while a join of its
- * call is in flight, and while the active call is its call. Matching is room-first: when both
- * sides know the room only the room counts, otherwise the conversation does. Each join owns its
- * marker, and concurrent joins neither lose nor resurrect one.
- */
+
+
+
+
+
+
 class CriticalAlertCallGateTest {
 
     private val callState = OnGoingCallStateManager()

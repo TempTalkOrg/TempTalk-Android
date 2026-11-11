@@ -1,5 +1,6 @@
 package com.difft.android.chat.ui.messageaction
 
+import com.difft.android.base.widget.FloatingMenuMotion
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
@@ -39,15 +40,15 @@ import org.robolectric.annotation.GraphicsMode
 import java.time.Duration
 import kotlin.test.assertNotNull
 
-/**
- * U1-U13 (#1294): the real [MessageActionPopup] with Compose content, placed by the positioner and
- * hosted in [MessageActionOverlayLayout].
- *
- * `settle()` advances one frame and draws the overlay, three times (recompose, measure, display).
- * The overlay (not the ComposeView) is drawn to mirror production. That a hidden menu is not
- * re-measured is NOT pinned by these tests (see U10); it is left to the on-device check.
- * xxhdpi (3 px/dp), so the 600px-wide anchor fits.
- */
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(application = TestScopeApplication::class, sdk = [34], qualifiers = "w411dp-h891dp-xxhdpi")
@@ -56,8 +57,8 @@ class MessageActionPopupAnchorTest {
     @get:Rule
     val globalMocks = GlobalStaticMockRule()
 
-    // Installs a per-test recomposer and frame clock; without it Compose's shared UI dispatcher
-    // stays bound to the first test's Choreographer and later tests never recompose.
+    
+    
     @get:Rule
     val composeRule = createEmptyComposeRule()
 
@@ -89,8 +90,8 @@ class MessageActionPopupAnchorTest {
         val anchorView = View(activity)
         val popup = MessageActionPopup(activity)
         val root: ViewGroup = activity.findViewById(android.R.id.content)
-        // Same `Int.dp` conversion the popup uses: it reads the first Robolectric application's
-        // density in the JVM, so literal xxhdpi px would break after an mdpi test class.
+        
+        
         val gap = 2.dp
         val pad = 8.dp
 
@@ -103,16 +104,16 @@ class MessageActionPopupAnchorTest {
             shadowOf(Looper.getMainLooper()).idle()
         }
 
-        /** Window-space rect of the root, for converting root-relative inputs. */
+        
         val rootWindow: Rect get() = Rect().also { root.getGlobalVisibleRect(it) }
 
         val contentRel: Rect
             get() = Rect().also { container.getGlobalVisibleRect(it) }.apply { offset(-rootWindow.left, -rootWindow.top) }
 
-        /** Default bubble: full width minus a [BUBBLE_INSET] on each side, so its edges sit inside the padding. */
+        
         val defaultBubble: Rect get() = Rect(BUBBLE_INSET, 200, contentRel.right - BUBBLE_INSET, 300)
 
-        /** Shows the popup with a bubble at [bubbleRel] (root-relative). */
+        
         fun show(bubbleRel: Rect = defaultBubble, outgoing: Boolean = true) {
             val window = Rect(bubbleRel).apply { offset(rootWindow.left, rootWindow.top) }
             val message = TextChatMessage().apply {
@@ -139,12 +140,15 @@ class MessageActionPopupAnchorTest {
 
         fun settle() = repeat(3) { frame() }
 
-        /**
-         * One frame: deliver state writes, recompose, then draw the overlay (measure + layout +
-         * positioned callbacks). In this Robolectric harness the notifications are sent explicitly:
-         * drawing a ComposeView sends them, a hidden one is not drawn, and the global handler path
-         * did not reliably deliver them across tests.
-         */
+        
+        fun finishEntrance() = repeat((FloatingMenuMotion.SHOW_MS / FRAME_MS + 2).toInt()) { frame() }
+
+        
+
+
+
+
+
         fun frame() {
             Snapshot.sendApplyNotifications()
             composeRule.mainClock.advanceTimeByFrame()
@@ -251,10 +255,10 @@ class MessageActionPopupAnchorTest {
         f.show(outgoing = false)
 
         val bounds = assertNotNull(f.menuBounds)
-        // Modifier.offset mirrors under RTL: x = bubble.left is drawn that far from the right edge.
+        
         assertEquals(f.contentRel.right - f.defaultBubble.left, bounds.right)
 
-        // Arrow strip corner: inside the menu, not on an action.
+        
         tap(f.overlay, bounds.left + 3f, bounds.top + 3f)
         assertTrue(f.popup.isShowing)
     }
@@ -272,29 +276,30 @@ class MessageActionPopupAnchorTest {
         f.show(bubbleRel = Rect(320, 200, 900, 300))
 
         val bounds = assertNotNull(f.menuBounds)
-        // maxPanelWidth fills the 700px container minus both paddings, so the bubble alignment
-        // (900 - width) is clamped to the left bound and the menu spans the whole band.
+        
+        
         assertEquals("bounds=$bounds", 300 + f.pad, bounds.left)
         assertEquals("bounds=$bounds", 1000 - f.pad, bounds.right)
         assertTrue("bounds=$bounds", bounds.top >= 150 + f.pad)
         assertTrue("bounds=$bounds", bounds.bottom <= 1050 - f.pad)
     }
 
-    /**
-     * #1294: the drag hide must never let a stale placement flash: a hidden menu is never shown at
-     * an old position, and the menu re-shown after a FULL->SELECTION switch is placed with its new
-     * size.
-     *
-     * The "INVISIBLE ComposeView is not re-measured" half cannot be pinned here: the
-     * compose test rule's frame clock calls `measureAndLayoutForTest()` on every registered root
-     * each frame, regardless of visibility (ui-test 1.11.2 `ComposeUiTest.android.kt`
-     * `onPerformTraversals`). The design does not depend on it; what it depends on is pinned:
-     * a hidden menu is not drawn, and the re-shown menu has the SELECTION bounds.
-     */
+    
+
+
+
+
+
+
+
+
+
+
     @Test
     fun `U10 a hidden menu is not drawn and is re-placed with its new size when shown`() {
         val f = Fixture()
         f.show()
+        f.finishEntrance()
         val full = Rect(assertNotNull(f.menuBounds))
         assertNotEquals(0, Color.alpha(pixelAt(f.overlay, full.centerX(), full.centerY())))
 
@@ -305,16 +310,18 @@ class MessageActionPopupAnchorTest {
 
         f.popup.setMenuVisible(true)
         f.settle()
+        
+        f.finishEntrance()
         val shown = assertNotNull(f.menuBounds)
         assertTrue("shown=$shown full=$full", shown.width() < full.width())
         assertEquals(full.right, shown.right)
         assertNotEquals(0, Color.alpha(pixelAt(f.overlay, shown.centerX(), shown.centerY())))
     }
 
-    /**
-     * A show issued together with new rows must not flip the View VISIBLE before the composition
-     * carrying those rows is applied: that frame would draw the menu at the stale placement.
-     */
+    
+
+
+
     @Test
     fun `U11 a show waits for the composition that carries the new rows`() {
         val f = Fixture()
@@ -351,7 +358,7 @@ class MessageActionPopupAnchorTest {
         assertEquals(View.VISIBLE, menu.visibility)
     }
 
-    /** A deferred dismiss hides everything first; the pending show from an earlier settle must not undo it. */
+    
     @Test
     fun `U13 hideAll cancels a pending show`() {
         val f = Fixture()
@@ -388,8 +395,9 @@ class MessageActionPopupAnchorTest {
 
     private companion object {
         const val MATCH = FrameLayout.LayoutParams.MATCH_PARENT
+        const val FRAME_MS = 16L
 
-        /** Larger than the 8dp edge padding, so bubble alignment is distinguishable from the clamp. */
+        
         val BUBBLE_INSET: Int get() = 40.dp
     }
 }

@@ -43,9 +43,9 @@ interface WebSocketConnectionFactory {
 
 @AssistedFactory
 interface PushTextSendJobFactory {
-    /**
-     * parameters: Job.Parameters? only used in JobManager, when creating a job from the PushTextSendJob's Factory
-     */
+    
+
+
     fun create(
         parameters: Job.Parameters?,
         textMessage: TextMessage,
@@ -55,9 +55,9 @@ interface PushTextSendJobFactory {
 
 @AssistedFactory
 interface PushReactionSendJobFactory {
-    /**
-     * parameters: Job.Parameters? only used in JobManager, when creating a job from the PushReactionSendJob's Factory
-     */
+    
+
+
     fun create(
         @Assisted parameters: Job.Parameters?,
         @Assisted textMessage: TextMessage,
@@ -66,9 +66,9 @@ interface PushReactionSendJobFactory {
 
 @AssistedFactory
 interface SettingSyncJobFactory {
-    /**
-     * parameters: Job.Parameters? only used in JobManager, when creating a job from the SettingSyncJob's Factory
-     */
+    
+
+
     fun create(
         @Assisted parameters: Job.Parameters?,
         @Assisted("roomId") roomId: String,
@@ -82,9 +82,9 @@ interface SettingSyncJobFactory {
 
 @AssistedFactory
 interface PushReadReceiptSendJobFactory {
-    /**
-     * parameters: Job.Parameters? only used in JobManager, when creating a job from the PushReadReceiptSendJob's Factory
-     */
+    
+
+
     fun create(
         @Assisted
         parameters: Job.Parameters?,
@@ -169,12 +169,12 @@ interface PushScreenShotSendJobFactory {
 
 @AssistedFactory
 interface ChatNormalPaginationControllerFactory {
-    /**
-     * [source] is assisted rather than injected because an `@AssistedFactory` method must return a
-     * concrete `@AssistedInject` class: giving the WCDB-backed source its own factory would pin the
-     * controller's field to that concrete type and destroy the test seam. `ChatPaginationController`
-     * owns the assembly instead.
-     */
+    
+
+
+
+
+
     fun create(
         forWhat: For,
         source: ChatMessageWindowSource,

@@ -5,17 +5,17 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * Unit tests for [FileOpenMime], the pure decision logic behind the ACTION_VIEW retry in
- * `Context.viewUri`.
- *
- * A `.md` attachment resolves to `text/markdown`. Few apps declare it for ACTION_VIEW, and those
- * that do (file managers, app stores) commonly cannot render it and fail silently, while
- * `text/plain` has several real text viewers on a typical device. Plain-text formats without a
- * dedicated ecosystem therefore try `text/plain` first; text formats with real viewers (csv, json,
- * html, ...) keep their exact MIME first and use `text/plain` as the retry. Everything else is tried
- * exactly once so the user gets the "no app can open this" toast instead of silent nothing.
- */
+
+
+
+
+
+
+
+
+
+
+
 class FileOpenMimeTest {
 
     @Test

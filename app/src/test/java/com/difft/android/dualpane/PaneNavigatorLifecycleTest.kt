@@ -22,12 +22,12 @@ import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import java.util.concurrent.TimeUnit
 
-/**
- * [PaneNavigator] across timing and lifecycle edges on [PaneNavigatorTestHost] (which registers the
- * real [IndexBackCallback]): a page arriving during the one-pane close slide, a destroyed
- * instance's late fragment callbacks, recreation with a collapsed list, a queued external open
- * across recreation, opens from the Me tab, and Back order with page callbacks.
- */
+
+
+
+
+
+
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [33])
 class PaneNavigatorLifecycleTest {
@@ -70,7 +70,7 @@ class PaneNavigatorLifecycleTest {
         idle()
     }
 
-    // ---------------------------------------------------------------- one-pane close race
+    
 
     @Test
     @Config(qualifiers = "w400dp-h800dp")
@@ -80,7 +80,7 @@ class PaneNavigatorLifecycleTest {
         settle()
         val layer = host.findViewById<View>(R.id.detail_pane)
 
-        assertTrue(nav.pop(TAB_CHATS)) // starts the slide out
+        assertTrue(nav.pop(TAB_CHATS)) 
         nav.openConversation(target("b"), PaneNavigator.Origin.External)
         idle()
         settle()
@@ -130,9 +130,9 @@ class PaneNavigatorLifecycleTest {
         val layer = host.findViewById<View>(R.id.detail_pane)
 
         nav.pop(TAB_CHATS)
-        // Execute the queued pop, without draining the close animation before stopping.
+        
         shadowOf(Looper.getMainLooper()).runOneTask()
-        controller!!.pause().stop() // the clear queued by the slide's end waits for start
+        controller!!.pause().stop() 
         settle()
         val slidOut = layer.translationX
         assertTrue("precondition: the slide finished off screen", slidOut != 0f)
@@ -163,7 +163,7 @@ class PaneNavigatorLifecycleTest {
         assertEquals(listOf("elsewhere"), labels(TAB_CONTACTS))
     }
 
-    // ---------------------------------------------------------------- Me tab root
+    
 
     @Test
     @Config(qualifiers = "w840dp-h900dp")
@@ -181,7 +181,7 @@ class PaneNavigatorLifecycleTest {
         assertEquals(0, nav.depth(TAB_CHATS))
     }
 
-    // ---------------------------------------------------------------- teardown and restore
+    
 
     @Test
     @Config(qualifiers = "w840dp-h900dp")
@@ -246,7 +246,7 @@ class PaneNavigatorLifecycleTest {
         assertEquals(listOf("conv:x:0"), labels(TAB_CHATS))
     }
 
-    // ---------------------------------------------------------------- Me tab origin
+    
 
     @Test
     @Config(qualifiers = "w840dp-h900dp")
@@ -264,7 +264,7 @@ class PaneNavigatorLifecycleTest {
         assertEquals(0, nav.depth(TAB_ME))
     }
 
-    // ---------------------------------------------------------------- Back order
+    
 
     @Test
     @Config(qualifiers = "w840dp-h900dp")
@@ -290,7 +290,7 @@ class PaneNavigatorLifecycleTest {
         launch()
         nav.openConversation(target("a"), PaneNavigator.Origin.Tab(TAB_CHATS))
         idle()
-        // The root conversation's own callback is the page's; make it decline like a hosted list.
+        
         nav.replaceRoot(TAB_CHATS, StackPageFragment.newInstance("root", handlesBack = false), selectionId = "a")
         idle()
         PaneNavigatorTestHost.listCollapsed = true
@@ -317,5 +317,78 @@ class PaneNavigatorLifecycleTest {
 
         assertEquals(0, nav.depth())
         assertEquals(0, host.moveTaskToBackCalls)
+    }
+
+    
+
+    private fun atRest(view: View): Boolean = view.translationX == 0f && view.foreground == null
+
+    
+    
+    @Test
+    @Config(qualifiers = "w400dp-h800dp")
+    fun `the detail layer slides over the list and both are at rest after opening and after closing`() {
+        launch()
+        val list = host.findViewById<View>(R.id.list_content)
+        val layer = host.findViewById<View>(R.id.detail_pane)
+
+        nav.openConversation(target("a"), PaneNavigator.Origin.Tab(nav.currentTab))
+        settle()
+        assertEquals(View.VISIBLE, layer.visibility)
+        assertTrue(atRest(list))
+        assertEquals(0f, layer.translationX, 0f)
+
+        nav.pop(TAB_CHATS)
+        settle()
+        assertEquals(View.GONE, layer.visibility)
+        assertEquals(0f, layer.translationX, 0f)
+        assertTrue(atRest(list))
+    }
+
+    @Test
+    @Config(qualifiers = "w400dp-h800dp")
+    fun `a conversation opened from the search layer closes the layer under one clean detail slide (T11)`() {
+        launch()
+        host.listLayer.open(ListPaneLayerRoot.SEARCH)
+        settle()
+        val list = host.findViewById<View>(R.id.list_content)
+        val listLayer = host.findViewById<View>(R.id.list_layer)
+        val layer = host.findViewById<View>(R.id.detail_pane)
+
+        
+        host.listLayer.close()
+        nav.openConversation(target("a"), PaneNavigator.Origin.Tab(nav.currentTab))
+        settle()
+
+        assertEquals(View.GONE, listLayer.visibility)
+        assertEquals(null, host.listLayer.host)
+        assertEquals(View.VISIBLE, layer.visibility)
+        assertEquals(0f, layer.translationX)
+        assertTrue(atRest(list))
+        assertTrue(atRest(listLayer))
+    }
+
+    @Test
+    @Config(qualifiers = "w400dp-h800dp")
+    fun `a list layer closing under a closing detail layer lets the detail close end naturally (T12)`() {
+        launch()
+        FoldedStandInFragment.folding.value = true
+        host.listLayer.open(ListPaneLayerRoot.FOLDED_GROUPS)
+        settle()
+        nav.openConversation(target("a"), PaneNavigator.Origin.Tab(nav.currentTab))
+        settle()
+        val layer = host.findViewById<View>(R.id.detail_pane)
+        val listLayer = host.findViewById<View>(R.id.list_layer)
+
+        assertTrue(nav.pop(TAB_CHATS)) 
+        idle()
+        FoldedStandInFragment.folding.value = false 
+        settle()
+
+        assertEquals(0, nav.depth())
+        assertEquals(View.GONE, layer.visibility)
+        assertEquals(View.GONE, listLayer.visibility)
+        assertEquals(null, host.listLayer.host)
+        assertTrue(atRest(host.findViewById(R.id.list_content)))
     }
 }

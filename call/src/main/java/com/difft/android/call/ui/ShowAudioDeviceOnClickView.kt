@@ -18,14 +18,14 @@ import com.difft.android.call.BuildConfig
 import com.twilio.audioswitch.AudioDevice
 import androidx.compose.ui.res.stringResource
 
-/** Picker footprint, unchanged from the pre-shell layout so the horn menu keeps its width. */
+
 private val AUDIO_PICKER_WIDTH = 247.dp
 
-/**
- * Dumb renderer for the audio-device picker: every status decision is already baked into
- * [AudioDeviceRow] by `toDeviceRows()`, so this file can never disagree with the horn icon about
- * which row is active.
- */
+
+
+
+
+
 @Composable
 fun ShowAudioDeviceOnClickView(
     modifier: Modifier = Modifier,
@@ -50,11 +50,11 @@ fun ShowAudioDeviceOnClickView(
         },
     ) {
         rows.forEachIndexed { index, row ->
-            // Stable node identity across list changes: a device connecting mid-call shifts
-            // positions, and without a key the remembered painter of row N would be handed to a
-            // different device. `kind` is unique per row (the library's device set holds at most
-            // one entry per class) and, unlike the AudioDevice data class, never changes for a
-            // given route.
+            
+            
+            
+            
+            
             key(row.kind) {
                 AudioDeviceRowItem(
                     index = index,
@@ -78,10 +78,10 @@ private fun AudioDeviceRowItem(
         iconRes = row.kind.pickerIconRes(),
         onClick = onClick,
         trailing = {
-            // The status must never be the thing that gets ellipsized: it is the whole point of
-            // the row, and a Bluetooth productName is long enough to eat it. The device name is
-            // the weighted child, so it shrinks instead. Always composed, even when empty, so the
-            // status node exists for every row.
+            
+            
+            
+            
             Text(
                 modifier = Modifier.testTag("call_audio_picker_item_status_$index"),
                 text = row.status.labelRes()?.let { stringResource(it) }.orEmpty(),

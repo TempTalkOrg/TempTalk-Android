@@ -13,9 +13,9 @@ import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 
-/**
- * Utility methods for input and output streams.
- */
+
+
+
 object StreamUtil {
 
     private const val TAG = "StreamUtil"

@@ -40,19 +40,19 @@ import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/**
- * T15–T22 — [ReversePairController]'s state machine, driven without a socket through its two seams
- * (address race + `/reverse-pair` call).
- *
- * The properties under test are the ones the whole design rests on: the pairing session is
- * registered BEFORE the request goes out, a response that fails after an upload was accepted is
- * ignored rather than aborting it, and `run()` always returns so the receiver role can tear down.
- *
- * The role runs on a scope of its own carrying the test's scheduler, exactly as it runs on the
- * service scope in production — and, unlike `backgroundScope`, that is work `runCurrent()` actually
- * drives. Time is advanced explicitly, never by `advanceUntilIdle()`, which would burn through the
- * connect deadline these tests exist to observe.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [34])
 class ReversePairControllerTest {
@@ -60,7 +60,7 @@ class ReversePairControllerTest {
     private val macPin = "654321"
     private val registry = PairingSessionRegistry()
 
-    /** Whatever the running controller sent, so a test can play the peer with the real pair token. */
+    
     private val sentBody = CompletableDeferred<ReversePairRequest>()
 
     private val roleScopes = ArrayList<CoroutineScope>()
@@ -120,7 +120,7 @@ class ReversePairControllerTest {
         },
     )
 
-    /** The role scope the service would own, plus the `run()` job on it. */
+    
     private class Role(val scope: CoroutineScope, val job: Job)
 
     private fun TestScope.startPairing(
@@ -138,7 +138,7 @@ class ReversePairControllerTest {
 
     private suspend fun hangForever(): ReversePairResponse = CompletableDeferred<ReversePairResponse>().await()
 
-    // ── T15: registration precedes the request ────────────────────────────────────────────────
+    
 
     @Test
     fun `the pairing session is registered before the request is sent`() = runTest {
@@ -150,7 +150,7 @@ class ReversePairControllerTest {
 
         assertEquals(PairingSessionRegistry.Phase.PENDING, phaseAtCallTime.getCompleted())
         assertIs<TransferState.AwaitingDesktopConfirm>(holder())
-        // The body carries this device's listener, not the peer's, and the token it must quote back.
+        
         val body = sentBody.getCompleted()
         assertEquals(listOf("192.168.1.5", "10.0.0.2"), body.listen.addresses)
         assertEquals(53318, body.listen.port)
@@ -158,7 +158,7 @@ class ReversePairControllerTest {
         assertTrue(body.pairToken.isNotBlank())
     }
 
-    // ── T16 / T16b: a late failure never aborts an accepted upload, and run() still returns ────
+    
 
     @Test
     fun `a reverse-pair failure after the upload was accepted is ignored and run completes`() = runTest {
@@ -168,7 +168,7 @@ class ReversePairControllerTest {
             throw SocketTimeoutException("the peer's response never arrived")
         }
 
-        // The peer connected back before its own 200 could be written.
+        
         assertEquals(
             PairingSessionRegistry.Decision.Accept,
             registry.authorizePrepareUpload(sentBody.getCompleted().pairToken, macPin),
@@ -182,7 +182,7 @@ class ReversePairControllerTest {
         assertTrue(role.scope.isActive, "…nor cancel the scope the receiver role runs on")
     }
 
-    // ── T17: a failure while nothing has connected is the terminal outcome ─────────────────────
+    
 
     @Test
     fun `a reverse-pair failure while still pending fails the transfer with the peer's reason`() = runTest {
@@ -202,7 +202,7 @@ class ReversePairControllerTest {
         assertEquals(TransferState.Failed(PrepareUploadReasons.DESKTOP_CANCELLED), holder())
     }
 
-    // ── T18: the connect deadline ──────────────────────────────────────────────────────────────
+    
 
     @Test
     fun `a PIN-cap eviction while waiting for the computer fails the transfer instead of parking`() = runTest {
@@ -231,7 +231,7 @@ class ReversePairControllerTest {
         assertTrue(role.job.isCompleted)
     }
 
-    // ── T19: a prepare-upload that beats the 200 ───────────────────────────────────────────────
+    
 
     @Test
     fun `a prepare-upload accepted before the 200 arms no deadline and fails nothing`() = runTest {
@@ -245,14 +245,14 @@ class ReversePairControllerTest {
         answer.complete(Unit)
         runCurrent()
 
-        // Well past any deadline the 200 could have armed.
+        
         advanceTimeBy(ReversePairController.MAX_CONNECT_MS * 2)
         runCurrent()
         assertTrue(role.job.isCompleted)
         assertIs<TransferState.AwaitingDesktopConfirm>(holder())
     }
 
-    // ── T20: the peer-supplied window is clamped ───────────────────────────────────────────────
+    
 
     @Test
     fun `an absurd connect window is clamped down`() = runTest {
@@ -277,7 +277,7 @@ class ReversePairControllerTest {
 
     private fun armedDeadline(): Long = assertIs<TransferState.AwaitingDesktopConnect>(holder()).deadlineMs
 
-    // ── T21: cancelling during the hang ────────────────────────────────────────────────────────
+    
 
     @Test
     fun `cancelling the role during the hang cancels the call and drops the generation`() = runTest {
@@ -298,7 +298,7 @@ class ReversePairControllerTest {
         assertNull(registry.phase(FIRST_GENERATION))
     }
 
-    // ── T22: a re-scan supersedes the previous pairing ─────────────────────────────────────────
+    
 
     @Test
     fun `a second pairing supersedes the first, whose token is then refused`() = runTest {
@@ -317,7 +317,7 @@ class ReversePairControllerTest {
         ReversePairResponse(sessionId = "mac-session", connectWithinMs = connectWithinMs)
 
     private companion object {
-        /** The registry hands out generations from 1; the first controller in a test owns it. */
+        
         const val FIRST_GENERATION = 1L
     }
 }

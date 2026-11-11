@@ -18,22 +18,22 @@ import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Turns the background 451 signal ([InactiveDeviceNotifier]) into an app-wide activation dialog.
- *
- * The socket can be rejected with no Activity anywhere, so the prompt cannot live in a fragment.
- * Same shape as the MITM-warning bridge in [TempTalkApplication]: the flow collector shows it when
- * a host is already resumed, and `onActivityResumed` retries a flag raised with none.
- */
+
+
+
+
+
+
+
 @Singleton
 class InactiveDeviceDialogPresenter @Inject constructor(
     private val deviceActivator: dagger.Lazy<DeviceActivator>,
 ) {
-    // Single dialog owner. Only ever touched on the main thread (see showIfNeeded's @MainThread
-    // contract), so no synchronisation is needed.
+    
+    
     private var dialog: ComposeDialog? = null
 
-    /** Called once from application startup. */
+    
     fun observe(currentActivity: () -> FragmentActivity?) {
         appScope.launch {
             InactiveDeviceNotifier.pending.collect { pending ->
@@ -41,8 +41,8 @@ class InactiveDeviceDialogPresenter @Inject constructor(
                     if (pending) {
                         currentActivity()?.let { showIfNeeded(it) }
                     } else {
-                        // The flag also clears when the socket reconnects without activation; the
-                        // prompt is not cancelable, so it must go away with the flag.
+                        
+                        
                         dialog?.dismiss()
                         dialog = null
                     }
@@ -51,24 +51,24 @@ class InactiveDeviceDialogPresenter @Inject constructor(
         }
     }
 
-    /** Called from `onActivityResumed` — retries a flag raised while no host was on screen. */
+    
     @MainThread
     fun onActivityResumed(activity: FragmentActivity) = showIfNeeded(activity)
 
     @MainThread
     private fun showIfNeeded(activity: FragmentActivity) {
-        // Double-check on the main thread: observe() and onActivityResumed() race for the same
-        // flag, and isDialogShowing is the only thing that makes the second caller a no-op.
+        
+        
         if (!InactiveDeviceNotifier.pending.value || InactiveDeviceNotifier.isDialogShowing) return
         if (activity.isFinishing || activity.isDestroyed) return
 
-        // Drop any stale dialog first: its onDismiss re-arms the notifier, which would undo the
-        // markDialogShown() below if it ran after it.
+        
+        
         dialog?.dismiss()
-        // Set before showing, so a racing second caller already sees isDialogShowing == true.
+        
         InactiveDeviceNotifier.markDialogShown()
-        // Host destroyed before the user acts (a config change tears down the ComposeView):
-        // re-arm so the next resumed Activity re-shows it.
+        
+        
         activity.lifecycle.addObserver(object : DefaultLifecycleObserver {
             override fun onDestroy(owner: LifecycleOwner) {
                 owner.lifecycle.removeObserver(this)
@@ -83,8 +83,8 @@ class InactiveDeviceDialogPresenter @Inject constructor(
             confirmText = activity.getString(com.difft.android.chat.R.string.activate_device),
             cancelable = false,
             showCancel = false,
-            // The device stays unusable until activation succeeds, so the prompt must survive a
-            // failed attempt; it is dismissed explicitly on success instead.
+            
+            
             autoDismiss = false,
             onConfirm = { activate() },
             onDismiss = {
@@ -94,7 +94,7 @@ class InactiveDeviceDialogPresenter @Inject constructor(
         )
     }
 
-    /** Activation failure leaves the prompt up: the device stays unusable until it succeeds. */
+    
     private fun activate() {
         appScope.launch {
             try {

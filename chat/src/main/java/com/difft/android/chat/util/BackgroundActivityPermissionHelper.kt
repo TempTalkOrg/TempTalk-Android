@@ -7,21 +7,21 @@ import com.difft.android.base.notification.OemBrand
 import com.difft.android.base.notification.OemSettingsLauncher
 import com.difft.android.base.notification.VivoOs
 
-/**
- * Entry to the vendor per-app background power policy that the app opens directly: Xiaomi's power
- * policy (省电策略) and, on vivo OriginOS 6+, the app's power-detail page, whose 「后台耗电管理」 row
- * leads to the per-app choice; the system-wide 「后台耗电管理」 app list is the fallback when that
- * page is missing. The switch state cannot be read, so callers show "check" and never claim a state.
- */
+
+
+
+
+
+
 object BackgroundActivityPermissionHelper {
 
     private const val TAG = "BackgroundActivityPermissionHelper"
     private const val VIVO_POWER_PACKAGE = "com.iqoo.powersaving"
 
-    /**
-     * Shown only when this device has the page and the app can really start it: newer
-     * HyperOS builds dropped it or protect it, and a row that can only fall back to app details is noise.
-     */
+    
+
+
+
     fun canOpenBackgroundActivitySettings(
         context: Context,
         brand: OemBrand = OemBrand.current(),
@@ -41,7 +41,7 @@ object BackgroundActivityPermissionHelper {
         else -> emptyList()
     }
 
-    /** Per-app details first (extra key must be exactly `package_name`), the app list second. */
+    
     internal fun vivoPowerIntents(pkg: String): List<Intent> = listOf(
         Intent("com.iqoo.powersaving.PowerUsageSummaryActivity.search")
             .setPackage(VIVO_POWER_PACKAGE)

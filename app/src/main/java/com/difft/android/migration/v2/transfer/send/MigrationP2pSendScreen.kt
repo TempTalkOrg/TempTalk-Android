@@ -50,35 +50,35 @@ import com.difft.android.migration.ui.component.formatTransferMetric
 import com.difft.android.migration.v2.handoff.MigrationHandoffReconciler
 import org.difft.app.database.models.ContactorModel
 
-/**
- * The old device's send flow: the confirmation page, which is the only place data is authorised to
- * leave, the progress page, the completion page and the failure page. Stateless, driven by
- * [MigrationP2pSendState] and [onIntent]. The transfer key is never rendered.
- */
+
+
+
+
+
 @Composable
 fun MigrationP2pSendScreen(
     state: MigrationP2pSendState,
     onIntent: (MigrationP2pSendIntent) -> Unit,
-    // The paired device's name, shown on the confirmation page.
+    
     peerAlias: String? = null,
-    // The receiver is the new app on this device: copy names it, and the exit returns to it.
+    
     sameDevice: Boolean = false,
-    // Opened straight after a Desktop link login: this device stays signed in whatever happens here.
+    
     fromLink: Boolean = false,
-    // The same-device no-login handoff: the login session itself travels.
+    
     credentialHandoff: Boolean = false,
-    // The signed-in account, for the confirmation page's identity row (null while loading).
+    
     selfContact: ContactorModel? = null,
     selfId: String = "",
 ) {
-    // While a transfer is running the page can only be left through its cancel action, as on iOS:
-    // system back would leave the transfer to the service and let the user reach the chats (#1382).
+    
+    
     val active = state == MigrationP2pSendState.Preparing ||
         state == MigrationP2pSendState.AwaitingPeerConfirm ||
         state is MigrationP2pSendState.Transferring ||
         state == MigrationP2pSendState.AwaitingVerdict
     BackHandler(enabled = active) {
-        // Deliberately swallowed: see above.
+        
     }
     when (state) {
         MigrationP2pSendState.Idle -> IdlePage(onIntent)
@@ -99,7 +99,7 @@ fun MigrationP2pSendScreen(
             } else {
                 SpaceBlockPage(state, onIntent)
             }
-        // No reading before bytes move: the one sentence under the bar says what is happening.
+        
         MigrationP2pSendState.Preparing -> ProgressPage(
             title = stringResource(R.string.migration_p1_preparing_title),
             metric = null,
@@ -123,22 +123,22 @@ fun MigrationP2pSendScreen(
         MigrationP2pSendState.AwaitingVerdict -> ProgressPage(
             title = stringResource(R.string.migration_p1_finishing_title),
             metric = null,
-            // A Desktop only links; this device stays the primary, so nothing is about to happen to it.
+            
             hint = if (fromLink) null else stringResource(R.string.migration_p1_finishing_hint),
-            // The wait has no upper bound the user can feel — the peer may verify and import for
-            // minutes — so this page must offer the same way out the ongoing notification already
-            // does; system back is swallowed while the transfer is active.
+            
+            
+            
             cancel = { onIntent(MigrationP2pSendIntent.Cancel) },
         )
         is MigrationP2pSendState.Unconfirmed -> UnconfirmedPage(state, onIntent)
         MigrationP2pSendState.Done -> DonePage(sameDevice, onIntent)
         is MigrationP2pSendState.Failed -> FailedPage(state, fromLink, credentialHandoff, onIntent)
-        // The Activity finishes on this; nothing to draw for the frame it takes.
+        
         MigrationP2pSendState.Cancelled -> Box(Modifier.fillMaxSize())
     }
 }
 
-/** Reached only when the scanner was dismissed: offer to scan again, or leave. */
+
 @Composable
 private fun IdlePage(onIntent: (MigrationP2pSendIntent) -> Unit) {
     MigrationPage(
@@ -165,7 +165,7 @@ private fun BusyPage() {
     }
 }
 
-/** The confirmation page: target, account, size, the attachment choice, and the button that starts it. */
+
 @Composable
 private fun ConfirmPage(
     state: MigrationP2pSendState.Ready,
@@ -184,7 +184,7 @@ private fun ConfirmPage(
         footer = {
             MigrationPrimaryButton(
                 text = stringResource(R.string.migration_s1_start),
-                // Size and space have to be known before the user can weigh what leaves this device.
+                
                 enabled = estimate != null,
                 onClick = { onIntent(MigrationP2pSendIntent.Send) },
             )
@@ -220,7 +220,7 @@ private fun ConfirmPage(
                     label = stringResource(R.string.migration_s1_size_label),
                     value = formatMigrationBytes(context, bytes),
                 )
-                // Attachments are a choice only above the threshold; below it they travel.
+                
                 if (state.canDropAttachments) {
                     MigrationCardDivider()
                     MigrationSwitchRow(
@@ -255,7 +255,7 @@ private fun CalculatingCard() {
     }
 }
 
-/** Block page: the target volume cannot take the payload. Nothing has started, so the mark is a warning. */
+
 @Composable
 private fun SpaceBlockPage(state: MigrationP2pSendState.Ready, onIntent: (MigrationP2pSendIntent) -> Unit) {
     val context = LocalContext.current
@@ -265,7 +265,7 @@ private fun SpaceBlockPage(state: MigrationP2pSendState.Ready, onIntent: (Migrat
         primary = MigrationAction(stringResource(R.string.migration_p3_manage_storage)) {
             onIntent(MigrationP2pSendIntent.OpenStorageSettings)
         },
-        // Leaving attachments behind is a remedy only when the user was offered the choice at all.
+        
         secondary = if (state.canDropAttachments && state.includeAttachments) {
             MigrationAction(stringResource(R.string.migration_p3_drop_attachments)) {
                 onIntent(MigrationP2pSendIntent.SetIncludeAttachments(false))
@@ -281,10 +281,10 @@ private fun SpaceBlockPage(state: MigrationP2pSendState.Ready, onIntent: (Migrat
     }
 }
 
-/**
- * The progress page. A non-null [cancel] means the phase can still be stopped, through a
- * confirmation; phases past the point of no return pass none and show no button.
- */
+
+
+
+
 @Composable
 private fun ProgressPage(
     title: String,
@@ -323,11 +323,11 @@ private fun ProgressPage(
     }
 }
 
-/**
- * Desktop link, account switch: the Desktop is asking its user to confirm before it accepts the
- * upload. Rendered in the shape of the sign-in confirmation page it followed — the target computer,
- * one line saying where to look, and a disabled sign-in button.
- */
+
+
+
+
+
 @Composable
 private fun AwaitingDesktopPage(peerAlias: String?, onIntent: (MigrationP2pSendIntent) -> Unit) {
     MigrationPage(
@@ -354,21 +354,21 @@ private fun AwaitingDesktopPage(peerAlias: String?, onIntent: (MigrationP2pSendI
     }
 }
 
-/** Completion page: the old app has moved over, or the history reached the new device. */
+
 @Composable
 private fun DonePage(sameDevice: Boolean, onIntent: (MigrationP2pSendIntent) -> Unit) {
     if (sameDevice) {
         MigrationResultPage(
             tone = MigrationResultTone.SUCCESS,
             title = stringResource(R.string.migration_p2_old_app_title, stringResource(R.string.migration_app_name_new)),
-            // The new app is mid-activation behind us; the way out is back into it.
+            
             primary = MigrationAction(stringResource(R.string.migration_p2_done)) { onIntent(MigrationP2pSendIntent.ReturnToPeer) },
         ) {
             MigrationResultBody(stringResource(R.string.migration_p2_old_app_body, stringResource(R.string.migration_app_name_legacy)))
         }
     } else {
-        // The 200 only means the import was promoted: the receiver has not signed in yet, so this
-        // device is still the valid session. Keep it until the user has checked the new device.
+        
+        
         MigrationResultPage(
             tone = MigrationResultTone.SUCCESS,
             title = stringResource(R.string.migration_p2_done_title),
@@ -379,13 +379,13 @@ private fun DonePage(sameDevice: Boolean, onIntent: (MigrationP2pSendIntent) -> 
     }
 }
 
-/**
- * The failure page for a send. The primary action depends on how the send can be restarted: on the
- * same-device handoff by asking the new app for a fresh pairing, gated on the new app's answer; on the
- * link path and cross-device by scanning a fresh code. A retry never resumes a failed session in
- * place — the receiver's pairing code belongs to one session, and a computer that cancelled or timed
- * out has dropped its session too.
- */
+
+
+
+
+
+
+
 @Composable
 private fun FailedPage(
     state: MigrationP2pSendState.Failed,
@@ -394,7 +394,7 @@ private fun FailedPage(
     onIntent: (MigrationP2pSendIntent) -> Unit,
 ) {
     val kind = classifyFailure(state.reason)
-    // Only the new device can fix this one (#1382): acknowledge and close, no update page, no retry.
+    
     if (kind == MigrationFailureKind.RECEIVER_UPDATE_NEEDED) {
         FailurePage(
             kind = kind,
@@ -406,21 +406,21 @@ private fun FailedPage(
     val primary = when {
         kind == MigrationFailureKind.UPDATE_NEEDED ->
             MigrationAction(stringResource(R.string.migration_m3_go)) { onIntent(MigrationP2pSendIntent.OpenUpdate) }
-        // A failed hand-over may still have been completed by the new app, so starting over is only
-        // safe once it has said it did not. Until then: recovering, or a re-check when it cannot be reached.
+        
+        
         credentialHandoff && state.reconciling ->
             MigrationAction(stringResource(R.string.migration_p3_recovering), enabled = false) {}
         credentialHandoff && state.reconcileOutcome == MigrationHandoffReconciler.Outcome.UNKNOWN ->
             MigrationAction(stringResource(R.string.migration_p3_recheck)) { onIntent(MigrationP2pSendIntent.RecheckPeer) }
-        // Same device: the pairing payload died with the new app's receiver, so the retry asks it
-        // for a fresh one rather than re-sending a code nothing is listening on.
+        
+        
         credentialHandoff ->
             MigrationAction(stringResource(R.string.migration_p3_retry), enabled = state.retryEnabled) {
                 onIntent(MigrationP2pSendIntent.RefreshPairing)
             }
-        // The computer shows a fresh code once its session ends; the home scanner takes it from there.
+        
         fromLink -> MigrationAction(stringResource(R.string.migration_p3_rescan)) { onIntent(MigrationP2pSendIntent.RescanLink) }
-        // The receiver's pairing code is session-scoped, so a retry means scanning a new one.
+        
         else -> MigrationAction(stringResource(R.string.migration_p3_retry)) { onIntent(MigrationP2pSendIntent.LaunchScan) }
     }
     FailurePage(

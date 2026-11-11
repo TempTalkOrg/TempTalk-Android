@@ -14,7 +14,7 @@ internal data class PersistedAdmission(
     val needsScheduling: Boolean = false,
 )
 
-/** Runs only on the controller's serial management dispatcher. Never consults the fast cache. */
+
 internal fun admitPersistedJob(
     job: Job,
     storage: JobStorage,

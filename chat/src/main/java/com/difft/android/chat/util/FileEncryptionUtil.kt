@@ -11,17 +11,17 @@ import javax.crypto.Mac
 import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
-/**
- * Encrypts a plaintext file into the at-rest ciphertext format consumed by [FileDecryptionUtil] and
- * [com.difft.android.chat.media.EncryptedAttachmentProvider].
- *
- * Output layout (identical to the sender-side upload encryption in PushTextSendJob):
- * `[IV(16)][AES-CBC/PKCS5 ciphertext][HMAC-SHA256(32)]`, where the 64-byte [fileKey] splits into
- * `key[0:32]` (AES) and `key[32:64]` (HMAC). The HMAC covers `IV || ciphertext`.
- *
- * Used by the one-time legacy-plaintext migration to re-encrypt images/voice that were decrypted to
- * disk before the encrypted-at-rest change.
- */
+
+
+
+
+
+
+
+
+
+
+
 object FileEncryptionUtil {
     private const val BUFFER_SIZE = 8192
     private const val IV_SIZE = 16

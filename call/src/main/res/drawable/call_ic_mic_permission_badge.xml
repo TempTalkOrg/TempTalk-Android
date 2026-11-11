@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- tabler:alert-circle-filled from the media-permission Figma spec (node 17129:3860).
-     The "!" is a cutout in the filled circle, so whatever is behind shows through. -->
+
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="16dp"
     android:height="16dp"

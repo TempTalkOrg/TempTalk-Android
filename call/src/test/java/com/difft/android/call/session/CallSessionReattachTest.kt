@@ -24,11 +24,11 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 
-/**
- * A call outlives its page once the room is set up: a new page attaches to the same live session,
- * and the last page going away does what was left to it. The room setup (Phase B) runs on the test
- * scheduler; the plain JVM keeps its collaborator stubs off Robolectric's class loader.
- */
+
+
+
+
+
 class CallSessionReattachTest {
 
     private val testDispatcher = StandardTestDispatcher()
@@ -88,7 +88,7 @@ class CallSessionReattachTest {
         assertSame(session, h.holder.current.value)
     }
 
-    /** What a non-configuration destroy does to the page's view model: its store is cleared. */
+    
     private fun destroy(vm: LCallViewModel) = ViewModelStore().apply {
         put("call-vm", vm)
         clear()

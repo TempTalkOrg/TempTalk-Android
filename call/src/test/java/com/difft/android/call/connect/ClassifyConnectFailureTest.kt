@@ -99,9 +99,9 @@ class ClassifyConnectFailureTest {
     @Test
     fun `transport failures outside the old allowlist are retryable`() {
         listOf(
-            // Thrown by the fork's RTCEngine for engine/PeerConnection-level connect failures.
+            
             RoomException.ConnectException("engine failed", null),
-            // The fork wraps any non-401 /rtc/validate probe response in a bare Exception.
+            
             Exception("HTTP 502 bad gateway"),
             ConnectException("connection refused"),
             SocketException("connection reset"),
@@ -115,8 +115,8 @@ class ClassifyConnectFailureTest {
 
     @Test
     fun `masked validate 401 is retryable regardless of its message`() {
-        // The fork replaces the real transport error with the probe's 401 body; the wording is
-        // the server's and must not be part of the decision.
+        
+        
         listOf(
             "invalid authorization header. Must start with Bearer ",
             "invalid token",
@@ -134,15 +134,15 @@ class ClassifyConnectFailureTest {
     fun `server verdict status is surfaced for logging when the SDK carried one`() {
         assertEquals(401, serverVerdictStatus(RoomException.StartCallException("token rejected", null, 401)))
         assertEquals(22001, serverVerdictStatus(RoomException.StartCallException("call ended", null, 22001)))
-        // App-side StartCallException and transport failures carry no server code.
+        
         assertEquals(null, serverVerdictStatus(StartCallException("no permission")))
         assertEquals(null, serverVerdictStatus(SSLHandshakeException("trust anchor not found")))
     }
 
     @Test
     fun `app-side connection exception is retryable`() {
-        // ServerConnectionException carries no verdict of its own — it is what this coordinator
-        // reports outward, so seeing it inbound must not be mistaken for a server answer.
+        
+        
         assertEquals(
             ConnectFailureCategory.TRANSIENT,
             classifyConnectFailure(ServerConnectionException("connect failed")),

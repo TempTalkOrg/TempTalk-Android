@@ -21,11 +21,11 @@ abstract class MediaConstraints {
 
     open fun isHighQuality(): Boolean = false
 
-    /**
-     * Provide a list of dimensions that should be attempted during compression. We will keep moving
-     * down the list until the image can be scaled to fit under [getImageMaxSize]. The first entry in
-     * the list should match your max width/height.
-     */
+    
+
+
+
+
     abstract fun getImageDimensionTargets(context: Context): IntArray
 
     abstract fun getGifMaxSize(context: Context): Long
@@ -67,9 +67,7 @@ abstract class MediaConstraints {
 
         @JvmStatic
         fun isVideoTranscodeAvailable(): Boolean {
-            // minSdk=26 and the feature-flag gating below is disabled, so transcode
-            // is always available. (Was: SDK_INT >= 26 && (useStreamingVideoMuxer() ||
-            // MemoryFileDescriptor.supported()).)
+            
             return true
         }
     }

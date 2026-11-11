@@ -16,17 +16,17 @@ import com.difft.android.chat.R
 import com.difft.android.chat.focus.settings.StillNotifyItem
 import com.difft.android.chat.focus.settings.stillNotifySummary
 
-/** Focus length choices; [seconds] is the server `duration` (null = until the user ends it). */
+
 enum class FocusDuration(val seconds: Int?, @param:StringRes val labelRes: Int) {
     ONE_HOUR(3600, R.string.focus_duration_1h),
     EIGHT_HOURS(28800, R.string.focus_duration_8h),
     MANUAL(null, R.string.focus_duration_manual),
 }
 
-/** The sheet's description: [res], naming [stillNotify] (the ticked "Other Groups Still Notify" items) when it has any. */
+
 data class FocusSheetDescription(@param:StringRes val res: Int, val stillNotify: List<StillNotifyItem>)
 
-/** The sheet's description follows the current "other groups" options: folding, and every item that still notifies (PRD 7.3.2). */
+
 fun focusSheetDescription(focus: EffectiveFocus): FocusSheetDescription {
     val items = buildList {
         if (focus.othersAllowMentionMe) add(StillNotifyItem.MENTION_ME)
@@ -42,7 +42,7 @@ fun focusSheetDescription(focus: EffectiveFocus): FocusSheetDescription {
     return FocusSheetDescription(res, items)
 }
 
-/** Bottom sheet content: title, dynamic description, the three durations and Cancel. A tap commits at once. */
+
 @Composable
 fun FocusDurationSheet(
     groupName: String,
@@ -70,7 +70,7 @@ fun FocusDurationSheet(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp),
         )
         FocusDuration.entries.forEach { option ->
-            SheetRow(stringResource(option.labelRes), DifftTheme.colors.textInfo) { onSelect(option) }
+            SheetRow(stringResource(option.labelRes), DifftTheme.colors.primary) { onSelect(option) }
         }
         SheetRow(stringResource(R.string.focus_cancel), DifftTheme.colors.textPrimary, onCancel)
     }

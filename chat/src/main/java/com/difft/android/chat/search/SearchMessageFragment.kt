@@ -33,13 +33,13 @@ import org.difft.app.database.WCDB
 import org.difft.app.database.loadPaginatedMessagesByKeyword
 import javax.inject.Inject
 
-/**
- * Search in one conversation's messages. A page of the home detail stack or of its shell
- * [SearchMessageActivity]. A result opens the conversation at that message: hosted, the tab's
- * root is replaced by a new instance carrying the jump (same conversation included); in a shell,
- * through the conversation router as before. The query is view state and searches again from
- * the first page after a fold; later pages are not restored.
- */
+
+
+
+
+
+
+
 @AndroidEntryPoint
 class SearchMessageFragment : Fragment(), UncoverableSearchPage {
 
@@ -64,7 +64,7 @@ class SearchMessageFragment : Fragment(), UncoverableSearchPage {
     private val resultsAdapter: SearchChatHistoryAdapter by lazy {
         object : SearchChatHistoryAdapter(isForMessageSearch = true) {
             override fun onItemClicked(data: SearchChatHistoryViewData, position: Int) {
-                // The conversation lays out in this window: let the keyboard start closing first.
+                
                 hideDetailKeyboardBeforeLeaving()
                 val kind = if (isGroup) ConversationTarget.Kind.GROUP else ConversationTarget.Kind.ONE_ON_ONE
                 detailNavigation().openConversation(ConversationTarget(kind, conversationId, jumpTimestamp = data.messageTimeStamp))
@@ -84,7 +84,7 @@ class SearchMessageFragment : Fragment(), UncoverableSearchPage {
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         _binding = ActivitySearchMessageBinding.inflate(inflater, container, false)
-        // Hosted, the keyboard opens through detailKeyboard (fresh open only), not on every composition.
+        
         if (isInDetailStack()) binding.searchInput.autoFocus = false
         return binding.root
     }
@@ -95,12 +95,12 @@ class SearchMessageFragment : Fragment(), UncoverableSearchPage {
         super.onDestroyView()
     }
 
-    /** One-pane search layer: the conversation layer over this page popped; the field takes the keyboard back. */
+    
     override fun onUncovered() {
         _binding?.searchInput?.focusAndShowKeyboard()
     }
 
-    /** One-pane search layer: a conversation layer covered this page without a result tap; the keyboard goes. */
+    
     override fun onCovered() {
         _binding?.searchInput?.hideKeyboard()
     }
@@ -126,7 +126,7 @@ class SearchMessageFragment : Fragment(), UncoverableSearchPage {
             addOnScrollListener(paginationScrollListener)
         }
 
-        // After a fold the restored query re-fires onQueryChanged and searches again.
+        
         if (savedInstanceState == null) {
             key = arguments?.getString(ARG_KEY).orEmpty()
             binding.searchInput.query = key
@@ -208,7 +208,7 @@ class SearchMessageFragment : Fragment(), UncoverableSearchPage {
     }
 }
 
-/** Message search in one conversation as a detail destination (home stack, or its shell Activity). */
+
 class SearchMessageDestination(
     private val conversationId: String,
     private val isGroup: Boolean,

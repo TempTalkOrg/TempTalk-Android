@@ -27,7 +27,7 @@ class GroupModeratorsManagementActivity : DetailShellActivity() {
     }
 }
 
-/** Kept for existing external callers of the shell. */
+
 enum class ActionType(val action: String) {
     ADD("add"), REMOVE("remove"), TRANSFER("transfer");
     companion object {

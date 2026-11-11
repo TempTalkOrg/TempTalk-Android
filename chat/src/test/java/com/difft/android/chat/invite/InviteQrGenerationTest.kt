@@ -15,24 +15,19 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/**
- * Generation call-site round-trips for the invite-QR params (design §7 T3-1, T3-2, T3-5).
- *
- * These pin the exact parameter combination `InviteUtils.createQRBitmap` passes to [QrEncoder.encode]
- * — sizePx=200, the `bg2_night` foreground, HIGH error correction, optional center logo — and prove
- * the produced QR survives that combination by decoding it back with a REAL [QrDecoder].
- *
- * [GraphicsMode.Mode.NATIVE] so `getPixels` reads real composited pixels.
- */
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [28])
 class InviteQrGenerationTest {
 
-    // A concrete int stands in for the resolved bg2_night color; the encoder only needs a ColorInt.
+    
     private val bg2NightInt = Color.rgb(0x1B, 0x1B, 0x1B)
 
-    /** Solid red square used as a stand-in for ic_invite_qr_logo. */
+    
     private fun logoBitmap(): Bitmap =
         Bitmap.createBitmap(32, 32, Bitmap.Config.ARGB_8888).apply {
             Canvas(this).drawColor(Color.RED)
@@ -54,7 +49,7 @@ class InviteQrGenerationTest {
 
     @Test
     fun `T3-2 invite param no-logo fallback decodes back`() {
-        // ic_invite_qr_logo can be absent (drawable lookup returns null) -> logo=null branch.
+        
         val url = "https://invite.test/u/i.html?pi=abc123"
         val bitmap = QrEncoder.encode(
             content = url,
@@ -82,7 +77,7 @@ class InviteQrGenerationTest {
         val h = bitmap.height
         val pixels = IntArray(w * h)
         bitmap.getPixels(pixels, 0, w, 0, 0, w, h)
-        // Every module pixel must be exactly the custom foreground or the default white background.
+        
         val allValid = pixels.all { it == bg2NightInt || it == Color.WHITE }
         assertTrue("every pixel must be bg2_night or white", allValid)
     }

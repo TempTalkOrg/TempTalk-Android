@@ -48,12 +48,12 @@ import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import kotlin.coroutines.cancellation.CancellationException
 
-/**
- * The global default notification for groups. A page of the home detail stack or its shell.
- * The write (server, then the stored profile) outlives the page under [OPERATION_KEY]; the shown
- * option is read from the stored profile whenever no write runs, so a page restored after a fold
- * shows the outcome. Pages that show this value re-read it on resume.
- */
+
+
+
+
+
+
 @AndroidEntryPoint
 class GroupGlobalNotificationSettingsFragment : Fragment(), SettingsIdiomPage {
 
@@ -142,7 +142,7 @@ class GroupGlobalNotificationSettingsFragment : Fragment(), SettingsIdiomPage {
     }
 }
 
-/** The global group-notification default as a detail destination (home stack, or its shell). */
+
 data object GroupGlobalNotificationSettingsDestination : DetailDestination {
     override fun newFragment(): Fragment = GroupGlobalNotificationSettingsFragment.newInstance()
     override fun shellIntent(context: Context): Intent = GroupGlobalNotificationSettingsActivity.intent(context)

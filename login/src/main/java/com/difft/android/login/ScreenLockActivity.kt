@@ -1,6 +1,7 @@
 package com.difft.android.login
 
 import android.app.Activity
+import com.difft.android.base.widget.floatAsTopBarButton
 import android.content.Intent
 import android.content.res.ColorStateList
 import android.os.Bundle
@@ -12,6 +13,7 @@ import androidx.core.widget.ImageViewCompat
 import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.lifecycleScope
 import com.difft.android.base.BaseActivity
+import com.difft.android.base.activity.AppUnlockListener
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.AppLockCallbackManager
 import com.difft.android.base.user.LogoutManager
@@ -53,18 +55,18 @@ class ScreenLockActivity : BaseActivity() {
     @Inject
     lateinit var logoutManager: LogoutManager
 
-    // 当前解锁模式：true = Pattern, false = Passcode
+    
     private var isPatternMode = false
 
-    // 是否为验证模式（用于关闭锁定时的身份验证）
+    
     private var isVerificationMode = false
 
-    // 倒计时相关 - Pattern 和 Passcode 分别维护
+    
     private var patternCountdownJob: Job? = null
     private var passcodeCountdownJob: Job? = null
 
-    // Short-entry hint shown in the error slot; the persistent status (warning / countdown) is
-    // restored when it ends.
+    
+    
     private var shortEntryHintJob: Job? = null
     private var defaultErrorTipsColors: ColorStateList? = null
 
@@ -73,19 +75,17 @@ class ScreenLockActivity : BaseActivity() {
         SecurityResultNonce.resultData(intent)?.let { setResult(RESULT_CANCELED, it) }
         PasscodeUtil.needRecordLastUseTime = false
 
-        // 检查是否为验证模式
         isVerificationMode = intent.getBooleanExtra(EXTRA_VERIFICATION_MODE, false)
 
         initView()
 
-        // 根据模式设置返回按键行为
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 if (isVerificationMode) {
-                    // 验证模式允许返回
+                    
                     finish()
                 }
-                // 正常解锁模式不允许返回（保持原有逻辑）
+                
             }
         })
     }
@@ -94,7 +94,7 @@ class ScreenLockActivity : BaseActivity() {
         val tintColor = ColorStateList.valueOf(ContextCompat.getColor(this, com.difft.android.base.R.color.login_logo_color))
         ImageViewCompat.setImageTintList(mBinding.ivLogo, tintColor)
 
-        // 验证模式下显示返回按钮
+        mBinding.ibBack.floatAsTopBarButton(leading = true)
         if (isVerificationMode) {
             mBinding.ibBack.visibility = View.VISIBLE
             mBinding.ibBack.setOnClickListener {
@@ -104,15 +104,12 @@ class ScreenLockActivity : BaseActivity() {
             mBinding.ibBack.visibility = View.GONE
         }
 
-        // 确定默认显示模式
         determineDefaultMode()
 
-        // 设置模式切换点击事件
         mBinding.tvSwitchMode.setOnClickListener {
             switchMode()
         }
 
-        // Passcode模式的事件
         mBinding.etPasscode1.doAfterTextChanged {
             val passcode = it.toString().trim()
             mBinding.btnSubmit.isEnabled = passcode.length in 4..10
@@ -126,10 +123,9 @@ class ScreenLockActivity : BaseActivity() {
             prepareVerify(passcode, true)
         }
 
-        // Pattern模式的事件
         setupPatternView()
         ScreenLockLayoutPolicy(mBinding).attach()
-        // Passcode mode on a short window: keep the submit button above the keyboard.
+        
         mBinding.root.liftAboveKeyboard(field = { mBinding.etPasscode1 }) { mBinding.btnSubmit }
 
         mBinding.tvForgetPasscode.setOnClickListener {
@@ -145,7 +141,6 @@ class ScreenLockActivity : BaseActivity() {
             )
         }
 
-        // 检查并恢复倒计时状态
         checkAndRestoreCountdown()
     }
 
@@ -162,7 +157,7 @@ class ScreenLockActivity : BaseActivity() {
         val hasPasscode = !userData?.passcode.isNullOrEmpty()
         val hasPattern = !userData?.pattern.isNullOrEmpty()
 
-        // 如果只设置了passcode，默认显示passcode；否则优先显示pattern
+        
         isPatternMode = hasPattern
 
         updateUI()
@@ -179,20 +174,18 @@ class ScreenLockActivity : BaseActivity() {
         val hasPattern = !userData?.pattern.isNullOrEmpty()
 
         if (isPatternMode) {
-            // 显示Pattern模式
             mBinding.tvTitle.text = getString(R.string.settings_draw_pattern)
             mBinding.etPasscode1.visibility = View.GONE
             mBinding.btnSubmit.visibility = View.GONE
             mBinding.patternLockView.visibility = View.VISIBLE
 
-            // Pattern mode: options pinned 16dp above the bottom
+            
             updateOptionsPosition(true)
 
-            // 清除输入框焦点，隐藏键盘
+            
             mBinding.etPasscode1.clearFocus()
             ViewUtil.hideKeyboard(this, mBinding.etPasscode1)
 
-            // 显示切换到passcode的选项
             if (hasPasscode) {
                 mBinding.tvSwitchMode.text = getString(R.string.settings_switch_to_passcode)
                 mBinding.tvSwitchMode.visibility = View.VISIBLE
@@ -202,20 +195,17 @@ class ScreenLockActivity : BaseActivity() {
                 mBinding.vSeparator.visibility = View.GONE
             }
         } else {
-            // 显示Passcode模式
             mBinding.tvTitle.text = getString(R.string.settings_enter_passcode)
             mBinding.etPasscode1.visibility = View.VISIBLE
             mBinding.btnSubmit.visibility = View.VISIBLE
             mBinding.patternLockView.visibility = View.GONE
 
-            // Passcode模式下，options跟随btn_submit，距离20dp
+            
             updateOptionsPosition(false)
 
-            // 请求输入框焦点，显示键盘
             mBinding.etPasscode1.requestFocus()
             ViewUtil.focusAndShowKeyboard(mBinding.etPasscode1)
 
-            // 显示切换到pattern的选项
             if (hasPattern) {
                 mBinding.tvSwitchMode.text = getString(R.string.settings_switch_to_pattern)
                 mBinding.tvSwitchMode.visibility = View.VISIBLE
@@ -226,11 +216,10 @@ class ScreenLockActivity : BaseActivity() {
             }
         }
 
-        // 清除输入和错误
         mBinding.etPasscode1.text?.clear()
         mBinding.patternLockView.clearPattern()
 
-        // 切换模式时，根据新模式恢复对应的倒计时状态
+        
         updateDelayStatusForCurrentMode()
     }
 
@@ -238,13 +227,13 @@ class ScreenLockActivity : BaseActivity() {
         val layoutParams = mBinding.llOptions.layoutParams as ConstraintLayout.LayoutParams
 
         if (isPatternMode) {
-            // Pattern mode: pinned 16dp above the bottom
+            
             layoutParams.topToBottom = ConstraintLayout.LayoutParams.UNSET
             layoutParams.bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
             layoutParams.topMargin = 0
             layoutParams.bottomMargin = resources.getDimensionPixelSize(R.dimen.screen_lock_options_bottom_margin)
         } else {
-            // Passcode模式：跟随btn_submit，距离20dp
+            
             layoutParams.topToBottom = mBinding.btnSubmit.id
             layoutParams.bottomToBottom = ConstraintLayout.LayoutParams.UNSET
             layoutParams.topMargin = (20 * resources.displayMetrics.density).toInt()
@@ -268,13 +257,13 @@ class ScreenLockActivity : BaseActivity() {
             }
 
             override fun onProgress(progressPattern: MutableList<PatternLockView.Dot>) {
-                // Pattern drawing in progress
+                
             }
 
             override fun onComplete(pattern: MutableList<PatternLockView.Dot>) {
                 val newSequence = pattern.map { it.id }
                 val legacySequence = mBinding.patternLockView.legacyPattern.map { it.id }
-                // Parsed once: classification and verification must see the same credential.
+                
                 val credential = userManager.getUserData()?.pattern?.takeIf { it.isNotEmpty() }?.let { PatternCredential.parse(it) }
                 if (credential == null) {
                     L.w { "[ScreenLockActivity] stored pattern missing or unreadable" }
@@ -283,7 +272,7 @@ class ScreenLockActivity : BaseActivity() {
                 }
                 val length = PatternUnlockPolicy.entryLength(newSequence, legacySequence, credential.createdWithNewRule)
                 when (PatternUnlockPolicy.classify(length)) {
-                    // Stray touch or too short to be a pattern: never verified, never counted.
+                    
                     PatternUnlockPolicy.EntryKind.IGNORED -> mBinding.patternLockView.clearPattern()
                     PatternUnlockPolicy.EntryKind.TOO_SHORT -> {
                         mBinding.patternLockView.clearPattern()
@@ -295,7 +284,7 @@ class ScreenLockActivity : BaseActivity() {
             }
 
             override fun onCleared() {
-//                mBinding.tvErrorTips.visibility = View.INVISIBLE
+                
             }
         })
     }
@@ -311,7 +300,7 @@ class ScreenLockActivity : BaseActivity() {
         }
     }
 
-    /** Ends a showing hint and puts the persistent status back; no-op when none is showing. */
+    
     private fun endShortEntryHint() {
         if (shortEntryHintJob != null) updateDelayStatusForCurrentMode()
     }
@@ -325,16 +314,18 @@ class ScreenLockActivity : BaseActivity() {
         }
 
         if (isVerificationMode) {
-            // 验证模式下，返回成功结果
+            
             setResult(RESULT_OK, SecurityResultNonce.resultData(intent))
         } else {
-            // Replay a queued popup only on a real app-entry unlock (not passcode setup); poll()
-            // clears the slot so it can never replay twice.
+            
+            (application as? AppUnlockListener)?.onAppUnlocked()
+            
+            
             PendingScreenLockDeeplink.poll()?.let { pendingIntent ->
-                // Arm the one-shot popup-gate bypass ONLY if the replay actually launches — a failed
-                // startActivity must not leave the gate open for an unrelated later popup. Timing is
-                // safe: the replayed intent's processIntent runs on a later main-loop cycle, after
-                // this flag is set.
+                
+                
+                
+                
                 val launched = runCatching { startActivity(pendingIntent) }
                     .onFailure { e -> L.w { "[ScreenLockActivity] replay startActivity failed: ${e.message}" } }
                     .isSuccess
@@ -359,7 +350,7 @@ class ScreenLockActivity : BaseActivity() {
         val attempts = userData?.passcodeAttempts ?: 0
         val autoMisses = userData?.passcodeAutoMisses ?: 0
 
-        // Past either budget only a manual submit is verified
+        
         if (!isManualVerify && !PasscodeAutoVerifyPolicy.allowsAutoVerify(attempts, autoMisses)) {
             L.i { "[ScreenLockActivity] auto verify blocked attempts=$attempts autoMisses=$autoMisses" }
             return
@@ -381,9 +372,8 @@ class ScreenLockActivity : BaseActivity() {
                 if (result.viaLegacyRule) {
                     L.i { "[ScreenLockActivity] pattern unlocked rule=legacy" }
                 } else if (!credential.createdWithNewRule) {
-                    // The new-rule sequence matched the stored hash, so it is the enrolled pattern: mark it
-                    // and the fallback with its double charge ends. A legacy-only match is not re-saved,
-                    // since the new-rule sequence of that gesture never matched.
+                    
+                    
                     userManager.update { this.pattern = PatternCredential.create(newSequence).format() }
                     L.i { "[ScreenLockActivity] pattern credential marked" }
                 }
@@ -404,20 +394,20 @@ class ScreenLockActivity : BaseActivity() {
         }
 
         when (val ladder = result.ladder) {
-            // 第10次错误直接退出
+            
             is PatternUnlockPolicy.Ladder.Logout -> {
                 logoutManager.doLogoutWithoutRemoveData()
                 return
             }
 
-            // 第9次错误：显示警告文案
+            
             is PatternUnlockPolicy.Ladder.Warning -> {
                 ToastUtil.show(R.string.settings_pattern_error_tips)
                 mBinding.tvErrorTips.visibility = View.VISIBLE
                 mBinding.tvErrorTips.text = getString(R.string.settings_too_many_attempts_warning)
             }
 
-            // 第5-8次错误：启动倒计时
+            
             is PatternUnlockPolicy.Ladder.Delay -> {
                 ToastUtil.show(R.string.settings_pattern_error_tips)
                 startCountdownTimer(ladder.seconds, true)
@@ -436,7 +426,6 @@ class ScreenLockActivity : BaseActivity() {
             AppLockCallbackManager.notifyUnlockSuccess()
         } else {
             if (isManualVerify) {
-                // 清空输入框
                 mBinding.etPasscode1.text?.clear()
 
                 val attemptsCount = (userManager.getUserData()?.passcodeAttempts ?: 0)
@@ -444,25 +433,24 @@ class ScreenLockActivity : BaseActivity() {
                     this.passcodeAttempts = attemptsCount + 1
                 }
 
-                // 第10次错误直接退出
+                
                 if (attemptsCount + 1 >= 10) {
                     logoutManager.doLogoutWithoutRemoveData()
                     return
                 }
 
-                // 所有错误都显示 Toast 提示
+                
                 ToastUtil.show(R.string.settings_passcode_error_tips)
 
-                // 根据尝试次数处理
                 when {
                     attemptsCount + 1 == 9 -> {
-                        // 第9次错误：显示警告文案
+                        
                         mBinding.tvErrorTips.visibility = View.VISIBLE
                         mBinding.tvErrorTips.text = getString(R.string.settings_too_many_attempts_warning)
                     }
 
                     attemptsCount + 1 >= 5 -> {
-                        // 第5-8次错误：启动倒计时
+                        
                         val delaySeconds = (attemptsCount + 1 - 4) * (attemptsCount + 1 - 4)
                         startCountdownTimer(delaySeconds, false)
                     }
@@ -480,25 +468,19 @@ class ScreenLockActivity : BaseActivity() {
     }
 
     private fun startCountdownTimer(delaySeconds: Int, isPattern: Boolean) {
-        // 根据模式选择对应的 Job
         if (isPattern) {
-            // 取消之前的 Pattern 倒计时
             patternCountdownJob?.cancel()
-            // 禁用 Pattern 输入
             mBinding.patternLockView.setInputEnabled(false)
         } else {
-            // 取消之前的 Passcode 倒计时
             passcodeCountdownJob?.cancel()
-            // 禁用 Passcode 输入
             mBinding.etPasscode1.isEnabled = false
             mBinding.btnSubmit.isEnabled = false
         }
 
-        // 启动倒计时
         val job = lifecycleScope.launch {
             var remainingSeconds = delaySeconds
             while (remainingSeconds > 0) {
-                // 只有当前模式与倒计时模式匹配时才更新UI
+                
                 if (isPattern == isPatternMode) {
                     mBinding.tvErrorTips.visibility = View.VISIBLE
                     updateCountdownText(remainingSeconds)
@@ -508,23 +490,20 @@ class ScreenLockActivity : BaseActivity() {
                 remainingSeconds--
             }
 
-            // 倒计时结束，恢复输入
             if (isPattern) {
                 mBinding.patternLockView.setInputEnabled(true)
             } else {
                 mBinding.etPasscode1.isEnabled = true
-                // 清除输入框内容
                 mBinding.etPasscode1.text?.clear()
-                // btnSubmit 的状态由 etPasscode1 的文本变化控制，会自动更新为 false
+                
             }
 
-            // 只有当前模式与倒计时模式匹配时才隐藏错误提示
+            
             if (isPattern == isPatternMode) {
                 mBinding.tvErrorTips.visibility = View.INVISIBLE
             }
         }
 
-        // 保存对应的 Job
         if (isPattern) {
             patternCountdownJob = job
         } else {
@@ -543,49 +522,43 @@ class ScreenLockActivity : BaseActivity() {
     private fun checkAndRestoreCountdown() {
         val userData = userManager.getUserData() ?: return
 
-        // 分别检查并启动两种模式的倒计时（如果需要的话）
-        // Pattern 模式
+        
         val patternAttempts = userData.patternAttempts
         if (patternAttempts in 5..8) {
             val delaySeconds = (patternAttempts - 4) * (patternAttempts - 4)
             startCountdownTimer(delaySeconds, true)
         }
 
-        // Passcode 模式
         val passcodeAttempts = userData.passcodeAttempts
         if (passcodeAttempts in 5..8) {
             val delaySeconds = (passcodeAttempts - 4) * (passcodeAttempts - 4)
             startCountdownTimer(delaySeconds, false)
         }
 
-        // 根据当前显示的模式，更新UI显示
         updateDelayStatusForCurrentMode()
     }
 
     private fun updateDelayStatusForCurrentMode() {
-        // Any short-entry hint ends here: the slot goes back to the persistent status.
+        
         shortEntryHintJob?.cancel()
         shortEntryHintJob = null
         defaultErrorTipsColors?.let { mBinding.tvErrorTips.setTextColor(it) }
 
         val userData = userManager.getUserData() ?: return
 
-        // 根据当前模式获取对应的尝试次数
         val attemptsCount = if (isPatternMode) {
             userData.patternAttempts
         } else {
             userData.passcodeAttempts
         }
 
-        // 处理第9次错误的情况
         if (attemptsCount == 9) {
             mBinding.tvErrorTips.visibility = View.VISIBLE
             mBinding.tvErrorTips.text = getString(R.string.settings_too_many_attempts_warning)
             return
         }
 
-        // 如果在倒计时范围（5-8次），先隐藏错误提示，Job 会在下一秒更新显示
-        // 否则隐藏错误提示
+        
         mBinding.tvErrorTips.visibility = View.INVISIBLE
     }
 }

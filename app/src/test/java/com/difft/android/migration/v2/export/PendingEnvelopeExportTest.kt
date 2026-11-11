@@ -8,10 +8,10 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/**
- * Which pending rows a device replacement carries (#1382): the ones the receive path would still
- * apply — unexpired by the 10-day rule on the target's timestamp, with bytes that parse.
- */
+
+
+
+
 class PendingEnvelopeExportTest {
 
     private val now = 1_800_000_000_000L

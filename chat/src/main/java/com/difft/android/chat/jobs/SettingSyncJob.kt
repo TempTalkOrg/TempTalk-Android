@@ -29,25 +29,25 @@ import java.io.IOException
 import java.net.HttpURLConnection
 import java.util.concurrent.TimeUnit
 
-/**
- * Carries one local-first setting change ([SyncField]) to the server. One job per user
- * operation; the queue `[SettingSync::<room>::<field>]` runs them FIFO per field, so a job that
- * finds another job in its queue knows it has been superseded.
- *
- * Phases only move forward and are persisted through [persistPhase]: a retry with the minimum
- * positive backoff, which makes the framework re-serialise the job before the next run
- * (`JobController.onRetry` requires a positive interval):
- *
- * - [Phase.SEND]: the intent is not on the server yet. POST once; on acceptance keep only the
- *   echoed version as [acceptedVersion] and move to RECONCILE.
- * - [Phase.RECONCILE]: the SET was accepted (or the server already won). Never SET again; GET the
- *   full snapshot and let [ConversationSettingsApplier.applyFinal] align the row.
- * - [Phase.ROLLBACK]: the SET was rejected or the job expired. Never SET again; GET and align.
- *
- * A job holding an [acceptedVersion] does not vanish on supersession until the local applied
- * version has caught up with it, so a later job's rollback can never undo the accepted write
- * with a stale read replica.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 class SettingSyncJob @AssistedInject constructor(
     @Assisted parameters: Parameters?,
     @Assisted("roomId") private val roomId: String,
@@ -89,10 +89,10 @@ class SettingSyncJob @AssistedInject constructor(
 
     override fun getFactoryKey(): String = KEY
 
-    /**
-     * The change is abandoned (another login's job, or dropped when a login ended, #1382 A04): its
-     * intent stops gating server snapshots at once, so the next pull realigns the local row.
-     */
+    
+
+
+
     override fun onFailure() {
         syncState.markFinalized(id, queueKey)
         syncState.clearIntentIf(roomId, field, ts)
@@ -111,9 +111,9 @@ class SettingSyncJob @AssistedInject constructor(
     private suspend fun execute(): Result {
         val room = dbRoomStore.getRoom(roomId) ?: return finish("roomGone")
         if (isSuperseded()) {
-            // An accepted write must be reflected in the local applied version before this job
-            // disappears, or a later job's rollback could undo it with a stale read. Once any
-            // snapshot has carried the version that far, nothing is left to wait for.
+            
+            
+            
             return when {
                 acceptedVersion == 0 -> finish("superseded")
                 room.conversationConfigVersion >= acceptedVersion -> finish("supersededFloorMet")
@@ -135,19 +135,19 @@ class SettingSyncJob @AssistedInject constructor(
         }
         val room = dbRoomStore.getRoom(roomId) ?: return finish("roomGone")
         if (room.confidentialMode != target) {
-            // The server won a conflict after this job was enqueued; it may still have executed our SET.
+            
             L.i { "[SettingSync] decision=serverWon room=$roomId target=$target local=${room.confidentialMode}" }
             phase = Phase.RECONCILE
             return persistPhase()
         }
-        // The SET is a server write: it is admitted like a message send and held while messaging
-        // is paused (#1382). The runner closes the ticket after this run's result is recorded.
+        
+        
         val admission = messagingGate.tryAdmit(AdmissionKind.SEND, KEY) ?: run {
             L.i { "[MigrationPause] event=send_deferred jobKey=$KEY jobId=$id attempt=$runAttempt" }
             return Result.deferred()
         }
         closeWhenRunEnds(admission)
-        // Only the login that made the change sends it (#1382 A04); see SendLogin.
+        
         when (sendLogin()) {
             SendLogin.CURRENT -> Unit
             SendLogin.NONE -> {
@@ -188,7 +188,7 @@ class SettingSyncJob @AssistedInject constructor(
         }
     }
 
-    /** Bounded GET → applyFinal loop; HTTP success is not alignment, only an outcome is. */
+    
     private suspend fun reconcile(reason: String): Result {
         repeat(MAX_RECONCILE_ATTEMPTS) { attempt ->
             if (attempt > 0) {
@@ -224,7 +224,7 @@ class SettingSyncJob @AssistedInject constructor(
 
     private fun retryLater(): Result = Result.retry(BackoffUtil.exponentialBackoff(runAttempt + 1, MAX_BACKOFF_MS))
 
-    /** Persists the phase change through the framework's retry path and runs again at once. */
+    
     private fun persistPhase(): Result = Result.retry(PHASE_PERSIST_BACKOFF_MS)
 
     class Factory : Job.Factory<SettingSyncJob> {
@@ -261,18 +261,18 @@ class SettingSyncJob @AssistedInject constructor(
         const val KEY_PHASE = "phase"
         const val KEY_ACCEPTED_VERSION = "accepted_version"
 
-        /** Smallest interval `JobController.onRetry` accepts; used to persist a phase change. */
+        
         const val PHASE_PERSIST_BACKOFF_MS = 1L
 
-        /** Execution-side expiry; the framework lifespan stays IMMORTAL so expiry always runs the rollback. */
+        
         val EXPIRY_MS: Long = TimeUnit.DAYS.toMillis(30)
         private val MAX_BACKOFF_MS: Long = TimeUnit.SECONDS.toMillis(60)
         private const val MAX_RECONCILE_ATTEMPTS = 2
 
-        /**
-         * 4xx the server will keep answering the same way. 401/403 wait for a token refresh;
-         * 408, 413, 428 and 429 are transient (timeout, rate limit, proof required).
-         */
+        
+
+
+
         fun isRejection(code: Int?): Boolean = code != null &&
             code in HttpURLConnection.HTTP_BAD_REQUEST until HttpURLConnection.HTTP_INTERNAL_ERROR &&
             code !in TRANSIENT_4XX

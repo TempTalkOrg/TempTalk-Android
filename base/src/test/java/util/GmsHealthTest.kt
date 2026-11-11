@@ -16,11 +16,11 @@ import org.robolectric.annotation.Config
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/**
- * Unit tests for [GmsHealth]: "broken" means GMS is installed but no package serves the gservices
- * authority. Package state is driven through Robolectric's real PackageManager shadow so the
- * lookups exercise the same `getPackageInfo` / `resolveContentProvider` calls as production.
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33])
 class GmsHealthTest {

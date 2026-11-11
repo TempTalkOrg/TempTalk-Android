@@ -8,15 +8,10 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * [DownloadAttachmentJob] persistence contract.
- *
- * Jobs outlive the install that created them, so BOTH directions matter: a new job must carry the
- * localId that keys its row and its progress, and a job persisted by the previous version — whose
- * data has no such key — must still deserialize and run instead of crashing the job manager.
- *
- * The key literals are asserted deliberately: they are the on-disk format of already-persisted jobs.
- */
+
+
+
+
 class DownloadAttachmentJobSerializationTest {
 
     private val fileKey = ByteArray(64) { it.toByte() }
@@ -37,7 +32,7 @@ class DownloadAttachmentJobSerializationTest {
         .putString("file_path", "/root/attachment/999/photo.jpg")
         .putLong("authorized_id", 777L)
         .putByteArray("file_key", fileKey)
-        // Written by a build that still carried the decrypt-to-disk flag; the factory ignores it.
+        
         .putBoolean("should_decrypt", true)
         .putBoolean("auto_save", false)
         .build()
@@ -65,11 +60,11 @@ class DownloadAttachmentJobSerializationTest {
         assertFalse(data.hasString("local_id"))
         assertEquals("msg-1", data.getString("message_id"))
         assertEquals("server-id", data.getString("attachment_id"))
-        // The frozen path survives only as onRun's fallback input; the destination is recomputed.
+        
         assertEquals("/root/attachment/999/photo.jpg", data.getString("file_path"))
         assertEquals(777L, data.getLong("authorized_id"))
         assertArrayEquals(fileKey, data.getByteArray("file_key"))
-        // A key the factory no longer reads must not survive the round trip.
+        
         assertFalse(data.hasBoolean("should_decrypt"))
         assertEquals(false, data.getBoolean("auto_save"))
     }

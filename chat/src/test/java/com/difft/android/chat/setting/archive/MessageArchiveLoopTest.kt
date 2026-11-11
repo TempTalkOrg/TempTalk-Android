@@ -16,13 +16,13 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * The archive loop of [MessageArchiveManager] (#1395): one loop per process whoever starts it
- * (IndexActivity or the warm-process foreground resync); a cipher-key failure skips a round
- * unstamped and is retried next round, logged once per process; any other exception still
- * escapes; a round while the DB is inaccessible is skipped silently. WCDB's native library does not
- * load on the JVM, so the round's DB work ([MessageArchiveManager.archivePass]) is faked.
- */
+
+
+
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class MessageArchiveLoopTest {
 
@@ -52,7 +52,7 @@ class MessageArchiveLoopTest {
 
     @Test
     fun `only the first start returns true, so a second caller cannot stack a loop`() {
-        // The launched loop exits at once on an inaccessible DB; only the guard is under test here.
+        
         inaccessible = true
 
         assertTrue(manager.startCheckTask())
@@ -80,7 +80,7 @@ class MessageArchiveLoopTest {
     fun `repeated key failures log once per process`() {
         val capture = LogCapture()
         capture.recording {
-            // L delivers asynchronously; the marker separates lines still queued from earlier tests.
+            
             L.i { START_MARKER }
             runTest {
                 onPass = { throw WCDBKeyUnavailableException("key unavailable") }
@@ -135,7 +135,7 @@ class MessageArchiveLoopTest {
         assertTrue(loop.isCompleted)
     }
 
-    /** The foreground interval elapses and the monotonic clock moves with it. */
+    
     private fun TestScope.advanceRound() {
         now += INTERVAL_MS
         advanceTimeBy(INTERVAL_MS + 1)

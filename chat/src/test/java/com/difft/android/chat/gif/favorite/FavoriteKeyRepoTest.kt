@@ -14,24 +14,24 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/**
- * Unit tests for the UserManager-backed [FavoriteKeyRepo] storage (favKey stored in the encrypted
- * secure_user store, not WCDB). v2: the repo simply caches the unwrapped favKey (keyId + raw key)
- * — no version gate, no distribution — so this covers the save/read round-trip and the
- * no-key-stored case.
- *
- * Runs under Robolectric because the favKey is stored Base64.NO_WRAP via android.util.Base64.
- */
+
+
+
+
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(manifest = Config.NONE, sdk = [30])
 class FavoriteKeyRepoTest {
 
-    /**
-     * In-memory UserManager mirroring :base FakeUserManager but local to the chat module (the
-     * testFixtures Kotlin compilation gap). Uses the real `UserManager.update {}` default so the
-     * copy-then-set funnel is exercised.
-     */
+    
+
+
+
+
     private class InMemoryUserManager(
         private var data: UserData? = UserData()
     ) : UserManager {
@@ -91,7 +91,7 @@ class FavoriteKeyRepoTest {
             block()
             throw AssertionError("expected IllegalArgumentException")
         } catch (e: IllegalArgumentException) {
-            // expected
+            
         }
     }
 }

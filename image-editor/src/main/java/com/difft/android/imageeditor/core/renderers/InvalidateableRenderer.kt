@@ -4,9 +4,9 @@ import com.difft.android.imageeditor.core.Renderer
 import com.difft.android.imageeditor.core.RendererContext
 import java.lang.ref.WeakReference
 
-/**
- * Maintains a weak reference to the an invalidate callback allowing future invalidation without memory leak risk.
- */
+
+
+
 abstract class InvalidateableRenderer : Renderer {
 
     private var invalidate = WeakReference<RendererContext.Invalidate>(null)

@@ -53,17 +53,17 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
-/**
- * [MigrationP2pSendController] — the CORE new behavior vs the demo controller: it passes the LIVE account
- * + `environmentHelper.currentEnvironment` to `P2pContainerFusion.sendRealExport` with a NON-NULL
- * `sourceEnvironment`, which is what makes the fusion build + send the `MigrationHandshake` (the demo
- * controller passes `null` → no handshake). Plus the snapshot close+delete-on-every-exit safety + the
- * empty-account fail-fast guard.
- *
- * The fusion + the snapshot read-source opener are injected as default-valued seams so we assert the
- * call args without standing up native sockets / WCDB. The internally-built `NeutralExporterImpl` is pure
- * Kotlin over the relaxed-mock read source; its lazy `export()` flow is never collected here.
- */
+
+
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [34])
 class MigrationP2pSendControllerTest {
@@ -91,8 +91,8 @@ class MigrationP2pSendControllerTest {
         snapshotFile = File.createTempFile("snap", ".db").apply { writeText("x") }
         coEvery { snapshotter.takeSnapshot() } returns snapshotFile
 
-        // The opener seam returns a relaxed-mock read source (no native WCDB open). The NeutralExporterImpl
-        // built over it stays pure-JVM (its export() flow is never collected here).
+        
+        
         readSource = mockk(relaxed = true)
     }
 
@@ -117,8 +117,8 @@ class MigrationP2pSendControllerTest {
         appVersion = "1.2.3",
         fusion = fusion,
         openReadSource = { _, _ -> readSource },
-        // Stub the pre-count so the test avoids the native-WCDB `DBMessageModel`/winq query builders the
-        // real `preCount()` walks (ExceptionInInitializerError on the JVM).
+        
+        
         preCount = { counted },
         readPendingRows = { pendingRows },
         clock = { NOW },
@@ -146,8 +146,8 @@ class MigrationP2pSendControllerTest {
 
         assertTrue(ok)
         assertEquals("acc_real", accountSlot.captured)
-        // The thing the demo does NOT do: a non-null env → the fusion builds + sends the handshake —
-        // under its wire name, never the build-config spelling.
+        
+        
         assertEquals(QrPayloadV2Codec.Environment.PROD, envSlot.captured)
     }
 
@@ -172,11 +172,11 @@ class MigrationP2pSendControllerTest {
         newController(counted).sendRealExport(scope = this, target = target, onProgress = {})
 
         val totals = totalsSlot.captured
-        // The exporter counts DB rows; the controller may prepend one identity record on top.
+        
         assertTrue(totals.recordCount == counted.recordCount || totals.recordCount == counted.recordCount + 1)
         assertEquals(counted.attachmentCount, totals.attachmentCount)
         assertEquals(counted.attachmentBytes, totals.attachmentBytes)
-        // The advisory size is on the formula's own scale, not the snapshot file size.
+        
         assertEquals(totals.recordCount * TransferProgress.RECORD_WEIGHT_BYTES + totals.attachmentBytes, sizeSlot.captured)
     }
 
@@ -203,7 +203,7 @@ class MigrationP2pSendControllerTest {
         coEvery {
             fusion.sendRealExport(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
         } answers {
-            scope.cancel() // cancel mid-send → withContext cancels → finally still runs
+            scope.cancel() 
             throw kotlinx.coroutines.CancellationException("cancelled")
         }
 
@@ -221,14 +221,14 @@ class MigrationP2pSendControllerTest {
         assertFailsWith<IllegalStateException> {
             newController().sendRealExport(scope = this, target = target, onProgress = {})
         }
-        // Empty-account guard: NO snapshot, NO fusion call, NO network round-trip.
+        
         coVerify(exactly = 0) { snapshotter.takeSnapshot() }
         coVerify(exactly = 0) {
             fusion.sendRealExport(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
         }
     }
 
-    // ── #1382: the device-replacement message pause around the snapshot ──
+    
 
     private fun anyExport() = coEvery {
         fusion.sendRealExport(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
@@ -297,7 +297,7 @@ class MigrationP2pSendControllerTest {
         assertNull(hooks.captured)
     }
 
-    // ── #1382: pending envelopes and the receiver capability they need ──
+    
 
     private class Captured {
         val records = slot<Flow<NeutralRecord>>()
@@ -350,7 +350,7 @@ class MigrationP2pSendControllerTest {
 
         assertEquals(setOf(ReceiverCaps.PENDING_ENVELOPE_V1), captured.caps.captured)
         assertEquals(2, captured.totals.captured.recordCount, "the two carried envelopes are counted")
-        // They lead the stream; taking them never starts the (native) database walk behind them.
+        
         val carried = captured.records.captured.take(2).toList().map { (it as NeutralRecord.PendingEnvelope).value }
         assertEquals(listOf("recall-1", "reaction-2"), carried.map { it.messageId })
         assertEquals(fresh, carried[0].originalMessageTimeStamp)

@@ -20,16 +20,16 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/**
- * T1-1..T1-3: [E2eeInfoSheetContent] is the shared explainer content both [E2eeInfoSheet.show]
- * and [E2eeInfoSheetDialog] host.
- *
- * Screen qualifiers are set generously tall (h1600dp): the content's `heightIn(max = 78% of
- * screenHeightDp)` + `verticalScroll` combination needs enough room that the "OK"/"Learn more"
- * actions actually get non-zero layout bounds under Robolectric's default (much smaller) test
- * window — `performClick()` dispatches a real touch at the node's center, so a zero-size node
- * (scrolled out of a too-small viewport) is simply unreachable by click.
- */
+
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34], qualifiers = "w411dp-h1600dp")

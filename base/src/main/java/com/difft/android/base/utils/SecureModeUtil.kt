@@ -15,13 +15,10 @@ import kotlinx.coroutines.withContext
 
 object SecureModeUtil {
 
-    /**
-     * 根据屏幕锁状态刷新截屏权限
-     * - 有屏幕锁 → 禁止截屏
-     * - 无屏幕锁 → 允许截屏
-     *
-     * 适用于：普通页面（全局 onActivityResumed 调用）
-     */
+    
+
+
+
     fun refreshByScreenLock(activity: Activity) {
         if (activity.isFinishing || activity.isDestroyed) return
 
@@ -47,13 +44,10 @@ object SecureModeUtil {
         }
     }
 
-    /**
-     * 根据屏幕锁 + 页面策略刷新截屏权限
-     * - 有屏幕锁 → 禁止截屏（忽略 pageEnable）
-     * - 无屏幕锁 → 根据 pageEnable 决定
-     *
-     * 适用于：IndexActivity（会话列表禁止，其他 tab 允许）
-     */
+    
+
+
+
     fun refreshWithPagePolicy(activity: Activity, pageEnable: Boolean) {
         if (activity.isFinishing || activity.isDestroyed) return
 
@@ -79,11 +73,7 @@ object SecureModeUtil {
         }
     }
 
-    /**
-     * 强制禁止截屏（不检查屏幕锁）
-     *
-     * 适用于：ChatActivity / GroupChatContentActivity
-     */
+    
     fun forceDisable(activity: Activity) {
         if (activity.isFinishing || activity.isDestroyed) return
 
@@ -95,13 +85,10 @@ object SecureModeUtil {
         setSecureFlag(activity.window)
     }
 
-    /**
-     * 根据屏幕锁状态设置 Dialog 的安全模式
-     * - 有屏幕锁 → 禁止截屏
-     * - 无屏幕锁 → 允许截屏
-     *
-     * 适用于：BottomSheetDialog 等独立 Window 的 Dialog
-     */
+    
+
+
+
     fun applySecureFlagToDialog(dialog: Dialog) {
         if (isDebugOrInsider()) {
             clearSecureFlag(dialog.window)
@@ -113,7 +100,7 @@ object SecureModeUtil {
         }
     }
 
-    // ==================== Private Helper Methods ====================
+    
 
     private fun isDebugOrInsider(): Boolean {
         return BuildConfig.DEBUG || globalServices.environmentHelper.isInsiderChannel()

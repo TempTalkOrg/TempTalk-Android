@@ -13,20 +13,20 @@ import org.difft.app.database.models.SpeechToTextModel
 import org.difft.app.database.models.TranslateModel
 import org.difft.app.database.test.builders.ChildRowCorpus
 
-/** One recorded loader invocation. [keys] is the exact key list the hydrator passed. */
+
 data class LoaderCall(val method: String, val keys: List<Any>)
 
-/**
- * In-memory [MessageChildRowLoader] over a [ChildRowCorpus].
- *
- * Reproduces the two things the production loader promises the hydrator — the `IN` predicate and
- * `ORDER BY databaseId ASC` — and nothing else. It deliberately does NOT chunk: chunking is
- * `WcdbMessageChildRowLoader`'s internal concern (`chunkKeys`) and is covered by its own case, so
- * a call here is one call and [callLog] measures what the hydrator actually asked for.
- *
- * [failures] maps a method name to a throwable it should raise instead of returning rows, for the
- * "loader exception propagates" case.
- */
+
+
+
+
+
+
+
+
+
+
+
 class FakeMessageChildRowLoader(
     private val corpus: ChildRowCorpus = ChildRowCorpus(),
     private val failures: Map<String, Throwable> = emptyMap(),
@@ -34,7 +34,7 @@ class FakeMessageChildRowLoader(
 
     private val recorded = mutableListOf<LoaderCall>()
 
-    /** Every invocation, in order. Empty means the hydrator issued no query at all. */
+    
     val callLog: List<LoaderCall> get() = recorded.toList()
 
     fun callCount(method: String): Int = recorded.count { it.method == method }

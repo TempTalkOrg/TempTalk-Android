@@ -10,21 +10,21 @@ import com.difft.android.imageeditor.core.Renderer
 import com.difft.android.imageeditor.core.RendererContext
 import java.util.UUID
 
-/**
- * An image consists of a tree of [EditorElement]s.
- *
- * Each element has some persisted state:
- * - An optional [Renderer] so that it can draw itself.
- * - A list of child elements that make the tree possible.
- * - Its own transformation matrix, which applies to itself and all its children.
- * - A set of flags controlling visibility, selectablity etc.
- *
- * Then some temporary state.
- * - A editor matrix for displaying as yet uncommitted edits.
- * - An animation matrix for animating from one matrix to another.
- * - Deleted children to allow them to fade out on delete.
- * - Temporary flags, for temporary visibility, selectablity etc.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 @Parcelize
 @TypeParceler<UUID, UuidParceler>()
 @TypeParceler<EditorFlags, FlagsParceler>()
@@ -67,16 +67,16 @@ class EditorElement private constructor(
         ArrayList()
     )
 
-    /**
-     * Iff Visible,
-     * Renders tree with the following localMatrix:
-     *
-     * viewModelMatrix * localMatrix * editorMatrix * animationMatrix
-     *
-     * Child nodes are supplied with a viewModelMatrix' = viewModelMatrix * localMatrix * editorMatrix * animationMatrix
-     *
-     * @param rendererContext Canvas to draw on to.
-     */
+    
+
+
+
+
+
+
+
+
+
     fun draw(rendererContext: RendererContext) {
         if (!flags.isVisible() && !flags.isChildrenVisible()) return
 
@@ -307,11 +307,11 @@ class EditorElement private constructor(
         setMatrixWithAnimation(localMatrix, newLocalMatrix, invalidate)
     }
 
-    /**
-     * @param destination Matrix to change
-     * @param source      Matrix value to set
-     * @param invalidate  Callback to allow animation
-     */
+    
+
+
+
+
     private fun setMatrixWithAnimation(destination: Matrix, source: Matrix, invalidate: Runnable?) {
         val old = Matrix(destination)
         animationMatrix.stop()

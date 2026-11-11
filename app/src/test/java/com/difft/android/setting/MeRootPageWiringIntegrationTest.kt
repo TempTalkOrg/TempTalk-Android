@@ -1,14 +1,24 @@
 package com.difft.android.setting
 
 import android.content.Context
+import android.content.pm.PackageManager
 import android.os.Looper
 import android.view.View
 import android.widget.TextView
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
 import androidx.core.graphics.Insets
 import androidx.core.view.ViewCompat
@@ -21,8 +31,14 @@ import com.difft.android.R
 import com.difft.android.base.notification.NotificationReadiness
 import com.difft.android.base.notification.NotificationTestRepository
 import com.difft.android.base.storage.user.StorageBoundUserManager
+import com.difft.android.base.ui.sidechrome.NavigationPlacement
+import com.difft.android.base.ui.sidechrome.SideChrome
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.PackageUtil
+import com.difft.android.base.utils.StatusBarSetting
+import com.difft.android.base.utils.TextSizeUtil
+import com.difft.android.base.utils.density.DisplayDensityNormalizer
+import com.difft.android.base.utils.density.DisplaySize
 import com.difft.android.base.utils.pane.SettingsIdiomPage
 import com.difft.android.base.utils.pane.detailBackOwner
 import com.difft.android.base.widget.ToastUtil
@@ -58,6 +74,7 @@ import io.mockk.mockk
 import io.mockk.mockkObject
 import io.mockk.unmockkObject
 import io.mockk.verify
+import io.mockk.verifyOrder
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
@@ -81,7 +98,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import com.difft.android.chat.R as ChatR
 
-/** The six production Me roots under the real pane host, including mixed XML/Compose pages. */
+
 @HiltAndroidTest
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -163,11 +180,11 @@ class MeRootPageWiringIntegrationTest {
         ({ NotificationSettingsFragment() }) to ChatR.string.notification_title,
         ({ AboutFragment() }) to R.string.settings_about,
         ({ LanguageFragment() }) to ChatR.string.me_language,
-        ({ ThemeFragment() }) to ChatR.string.me_theme,
+        ({ ThemeFragment() }) to ChatR.string.me_appearance,
         ({ LinkedDevicesFragment() }) to R.string.linked_devices_title,
     )
 
-    /** Actual XML listeners must pad only the missing bottom, preserving top padding. */
+    
     private fun assertXmlInsets(page: Fragment, expectedBottom: Int) {
         if (page !is ChatSettingsFragment && page !is NotificationSettingsFragment) return
         val root = page.requireView()
@@ -189,7 +206,7 @@ class MeRootPageWiringIntegrationTest {
             val page = factory()
             mount(page)
             title(page, context.getString(titleRes))
-            // The two-pane detail column reaches the window bottom, so the page pads the bar itself.
+            
             assertXmlInsets(page, 27)
             val xmlBack = page.requireView().findViewById<View>(R.id.ib_back)
             if (xmlBack != null) assertEquals(View.GONE, xmlBack.visibility)
@@ -292,5 +309,104 @@ class MeRootPageWiringIntegrationTest {
         idle()
         verify(exactly = 1) { ToastUtil.show(R.string.linked_devices_list_update_failed) }
         compose.onNodeWithText("Test laptop").assertExists()
+    }
+
+    
+    private fun segment(group: String, text: String): SemanticsNodeInteraction =
+        compose.onNode(hasText(text) and hasAnyAncestor(hasContentDescription(group)))
+
+    private fun mockAppearanceSingletons() {
+        mockkObject(TextSizeUtil, DisplayDensityNormalizer, SideChrome, StatusBarSetting)
+        every { TextSizeUtil.updateTextSize(any()) } just Runs
+        every { DisplayDensityNormalizer.setDisplaySize(any(), any()) } just Runs
+        every { DisplayDensityNormalizer.recreateManagedActivities() } returns emptyList()
+        every { SideChrome.applyPlacement(any(), any()) } returns emptyList()
+        every { StatusBarSetting.setHidden(any(), any()) } just Runs
+    }
+
+    @Test
+    fun `the Appearance page routes each control to its setting and has no navigation row off a short foldable`() {
+        launch()
+        mount(ThemeFragment())
+        mockAppearanceSingletons()
+        try {
+            compose.onNodeWithText(context.getString(R.string.me_navigation_placement)).assertDoesNotExist()
+
+            segment(context.getString(R.string.me_text_size), context.getString(R.string.me_text_size_lage)).performScrollTo().performClick()
+            segment(context.getString(R.string.me_display_size), context.getString(R.string.me_display_size_small)).performScrollTo().performClick()
+            compose.onNodeWithText(context.getString(R.string.me_hide_status_bar)).performScrollTo().performClick()
+            idle()
+
+            verify(exactly = 1) { TextSizeUtil.updateTextSize(TextSizeUtil.TEXT_SIZE_LAGER) }
+            verifyOrder {
+                DisplayDensityNormalizer.setDisplaySize(pane!!.get(), DisplaySize.SMALL)
+                DisplayDensityNormalizer.recreateManagedActivities()
+            }
+            verify(exactly = 1) { StatusBarSetting.setHidden(pane!!.get(), true) }
+            verify(exactly = 0) { SideChrome.applyPlacement(any(), any()) }
+        } finally {
+            unmockkObject(TextSizeUtil, DisplayDensityNormalizer, SideChrome, StatusBarSetting)
+        }
+    }
+
+    @Test
+    fun `while its window is being recreated the Appearance page ignores a second display size and keeps the first marked`() {
+        launch()
+        mount(ThemeFragment())
+        mockAppearanceSingletons()
+        
+        every { DisplayDensityNormalizer.recreateManagedActivities() } answers { listOf(pane!!.get()) }
+        try {
+            val group = context.getString(R.string.me_display_size)
+            segment(group, context.getString(R.string.me_display_size_small)).performScrollTo().performClick()
+            idle()
+            segment(group, context.getString(R.string.me_display_size_large)).performScrollTo().performClick()
+            idle()
+
+            verify(exactly = 1) { DisplayDensityNormalizer.setDisplaySize(any(), any()) }
+            verify(exactly = 1) { DisplayDensityNormalizer.setDisplaySize(pane!!.get(), DisplaySize.SMALL) }
+            segment(group, context.getString(R.string.me_display_size_small)).assertIsSelected()
+            segment(group, context.getString(R.string.me_display_size_large)).assertIsNotSelected()
+        } finally {
+            unmockkObject(TextSizeUtil, DisplayDensityNormalizer, SideChrome, StatusBarSetting)
+        }
+    }
+
+    @Test
+    @Config(qualifiers = "w900dp-h638dp")
+    fun `on a short foldable screen the Appearance page offers the navigation position and applies it`() {
+        shadowOf(context.packageManager).setSystemFeature(PackageManager.FEATURE_SENSOR_HINGE_ANGLE, true)
+        launch()
+        mount(ThemeFragment())
+        mockAppearanceSingletons()
+        try {
+            val group = context.getString(R.string.me_navigation_placement)
+            segment(group, context.getString(R.string.me_navigation_placement_default)).performScrollTo().performClick()
+            idle()
+
+            verify(exactly = 1) { SideChrome.applyPlacement(pane!!.get(), NavigationPlacement.DEFAULT) }
+            segment(group, context.getString(R.string.me_navigation_placement_default)).assertExists()
+        } finally {
+            unmockkObject(TextSizeUtil, DisplayDensityNormalizer, SideChrome, StatusBarSetting)
+        }
+    }
+
+    @Test
+    @Config(qualifiers = "w400dp-h500dp")
+    fun `the Appearance page comes back at its scroll offset after the window is recreated`() {
+        launch()
+        mount(ThemeFragment())
+        compose.onNodeWithText(context.getString(R.string.me_hide_status_bar)).performScrollTo()
+        idle()
+        fun offset(): Float = compose.onNode(hasScrollAction()).fetchSemanticsNode()
+            .config[SemanticsProperties.VerticalScrollAxisRange].value()
+        val before = offset()
+        assertTrue(before > 0f, "the page did not scroll: $before")
+
+        compose.runOnUiThread { pane!!.recreate() }
+        idle()
+
+        assertTrue(pages().single() is ThemeFragment)
+        assertEquals(before, offset())
     }
 }

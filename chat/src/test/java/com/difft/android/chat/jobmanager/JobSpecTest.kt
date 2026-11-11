@@ -12,7 +12,7 @@ import kotlin.test.assertTrue
 
 class JobSpecTest {
 
-    // region JobSpec constructor and field access
+    
 
     @Test
     fun `constructor sets all fields`() {
@@ -43,9 +43,9 @@ class JobSpecTest {
         assertFalse(spec.isMemoryOnly)
     }
 
-    // endregion
+    
 
-    // region queueKey nullable
+    
 
     @Test
     fun `queueKey can be null`() {
@@ -59,9 +59,9 @@ class JobSpecTest {
         assertEquals("my-queue", spec.queueKey)
     }
 
-    // endregion
+    
 
-    // region copy
+    
 
     @Test
     fun `copy preserves all fields`() {
@@ -102,9 +102,9 @@ class JobSpecTest {
         assertEquals(original.id, modified.id)
     }
 
-    // endregion
+    
 
-    // region toString
+    
 
     @Test
     fun `toString contains id with JOB prefix`() {
@@ -140,9 +140,9 @@ class JobSpecTest {
         assertTrue(str.contains("memoryOnly: true"))
     }
 
-    // endregion
+    
 
-    // region equals / hashCode (data class)
+    
 
     @Test
     fun `equal specs have same hashCode`() {
@@ -169,9 +169,9 @@ class JobSpecTest {
         assertNotEquals(spec1, spec2)
     }
 
-    // endregion
+    
 
-    // region ConstraintSpec
+    
 
     @Test
     fun `ConstraintSpec constructor sets all fields`() {
@@ -216,9 +216,9 @@ class JobSpecTest {
         assertTrue(copied.isMemoryOnly)
     }
 
-    // endregion
+    
 
-    // region FullSpec
+    
 
     @Test
     fun `FullSpec holds jobSpec and constraintSpecs`() {
@@ -265,9 +265,9 @@ class JobSpecTest {
         assertEquals(full1.hashCode(), full2.hashCode())
     }
 
-    // endregion
+    
 
-    // region Helper
+    
 
     private fun createJobSpec(
         id: String = "job-1",
@@ -295,5 +295,5 @@ class JobSpecTest {
         isMemoryOnly = isMemoryOnly
     )
 
-    // endregion
+    
 }

@@ -38,10 +38,10 @@ import retrofit2.Response
 import java.util.Collections
 import kotlin.time.Duration.Companion.seconds
 
-/**
- * The critical-alert send feedback as session UI output: [CriticalAlertDispatcher] built by the
- * session graph, so its toast / barrage lambdas are the graph's own bindings. Row: T3-23.
- */
+
+
+
+
 class CriticalAlertDispatcherOutputTest {
 
     private val testDispatcher = StandardTestDispatcher()
@@ -136,7 +136,7 @@ class CriticalAlertDispatcherOutputTest {
         val sent = runBlocking { session.handleCriticalAlertNew(gid = "g1") }
 
         assertTrue(sent)
-        // Persisted inline under the ticket, not left to a later launch.
+        
         coVerify(exactly = 1) {
             h.deps.callToChatController.createCriticalAlertMessage(SERVER_TS, any(), any(), For.Group("g1"), any())
         }

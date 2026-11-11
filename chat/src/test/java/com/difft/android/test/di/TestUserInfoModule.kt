@@ -11,13 +11,11 @@ import dagger.hilt.components.SingletonComponent
 import dagger.hilt.testing.TestInstallIn
 import javax.inject.Singleton
 
-/**
- * Test replacement for both [UserInfoModule] and [StorageBindings]
- * (issue #725, Task 7). The production [StorageBindings] requires a fully
- * wired [com.difft.android.base.storage.user.StorageBoundUserManagerImpl]
- * (DataStores + AndroidX Keystore + Tink keysets), which most tests can't
- * provide. The fake here implements the legacy [UserManager] contract only.
- */
+
+
+
+
+
 @Module
 @TestInstallIn(
     components = [SingletonComponent::class],

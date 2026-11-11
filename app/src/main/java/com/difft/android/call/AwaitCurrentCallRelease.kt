@@ -7,12 +7,12 @@ import com.difft.android.call.state.OnGoingCallStateManager
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
 
-/**
- * Accepting an incoming call while another is live: hangs the current call up (when it has a room
- * id) and waits until its session has ended, i.e. [CallSessionHolder.current] is cleared, which is
- * also when a new call may start. Returns true at once with no live session, and false when the
- * session does not end within [timeoutMs].
- */
+
+
+
+
+
+
 internal suspend fun awaitCurrentCallRelease(
     holder: CallSessionHolder,
     ogsm: OnGoingCallStateManager,

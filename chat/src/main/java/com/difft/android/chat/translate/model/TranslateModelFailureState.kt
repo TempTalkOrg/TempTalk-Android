@@ -14,7 +14,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
-/** Per-model download failure bookkeeping, as persisted in the app_state JSON blob. */
+
 internal data class ModelFailureRecord(
     val failCount: Int = 0,
     val lastAttemptAtMs: Long = 0,
@@ -24,11 +24,11 @@ internal data class ModelFailureRecord(
 
 private const val MINUTE_MS = 60_000L
 
-/**
- * Backoff for consecutive download failures: 1m -> 5m -> 30m -> 2h -> 24h (capped).
- *
- * Pure and Android-free on purpose so it can be unit tested without Robolectric.
- */
+
+
+
+
+
 internal fun backoffDelayMs(failCount: Int): Long = when {
     failCount <= 1 -> MINUTE_MS
     failCount == 2 -> 5 * MINUTE_MS
@@ -37,17 +37,17 @@ internal fun backoffDelayMs(failCount: Int): Long = when {
     else -> 24 * 60 * MINUTE_MS
 }
 
-/**
- * Failure / backoff records for the translation model downloads.
- *
- * The in-memory [records] map is the single source of truth and is replaced **synchronously**
- * (whole immutable map, never mutated in place) before the write to app_state is launched. A
- * backoff decision therefore always reads the newest value — persisting first would open a window
- * in which a second trigger is admitted because the failure it should have seen is still in flight.
- *
- * Same shape as `ServerTimeProvider`: authoritative volatile memory field, asynchronous write-back,
- * one asynchronous read at startup to seed it. Nothing here ever touches the main thread.
- */
+
+
+
+
+
+
+
+
+
+
+
 internal class TranslateModelFailureState(
     private val appState: DataStore<Preferences>,
     private val gson: Gson,
@@ -60,7 +60,7 @@ internal class TranslateModelFailureState(
 
     private val loadMutex = Mutex()
 
-    /** Reads the blob once, off the main thread. Safe to call from every trigger. */
+    
     suspend fun ensureLoaded() {
         if (loaded) return
         loadMutex.withLock {
@@ -79,7 +79,7 @@ internal class TranslateModelFailureState(
         put(model, current.copy(lastAttemptAtMs = System.currentTimeMillis()))
     }
 
-    /** Records a failure and returns the timestamp before which no automatic retry may run. */
+    
     fun onFailure(model: ModelId, reason: FailureReason): Long {
         val current = records[model.code] ?: ModelFailureRecord()
         val failCount = current.failCount + 1
@@ -95,7 +95,7 @@ internal class TranslateModelFailureState(
         return nextRetryAtMs
     }
 
-    /** A stuck download is a failure for reporting purposes but must not consume a backoff step. */
+    
     fun onStuck(model: ModelId) {
         val current = records[model.code] ?: ModelFailureRecord()
         put(model, current.copy(lastReason = FailureReason.STUCK_NO_PROGRESS.name))

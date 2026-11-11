@@ -56,7 +56,7 @@ object Util {
 
     @JvmStatic
     fun isEmpty(value: String?): Boolean {
-        // Matches Java String.trim() semantics (strips chars <= 0x20), not Kotlin's Unicode-whitespace trim.
+        
         return value == null || value.trim { it <= ' ' }.isEmpty()
     }
 

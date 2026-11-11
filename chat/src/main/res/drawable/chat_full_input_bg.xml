@@ -4,5 +4,5 @@
     <corners
         android:topLeftRadius="8dp"
         android:topRightRadius="8dp" />
-    <solid android:color="@color/chat_full_input_bg" />
+    <solid android:color="@color/bg1" />
 </shape>

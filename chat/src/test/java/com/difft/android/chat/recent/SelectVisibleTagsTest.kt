@@ -4,19 +4,19 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * T4-1 … T4-11 — whole-tag degradation when the row runs out of horizontal space.
- *
- * Pure JVM: [selectVisibleTags] takes a `(String) -> Float` measurer instead of a `TextPaint`, so
- * every width threshold below is expressed in exact character counts and needs no Robolectric.
- * That the real `TextPaint` honours the same contract is pinned by
- * [ChatListTagMeasureAssumptionTest].
- *
- * Verify: :chat:testDebugUnitTest
- */
+
+
+
+
+
+
+
+
+
+
 class SelectVisibleTagsTest {
 
-    /** 10px per character — every threshold below is therefore exactly `text.length * 10f`. */
+    
     private val measure: (String) -> Float = { it.length * 10f }
 
     private val criticalAlert = TagSegment(ChatListTag.CRITICAL_ALERT, "[Alert]")
@@ -28,7 +28,7 @@ class SelectVisibleTagsTest {
 
     private fun widthOf(vararg tags: TagSegment): Float = measure(joinTags(tags.toList()).toString())
 
-    // ── T4-1 … T4-3 : drop count ─────────────────────────────────────────────
+    
 
     @Test
     fun `T4-1 nothing is dropped when everything fits`() {
@@ -51,7 +51,7 @@ class SelectVisibleTagsTest {
         assertEquals(listOf(criticalAlert, sendFailed), result)
     }
 
-    // ── T4-4 / T4-5 : degenerate widths ──────────────────────────────────────
+    
 
     @Test
     fun `T4-4 zero width still keeps both non-droppable tags`() {
@@ -63,7 +63,7 @@ class SelectVisibleTagsTest {
         assertEquals(listOf(criticalAlert, sendFailed), selectVisibleTags(allFour, -500f, measure))
     }
 
-    // ── T4-6 / T4-7 : the fit boundary ───────────────────────────────────────
+    
 
     @Test
     fun `T4-6 an exact fit drops nothing`() {
@@ -77,7 +77,7 @@ class SelectVisibleTagsTest {
         assertEquals(listOf(criticalAlert, sendFailed, mention), result)
     }
 
-    // ── T4-8 … T4-10 : composition edge cases ────────────────────────────────
+    
 
     @Test
     fun `T4-8 non-droppable tags are never dropped even when they overflow`() {
@@ -95,7 +95,7 @@ class SelectVisibleTagsTest {
         assertEquals(emptyList<TagSegment>(), selectVisibleTags(emptyList(), 0f, measure))
     }
 
-    // ── T4-11 : bounded work per bind ────────────────────────────────────────
+    
 
     @Test
     fun `T4-11 measuring is bounded to three calls per bind`() {

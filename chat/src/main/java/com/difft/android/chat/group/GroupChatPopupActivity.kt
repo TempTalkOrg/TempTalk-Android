@@ -17,13 +17,13 @@ import com.difft.android.base.android.permission.PermissionUtil
 import com.difft.android.base.android.permission.PermissionUtil.launchSinglePermission
 import com.difft.android.base.android.permission.PermissionUtil.registerPermission
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.utils.ResUtils
 import com.difft.android.network.config.GlobalConfigsManager
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.InsetAwareConstraintLayout
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.chat.R
 import com.difft.android.base.utils.SecureModeUtil
+import com.difft.android.base.utils.pane.ConversationOpener
 import com.difft.android.chat.common.SendMessageUtils
 import com.difft.android.chat.messages.PriorConversationReporter
 import com.difft.android.chat.databinding.ChatActivityGroupChatPopupBinding
@@ -59,10 +59,10 @@ import com.difft.android.chat.util.MessageNotificationUtil
 import com.difft.android.chat.util.ViewUtil
 import javax.inject.Inject
 
-/**
- * Group chat activity displayed as a popup bottom sheet.
- * Used when opening group chat from group member popup.
- */
+
+
+
+
 @AndroidEntryPoint
 class GroupChatPopupActivity : BaseActivity(), ChatMessageListProvider, KeyboardPanelHost, VoiceRecordHost {
 
@@ -85,7 +85,7 @@ class GroupChatPopupActivity : BaseActivity(), ChatMessageListProvider, Keyboard
             val intent = Intent(activity, GroupChatPopupActivity::class.java)
             intent.groupID = groupID
             intent.jumpMessageTimeStamp = jumpMessageTimeStamp
-            // Launch in a new task to isolate keyboard events from background Activity
+            
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             activity.startActivity(intent)
         }
@@ -134,20 +134,20 @@ class GroupChatPopupActivity : BaseActivity(), ChatMessageListProvider, Keyboard
 
     private lateinit var backPressedCallback: OnBackPressedCallback
 
-    // Constructed eagerly in onCreate rather than by lazy: a child fragment hosted here can call
-    // back into the KeyboardPanelHost overrides below, and a lazy initializer would leave a
-    // reentrancy window where those callbacks touch a half-built controller.
+    
+    
+    
     private lateinit var sheetController: PopupChatSheetController
 
-    // Disable BaseActivity auto padding - this Activity handles insets itself
+    
     override fun shouldApplySystemBarsPadding(): Boolean = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Force initialize ViewModels before child fragments are created.
-        // Fragments declared in layout via android:name will be created when mBinding is accessed,
-        // and they use this Activity's ViewModelStore. We must ensure ViewModels exist first.
+        
+        
+        
         chatViewModel
         chatSettingViewModel
 
@@ -182,31 +182,43 @@ class GroupChatPopupActivity : BaseActivity(), ChatMessageListProvider, Keyboard
         onBackPressedDispatcher.addCallback(this, backPressedCallback)
     }
 
-    /**
-     * Maximize to full GroupChatContentActivity and close this popup.
-     * Animates the bottom sheet to full screen height before transitioning.
-     */
+    
+
+
+
     fun maximizeToFullActivity() {
-        // Get current scroll position before animation
+        
         val scrollPosition = getChatMessageListFragment()?.getFirstVisibleMessageTimestamp()
 
-        sheetController.maximize {
+        val open = {
             GroupChatContentActivity.startActivity(
                 this,
                 chatViewModel.forWhat.id,
                 jumpMessageTimeStamp = scrollPosition ?: intent.jumpMessageTimeStamp
             )
+        }
+        if ((applicationContext as? ConversationOpener)?.opensInDetailPane(this) == true) {
+            sheetController.handOffToDetailPane {
+                open()
+                finish()
+                @Suppress("DEPRECATION")
+                overridePendingTransition(0, android.R.anim.fade_out)
+            }
+            return
+        }
+        sheetController.maximize {
+            open()
             finish()
             @Suppress("DEPRECATION")
             overridePendingTransition(android.R.anim.fade_in, 0)
         }
     }
 
-    /** Cache: whether confidential toggle should be hidden due to group member limit */
+    
     private var shouldHideConfidentialForGroupLimit = false
 
     private fun onCreateForShowingMessages(savedInstanceState: Bundle?) {
-//        ScreenShotUtil.forceDisable(this)
+
 
         if (TextUtils.isEmpty(chatViewModel.forWhat.id)) {
             ToastUtil.show("No groupID detected. Finishing Activity.")
@@ -221,12 +233,12 @@ class GroupChatPopupActivity : BaseActivity(), ChatMessageListProvider, Keyboard
             .onEach {
                 if (it.gid == chatViewModel.forWhat.id) {
                     if (it.status != 0) {
-                        // Group is gone (kicked / left / dismissed / destroyed) — close.
+                        
                         finish()
                         return@onEach
                     }
                     chatViewModel.setChatUIData(ChatUIData(null, it))
-                    // Refresh confidential toggle when group members change
+                    
                     updateConfidential()
                 }
             }
@@ -316,7 +328,7 @@ class GroupChatPopupActivity : BaseActivity(), ChatMessageListProvider, Keyboard
     }
 
     private fun updateConfidential(conversationSet: ConversationSetResponseBody? = null) {
-        // Check group member count asynchronously
+        
         lifecycleScope.launch(Dispatchers.IO) {
             val memberCount = wcdb.getGroupMemberCount(chatViewModel.forWhat.id)
             val limit = globalConfigsManager.getGroupConfidentialMemberLimit()
@@ -330,19 +342,17 @@ class GroupChatPopupActivity : BaseActivity(), ChatMessageListProvider, Keyboard
 
     private fun updateConfidentialUI(conversationSet: ConversationSetResponseBody? = null) {
         if (shouldHideConfidentialForGroupLimit) {
-            // Hide confidential toggle when group member limit exceeded
+            
             mBinding.includeFullInput.ivFullInputConfidential.visibility = View.GONE
             return
         }
 
         mBinding.includeFullInput.ivFullInputConfidential.visibility = View.VISIBLE
         if (conversationSet?.confidentialMode == 1) {
-            val drawable = ResUtils.getDrawable(R.drawable.chat_btn_confidential_mode_enable)
-            mBinding.includeFullInput.ivFullInputConfidential.setImageDrawable(drawable)
+            mBinding.includeFullInput.ivFullInputConfidential.setImageResource(R.drawable.chat_btn_confidential_mode_enable)
             mBinding.includeFullInput.ivFullInputConfidential.tag = 1
         } else {
-            val drawable = ResUtils.getDrawable(R.drawable.chat_btn_confidential_mode_disable)
-            mBinding.includeFullInput.ivFullInputConfidential.setImageDrawable(drawable)
+            mBinding.includeFullInput.ivFullInputConfidential.setImageResource(R.drawable.chat_btn_confidential_mode_disable)
             mBinding.includeFullInput.ivFullInputConfidential.tag = 0
         }
     }
@@ -350,7 +360,7 @@ class GroupChatPopupActivity : BaseActivity(), ChatMessageListProvider, Keyboard
     private fun getGroupInfo(forceUpdate: Boolean = false) {
         lifecycleScope.launch {
             try {
-                // See GroupChatFragment.getGroupInfo for rationale.
+                
                 val (oldVersion, oldName, oldAvatar) = if (forceUpdate) {
                     withContext(Dispatchers.IO) {
                         val g = wcdb.group.getFirstObject(DBGroupModel.gid.eq(chatViewModel.forWhat.id))
@@ -369,8 +379,8 @@ class GroupChatPopupActivity : BaseActivity(), ChatMessageListProvider, Keyboard
                             L.i { "[GroupChatPopupActivity] Group info changed for ${result.gid}, notifying room" }
                             groupUtil.emitSingleGroupUpdate(result)
                         } else {
-                            // Group info unchanged: independently check Room/Group drift
-                            // (fallback for cold-start race that drops trackRoom events).
+                            
+                            
                             groupUtil.reconcileRoomIfDrifted(result)
                         }
                     }
@@ -386,10 +396,10 @@ class GroupChatPopupActivity : BaseActivity(), ChatMessageListProvider, Keyboard
     }
 
 
-    // --- KeyboardPanelHost ------------------------------------------------------------------
-    // ChatMessageInputFragment is a direct FragmentContainerView child here, so it has no parent
-    // fragment and resolves its keyboard/panel host to this Activity. Every method forwards to the
-    // sheet controller, the single owner of the sheet's height and bottom padding.
+    
+    
+    
+    
 
     override fun addKeyboardStateListener(listener: InsetAwareConstraintLayout.KeyboardStateListener) {
         sheetController.addKeyboardStateListener(listener)
@@ -412,7 +422,7 @@ class GroupChatPopupActivity : BaseActivity(), ChatMessageListProvider, Keyboard
     }
 
     override fun onDestroy() {
-        // Guard: onCreate may abort before the controller is built (e.g. super.onCreate throws).
+        
         if (::sheetController.isInitialized) {
             sheetController.release()
         }

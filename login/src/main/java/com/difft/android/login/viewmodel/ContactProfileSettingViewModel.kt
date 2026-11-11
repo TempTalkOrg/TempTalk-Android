@@ -14,7 +14,7 @@ import kotlinx.coroutines.launch
 import org.difft.app.database.models.ContactorModel
 import javax.inject.Inject
 
-/** Compatibility Resource mapping for the registration and signup flows. */
+
 @HiltViewModel
 class ContactProfileSettingViewModel @Inject constructor(
     private val repository: ProfileSaveRepository,

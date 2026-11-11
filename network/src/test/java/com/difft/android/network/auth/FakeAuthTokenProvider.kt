@@ -1,9 +1,9 @@
 package com.difft.android.network.auth
 
-/**
- * Hand-written [AuthTokenProvider] so call counts are plain fields — the shape
- * `ProxyConfigProviderTunnelHostsTest`'s `NoOpRefresher` uses.
- */
+
+
+
+
 internal class FakeAuthTokenProvider(
     private var token: String = "",
     private val refreshedTo: String = "",
@@ -31,5 +31,5 @@ internal class FakeAuthTokenProvider(
     }
 }
 
-/** Wraps [value] as a `dagger.Lazy`, which is what `HeaderInterceptor` takes. */
+
 internal fun <T> lazyOf(value: T): dagger.Lazy<T> = dagger.Lazy { value }

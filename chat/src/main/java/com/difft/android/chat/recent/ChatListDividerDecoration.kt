@@ -7,20 +7,20 @@ import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.RecyclerView
 import com.difft.android.base.R
 
-/**
- * Hairline between two consecutive conversation rows of the chat list (design-system list
- * spec: inset to the text column, none after the last row). Drawn over the rows so the swipe
- * actions and the selected-row background keep their own geometry; rows that are not
- * conversations (search input, E2EE footer) never get a line above or below.
- */
+
+
+
+
+
+
 class ChatListDividerDecoration(context: Context) : RecyclerView.ItemDecoration() {
 
-    // Activity density, not the application's: the two differ on multi-display foldables.
+    
     private val density = context.resources.displayMetrics.density
-    // One physical pixel, like the design system's 0.5px hairline and iOS's separator; a
-    // density-scaled 0.5dp reads as a 2px rule on 3x screens.
+    
+    
     private val paint = Paint().apply {
-        color = ContextCompat.getColor(context, R.color.line)
+        color = ContextCompat.getColor(context, R.color.divider)
         strokeWidth = 1f
     }
     private val insetStartPx = (TEXT_COLUMN_START_DP * density).toInt()
@@ -50,7 +50,7 @@ class ChatListDividerDecoration(context: Context) : RecyclerView.ItemDecoration(
         }
 
     private companion object {
-        /** 16dp avatar margin + 52dp avatar + 12dp gap: where the row's text column starts. */
+        
         const val TEXT_COLUMN_START_DP = 80
         const val ROW_END_MARGIN_DP = 16
     }

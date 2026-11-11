@@ -9,7 +9,7 @@ import com.difft.android.chat.setting.ConversationTargetArgs
 import dagger.hilt.android.AndroidEntryPoint
 import difft.android.messageserialization.For
 
-/** Full-window shell for [TranslateSettingsFragment] where it is not pushed onto a home stack. */
+
 @AndroidEntryPoint
 class TranslateSettingsActivity : DetailShellActivity() {
 

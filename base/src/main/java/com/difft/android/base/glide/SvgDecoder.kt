@@ -24,15 +24,15 @@ class SvgDecoder : ResourceDecoder<InputStream, SVG> {
         }
     }
 
-    /**
-     * Only claim streams that actually look like SVG. Glide tries every registered
-     * `InputStream -> X` decoder; without this gate, every raster image loaded via an InputStream
-     * model (e.g. the decrypting content uri for encrypted-at-rest attachments) would be fed to
-     * [SVG.getFromInputStream], fail with "SVG document is empty", and log noise before Glide's
-     * bitmap decoder takes over. Sniff the first bytes and defer non-SVG streams to other decoders.
-     */
+    
+
+
+
+
+
+
     override fun handles(source: InputStream, options: Options): Boolean {
-        if (!source.markSupported()) return false // non-SVG: let the bitmap decoder handle it
+        if (!source.markSupported()) return false 
         return try {
             source.mark(SNIFF_LIMIT)
             val buf = ByteArray(SNIFF_LIMIT)

@@ -67,7 +67,7 @@ import org.robolectric.annotation.GraphicsMode
 import javax.inject.Inject
 import kotlin.test.*
 
-/** Real Fragment launcher registration and lifecycle; only transport/application boundaries are mocked. */
+
 @HiltAndroidTest
 @RunWith(RobolectricTestRunner::class)
 @Config(application = FoldableTestApplication_Application::class, sdk = [34])

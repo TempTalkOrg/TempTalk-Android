@@ -28,7 +28,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 
-/** [MigrationVerdictRecheck]: the app-level `/status` re-check while a pause awaits a decision (#1382 A07). */
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class MigrationVerdictRecheckTest {
 

@@ -6,7 +6,7 @@ package com.difft.android.video.exceptions
 
 import java.io.IOException
 
-/**
- * Exception to denote when video processing has been unable to meet its output file size requirements.
- */
+
+
+
 class VideoSizeException(message: String?) : IOException(message)

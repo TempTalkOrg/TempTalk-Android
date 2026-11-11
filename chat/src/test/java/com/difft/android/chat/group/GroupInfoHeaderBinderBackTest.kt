@@ -37,7 +37,7 @@ class TestBackOwner : LifecycleOwner {
     override val lifecycle: Lifecycle get() = registry
 }
 
-/** Detail stack host double whose back owner the test moves between visible top and covered. */
+
 class OwnerControlledStackHost : Fragment(), DetailStackHost {
     val owner = TestBackOwner()
     override val detailNavigation: DetailNavigation = object : DetailNavigation {
@@ -51,7 +51,7 @@ class OwnerControlledStackHost : Fragment(), DetailStackHost {
     override fun detailBackOwnerFor(fragment: Fragment): LifecycleOwner = owner
 }
 
-/** The page under test: the real binder over the real group-info layout and a mocked ViewModel. */
+
 internal class BinderPage : Fragment() {
     val viewModel: GroupInfoHeaderViewModel = mockk(relaxed = true) {
         every { state } returns MutableStateFlow(GroupInfoHeaderContract.State(isEditing = true))
@@ -71,11 +71,11 @@ internal class BinderPage : Fragment() {
     }
 }
 
-/**
- * GroupInfoHeaderBinder as a hosted page (design: foldable detail stacks, F20): its edit-mode Back
- * callback is registered with the page's detail back owner, so it handles Back only while the page
- * is the visible top; and the page root shows touches to the outside-tap check first.
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33])
 class GroupInfoHeaderBinderBackTest {
@@ -90,20 +90,20 @@ class GroupInfoHeaderBinderBackTest {
         val host = OwnerControlledStackHost()
         activity.supportFragmentManager.beginTransaction().add(android.R.id.content, host).commitNow()
         val page = BinderPage()
-        // Added without a container: the page still creates its view and starts the binder.
+        
         host.childFragmentManager.beginTransaction().add(page, "page").commitNow()
         shadowOf(Looper.getMainLooper()).idle()
 
-        // Covered or hidden: the owner sits at CREATED.
+        
         activity.onBackPressedDispatcher.onBackPressed()
         verify(exactly = 0) { page.viewModel.dispatch(exitByBack) }
 
-        // Visible top: STARTED.
+        
         host.owner.registry.currentState = Lifecycle.State.STARTED
         activity.onBackPressedDispatcher.onBackPressed()
         verify(exactly = 1) { page.viewModel.dispatch(exitByBack) }
 
-        // Covered again.
+        
         host.owner.registry.currentState = Lifecycle.State.CREATED
         activity.onBackPressedDispatcher.onBackPressed()
         verify(exactly = 1) { page.viewModel.dispatch(exitByBack) }

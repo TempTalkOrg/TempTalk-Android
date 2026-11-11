@@ -21,11 +21,11 @@ import org.robolectric.annotation.GraphicsMode
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/**
- * The TitleBar back button is hidden in tablet dual-pane mode and shown otherwise. Verifies both the
- * screen's rendering of the showBackButton param and the host's `!isInDualPaneMode()` mapping that
- * feeds it (the real @AndroidEntryPoint fragment can't be launched without a Hilt harness).
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [33])
@@ -66,14 +66,14 @@ class LinkedDevicesBackButtonTest {
         composeTestRule.onNodeWithContentDescription("Back").assertIsDisplayed()
     }
 
-    // The host computes showBackButton = !isInDualPaneMode(); confirm that mapping against a real host.
+    
     @Test
     fun `isInDualPaneMode drives the back-button visibility flag`() {
-        assertFalse(showBackButtonFor(dualPane = true)) // dual-pane -> back hidden
-        assertTrue(showBackButtonFor(dualPane = false)) // single-pane -> back shown
+        assertFalse(showBackButtonFor(dualPane = true)) 
+        assertTrue(showBackButtonFor(dualPane = false)) 
     }
 
-    /** Attaches a bare fragment to a [FakeDualPaneHostActivity] and returns `!isInDualPaneMode()`. */
+    
     private fun showBackButtonFor(dualPane: Boolean): Boolean {
         val controller = Robolectric.buildActivity(FakeDualPaneHostActivity::class.java).also {
             it.get().setTheme(androidx.appcompat.R.style.Theme_AppCompat_Light)

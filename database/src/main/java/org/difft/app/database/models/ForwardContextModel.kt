@@ -6,9 +6,9 @@ import java.util.Objects
 
 @WCDBTableCoding
 class ForwardContextModel {
-    // Int (not Long): WCDB-KSP generates `== 0` autoincrement guard which does not
-    // compile for Long primary keys. Column type stays ColumnType.Integer — no schema
-    // change. Local rowid never exceeds 2^31 and is never externally serialized. #901
+    
+    
+    
     @WCDBField(isPrimary = true, isAutoIncrement = true)
     var databaseId: Int = 0
 

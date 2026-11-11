@@ -1,5 +1,11 @@
 package com.difft.android.me
 
+import androidx.core.view.updatePadding
+import com.difft.android.base.ui.topchrome.TopChromeStyle
+import com.difft.android.base.ui.topchrome.TopChromeOwner
+import com.difft.android.base.ui.glass.installAppBarOverlayChrome
+import com.difft.android.base.ui.sidechrome.padForSideChrome
+import com.difft.android.base.ui.sidechrome.sideChromeBar
 import android.content.Intent
 import com.difft.android.base.log.lumberjack.L
 import android.os.Bundle
@@ -7,30 +13,12 @@ import android.text.TextUtils
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import androidx.appcompat.app.AppCompatDelegate
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.unit.dp
-import androidx.core.view.updateLayoutParams
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.flowWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import com.difft.android.BuildConfig
 import com.difft.android.R
-import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.DualPaneHost
 import com.difft.android.base.utils.padBottomForHomeTabBar
@@ -38,10 +26,7 @@ import com.difft.android.base.utils.EnvironmentHelper
 import com.difft.android.base.utils.LanguageUtils
 import com.difft.android.base.utils.TextSizeUtil
 import com.difft.android.base.utils.globalServices
-import com.difft.android.base.widget.ComposeDialog
-import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.chat.common.AvatarUtil
-import com.difft.android.chat.common.HomeHeaderCollapser
 import com.difft.android.chat.media.AvatarEncryptedProvider
 import com.difft.android.chat.media.AvatarPreview
 import com.difft.android.chat.contacts.data.ContactorUtil
@@ -92,7 +77,9 @@ import org.difft.app.database.models.ContactorModel
 import javax.inject.Inject
 
 @AndroidEntryPoint
-class MeFragment : Fragment() {
+class MeFragment : Fragment(), TopChromeOwner {
+    override val topChromeStyle get() = TopChromeStyle.Feather
+
     private lateinit var binding: MeFragmentBinding
 
     @Inject
@@ -118,50 +105,37 @@ class MeFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
-        initThemeView()
-        // Store swallows non-cancellation errors; lifecycleScope cancels the launch on teardown.
+        
         viewLifecycleOwner.lifecycleScope.launch {
             linkedDevicesCountStore.refresh()
         }
     }
 
-    private fun initThemeView() {
-        val theme = userManager.getUserData()?.theme
-        binding.tvTheme.text = when (theme) {
-            AppCompatDelegate.MODE_NIGHT_YES -> {
-                getString(com.difft.android.chat.R.string.me_theme_dark)
-            }
+    
 
-            AppCompatDelegate.MODE_NIGHT_NO -> {
-                getString(com.difft.android.chat.R.string.me_theme_light)
-            }
 
-            else -> {
-                getString(com.difft.android.chat.R.string.me_theme_system)
-            }
-        }
-    }
 
-    /**
-     * The title row shows in the two-pane list and on a foldable, and collapses with the page on a
-     * short window like the Chats and Contacts titles ([HomeHeaderCollapser]); other phones keep the
-     * header-less layout with its top gap.
-     */
+
     private fun applyHomeHostChrome() {
         val host = activity as? DualPaneHost
-        val showHeader = host?.isDualPaneMode == true || HomeHeaderCollapser.isFoldable(requireActivity())
-        val collapsible = showHeader && HomeHeaderCollapser.isEligible(requireActivity())
-        binding.homeHeader.visibility = if (showHeader) View.VISIBLE else View.GONE
-        HomeHeaderCollapser.bind(binding.homeAppBar, binding.homeHeader, collapsible)
-        binding.scrollView2.updateLayoutParams<ViewGroup.MarginLayoutParams> {
-            topMargin = if (showHeader) 0 else resources.getDimensionPixelSize(R.dimen.me_headerless_top_gap)
+        
+        if (host?.isDualPaneMode != true) {
+            sideChromeBar(base = true)
+            padForSideChrome(binding.root)
         }
-        // The page scrolls under the floating home tab capsule; keep the last card reachable,
-        // plus the title's collapse range while it is expanded.
-        binding.scrollView2.padBottomForHomeTabBar(
-            viewLifecycleOwner,
-            host,
-            extraPx = HomeHeaderCollapser.collapseRangePx(binding.homeHeader, collapsible),
+        binding.scrollView2.updatePadding(top = resources.getDimensionPixelSize(R.dimen.me_headerless_top_gap))
+        
+        binding.scrollView2.padBottomForHomeTabBar(viewLifecycleOwner, host)
+        installMeGlassChrome(viewLifecycleOwner, binding)
+        installAppBarOverlayChrome(
+            viewLifecycleOwner, binding.root, binding.homeAppBar, binding.scrollView2, binding.scrollView2,
+            covered = (activity as? ConversationNavigationCallback)?.detailCoversList,
+            windowLifecycle = requireActivity().lifecycle,
+            
+            installSource = false,
+            
+            style = TopChromeStyle.Feather,
+            tintRes = com.difft.android.base.R.color.bg,
         )
     }
 
@@ -224,9 +198,9 @@ class MeFragment : Fragment() {
         binding.clHelp.visibility = View.VISIBLE
         binding.clHelp.setOnClickListener {
             viewLifecycleOwner.lifecycleScope.launch {
-                // Cache first (sync); fall back to a DB read for the pre-preload cold-start window.
-                // Only when both are empty does the official account remain unknown (server contract
-                // guarantees exactly one, so minOrNull is deterministic).
+                
+                
+                
                 val botId = OfficialAccountCache.state.value.minOrNull()
                     ?: withContext(Dispatchers.IO) {
                         wcdb.contactor.getFirstObject(DBContactorModel.publicAccountType.eq(PublicAccountType.OFFICIAL))?.id
@@ -264,18 +238,13 @@ class MeFragment : Fragment() {
             }
         }
 
-        binding.clTextSize.setOnClickListener {
-            showTextSizeDialog()
-        }
-
+        
         TextSizeUtil.textSizeState
             .flowWithLifecycle(viewLifecycleOwner.lifecycle, Lifecycle.State.STARTED)
-            .onEach { textSize ->
-                updateTextSizeSettings(textSize == TextSizeUtil.TEXT_SIZE_LAGER)
-            }
+            .onEach { textSize -> MeTextScaling.apply(binding, textSize == TextSizeUtil.TEXT_SIZE_LAGER) }
             .launchIn(viewLifecycleOwner.lifecycleScope)
 
-        //测试环境显示测试页面入口（且仅 debug 构建，避免破坏性 DB 测试入口进入 TTDevOfficialRelease）
+        
         if (environmentHelper.isThatEnvironment(environmentHelper.ENVIRONMENT_DEVELOPMENT) && BuildConfig.DEBUG) {
             binding.clTest.visibility = View.VISIBLE
             binding.clTest.setOnClickListener {
@@ -327,34 +296,11 @@ class MeFragment : Fragment() {
             .launchIn(viewLifecycleOwner.lifecycleScope)
     }
 
-    var dialog: ComposeDialog? = null
-    private fun showTextSizeDialog() {
-        val textSizeList = arrayOf(getString(R.string.me_text_size_default), getString(R.string.me_text_size_lage))
-        val currentSelection = userManager.getUserData()?.textSize ?: 0
+    
 
-        dialog = ComposeDialogManager.showBottomDialog(requireActivity()) {
-            TextSizeSelectionDialog(
-                textSizeList = textSizeList,
-                currentSelection = currentSelection,
-                onItemSelected = { index ->
-                    TextSizeUtil.updateTextSize(index)
-                    // updateTextSize will emit to textSizeChange, which will trigger the subscription
-                    dialog?.dismiss() // 选中后关闭弹窗
-                }
-            )
-        }
-    }
 
-    private fun updateTextSizeSettings(isLarger: Boolean) {
-        binding.tvTextSize.text = if (isLarger) getString(R.string.me_text_size_lage) else getString(R.string.me_text_size_default)
-        MeTextScaling.apply(binding, isLarger)
-    }
 
-    /**
-     * Navigate through the home detail stack in either layout; other hosts keep their Activity entry
-     * @param fragment The fragment to show in dual-pane mode
-     * @param fallbackAction The action to perform in single-pane mode (usually starting an Activity)
-     */
+
     private fun navigateToDetailOrActivity(fragment: Fragment, fallbackAction: () -> Unit) {
         val dualPaneHost = activity as? DualPaneHost
         if (dualPaneHost != null) {
@@ -389,87 +335,8 @@ class MeFragment : Fragment() {
     }
 }
 
-/** Pure badge-state rule: hidden at null/0, else the raw count with no cap. Returns (visible, text). */
+
 fun linkedDevicesBadgeState(count: Int?): Pair<Boolean, String> {
     val visible = (count ?: 0) > 0
     return visible to (if (visible) count.toString() else "")
-}
-
-/**
- * 文字大小选择对话框
- */
-@Composable
-fun TextSizeSelectionDialog(
-    textSizeList: Array<String>,
-    currentSelection: Int,
-    onItemSelected: (Int) -> Unit
-) {
-    val textColor = DifftTheme.colors.textPrimary
-    val selectedColor = DifftTheme.colors.textInfo
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp)
-    ) {
-        // 选项列表
-        textSizeList.forEachIndexed { index, text ->
-            TextSizeOptionItem(
-                text = text,
-                isSelected = index == currentSelection,
-                textColor = textColor,
-                selectedColor = selectedColor,
-                onClick = {
-                    onItemSelected(index)
-                }
-            )
-
-            // 分隔线（除了最后一个）
-            if (index < textSizeList.size - 1) {
-                HorizontalDivider(
-                    color = textColor.copy(alpha = 0.1f),
-                    thickness = 0.5.dp,
-                    modifier = Modifier.padding(vertical = 8.dp)
-                )
-            }
-        }
-    }
-}
-
-/**
- * 文字大小选项项
- */
-@Composable
-fun TextSizeOptionItem(
-    text: String,
-    isSelected: Boolean,
-    textColor: Color,
-    selectedColor: Color,
-    onClick: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() }
-            .padding(vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        // 文字
-        Text(
-            text = text,
-            style = DifftTheme.typography.p2,
-            color = if (isSelected) selectedColor else textColor,
-            modifier = Modifier.weight(1f)
-        )
-
-        // 选中图标
-        if (isSelected) {
-            Icon(
-                painter = painterResource(id = com.difft.android.chat.R.drawable.chat_ic_selected),
-                contentDescription = "Selected",
-                tint = selectedColor,
-                modifier = Modifier.size(20.dp)
-            )
-        }
-    }
 }

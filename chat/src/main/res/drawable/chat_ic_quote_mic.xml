@@ -1,9 +1,4 @@
-<!--
-  Voice type-icon for the quote media preview (list ⑤ + input compose-bar ⑥).
-  Same glyph as chat_ic_mic_24 but filled with @color/icon (day/night adaptive) so it stays
-  size- and color-consistent with the file type-icon (ic_file). Kept separate from the shared
-  chat_ic_mic_24 (gray_600, no night variant) so the voice-record button UI is untouched.
--->
+
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"

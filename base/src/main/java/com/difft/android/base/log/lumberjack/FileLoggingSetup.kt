@@ -49,9 +49,9 @@ sealed class FileLoggingSetup : IFileLoggingSetup {
             setup.fileExtension
         )
         val baseFilePath = folder + "/" + setup.fileName + "." + setup.fileExtension
-        /*
-         * we know the file name of the newest file before hand, no need to check all files in the folder
-         */
+        
+
+
         override fun getLatestLogFiles() = File(baseFilePath)
     }
 
@@ -73,18 +73,18 @@ sealed class FileLoggingSetup : IFileLoggingSetup {
         )
     }
 
-    /*
-     * logsToKeep...    define how many log files will be kept
-     * logPattern...    define a custom file logger format
-     *                  Refer to https://github.com/tony19/logback-android and https://www.slf4j.org/ for more infos
-     *                  DEFAULT: %d{HH:mm:ss.SSS}	%logger{36}	%msg%n
-     * fileName...      define a custom basic file name for your log files
-     * fileExtension... define a custom file extension for your log files
-     */
+    
+
+
+
+
+
+
+
     @Parcelize
     class Setup(
         val logsToKeep: Int = 7,
-        // 去掉 %d，时间戳由 L.kt 在调用时捕获并添加，保证时间准确性
+        
         val logPattern: String = "%marker%-5level %msg%n",
         val fileName: String = "log",
         val fileExtension: String = "log"

@@ -23,7 +23,7 @@ object StyleUtils {
         return !TextUtils.isEmpty(text)
     }
 
-    /** Number of dynamic format specifiers in [text]. */
+    
     @JvmStatic
     fun getFormatCount(text: String): Int {
         val pattern = "%[^%]*\\d"

@@ -21,17 +21,17 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
-/**
- * T6 / T7 / T62 / T63 — one bad item must cost exactly that item.
- *
- * T62 is the row that moves the reported symptom forward in time: the default path (full quality,
- * nothing edited) reads nothing at all before the attachment copy, so without a probe at the
- * transform boundary an unreadable gallery item is only discovered after the review screen — and its
- * caption — is gone. T63 is the other half of that bargain: items whose bytes were just written are
- * never probed, so the success path pays nothing.
- *
- * Run: :chat:testDebugUnitTest
- */
+
+
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [33])
 class MediaSelectionRepositoryFailureTest {
@@ -47,7 +47,7 @@ class MediaSelectionRepositoryFailureTest {
         harness = ContentSourceHarness(context)
     }
 
-    /** Fails the way the transcoder does for an unreadable source: same type, no errno. */
+    
     private class FailingTransform : MediaTransform {
         override fun transform(context: Context, media: LocalMedia): LocalMedia =
             throw VideoSourceException("Unable to read file", RuntimeException("setDataSource failed"))
@@ -60,9 +60,9 @@ class MediaSelectionRepositoryFailureTest {
         }
     }
 
-    // ---------------------------------------------------------------- T6
+    
 
-    /** T6 — the surviving items keep their order, and the batch is not discarded. */
+    
     @Test
     fun `a failing item is isolated and the rest are still sendable`() {
         val first = readableImage(id = 1L)
@@ -87,9 +87,9 @@ class MediaSelectionRepositoryFailureTest {
         assertNotNull(failure.denialKind)
     }
 
-    // ---------------------------------------------------------------- T7
+    
 
-    /** T7 — untouched items are passed through as the very same instances. */
+    
     @Test
     fun `untouched items pass through unchanged`() {
         val items = listOf(readableImage(id = 4L), readableImage(id = 5L), readableImage(id = 6L))
@@ -101,9 +101,9 @@ class MediaSelectionRepositoryFailureTest {
         items.forEach { assertSame(it, result.updated.getValue(it).media) }
     }
 
-    // ---------------------------------------------------------------- T62
+    
 
-    /** T62 — an unreadable pass-through item is caught here, not after the screen is gone. */
+    
     @Test
     fun `unreadable pass through item fails at the transform boundary`() {
         val media = LocalMediaBuilder.gallery(
@@ -122,9 +122,9 @@ class MediaSelectionRepositoryFailureTest {
         assertEquals(1, result.failures.single().position)
     }
 
-    // ---------------------------------------------------------------- T63
+    
 
-    /** T63 — bytes that were just written are not probed, however unreadable the source became. */
+    
     @Test
     fun `an item that produced new bytes is never probed`() {
         val media = LocalMediaBuilder.gallery(

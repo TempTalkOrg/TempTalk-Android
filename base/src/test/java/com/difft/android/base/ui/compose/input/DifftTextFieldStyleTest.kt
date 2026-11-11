@@ -23,10 +23,10 @@ import org.robolectric.annotation.GraphicsMode
 import kotlin.math.abs
 import kotlin.test.assertTrue
 
-/**
- * Pins for the design-library skins of [DifftClearableTextField]: the two box heights, the
- * helper line and the character counter (which owns the trailing slot, so the ✕ steps aside).
- */
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34])
@@ -41,7 +41,7 @@ class DifftTextFieldStyleTest {
         rule.activity.getString(R.string.base_clear_text)
     )
 
-    // S1: the default box is the library Large size.
+    
     @Test
     fun defaultSize_isLarge40() {
         rule.setContent {
@@ -58,7 +58,7 @@ class DifftTextFieldStyleTest {
         assertTrue(abs((height - DifftTextFieldSize.Large.height).value) <= 0.5f, "height=$height")
     }
 
-    // S2: Medium is the 32dp box, in both skins.
+    
     @Test
     fun mediumSize_searchBoxIs32() = assertMediumHeight(DifftTextFieldStyle.Search)
 
@@ -82,7 +82,7 @@ class DifftTextFieldStyleTest {
         assertTrue(abs((height - DifftTextFieldSize.Medium.height).value) <= 0.5f, "$style height=$height")
     }
 
-    // S3: the helper / error line renders under the field.
+    
     @Test
     fun supportingText_isRendered() {
         rule.setContent {
@@ -100,7 +100,7 @@ class DifftTextFieldStyleTest {
         rule.onNodeWithText("SupportingProbe").assertExists()
     }
 
-    // S4: the counter reads n/max and follows the text.
+    
     @Test
     fun counter_tracksLength() {
         val state = mutableStateOf("")
@@ -122,7 +122,7 @@ class DifftTextFieldStyleTest {
         rule.onNodeWithText("3/20").assertExists()
     }
 
-    // S5: the counter replaces the clear icon (library "Basic + word count" draws no ✕).
+    
     @Test
     fun counter_replacesClearIcon() {
         rule.setContent {
@@ -140,7 +140,7 @@ class DifftTextFieldStyleTest {
         clearNode().assertDoesNotExist()
     }
 
-    // S7: a multi-line form field is at least the library text-area minimum tall.
+    
     @Test
     fun multiLineForm_usesTextAreaMinHeight() {
         rule.setContent {
@@ -164,7 +164,7 @@ class DifftTextFieldStyleTest {
         )
     }
 
-    // S6: showCounter without a maxLength renders nothing extra and keeps the ✕.
+    
     @Test
     fun counterWithoutMaxLength_keepsClearIcon() {
         rule.setContent {

@@ -23,12 +23,12 @@ import org.robolectric.Shadows
 import org.robolectric.annotation.Config
 import java.util.concurrent.TimeUnit
 
-/**
- * [StaleLayoutMonitor] on the real `activity_index.xml` (the [DualPaneReconcilerTest] harness).
- * The default qualifiers are the #1454 state: an inner-panel configuration (860x608 dp, dual-pane
- * tree) while the injected panel reader says the outer panel (424x622; mdpi, so px == dp).
- * `rebuilds` counts recreates through the reconciler, `exits` the monitor's direct override exit.
- */
+
+
+
+
+
+
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [33], qualifiers = "w860dp-h608dp")
 class StaleLayoutMonitorTest {
@@ -42,7 +42,7 @@ class StaleLayoutMonitorTest {
     fun setUp() {
         DualPaneReconciler.resetProcessStateForTest()
         StaleLayoutOverrideTest.OverrideProbeActivity.probePanel = OUTER
-        // The rebuild throttle compares against a reset stamp of 0 (see DualPaneReconcilerTest).
+        
         idleFor(2_000)
     }
 
@@ -78,7 +78,7 @@ class StaleLayoutMonitorTest {
         return host
     }
 
-    /** The instance a rung-3 recreate produces: the override applied in attachBaseContext. */
+    
     private fun overrideInstance(): Host {
         val host = host(activityClass = StaleLayoutOverrideTest.OverrideProbeActivity::class.java)
         val applied = (host.activity as StaleLayoutOverrideTest.OverrideProbeActivity).appliedPanel
@@ -88,16 +88,16 @@ class StaleLayoutMonitorTest {
 
     private fun idleFor(ms: Long) = Shadows.shadowOf(Looper.getMainLooper()).idleFor(ms, TimeUnit.MILLISECONDS)
 
-    /** The monitor's `staleLayout` lines, captured synchronously instead of through `L`'s logger thread. */
+    
     private fun logged(fragment: String): List<String> = lines.filter { it.contains(fragment) }
 
-    /** Detection at settle (t = 1 s), verification at t = 4 s. */
+    
     private fun Host.runToDetection() {
         monitor.onHostDisplayChanged()
         idleFor(1_001)
     }
 
-    // ---------------------------------------------------------------- arming and detection
+    
 
     @Test
     fun `a panel change arms one settled check that detects once`() {
@@ -191,7 +191,7 @@ class StaleLayoutMonitorTest {
         assertNull(StaleLayoutOverride.active)
     }
 
-    // ---------------------------------------------------------------- verification and rung 3
+    
 
     @Test
     fun `verification logs one result, then the override recreate runs once`() {
@@ -215,7 +215,7 @@ class StaleLayoutMonitorTest {
         host().runToDetection()
         idleFor(3_100)
         assertEquals("first episode: rung 3 ran", 1, rebuilds.size)
-        // Unfold: the platform relaunches onto the inner panel; refold before its settled check runs.
+        
         panel = INNER
         val inner = host()
         inner.monitor.onHostDisplayChanged()
@@ -234,9 +234,9 @@ class StaleLayoutMonitorTest {
     fun `an unrelated relaunch with the configuration still stale does not suppress rung 3`() {
         val first = host()
         first.runToDetection()
-        first.monitor.detach() // a theme recreate destroys the detecting instance
+        first.monitor.detach() 
         val second = host()
-        second.monitor.onHostDisplayChanged() // its onStart replay
+        second.monitor.onHostDisplayChanged() 
         idleFor(3_100)
         val result = logged("staleLayout result")
         assertEquals(1, result.size)
@@ -273,7 +273,7 @@ class StaleLayoutMonitorTest {
         val host = host()
         host.runToDetection()
         idleFor(2_500)
-        // Another rebuild 500 ms before verification opens the throttle window.
+        
         assertEquals(PaneRebuildOutcome.PROCEED, host.reconciler.rebuildForStaleLayout())
         StaleLayoutOverride.clear()
         rebuilds.clear()
@@ -304,7 +304,7 @@ class StaleLayoutMonitorTest {
         assertNull("a healthy check ends the episode", StaleLayoutMonitor.reportedPanelForTest())
     }
 
-    // ---------------------------------------------------------------- override exit
+    
 
     @Test
     fun `the override instance exits on another panel from the settled check only, despite the throttle`() {
@@ -312,7 +312,7 @@ class StaleLayoutMonitorTest {
         val override = overrideInstance()
         override.monitor.onHostDisplayChanged()
         idleFor(1_100)
-        assertEquals(PaneRebuildOutcome.PROCEED, override.reconciler.rebuildForStaleLayout()) // throttle open
+        assertEquals(PaneRebuildOutcome.PROCEED, override.reconciler.rebuildForStaleLayout()) 
         panel = INNER
         override.monitor.onHostDisplayChanged()
         idleFor(500)

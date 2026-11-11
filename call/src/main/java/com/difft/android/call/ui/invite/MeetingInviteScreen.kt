@@ -17,32 +17,24 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 
-/**
- * 会议邀请页面的状态枚举
- */
 enum class InviteScreenState {
-    INITIAL,      // 初始页面 - 显示成员列表和添加按钮
-    ADD_MEMBERS,  // 添加成员页面 - 显示联系人列表
-    CONFIRM       // 确认页面 - 显示已选成员和邀请按钮
+    INITIAL,
+    ADD_MEMBERS,
+    CONFIRM
 }
 
-/**
- * 会议邀请页面的状态枚举
- */
 enum class InviteViewState {
-    DISMISS,      // 初始页面 - 显示成员列表和添加按钮
-    INVITE,  // 添加成员页面 - 显示联系人列表
+    DISMISS,
+    INVITE,
 }
 
 
-/**
- * 会议邀请主页面
- * 使用 Fragment 实现底部弹窗，参考 ChatSelectBottomSheetFragment 的实现方式
- *
- * @param callViewModel 通话的ViewModel
- * @param inviteCallHandler 邀请处理器，包含邀请相关的状态和逻辑
- * @param onInviteViewAction 回调函数，用于处理邀请视图的操作
- */
+
+
+
+
+
+
 @OptIn(FlowPreview::class)
 @Composable
 fun MeetingInviteScreen(
@@ -56,15 +48,14 @@ fun MeetingInviteScreen(
     val showInviteViewEnable by callViewModel.callUiController.showInviteViewEnable.collectAsState(false)
     val latestInviteHandler = rememberUpdatedState(inviteCallHandler)
     val latestInviteAction = rememberUpdatedState(onInviteViewAction)
-    // In tabletop the sheet takes only the dock region below the fold, over the console.
+    
     val tabletop = LocalCallTabletop.current
     val dockHeightPx = tabletop?.dockHeightPx
     val latestDockHeightPx = rememberUpdatedState(dockHeightPx)
-    // The sheet is its own window: it hides the status bar whenever the page does.
+    
     val statusBarHidden = isCallImmersive()
     val latestStatusBarHidden = rememberUpdatedState(statusBarHidden)
 
-    // 使用 LaunchedEffect 监听状态变化，显示/隐藏 Fragment
     LaunchedEffect(context) {
         val activity = context as? androidx.fragment.app.FragmentActivity ?: return@LaunchedEffect
         snapshotFlow { showInviteViewEnable }
@@ -72,7 +63,6 @@ fun MeetingInviteScreen(
             .debounce(100)
             .collectLatest { shouldShow ->
                 if (shouldShow) {
-                    // 检查是否已经显示了 Fragment
                     val existingFragment = activity.supportFragmentManager
                         .findFragmentByTag("MeetingInviteBottomSheet") as? MeetingInviteBottomSheetFragment
 
@@ -94,7 +84,6 @@ fun MeetingInviteScreen(
                         }
                     }
                 } else {
-                    // 隐藏 Fragment
                     val existingFragment = activity.supportFragmentManager
                         .findFragmentByTag("MeetingInviteBottomSheet") as? MeetingInviteBottomSheetFragment
                     existingFragment?.dismiss()
@@ -102,7 +91,7 @@ fun MeetingInviteScreen(
             }
     }
 
-    // An open sheet follows the posture: entering or leaving tabletop resizes it in place.
+    
     LaunchedEffect(context, dockHeightPx) {
         val activity = context as? androidx.fragment.app.FragmentActivity ?: return@LaunchedEffect
         (activity.supportFragmentManager.findFragmentByTag("MeetingInviteBottomSheet") as? MeetingInviteBottomSheetFragment)

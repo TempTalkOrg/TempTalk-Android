@@ -3,9 +3,9 @@ package com.difft.android.websocket.api.push.exceptions
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.websocket.internal.push.ProofRequiredResponse
 
-/**
- * Thrown when rate-limited by the server and proof of humanity is required to continue messaging.
- */
+
+
+
 class ProofRequiredException(
     response: ProofRequiredResponse,
     val retryAfterSeconds: Long

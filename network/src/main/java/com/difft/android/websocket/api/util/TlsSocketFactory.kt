@@ -7,15 +7,15 @@ import java.net.UnknownHostException
 import javax.net.ssl.SSLSocket
 import javax.net.ssl.SSLSocketFactory
 
-/**
- * SSLSocketFactory wrapper that restricts enabled protocols to TLS 1.2 and 1.3.
- *
- * Filters the desired protocols against the device's actual supported protocols
- * at runtime, so it works safely across all API levels (TLS 1.3 is available
- * from Android 10 / API 29; older devices fall back to TLS 1.2 only).
- *
- * @see SSLSocketFactory
- */
+
+
+
+
+
+
+
+
+
 class TlsSocketFactory(private val delegate: SSLSocketFactory) : SSLSocketFactory() {
 
     override fun getDefaultCipherSuites(): Array<String> = delegate.defaultCipherSuites

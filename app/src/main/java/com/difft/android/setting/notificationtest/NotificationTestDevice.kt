@@ -16,7 +16,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import javax.inject.Inject
 
-/** The device state the notification test reads while it runs (#1350): Do Not Disturb, lock state, screen state. */
+
 class NotificationTestDevice @Inject constructor(
     @param:ApplicationContext private val context: Context,
 ) {
@@ -29,21 +29,21 @@ class NotificationTestDevice @Inject constructor(
     fun isKeyguardLocked(): Boolean =
         context.getSystemService(KeyguardManager::class.java)?.isKeyguardLocked == true
 
-    /** Whether the vendor pop-up fix opens a vendor page directly (Xiaomi, or vivo OriginOS 6+). A binder call. */
+    
     fun opensVendorPopupDirectly(): Boolean = NotificationFixJump.opensOemPopupDirectly(context)
 
-    /** Whether a PIN, pattern, password or biometric lock is set; read for diagnostics only. */
+    
     fun isDeviceSecure(): Boolean =
         context.getSystemService(KeyguardManager::class.java)?.isDeviceSecure == true
 
-    /** Whether the screen is on; unknown counts as on, so an unreadable state never extends a run. */
+    
     fun isInteractive(): Boolean =
         context.getSystemService(PowerManager::class.java)?.isInteractive != false
 
-    /**
-     * Keeps the CPU awake for at most [timeoutMs] so the screen-off phase of a test is not stalled by
-     * suspend; returns the release action. A missing PowerManager or a refused lock degrades to no lock.
-     */
+    
+
+
+
     fun holdWakeLock(timeoutMs: Long): () -> Unit {
         val lock = try {
             context.getSystemService(PowerManager::class.java)
@@ -54,7 +54,7 @@ class NotificationTestDevice @Inject constructor(
             null
         }
         return {
-            // The timeout can release the lock between isHeld and release(); that race only throws.
+            
             try {
                 if (lock?.isHeld == true) lock.release()
             } catch (e: RuntimeException) {
@@ -63,7 +63,7 @@ class NotificationTestDevice @Inject constructor(
         }
     }
 
-    /** Emits each time the screen turns off; the receiver lives only while the flow is collected. */
+    
     fun screenOffEvents(): Flow<Unit> = callbackFlow {
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {

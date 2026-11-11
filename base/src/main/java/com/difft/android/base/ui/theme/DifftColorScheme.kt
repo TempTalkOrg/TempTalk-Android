@@ -8,17 +8,18 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import com.difft.android.base.ui.theme.tokens.ColorTokens
 
-/**
- * Extended colors for Difft design system
- * These are custom semantic colors beyond Material Design 3's standard ColorScheme
- */
+
+
+
+
 @Immutable
 data class DifftExtendedColors(
-    // Functional colors
+    
     val success: Color,
     val warning: Color,
+    val info: Color,
 
-    // Text hierarchy
+    
     val textPrimary: Color,
     val textSecondary: Color,
     val textTertiary: Color,
@@ -30,50 +31,56 @@ data class DifftExtendedColors(
     val textInfo: Color,
     val textCaution: Color,
 
-    // Background hierarchy
+    
     val background: Color,
-    val bg: Color,    // bg — default page background (settings idiom)
-    val backgroundSecondary: Color,  // bg2 (true second elevation, e.g. cards floating above bg1)
+    val bg: Color,    
+    val backgroundSecondary: Color,  
     val backgroundTertiary: Color,
-    val backgroundQuaternary: Color,  // bg4
+    val backgroundQuaternary: Color,  
     val backgroundDisabled: Color,
-    val backgroundPopup: Color,  // bgpopup — popups, bottom sheets, elevated cards
-    val backgroundModal: Color,  // bgmodal — dialogs, dropdown menus, notifications
+    val backgroundPopup: Color,  
+    val backgroundModal: Color,  
     val backgroundTooltip: Color,
-    val backgroundBlue: Color,
-    val backgroundSpace: Color,  // bgspace — workspace/brand surface
-    val backgroundPagePrimary: Color,  // bgpage-primary
-    val backgroundPageSecondary: Color,  // bgpage-secondary
-    val bg5: Color,  // bg5 — permanently dark surface (call UI)
-    val bgWhite: Color,  // bgwhite — fixed light surface in both themes (call slider handle)
+    val backgroundPagePrimary: Color,  
+    val bg5: Color,  
+    val bgWhite: Color,  
 
-    // UI elements
+    
+    val primaryPressed: Color,
+    val fill: Color,
+    val selected: Color,
+    val avsysBg: Color,
+    val avsysFg: Color,
     val line: Color,
     val divider: Color,
+    val dividerFloating: Color,
     val icon: Color,
     val iconOnPrimary: Color,
 
-    // Special effects
-    val ripple: Color,
-    val scrim: Color,
+    
+    val bubbleSent: Color,
+    val bubbleSentText: Color,
+    val bubbleSentMeta: Color,
+    val bubbleSentLink: Color,
+    val bubbleSentQuote: Color,
+    val bubbleSentBar: Color,
+    val bubbleRecv: Color,
+    val bubbleRecvQuote: Color,
+    val mediaTimeBg: Color,
 
-    // System UI
-    val statusBarColor: Color,
-    val navigationBarColor: Color,
-
-    // Theme indicator
+    
     val isDark: Boolean
 )
 
-/**
- * Creates Material Design 3 ColorScheme for light theme
- * Maps Difft colors to MD3 semantic roles
- */
+
+
+
+
 fun createLightColorScheme(): ColorScheme = lightColorScheme(
-    primary = ColorTokens.Primary,
-    onPrimary = ColorTokens.Light.TextOnPrimary,
-    primaryContainer = ColorTokens.Light.BackgroundBlue,
-    onPrimaryContainer = ColorTokens.Primary,
+    primary = ColorTokens.Light.Primary,
+    onPrimary = ColorTokens.Light.OnPrimary,
+    primaryContainer = ColorTokens.Light.Fill,
+    onPrimaryContainer = ColorTokens.Light.Primary,
 
     secondary = ColorTokens.Light.BackgroundTertiary,
     onSecondary = ColorTokens.Light.TextPrimary,
@@ -105,20 +112,20 @@ fun createLightColorScheme(): ColorScheme = lightColorScheme(
 
     inverseSurface = ColorTokens.Dark.BackgroundTertiary,
     inverseOnSurface = ColorTokens.Dark.TextPrimary,
-    inversePrimary = ColorTokens.Primary,
+    inversePrimary = ColorTokens.Dark.Primary,
 
-    surfaceTint = ColorTokens.Primary
+    surfaceTint = ColorTokens.Light.Primary
 )
 
-/**
- * Creates Material Design 3 ColorScheme for dark theme
- * Maps Difft colors to MD3 semantic roles
- */
+
+
+
+
 fun createDarkColorScheme(): ColorScheme = darkColorScheme(
-    primary = ColorTokens.Primary,
-    onPrimary = ColorTokens.Dark.TextOnPrimary,
-    primaryContainer = ColorTokens.Dark.BackgroundBlue,
-    onPrimaryContainer = ColorTokens.InfoLight,
+    primary = ColorTokens.Dark.Primary,
+    onPrimary = ColorTokens.Dark.OnPrimary,
+    primaryContainer = ColorTokens.Dark.Fill,
+    onPrimaryContainer = ColorTokens.Dark.Primary,
 
     secondary = ColorTokens.Dark.BackgroundTertiary,
     onSecondary = ColorTokens.Dark.TextPrimary,
@@ -150,17 +157,18 @@ fun createDarkColorScheme(): ColorScheme = darkColorScheme(
 
     inverseSurface = ColorTokens.Light.BackgroundTertiary,
     inverseOnSurface = ColorTokens.Light.TextPrimary,
-    inversePrimary = ColorTokens.Primary,
+    inversePrimary = ColorTokens.Light.Primary,
 
-    surfaceTint = ColorTokens.Primary
+    surfaceTint = ColorTokens.Dark.Primary
 )
 
-/**
- * Creates extended colors for light theme
- */
+
+
+
 fun createLightExtendedColors(): DifftExtendedColors = DifftExtendedColors(
     success = ColorTokens.Success,
     warning = ColorTokens.Warning,
+    info = ColorTokens.Info,
 
     textPrimary = ColorTokens.Light.TextPrimary,
     textSecondary = ColorTokens.Light.TextSecondary,
@@ -182,33 +190,42 @@ fun createLightExtendedColors(): DifftExtendedColors = DifftExtendedColors(
     backgroundPopup = ColorTokens.Light.BackgroundPopup,
     backgroundModal = ColorTokens.Light.BackgroundModal,
     backgroundTooltip = ColorTokens.Light.Tooltip,
-    backgroundBlue = ColorTokens.Light.BackgroundBlue,
-    backgroundSpace = ColorTokens.Light.BackgroundSpace,
     backgroundPagePrimary = ColorTokens.Light.BackgroundPagePrimary,
-    backgroundPageSecondary = ColorTokens.Light.BackgroundPageSecondary,
     bg5 = ColorTokens.Light.Bg5,
     bgWhite = ColorTokens.BgWhite,
 
+    primaryPressed = ColorTokens.Light.PrimaryPressed,
+    fill = ColorTokens.Light.Fill,
+    selected = ColorTokens.Light.Selected,
+    avsysBg = ColorTokens.Light.AvsysBg,
+    avsysFg = ColorTokens.Light.AvsysFg,
+
     line = ColorTokens.Light.Line,
     divider = ColorTokens.Light.Divider,
+    dividerFloating = ColorTokens.Light.DividerFloating,
     icon = ColorTokens.Light.Icon,
     iconOnPrimary = ColorTokens.Light.IconOnPrimary,
 
-    ripple = ColorTokens.Light.Ripple,
-    scrim = ColorTokens.Light.Scrim,
-
-    statusBarColor = ColorTokens.Light.Background,
-    navigationBarColor = ColorTokens.Light.Background,
+    bubbleSent = ColorTokens.BubbleSent,
+    bubbleSentText = ColorTokens.BubbleSentText,
+    bubbleSentMeta = ColorTokens.BubbleSentMeta,
+    bubbleSentLink = ColorTokens.BubbleSentLink,
+    bubbleSentQuote = ColorTokens.Light.BubbleSentQuote,
+    bubbleSentBar = ColorTokens.Light.BubbleSentBar,
+    bubbleRecv = ColorTokens.Light.BubbleRecv,
+    bubbleRecvQuote = ColorTokens.Light.BubbleRecvQuote,
+    mediaTimeBg = ColorTokens.MediaTimeBg,
 
     isDark = false
 )
 
-/**
- * Creates extended colors for dark theme
- */
+
+
+
 fun createDarkExtendedColors(): DifftExtendedColors = DifftExtendedColors(
     success = ColorTokens.Success,
     warning = ColorTokens.Warning,
+    info = ColorTokens.Info,
 
     textPrimary = ColorTokens.Dark.TextPrimary,
     textSecondary = ColorTokens.Dark.TextSecondary,
@@ -230,28 +247,36 @@ fun createDarkExtendedColors(): DifftExtendedColors = DifftExtendedColors(
     backgroundPopup = ColorTokens.Dark.BackgroundPopup,
     backgroundModal = ColorTokens.Dark.BackgroundModal,
     backgroundTooltip = ColorTokens.Dark.Tooltip,
-    backgroundBlue = ColorTokens.Dark.BackgroundBlue,
-    backgroundSpace = ColorTokens.Dark.BackgroundSpace,
     backgroundPagePrimary = ColorTokens.Dark.BackgroundPagePrimary,
-    backgroundPageSecondary = ColorTokens.Dark.BackgroundPageSecondary,
     bg5 = ColorTokens.Dark.Bg5,
     bgWhite = ColorTokens.BgWhite,
 
+    primaryPressed = ColorTokens.Dark.PrimaryPressed,
+    fill = ColorTokens.Dark.Fill,
+    selected = ColorTokens.Dark.Selected,
+    avsysBg = ColorTokens.Dark.AvsysBg,
+    avsysFg = ColorTokens.Dark.AvsysFg,
+
     line = ColorTokens.Dark.Line,
     divider = ColorTokens.Dark.Divider,
+    dividerFloating = ColorTokens.Dark.DividerFloating,
     icon = ColorTokens.Dark.Icon,
     iconOnPrimary = ColorTokens.Dark.IconOnPrimary,
 
-    ripple = ColorTokens.Dark.Ripple,
-    scrim = ColorTokens.Dark.Scrim,
-
-    statusBarColor = ColorTokens.Dark.Background,
-    navigationBarColor = ColorTokens.Dark.Background,
+    bubbleSent = ColorTokens.BubbleSent,
+    bubbleSentText = ColorTokens.BubbleSentText,
+    bubbleSentMeta = ColorTokens.BubbleSentMeta,
+    bubbleSentLink = ColorTokens.BubbleSentLink,
+    bubbleSentQuote = ColorTokens.Dark.BubbleSentQuote,
+    bubbleSentBar = ColorTokens.Dark.BubbleSentBar,
+    bubbleRecv = ColorTokens.Dark.BubbleRecv,
+    bubbleRecvQuote = ColorTokens.Dark.BubbleRecvQuote,
+    mediaTimeBg = ColorTokens.MediaTimeBg,
 
     isDark = true
 )
 
-/**
- * CompositionLocal for DifftExtendedColors
- */
+
+
+
 val LocalDifftExtendedColors = staticCompositionLocalOf { createLightExtendedColors() }

@@ -12,11 +12,11 @@ import com.difft.android.base.R
 import kotlin.math.min
 import kotlin.math.roundToInt
 
-/**
- * Vertical A-Z index rail. Shows the letters passed to [reset], sized to its content; on short
- * windows it scales the text down, then condenses with dots, then stops drawing and ignores
- * touches (#1374).
- */
+
+
+
+
+
 class SideBar @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
@@ -33,14 +33,14 @@ class SideBar @JvmOverloads constructor(
     private var slotHeight = 0f
     private var contentTop = 0f
 
-    /** Index into [letters] of the letter under the finger, or -1. */
+    
     private var chosen = -1
 
     private val maxTextSize = resources.getDimension(R.dimen.chat_sidebar_text_size_normal_default)
     private val preferredItemHeight = PREFERRED_ITEM_HEIGHT_DP * resources.displayMetrics.density
     private val minItemHeight = MIN_ITEM_HEIGHT_DP * resources.displayMetrics.density
-    private val normalColor = ContextCompat.getColor(context, R.color.t_info)
-    private val selectedColor = ContextCompat.getColor(context, R.color.blue_200)
+    private val normalColor = ContextCompat.getColor(context, R.color.t_secondary)
+    private val selectedColor = ContextCompat.getColor(context, R.color.primary)
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER }
 
     fun setOnTouchingLetterChangedListener(listener: OnTouchingLetterChangedListener?) {
@@ -51,10 +51,10 @@ class SideBar @JvmOverloads constructor(
         if (this.letters == letters) return
         this.letters = letters
         chosen = -1
-        // Slots must match the new letters before the next touch, which can arrive ahead of the
-        // relayout requested below.
+        
+        
         updateSlots()
-        // Intrinsic height depends on the letter count.
+        
         requestLayout()
         invalidate()
     }

@@ -43,7 +43,7 @@ import kotlinx.coroutines.launch
 @AndroidEntryPoint
 class ScreenLockSettingFragment : Fragment(), SettingsIdiomPage {
     private val model: ScreenLockSettingsViewModel by viewModels()
-    // Registration order is fixed across every Fragment reconstruction.
+    
     private val bindingLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         model.dispatch(ScreenLockContract.Intent.Result(it.data?.getStringExtra(SecurityResultNonce.EXTRA_REQUEST_ID), Stage.AwaitingBinding, it.resultCode == Activity.RESULT_OK))
     }
@@ -98,8 +98,8 @@ class ScreenLockSettingFragment : Fragment(), SettingsIdiomPage {
                     } }
                     kotlinx.coroutines.awaitCancellation()
                 } finally {
-                    // Losing the visible top (fold, rotation, tab switch) only unmounts the dialogs; a
-                    // ChoosingBinding pending stays and shows again. Only the user's dismiss cancels it.
+                    
+                    
                     visible = false
                 }
             }

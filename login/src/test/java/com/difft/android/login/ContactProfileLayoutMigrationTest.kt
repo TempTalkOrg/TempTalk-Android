@@ -14,10 +14,10 @@ import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/**
- * Detached-inflate pin for the profile name field: the shared single-line input at the old id,
- * capped at 30 characters, with its own clear icon in place of the hand-made clear button.
- */
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [34], qualifiers = "w360dp-h640dp")
 class ContactProfileLayoutMigrationTest {

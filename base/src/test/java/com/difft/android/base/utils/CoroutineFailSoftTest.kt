@@ -18,17 +18,17 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 
-/**
- * Contract tests for [dbKeyFailSoftExceptionHandler]: a [WCDBKeyUnavailableException] thrown on a
- * scope carrying the handler is swallowed (never reaches the thread's uncaught handler); any other
- * throwable is forwarded so unrelated bugs keep crashing; and a key failure thrown from a nested
- * `launch` is swallowed the same way.
- *
- * `job.join()` resumes only after the coroutine's completion (incl. the CEH), so assertions are
- * deterministic with no sleeps. The forward target is captured via a global default uncaught
- * handler (the CEH runs on a Dispatchers.IO thread with no per-thread handler, so it falls through
- * to the default).
- */
+
+
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(manifest = Config.NONE)
 class CoroutineFailSoftTest {

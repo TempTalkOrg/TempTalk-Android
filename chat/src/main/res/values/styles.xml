@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <!-- Base application theme. -->
+    
     <style name="AppTheme" parent="Theme.AppCompat.Light.DarkActionBar">
-        <!-- Customize your theme here. -->
+        
     </style>
 
 
@@ -16,7 +16,7 @@
 
 
 
-    <!-- Text Preview Activity Theme with fade animation -->
+    
     <style name="Theme.TextPreview" parent="Theme.Chative">
         <item name="android:windowIsTranslucent">true</item>
         <item name="android:windowBackground">@android:color/transparent</item>
@@ -24,8 +24,8 @@
         <item name="android:windowNoTitle">true</item>
         <item name="android:backgroundDimEnabled">false</item>
         <item name="android:windowAnimationStyle">@style/TextPreviewAnimation</item>
-        <!-- Selection handle color -->
-        <item name="colorControlActivated">@color/primary</item>
+        
+        <item name="colorControlActivated">@color/info</item>
     </style>
 
     <style name="TextPreviewAnimation" parent="@android:style/Animation.Activity">

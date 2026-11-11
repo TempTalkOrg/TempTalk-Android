@@ -21,19 +21,13 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 
-/**
- * View-state tests for `activity_scan.xml` + [ScanFrameOverlayView] (design §7 T17–T19).
- *
- * **No pixel baseline:** `:chat` has NO View/XML Roborazzi harness (the only screenshot infra is
- * Compose-based), so per the [com.difft.android.chat.ui.ChatMessageViewHolderQuoteThumbnailTest]
- * precedent these tests inflate the real layout via `Robolectric.buildActivity` + `LayoutInflater`
- * and assert on resulting view state. Inflating proves the [ScanFrameOverlayView] `@JvmOverloads`
- * constructor exists (otherwise LayoutInflater throws InflateException). Visual parity vs the BGA
- * qrcv_* values (200dp rect, 20dp/3dp corners) recoloured to primary blue (#056FFA) is verified
- * by code review + on-device.
- *
- * Overlay/header are the only deterministic surface: PreviewView renders black in Robolectric.
- */
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [33])
 class ScanLayoutViewStateTest {
@@ -54,7 +48,7 @@ class ScanLayoutViewStateTest {
         runCatching { controller.destroy() }
     }
 
-    /** Inflates activity_scan, measures + lays out at the given dimensions, returns the root. */
+    
     private fun inflateScan(widthPx: Int, heightPx: Int): ViewGroup {
         val parent = FrameLayout(activity)
         activity.setContentView(parent)
@@ -68,7 +62,7 @@ class ScanLayoutViewStateTest {
         return root
     }
 
-    // ── T17: portrait — preview + overlay full-bleed, header pinned top with back + title ──────
+    
     @Test
     fun `T17 - portrait inflation yields full-bleed preview plus overlay and a top header`() {
         val w = 1080
@@ -81,7 +75,7 @@ class ScanLayoutViewStateTest {
         assertEquals(w, preview.width)
         assertEquals(h, preview.height)
 
-        // Inflating scanOverlay proves the @JvmOverloads (Context, AttributeSet) ctor exists.
+        
         val overlay = root.findViewById<ScanFrameOverlayView>(R.id.scanOverlay)
         assertNotNull("scanOverlay must inflate (proves @JvmOverloads ctor)", overlay)
         assertEquals(w, overlay.width)
@@ -96,7 +90,7 @@ class ScanLayoutViewStateTest {
         assertEquals(activity.getString(R.string.scan_scan), title.text.toString())
     }
 
-    // ── T18: landscape (sw≥600dp) — the distortion-fix surface; preview fills, no fixed aspect ──
+    
     @Test
     @Config(qualifiers = "sw600dp-land")
     fun `T18 - landscape inflation keeps preview full-bleed and overlay centered without distortion`() {
@@ -106,26 +100,26 @@ class ScanLayoutViewStateTest {
 
         val preview = root.findViewById<PreviewView>(R.id.previewView)
         assertNotNull(preview)
-        assertEquals(w, preview.width) // fills parent — no fixed aspect that would distort
+        assertEquals(w, preview.width) 
         assertEquals(h, preview.height)
 
         val overlay = root.findViewById<ScanFrameOverlayView>(R.id.scanOverlay)
         assertNotNull(overlay)
-        // overlay is full-bleed; its rect is computed from measured width/height in onDraw (centered),
-        // not a fixed offset, so it stays centered regardless of orientation.
+        
+        
         assertEquals(w, overlay.width)
         assertEquals(h, overlay.height)
 
         val back = root.findViewById<View>(R.id.ib_back)
-        assertEquals(View.VISIBLE, back.visibility) // header pinned top
+        assertEquals(View.VISIBLE, back.visibility) 
     }
 
-    // ── T19: dark parity — overlay inflates under a dark config; colors have no values-night ────
+    
     @Test
     @Config(qualifiers = "night")
     fun `T19 - overlay inflates identically under dark mode (no values-night override)`() {
-        // Theme parity exempt: scan_mask_color and primary (corners/scan line) are mode-identical →
-        // mode-identical by design. Assert the overlay inflates without exception under a dark config.
+        
+        
         val root = inflateScan(1080, 1920)
         val overlay = root.findViewById<ScanFrameOverlayView>(R.id.scanOverlay)
         assertNotNull("overlay inflates under dark config", overlay)

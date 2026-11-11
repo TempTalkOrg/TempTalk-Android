@@ -14,10 +14,10 @@ import androidx.compose.ui.unit.dp
 import com.difft.android.base.ui.compose.DifftButton
 import com.difft.android.base.ui.theme.DifftTheme
 
-/**
- * One action as data, so a page can describe its buttons without composing them itself. The primary
- * is a filled button, the secondary a plain text button, red only when it discards something.
- */
+
+
+
+
 data class MigrationAction(
     val text: String,
     val enabled: Boolean = true,
@@ -25,7 +25,7 @@ data class MigrationAction(
     val onClick: () -> Unit,
 )
 
-/** Primary (filled) full-width action. */
+
 @Composable
 fun MigrationPrimaryButton(
     text: String,
@@ -41,7 +41,7 @@ fun MigrationPrimaryButton(
     )
 }
 
-/** Full-width text button: the second choice under a primary, or the only exit on a status page. */
+
 @Composable
 fun MigrationTextButton(
     text: String,
@@ -68,7 +68,7 @@ fun MigrationTextButton(
     }
 }
 
-/** The page footer: a primary above an optional text button, both full width. */
+
 @Composable
 fun MigrationButtonStack(
     primary: MigrationAction?,
@@ -93,7 +93,7 @@ fun MigrationButtonStack(
     }
 }
 
-/** Secondary action; renders [MigrationTextButton]. */
+
 @Composable
 fun MigrationSecondaryButton(
     text: String,

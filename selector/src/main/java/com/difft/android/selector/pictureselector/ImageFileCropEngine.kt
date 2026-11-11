@@ -30,7 +30,7 @@ class ImageFileCropEngine(
         dataSource: ArrayList<String>,
         requestCode: Int
     ) {
-        // 防止在 Android 9 等设备上因 dataSource 为空导致 UCropMultipleActivity 崩溃
+        
         if (dataSource.isEmpty()) {
             return
         }
@@ -60,9 +60,6 @@ class ImageFileCropEngine(
         uCrop.start(fragment.requireActivity(), fragment, requestCode)
     }
 
-    /**
-     * 配制UCrop，可根据需求自我扩展
-     */
     private fun buildOptions(): UCrop.Options {
         val options = UCrop.Options()
         options.setCircleDimmedLayer(true)
@@ -71,9 +68,9 @@ class ImageFileCropEngine(
         options.setHideBottomControls(true)
         options.setMaxScaleMultiplier(100f)
 
-        // uCrop reads colors as hard ARGB values (window.setStatusBarColor / toolbar paint).
-        // It does NOT auto-switch on theme change. Resolve dark/light explicitly so the
-        // crop screen matches the app's current night mode.
+        
+        
+        
         val nightMask = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
         val isDark = nightMask == Configuration.UI_MODE_NIGHT_YES
 
@@ -84,10 +81,10 @@ class ImageFileCropEngine(
         options.setStatusBarColor(barColor)
         options.setToolbarColor(barColor)
         options.setToolbarWidgetColor(textColor)
-        // status bar icons: dark mode → light icons (false); light mode → dark icons (true).
+        
         options.isDarkStatusBarBlack(!isDark)
 
-        // Allow selectorStyle to override status/toolbar color when set explicitly.
+        
         if (selectorStyle != null && selectorStyle.selectMainStyle!!.statusBarColor != 0) {
             val mainStyle = selectorStyle.selectMainStyle!!
             val statusBarColor = mainStyle.statusBarColor

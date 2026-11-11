@@ -24,11 +24,11 @@ import org.robolectric.Robolectric
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
-/**
- * [TaskWait] / [withTaskWait], the claim the wait-showing utilities (save to notes, save
- * attachment, avatar preview) take: with a page's [PageWait] the dialog goes with the page's view
- * while the task keeps running; without one, only the task's own token is released.
- */
+
+
+
+
+
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [34])
 class TaskWaitTest {
@@ -69,10 +69,10 @@ class TaskWaitTest {
         val (activity, page) = activityWithPage()
         val wait = PageWait(page)
 
-        // Save to notes releases in its result handler and again in finally.
+        
         val first = TaskWait.claim(activity, wait)
         first.release()
-        val second = TaskWait.claim(activity, wait) // the user saved again in between
+        val second = TaskWait.claim(activity, wait) 
         first.release()
 
         assertTrue("the second save's wait stays up", wait.held)
@@ -88,7 +88,7 @@ class TaskWaitTest {
         val work = CompletableDeferred<Unit>()
         var finished = false
 
-        // Like save to notes: the work outlives the page on an application-wide scope.
+        
         CoroutineScope(Dispatchers.Main).launch {
             withTaskWait(activity, wait) { work.await() }
             finished = true

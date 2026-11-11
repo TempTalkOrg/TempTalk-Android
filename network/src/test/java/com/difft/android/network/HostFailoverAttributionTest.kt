@@ -20,11 +20,11 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
-/**
- * Which host a failure is attributed to (#1396): the host of the network hop the failure happened
- * on, not the construction-time origin. Covers a redirect, a failed resend, a pooled connection
- * and a body that fails after its headers arrived.
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class)
 class HostFailoverAttributionTest {
@@ -50,7 +50,7 @@ class HostFailoverAttributionTest {
         )
     }
 
-    // T19 — a redirect target that fails before it connects is not attributable: no mark, no resend.
+    
     @Test
     fun `a redirect follow up that fails before connecting is unattributed`() {
         val f = pool(A, B, C)
@@ -65,7 +65,7 @@ class HostFailoverAttributionTest {
         assertEquals(listOf(A, B, C), f.eligibleHosts(), "neither the redirecting nor the target host is marked")
     }
 
-    // T19 — a redirect to a host outside the pool that fails after sending marks nothing.
+    
     @Test
     fun `a post send failure on a redirect target outside the pool marks nothing`() {
         val f = pool(A, B, others = listOf(X))
@@ -91,7 +91,7 @@ class HostFailoverAttributionTest {
         assertEquals(listOf(A, B, C), f.eligibleHosts())
     }
 
-    // T20 — the resend target fails at connect: it is classified connect-stage and the next host is tried.
+    
     @Test
     fun `a failed resend is itself connect stage and the next host is tried`() {
         val f = pool(A, B, C)
@@ -106,11 +106,11 @@ class HostFailoverAttributionTest {
         assertEquals(listOf(C), f.eligibleHosts(), "A answered 5xx and B failed at connect: both marked")
     }
 
-    // T21 — routed to B over a pooled connection, B fails while the response is read: B is marked, not A.
+    
     @Test
     fun `a failure on a pooled connection is attributed to the routed host`() {
         val f = pool(A, B, C)
-        // B is the best host, so the client built on A is routed to it.
+        
         f.coordinator.publishProbeResults(listOf(up(B), up(A), up(C)), startGeneration = 0L)
         f.ok(B, "first")
         f.server(B).enqueue(MockResponse.Builder().onResponseStart(SocketEffect.CloseSocket()).build())
@@ -126,7 +126,7 @@ class HostFailoverAttributionTest {
         assertEquals(listOf(A, C), f.eligibleHosts(), "B is marked, the origin A is not")
     }
 
-    // T23 — headers arrive, then the body stalls past the read timeout: the host is marked after the failure.
+    
     @Test
     fun `a body that stalls after its headers marks the host once and never resends`() {
         val f = pool(A, B, C)
@@ -154,7 +154,7 @@ class HostFailoverAttributionTest {
         assertEquals(listOf(B), f.eligibleHosts(), "the later body failure wins over the healthy header answer")
     }
 
-    // T23 — a download cancelled by the caller is no host signal.
+    
     @Test
     fun `a download cancelled by the caller marks nothing`() {
         val f = pool(A, B)
@@ -170,8 +170,8 @@ class HostFailoverAttributionTest {
         assertEquals(listOf(A, B), f.eligibleHosts())
     }
 
-    // #1396 — a stale pooled connection fails after the send, OkHttp retries it on a new connection
-    // and that connect fails: the final error is connect-stage, so A is marked and B answers.
+    
+    
     @Test
     fun `a connect failure after okhttp retried a stale pooled connection is resent`() {
         val f = pool(A, B, C)
@@ -190,8 +190,8 @@ class HostFailoverAttributionTest {
         assertEquals(listOf(B, C), f.eligibleHosts())
     }
 
-    // #1396 — the stale exchange may have delivered a write (PUT v1/groups creates a group), so no
-    // write method is resent elsewhere.
+    
+    
     @Test
     fun `a write is not resent after okhttp retried a stale pooled connection`() {
         listOf("POST", "PUT", "DELETE").forEach { method ->
@@ -212,7 +212,7 @@ class HostFailoverAttributionTest {
         }
     }
 
-    // #1396 — with OkHttp retries on, a read failure OkHttp does not recover is still post-send.
+    
     @Test
     fun `a read timeout stays post send when okhttp retries are enabled`() {
         val f = pool(A, B, C)

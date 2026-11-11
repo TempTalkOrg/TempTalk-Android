@@ -13,11 +13,11 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import com.difft.android.chat.messages.TestScopeApplication
 
-/**
- * The resend action asks [AttachmentSendIdentity.hasUploadSource] before queueing a send, and the
- * send job uses [AttachmentSendIdentity.uploadSourcePath] itself, so the two cannot disagree. Only an
- * attachment that never uploaded and has no file left is unsendable (issue #1378).
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [34])
 class AttachmentSendIdentityUploadSourceTest {
@@ -62,8 +62,8 @@ class AttachmentSendIdentityUploadSourceTest {
 
     @Test
     fun `a never-uploaded attachment whose staged file is still at its address can be resent`() {
-        // The ordinary failed send: a resend re-reads the row (no transient path), so the staged
-        // file is found at the copy's own address.
+        
+        
         val staged = attachment(authorityId = 0L, fileName = "voice.m4a")
         File(AttachmentPathResolver.fileFor(staged)).apply {
             parentFile?.mkdirs()
@@ -74,7 +74,7 @@ class AttachmentSendIdentityUploadSourceTest {
 
     @Test
     fun `a never-uploaded attachment whose staged file is gone cannot be resent`() {
-        // The #1378 shape: a migrated row that names its file, with nothing at the copy's address.
+        
         assertFalse(identity.hasUploadSource(attachment(authorityId = 0L, fileName = "voice.m4a")))
     }
 }

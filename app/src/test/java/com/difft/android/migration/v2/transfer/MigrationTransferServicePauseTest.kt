@@ -55,11 +55,10 @@ import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/**
- * The transfer service's side of the migration message pause (#1382): which sends pause, and how
- * each way a send ends settles the pause (design §2.5). The controller is intercepted; its answer
- * plays the pipeline's part (enter, commit marker, the receiver's `/cancel` answer).
- */
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [34])
 class MigrationTransferServicePauseTest {
@@ -69,7 +68,7 @@ class MigrationTransferServicePauseTest {
     private val pendingStore = PendingVerdictStore(messaging.store)
     private val statusRef = SenderSessionRef("10.0.0.2", 53317, "fp", "session-1", "token", listOf("status-v1"))
 
-    /** A receiver that keeps answering `/status` after a failure (#1382 A06). */
+    
     private val retainRef = statusRef.copy(caps = listOf(ReceiverCaps.STATUS_V1, ReceiverCaps.VERDICT_RETAIN_V1))
     private val target = QrPayload(ip = "192.168.1.7", port = 53317, fp = "fp", pin = "123456", alias = "Pixel", transferKey = "tk")
     private val retryDrain = mockk<MigrationRetryQueueDrain>()
@@ -112,7 +111,7 @@ class MigrationTransferServicePauseTest {
         MigrationTransferService::class.java.getDeclaredField(name).apply { isAccessible = true }.set(service, value)
     }
 
-    /** Plays the controller and pipeline: [script] gets the export's pause session and the typed-refusal callback. */
+    
     private fun export(
         ref: SenderSessionRef = statusRef,
         script: suspend (SenderPauseSession?, (String) -> Unit) -> Boolean,
@@ -129,7 +128,7 @@ class MigrationTransferServicePauseTest {
         }
     }
 
-    /** Up to the commit marker (with its receipt), as the pipeline would get there; [endMarker] past it. */
+    
     private suspend fun SenderPauseSession.throughCommitMarker(endMarker: Boolean = true) {
         enter()
         beforeFinalize()
@@ -215,7 +214,7 @@ class MigrationTransferServicePauseTest {
     fun `a receiver without the pending-envelope capability fails the send and resumes messaging`() = runBlocking<Unit> {
         export { s, _ ->
             s!!.enter()
-            // The pipeline's refusal: caps read, `/cancel` answered, no frame written.
+            
             s.onAbortAnswer(CancelState.STOPPED)
             throw ReceiverCapabilityMissingException(setOf(ReceiverCaps.PENDING_ENVELOPE_V1))
         }
@@ -401,7 +400,7 @@ class MigrationTransferServicePauseTest {
     fun `a success the pause did not take shows no definite result and cleans nothing`() = runBlocking<Unit> {
         export { s, _ ->
             s!!.throughCommitMarker()
-            // The record went away under the export (a logout's own clear of this owner).
+            
             messaging.pause.clear(s.owner, "test")
             true
         }
@@ -421,7 +420,7 @@ class MigrationTransferServicePauseTest {
             try {
                 awaitCancellation()
             } finally {
-                // The pipeline's `/cancel` notice takes a moment before the answer arrives.
+                
                 withContext(NonCancellable) {
                     delay(300)
                     s.onAbortAnswer(CancelState.STOPPED)

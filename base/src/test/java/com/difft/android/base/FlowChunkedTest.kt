@@ -1,8 +1,8 @@
 package com.difft.android.base
 
-/*
- * Copyright 2016-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license.
- */
+
+
+
 
 import com.difft.android.base.utils.ChunkingMethod
 import com.difft.android.base.utils.chunked
@@ -195,9 +195,9 @@ class ChunkedTest {
         assertEquals(5, result.first().size)
         assertEquals(5, result[1].size)
     }
-    /**
-     * Asserts that this invocation is `index`-th in the execution sequence (counting from one).
-     */
+    
+
+
     public  fun expect(index: Int) {
         val wasIndex = actionIndex.incrementAndGet()
         check(index == wasIndex) { "Expecting action index $index but it is actually $wasIndex" }
@@ -269,28 +269,12 @@ class ChunkedTest {
 
         finish(1)
     }
-    /**
-     * Runs a test with a virtual time source backed by `runTest`'s built-in
-     * `TestScope.testScheduler` — `delay()` and `withTimeout()` advance virtual
-     * time without actually sleeping. [UnconfinedTestDispatcher] is used so
-     * that:
-     *  - **virtual time** still applies (the dispatcher implements `Delay`
-     *    against [testScheduler], so `delay()` skips wall-clock); and
-     *  - **eager dispatch** is preserved — continuations resume inline on the
-     *    calling thread, which the tests rely on for their interleaved
-     *    `expect(1)`, `expect(2)`, … ordering between producer and collector.
-     *
-     * [ensureFinished] enforces that `finish(N)` was called inside the block,
-     * catching early-return bugs.
-     *
-     * (Previously: custom `VirtualTimeDispatcher` using the internal
-     * `processNextEventInCurrentThread()` — removed in kotlinx-coroutines
-     * 1.11. `UnconfinedTestDispatcher(testScheduler)` provides equivalent
-     * semantics through the public test API. Note: switching to
-     * `Dispatchers.Unconfined` instead would defeat virtual time —
-     * `Unconfined` does not implement `Delay`, so `delay()` would fall
-     * through to `DefaultDelay` and consume real wall-clock.)
-     */
+    
+
+
+
+
+
     public fun withVirtualTime(block: suspend CoroutineScope.() -> Unit) = runTest {
         withContext(UnconfinedTestDispatcher(testScheduler)) {
             block()

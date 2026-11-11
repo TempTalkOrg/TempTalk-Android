@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- D5 / D5b: the focus group is gone (forced dialog) -->
+    
     <string name="focus_invalid_disbanded_title">Focus Group Dismissed</string>
     <string name="focus_invalid_removed_title">Removed From Focus Group</string>
     <string name="focus_invalid_disbanded_message">“%1$s” has been dismissed. All groups stay muted. Select another focus group, or end Focus.</string>
@@ -9,12 +9,12 @@
     <string name="focus_invalid_removed_message_generic">You have been removed from your focus group. All groups stay muted. Select another focus group, or end Focus.</string>
     <string name="focus_invalid_reselect">Reselect</string>
 
-    <!-- Home status strip while no focus group is selected -->
+    
     <string name="focus_strip_title">No focus group</string>
     <string name="focus_strip_subtitle">· All groups stay muted</string>
     <string name="focus_strip_action">Settings</string>
     <string name="focus_strip_close">Close</string>
 
-    <!-- D4: leave confirm body for the group being focused -->
+    
     <string name="focus_leave_focused_notice">This is your focus group. After you leave, other groups stay muted until you select a new focus group.</string>
 </resources>

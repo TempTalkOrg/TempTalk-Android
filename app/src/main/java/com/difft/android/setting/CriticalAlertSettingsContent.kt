@@ -20,10 +20,10 @@ internal const val TAG_ROW_DND_ACCESS = "row_dnd_access"
 internal const val TAG_ROW_CRITICAL_CATEGORY = "row_critical_category"
 internal const val TAG_ROW_CRITICAL_BACKGROUND = "row_critical_background_connection"
 
-/**
- * The Critical Alerts page: every dependency in order, Do Not Disturb access (which turns the feature
- * on), the category, the lock-screen permissions and the background connection.
- */
+
+
+
+
 @Composable
 internal fun CriticalAlertSettingsContent(
     state: NotificationSettingsUiState?,
@@ -38,7 +38,7 @@ internal fun CriticalAlertSettingsContent(
     ) {
         Spacer(Modifier.height(DifftSettingsDefaults.FirstGroupSpacing))
         DifftSettingsGroup {
-            // Whether to use the feature is the user's choice, so missing access is no warning.
+            
             ValueRow(
                 label = stringResource(ChatR.string.notification_dnd_access),
                 value = state?.let {

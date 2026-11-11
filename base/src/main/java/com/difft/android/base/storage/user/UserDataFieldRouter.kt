@@ -7,29 +7,17 @@ import com.difft.android.base.storage.schema.UserAuthData
 import com.difft.android.base.storage.schema.UserAuthDataMapper
 import com.difft.android.base.user.UserData
 
-/**
- * Pure-function field router for [UserData] writes (issue #725, Task 7).
- *
- * Decides which underlying DataStore receives the changed fields:
- *  - 17 auth fields  → `secure_user.pb` ([UserAuthData] via [UserAuthDataMapper]).
- *  - 26 UX fields    → `app_state.preferences_pb` (typed [Preferences.Key]).
- *  - `password` dead field was dropped in Task 1.
- *
- * **Single source of truth** for the 43→15+26 split. Used by:
- *  - [StorageBoundUserManagerImpl.writeAll] — diff old vs new, dispatch each
- *    changed field to its DataStore.
- *  - [StorageBoundUserManagerImpl.updateAppState] — apply a single typed
- *    change to the in-memory snapshot.
- *  - [StorageBoundUserManagerImpl.warmUp] — compose snapshot from two stores.
- *
- * Stateless. Pure. Trivially testable. No I/O, no Hilt, no state.
- */
+
+
+
+
+
 internal object UserDataFieldRouter {
 
-    /**
-     * Single mutation to apply to a [MutablePreferences]. Encapsulates the
-     * typed key+value so the diff result is self-describing.
-     */
+    
+
+
+
     sealed interface AppStateChange {
         fun applyTo(mut: MutablePreferences)
 
@@ -64,31 +52,31 @@ internal object UserDataFieldRouter {
         }
     }
 
-    /**
-     * Result of a diff — what the writer must persist.
-     *
-     * @property newAuth Non-null when any auth field changed; carries the full
-     *   new [UserAuthData] ready to be written via `secureUserStore.updateData { newAuth }`.
-     * @property appStateChanges One [AppStateChange] per changed UX field.
-     *   Empty list = no UX write.
-     */
+    
+
+
+
+
+
+
+
     data class Diff(
         val newAuth: UserAuthData?,
         val appStateChanges: List<AppStateChange>,
     )
 
-    /**
-     * Diff [old] vs [new]. Null [old] is treated as defaults — every non-default
-     * field in [new] counts as a change. Returns the dispatch plan.
-     */
+    
+
+
+
     fun diff(old: UserData?, new: UserData): Diff = project(old ?: UserData(), new, includeDefaults = false)
 
-    /** Full facade projection, including explicit resets to default values. */
+    
     fun snapshot(value: UserData): Diff = project(UserData(), value, includeDefaults = true)
 
     private fun project(prev: UserData, new: UserData, includeDefaults: Boolean): Diff {
 
-        // Auth half — compute UserAuthData projections once, compare.
+        
         val oldAuth = UserAuthDataMapper.fromUserData(prev)
         val newAuth = UserAuthDataMapper.fromUserData(new)
         val authChanged = includeDefaults || oldAuth != newAuth
@@ -147,6 +135,9 @@ internal object UserDataFieldRouter {
         }
         if (includeDefaults || prev.textSize != new.textSize) {
             add(AppStateChange.IntChange(AppStateKeys.TEXT_SIZE, new.textSize))
+        }
+        if (includeDefaults || prev.chatTheme != new.chatTheme) {
+            add(AppStateChange.IntChange(AppStateKeys.CHAT_THEME, new.chatTheme))
         }
         if (includeDefaults || prev.lastCheckUpdateTime != new.lastCheckUpdateTime) {
             add(AppStateChange.LongChange(AppStateKeys.LAST_CHECK_UPDATE_TIME, new.lastCheckUpdateTime))
@@ -212,7 +203,7 @@ internal object UserDataFieldRouter {
         if (includeDefaults || prev.imageEditorBlurPercentage != new.imageEditorBlurPercentage) {
             add(AppStateChange.IntChange(AppStateKeys.IMAGE_EDITOR_BLUR_PERCENTAGE, new.imageEditorBlurPercentage))
         }
-        // Fields keyed directly by AppStateKeys.
+        
         if (includeDefaults || prev.unreadMsgNum != new.unreadMsgNum) {
             add(AppStateChange.IntChange(AppStateKeys.SP_UNREAD_MSG_NUM, new.unreadMsgNum))
         }
@@ -245,25 +236,25 @@ internal object UserDataFieldRouter {
         }
     }
 
-    /**
-     * Apply a list of [AppStateChange]s to a [MutablePreferences]. Convenience
-     * for [StorageBoundUserManagerImpl.writeAll]'s `appStateStore.edit { ... }`
-     * lambda.
-     */
+    
+
+
+
+
     fun applyAppStateChanges(prefs: MutablePreferences, changes: List<AppStateChange>) {
         changes.forEach { it.applyTo(prefs) }
     }
 
-    /**
-     * Apply a single typed app_state change to the in-memory [UserData]
-     * snapshot. Used by [StorageBoundUserManagerImpl.updateAppState].
-     *
-     * Returns [base] unchanged if [key] does not map to a `UserData` field
-     * (e.g., keyboard heights, call counters, DB-recovery flags).
-     *
-     * The `@Suppress("UNCHECKED_CAST")` is safe because the typed
-     * [Preferences.Key] system guarantees `T` matches the field type.
-     */
+    
+
+
+
+
+
+
+
+
+
     @Suppress("UNCHECKED_CAST")
     fun <T> applyAppStateChangeToSnapshot(base: UserData, key: Preferences.Key<T>, value: T): UserData =
         when (key) {
@@ -280,6 +271,7 @@ internal object UserDataFieldRouter {
             AppStateKeys.LAST_USE_TIME -> base.copy(lastUseTime = value as Long)
             AppStateKeys.THEME -> base.copy(theme = value as Int)
             AppStateKeys.TEXT_SIZE -> base.copy(textSize = value as Int)
+            AppStateKeys.CHAT_THEME -> base.copy(chatTheme = value as Int)
             AppStateKeys.LAST_CHECK_UPDATE_TIME -> base.copy(lastCheckUpdateTime = value as Long)
             AppStateKeys.SAVE_TO_PHOTOS -> base.copy(saveToPhotos = value as Boolean)
             AppStateKeys.VOICE_PLAYBACK_SPEED -> base.copy(voicePlaybackSpeed = value as Float)
@@ -300,7 +292,7 @@ internal object UserDataFieldRouter {
             AppStateKeys.IMAGE_EDITOR_MARKER_PERCENTAGE -> base.copy(imageEditorMarkerPercentage = value as Int)
             AppStateKeys.IMAGE_EDITOR_HIGHLIGHTER_PERCENTAGE -> base.copy(imageEditorHighlighterPercentage = value as Int)
             AppStateKeys.IMAGE_EDITOR_BLUR_PERCENTAGE -> base.copy(imageEditorBlurPercentage = value as Int)
-            // — ad-hoc fields lifted from raw AppStateKeys access (issue #725) —
+            
             AppStateKeys.SP_UNREAD_MSG_NUM -> base.copy(unreadMsgNum = value as Int)
             AppStateKeys.SP_DENOISE_MODE ->
                 base.copy(denoiseMode = (value as String).takeIf { it.isNotEmpty() })
@@ -315,15 +307,15 @@ internal object UserDataFieldRouter {
                 base.copy(bestHost = (value as String).takeIf { it.isNotEmpty() })
             AppStateKeys.GRAY_MAP_JSON ->
                 base.copy(grayMapJson = (value as String).takeIf { it.isNotEmpty() })
-            else -> base   // key doesn't map to UserData (keyboard heights, DB-recovery, call_count)
+            else -> base   
         }
 
-    /**
-     * Compose a [UserData] snapshot from the auth half (DataStore) +
-     * app_state half (DataStore). [fallback] supplies any UX fields that
-     * aren't yet in [appState] (e.g., on fresh install the legacy SP may
-     * still hold values during the v(N+1) window).
-     */
+    
+
+
+
+
+
     fun compose(
         auth: UserAuthData,
         appState: Preferences,
@@ -344,6 +336,7 @@ internal object UserDataFieldRouter {
             lastUseTime = appState[AppStateKeys.LAST_USE_TIME] ?: base.lastUseTime,
             theme = appState[AppStateKeys.THEME] ?: base.theme,
             textSize = appState[AppStateKeys.TEXT_SIZE] ?: base.textSize,
+            chatTheme = appState[AppStateKeys.CHAT_THEME] ?: base.chatTheme,
             lastCheckUpdateTime = appState[AppStateKeys.LAST_CHECK_UPDATE_TIME] ?: base.lastCheckUpdateTime,
             saveToPhotos = appState[AppStateKeys.SAVE_TO_PHOTOS] ?: base.saveToPhotos,
             voicePlaybackSpeed = appState[AppStateKeys.VOICE_PLAYBACK_SPEED] ?: base.voicePlaybackSpeed,
@@ -364,7 +357,7 @@ internal object UserDataFieldRouter {
             imageEditorMarkerPercentage = appState[AppStateKeys.IMAGE_EDITOR_MARKER_PERCENTAGE] ?: base.imageEditorMarkerPercentage,
             imageEditorHighlighterPercentage = appState[AppStateKeys.IMAGE_EDITOR_HIGHLIGHTER_PERCENTAGE] ?: base.imageEditorHighlighterPercentage,
             imageEditorBlurPercentage = appState[AppStateKeys.IMAGE_EDITOR_BLUR_PERCENTAGE] ?: base.imageEditorBlurPercentage,
-            // — ad-hoc fields lifted from raw AppStateKeys access (issue #725) —
+            
             unreadMsgNum = appState[AppStateKeys.SP_UNREAD_MSG_NUM] ?: base.unreadMsgNum,
             denoiseMode = appState[AppStateKeys.SP_DENOISE_MODE]?.takeIf { it.isNotEmpty() } ?: base.denoiseMode,
             criticalAlertInfos = appState[AppStateKeys.SP_KEY_CRITICAL_ALERT_INFOS]?.takeIf { it.isNotEmpty() } ?: base.criticalAlertInfos,

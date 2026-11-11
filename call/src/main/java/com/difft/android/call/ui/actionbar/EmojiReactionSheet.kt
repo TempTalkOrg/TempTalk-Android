@@ -41,16 +41,15 @@ import kotlinx.coroutines.launch
 import com.difft.android.call.ui.screenshare.isCallImmersive
 import com.difft.android.call.ui.tabletop.callSheetScrimColor
 
-/** Vertical rhythm of the sheet: grab bar → emoji row → divider → chips. */
+
 private val SHEET_ROW_GAP = 16.dp
 
-/**
- * Bottom sheet with one row of quick emoji and the quick-phrase chips. Picking anything sends
- * it and closes the sheet; tapping the scrim just closes it.
- *
- * Data (emoji / phrase presets) comes from the call config exactly as before — only the
- * presentation changed from a floating card to a sheet.
- */
+
+
+
+
+
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun EmojiReactionSheet(
@@ -71,8 +70,8 @@ fun EmojiReactionSheet(
         }
     }
 
-    // One send per opening: the content stays hit-testable through the hide animation, so a
-    // second tap in that window must be a no-op rather than a duplicate reaction.
+    
+    
     var sent by remember { mutableStateOf(false) }
     val pick: (() -> Unit) -> Unit = { send ->
         if (!sent) {
@@ -106,8 +105,7 @@ fun EmojiReactionSheet(
                 .semantics { testTagsAsResourceId = BuildConfig.DEBUG }
                 .testTag("call_emoji_sheet")
                 .fillMaxWidth()
-                // Design shows 12dp here and between rows; 16dp was chosen on device because the
-                // 28sp emoji row read as crowding the grab bar and the divider at 12.
+                
                 .padding(top = SHEET_ROW_GAP, bottom = if (isLandscape) 20.dp else 34.dp),
             verticalArrangement = Arrangement.spacedBy(SHEET_ROW_GAP),
         ) {
@@ -133,8 +131,8 @@ fun EmojiReactionSheet(
             }
             HorizontalDivider(
                 modifier = Modifier.padding(horizontal = 8.dp),
-                thickness = 1.dp,
-                color = DifftTheme.colors.line,
+                thickness = DifftTheme.hairline,
+                color = DifftTheme.colors.divider,
             )
             FlowRow(
                 modifier = Modifier

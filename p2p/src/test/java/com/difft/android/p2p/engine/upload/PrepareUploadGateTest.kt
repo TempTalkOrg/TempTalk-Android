@@ -14,12 +14,11 @@ import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * I4 — the migration handshake gate wired into [PrepareUploadHandler] (integration-design §6.1). These
- * verify the SEAM behavior (gate runs before session creation, reject → 403 with reason, handshake
- * required when a validator is present, no session on reject). The env/account/version LOGIC itself is
- * tested in `:app`'s `MigrationHandshakeGateTest` (it needs EnvironmentHelper/FormatCompat).
- */
+
+
+
+
+
 class PrepareUploadGateTest {
 
     private val info = DeviceInfo(alias = "Sender", fingerprint = "fp")
@@ -65,10 +64,10 @@ class PrepareUploadGateTest {
             handler.handle(request(withHandshake = true), "1.1.1.1", null)
         }
         assertEquals(403, ex.httpStatus)
-        // The reason rides the 403 body via detailBody() so the sender can show the specific message.
+        
         assertEquals(MigrationRejectReason.ENV_MISMATCH.wire, ex.detail)
         assertEquals(MigrationRejectReason.ENV_MISMATCH.wire, ex.detailBody())
-        // The hard guarantee: a rejected handshake creates NO session → no upload can follow.
+        
         assertNull(sm.activeSessionId())
     }
 
@@ -112,7 +111,7 @@ class PrepareUploadGateTest {
             handler.handle(request(withHandshake = false), "1.1.1.1", null)
         }
         assertEquals(403, ex.httpStatus)
-        // Validator is never even consulted — a missing handshake is rejected up front.
+        
         assertTrue(!validatorCalled)
         assertNull(sm.activeSessionId())
     }
@@ -120,14 +119,13 @@ class PrepareUploadGateTest {
     @Test
     fun `with NO validator the generic file path ignores the handshake field (oracle-compat)`() {
         val sm = SessionManager()
-        // No migrationValidator → generic file transfer / LocalSend oracle. A request that happens to
-        // carry (or omit) a handshake is accepted exactly as before — the gate does not exist here.
+        
         val handler = PrepareUploadHandler(sm, PinPolicy(), requirePin = false)
         val resp = handler.handle(request(withHandshake = true), "1.1.1.1", null)
         assertTrue(resp.sessionId.isNotBlank())
     }
 
-    // ── Reverse pairing: the pending session replaces the PIN policy ─────────────────────────────
+    
 
     @Test
     fun `a pairing session accepts a matching token and PIN without touching the PIN policy`() {
@@ -141,8 +139,7 @@ class PrepareUploadGateTest {
         val resp = handler.handle(request(withHandshake = true, pairToken = TOKEN), "1.1.1.1", SCANNED_PIN)
 
         assertTrue(resp.sessionId.isNotBlank())
-        // The pairing PIN is bound to the session, so the listener's own one-time PIN is untouched —
-        // a five-minute confirmation hang can therefore never turn into a 401 here.
+        
         assertEquals(issued, pinPolicy.current())
     }
 
@@ -177,7 +174,7 @@ class PrepareUploadGateTest {
         assertTrue(resp.sessionId.isNotBlank())
     }
 
-    // ── Storage precheck: after the gate, before the session ─────────────────────────────────────
+    
 
     @Test
     fun `a gate reject wins over a full disk and the storage precheck is never consulted`() {
@@ -240,7 +237,7 @@ class PrepareUploadGateTest {
         )
 
     private companion object {
-        /** The PIN the phone read off the computer's code, not one it issued. */
+        
         const val SCANNED_PIN = "482913"
         const val TOKEN = "dG9rZW4"
         const val DECLARED_BYTES = 600L * 1024 * 1024

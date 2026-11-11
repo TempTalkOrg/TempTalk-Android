@@ -17,7 +17,7 @@ class LocalPreferenceViewModelTest {
         val model = LocalPreferenceViewModel(users)
         assertFalse(model.state.value.closeRequested)
         model.dispatch(LocalPreferenceContract.Intent.SelectDisplay(NotificationContentDisplayType.entries.first().value))
-        // The first page collector consumes it by popping; a collector attached after a fold sees the same truth.
+        
         assertTrue(model.state.first().closeRequested)
         assertTrue(model.state.first().closeRequested)
         model.dispatch(LocalPreferenceContract.Intent.SelectSpeed(1.5f))

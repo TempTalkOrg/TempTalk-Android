@@ -36,8 +36,8 @@ class DifftTypeScaleDetectorTest {
             )
             .issues(DifftTypeScaleDetector.ISSUE)
             .allowMissingSdk()
-            // @JvmOverloads cannot be applied to functions with value-class parameters, so that
-            // harness mode rewrites the stubs into something the Kotlin compiler rejects.
+            
+            
             .skipTestModes(TestMode.JVM_OVERLOADS)
             .run()
             .expectErrorCount(2)
@@ -70,7 +70,7 @@ class DifftTypeScaleDetectorTest {
             )
             .issues(DifftTypeScaleDetector.ISSUE)
             .allowMissingSdk()
-            // Same value-class stubs as above: keep the @JvmOverloads harness mode off everywhere.
+            
             .skipTestModes(TestMode.JVM_OVERLOADS)
             .run()
             .expectErrorCount(2)
@@ -104,8 +104,8 @@ class DifftTypeScaleDetectorTest {
             )
             .issues(DifftTypeScaleDetector.ISSUE)
             .allowMissingSdk()
-            // @JvmOverloads cannot be applied to functions with value-class parameters, so that
-            // harness mode rewrites the stubs into something the Kotlin compiler rejects.
+            
+            
             .skipTestModes(TestMode.JVM_OVERLOADS)
             .run()
             .expectErrorCount(2)
@@ -144,7 +144,7 @@ class DifftTypeScaleDetectorTest {
             )
             .issues(DifftTypeScaleDetector.ISSUE)
             .allowMissingSdk()
-            // Same value-class stubs as above: keep the @JvmOverloads harness mode off everywhere.
+            
             .skipTestModes(TestMode.JVM_OVERLOADS)
             .run()
             .expectClean()
@@ -168,8 +168,8 @@ class DifftTypeScaleDetectorTest {
             """,
         ).indented()
 
-        // File name matters: Kotlin compiles top-level functions into `<FileName>Kt`, which the
-        // detector matches on.
+        
+        
         val TEXT_STUB = kotlin(
             "src/androidx/compose/material3/Text.kt",
             """

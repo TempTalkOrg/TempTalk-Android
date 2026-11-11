@@ -35,7 +35,7 @@ import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
-/** The same production saver services registration/signup Resource and hosted MVI callers. */
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class ProfileSaveRepositoryTest {

@@ -17,21 +17,13 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import java.util.concurrent.atomic.AtomicInteger
 
-/**
- * First-execution gate for the benchmark module (issue #1162 phase 1): proves the two
- * runtime unknowns before any benchmark is written.
- *
- * 1. The encrypted WCDB bootstrap works under instrumentation: the release test build
- *    runs [WCDB] with `BuildConfig.DEBUG = false`, so `setCipherKey` + the Keystore key
- *    path are on the line — any Keystore failure surfaces here as a loud
- *    WCDBKeyUnavailableException at first `db` touch, never silently mid-benchmark.
- * 2. `Database.traceSQL` fires per statement in the release native build, which is the
- *    mechanism the query-count benchmarks rely on (the production `[MessageHydrator]`
- *    log line never emits in a benchmark process).
- *
- * Isolation is the test APK's package sandbox: the fixed DATABASE_NAME resolves under
- * /data/data/com.difft.android.microbenchmark.test/databases/, untouched by the app.
- */
+
+
+
+
+
+
+
 @RunWith(AndroidJUnit4::class)
 class WcdbBootstrapSmokeTest {
 
@@ -46,17 +38,17 @@ class WcdbBootstrapSmokeTest {
 
     @After
     fun tearDown() {
-        // Close first — deleteDatabase cannot remove a database an open handle holds.
-        // Delete directly rather than via wcdb.deleteDatabaseFile(): its catch block
-        // calls FirebaseCrashlytics unguarded, which is not initialized in this process.
+        
+        
+        
         wcdb.db.close()
         context.deleteDatabase(WCDB.DATABASE_NAME)
     }
 
     @Test
     fun encryptedDatabaseOpensAndRoundTrips() {
-        // First real open is heavy (cipher/PBKDF + header I/O) and is exactly the path
-        // under test: release BuildConfig -> setCipherKey -> WCDBKeyManager -> Keystore.
+        
+        
         val db = wcdb.db
         assertTrue("database did not report open", db.canOpen())
 

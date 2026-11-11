@@ -21,11 +21,11 @@ import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import java.util.concurrent.TimeUnit
 
-/**
- * [PaneNavigator]: a removed conversation's close survives a
- * recreation (mid-slide or queued after state save), a reopen by the user is not undone, and the
- * one-pane layer keeps the conversation background behind a push.
- */
+
+
+
+
+
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [33])
 class PaneNavigatorRemovedConversationRestoreTest {
@@ -62,8 +62,8 @@ class PaneNavigatorRemovedConversationRestoreTest {
         open("u1")
 
         RemovedConversations.add("u1")
-        PaneNavigator.closeConversationEverywhere("u1") // starts the one-pane slide
-        controller!!.recreate() // before the slide's end clears the stack
+        PaneNavigator.closeConversationEverywhere("u1") 
+        controller!!.recreate() 
         settle()
 
         assertEquals(0, nav.depth(TAB_CHATS))
@@ -78,7 +78,7 @@ class PaneNavigatorRemovedConversationRestoreTest {
         controller!!.pause().stop()
 
         RemovedConversations.add("u1")
-        PaneNavigator.closeConversationEverywhere("u1") // queued: state is saved
+        PaneNavigator.closeConversationEverywhere("u1") 
         controller!!.recreate()
         settle()
 
@@ -99,7 +99,7 @@ class PaneNavigatorRemovedConversationRestoreTest {
         assertFalse(RemovedConversations.contains("u1"))
     }
 
-    /** A removal's close for u1, then the user's open of u2, both queued before one drain. */
+    
     private fun closeThenOpenQueued() {
         PaneNavigator.closeConversationEverywhere("u1")
         nav.openConversation(ConversationTarget(ConversationTarget.Kind.ONE_ON_ONE, "u2"), PaneNavigator.Origin.Tab(TAB_CHATS))
@@ -144,10 +144,10 @@ class PaneNavigatorRemovedConversationRestoreTest {
         assertEquals(1, nav.depth(TAB_CHATS))
     }
 
-    /**
-     * The conversation page u1 closes itself (group disbanded, left, friend gone), and before one
-     * drain a request keeps u1 (reopen or push).
-     */
+    
+
+
+
     private fun closeThenKeepQueued(keep: () -> Unit) {
         val root = host.pages(TAB_CHATS).first()
         root.detailNavigation().closeConversation(root)
@@ -214,8 +214,8 @@ class PaneNavigatorRemovedConversationRestoreTest {
         launch()
         open("u1")
 
-        // What the friend removal does: the marker first, then the app-wide close; a push lands
-        // after it in the same drain. The root is about the friend, so the whole tab goes.
+        
+        
         RemovedConversations.add("u1")
         PaneNavigator.closeConversationEverywhere("u1")
         pushInfo()
@@ -250,9 +250,9 @@ class PaneNavigatorRemovedConversationRestoreTest {
         settle()
         open("A")
 
-        nav.pop(TAB_CHATS) // Back slides the Chats layer out
+        nav.pop(TAB_CHATS) 
         nav.selectTab(TAB_CONTACTS)
-        nav.closeSubject(TAB_CONTACTS, "B") // the group in Contacts is disbanded meanwhile
+        nav.closeSubject(TAB_CONTACTS, "B") 
         settle()
 
         assertEquals(0, nav.depth(TAB_CONTACTS))
@@ -272,7 +272,7 @@ class PaneNavigatorRemovedConversationRestoreTest {
         settle()
         controller!!.pause().stop()
 
-        // The removal's live close was lost with the instance; only the marker is left.
+        
         RemovedConversations.add("m")
         controller!!.recreate()
         settle()

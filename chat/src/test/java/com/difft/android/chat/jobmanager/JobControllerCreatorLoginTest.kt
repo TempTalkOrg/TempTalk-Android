@@ -17,10 +17,10 @@ import org.junit.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
-/**
- * [Job.creatorLogin] (#1382 A04) is stored with the job's data and restored with it, so it survives
- * submission, retries, deferrals and a process restart, which re-creates every job from storage.
- */
+
+
+
+
 class JobControllerCreatorLoginTest {
 
     private val jobStorage = mockk<JobStorage>(relaxed = true)
@@ -94,7 +94,7 @@ class JobControllerCreatorLoginTest {
         verify(exactly = 0) { jobStorage.deleteJob("tagged") }
     }
 
-    // -- Helpers --
+    
 
     private fun submit(job: PayloadJob): JobSpec {
         val inserted = slot<List<FullSpec>>()

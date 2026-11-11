@@ -23,23 +23,13 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 
-/**
- * T1-1 … T1-12 — the out-of-bubble send-failed status row of an outgoing message.
- *
- * **Screenshot tier downgraded to view-state / geometry assertions** (documented, per the
- * [ChatMessageViewHolderQuoteThumbnailTest] precedent): `:chat` has NO View/XML Roborazzi harness —
- * the only screenshot infra is Compose-based. These tests invoke the REAL production top-level
- * function [bindSendFailStatusRow] against the REAL inflated `chat_item_chat_message_list_text_mine`
- * layout and assert on the resulting view state plus post-`measure`+`layout` geometry. Colour-value
- * parity with the design is verified on-device (no pixel baseline).
- *
- * T1-10 / T1-11 are framework-assumption tests: they pin ConstraintLayout's GONE-collapse behaviour
- * plus `layout_goneMarginTop`, which is the single structural risk of re-anchoring `cl_translate` /
- * `cl_speech_to_text` onto the (usually GONE) status row. If that assumption ever breaks, the
- * translate / speech-to-text panels silently shift by 5dp on every outgoing message.
- *
- * Verify: :chat:testDebugUnitTest
- */
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [33])
 class SendFailStatusRowTest {
@@ -68,7 +58,7 @@ class SendFailStatusRowTest {
 
     private fun statusRow(): View = inflateMine().llSendFailStatus
 
-    /** Measures the item at a realistic phone width so ConstraintLayout resolves the chain. */
+    
     private fun measureAndLayout(root: View) {
         root.measure(
             View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY),
@@ -88,8 +78,6 @@ class SendFailStatusRowTest {
         }
         return Rect(x, y, x + width, y + height)
     }
-
-    // ---- T1-1 … T1-4: visibility per sendStatus -------------------------------------------
 
     @Test
     fun `T1-1 failed status shows the row as a clickable hit target`() {
@@ -130,8 +118,6 @@ class SendFailStatusRowTest {
         assertEquals(View.GONE, unknownRow.visibility)
     }
 
-    // ---- T1-5: recycle leaves no retry affordance behind ----------------------------------
-
     @Test
     fun `T1-5 rebinding a recycled row clears visibility listener and clickable`() {
         val row = statusRow()
@@ -141,16 +127,14 @@ class SendFailStatusRowTest {
         row.performClick()
         assertEquals(1, taps)
 
-        // Same View, now bound to a successfully-sent message (RecyclerView reuse).
+        
         bindSendFailStatusRow(row, SendType.Sent.rawValue) { taps++ }
 
         assertEquals(View.GONE, row.visibility)
         assertFalse(row.isClickable)
         row.performClick()
-        assertEquals(1, taps) // listener was cleared — no extra tap delivered
+        assertEquals(1, taps) 
     }
-
-    // ---- T1-6: tap forwards exactly once -------------------------------------------------
 
     @Test
     fun `T1-6 tapping the failed row invokes the retry callback exactly once`() {
@@ -162,8 +146,6 @@ class SendFailStatusRowTest {
 
         assertEquals(1, taps)
     }
-
-    // ---- T1-7: visual contract (text / colour token / sizes) ------------------------------
 
     @Test
     fun `T1-7 row renders the retry label in the t_error token at 12sp with a 12dp icon`() {
@@ -184,8 +166,6 @@ class SendFailStatusRowTest {
         assertEquals(12.dp, icon.layoutParams.height)
     }
 
-    // ---- T1-8: accessibility — one announcement, exact wording ---------------------------
-
     @Test
     fun `T1-8 row owns the contentDescription and its children are not accessibility nodes`() {
         val binding = inflateMine()
@@ -204,8 +184,6 @@ class SendFailStatusRowTest {
         )
     }
 
-    // ---- T1-9: minimum touch target -----------------------------------------------------
-
     @Test
     fun `T1-9 visible row is at least 32dp tall`() {
         val binding = inflateMine()
@@ -218,8 +196,6 @@ class SendFailStatusRowTest {
             binding.llSendFailStatus.height >= 32.dp
         )
     }
-
-    // ---- T1-10 (FA3): GONE-collapse + goneMarginTop restore today's geometry --------------
 
     @Test
     fun `T1-10 visible row never overlaps cl_translate and pushes it below`() {
@@ -275,8 +251,6 @@ class SendFailStatusRowTest {
         assertEquals(container.bottom + 5.dp, s2t.top)
     }
 
-    // ---- T1-11: the anchors themselves must not be silently reverted ----------------------
-
     @Test
     fun `T1-11 translate and speech-to-text anchor the status row with a 5dp gone margin`() {
         val binding = inflateMine()
@@ -288,13 +262,11 @@ class SendFailStatusRowTest {
         }
     }
 
-    // ---- T1-12: every mine content type keeps the row below the bubble --------------------
-
     @Test
     fun `T1-12 row stays below the bubble for every mine content type`() {
         val contentLayouts = listOf(
             R.layout.chat_item_content_text,
-            R.layout.chat_item_content_image, // covers IMAGE + VIDEO (same wrapper)
+            R.layout.chat_item_content_image, 
             R.layout.chat_item_content_audio,
             R.layout.chat_item_content_attach,
             R.layout.chat_item_content_contact,

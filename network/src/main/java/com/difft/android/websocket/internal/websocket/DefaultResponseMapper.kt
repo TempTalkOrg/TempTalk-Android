@@ -6,12 +6,12 @@ import com.difft.android.websocket.internal.util.JsonUtil
 import java.util.Objects
 import java.util.function.Function
 
-/**
- * A default implementation of a [ResponseMapper] that can parse most known application errors via
- * [DefaultErrorMapper] and provides basic JSON parsing of the response model if possible.
- *
- * Can be extended to add custom parsing for both the result type and the error cases.
- */
+
+
+
+
+
+
 class DefaultResponseMapper<Response> private constructor(
     private val clazz: Class<Response>,
     private val customResponseMapper: CustomResponseMapper<Response>?,

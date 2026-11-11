@@ -23,26 +23,26 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 
-/**
- * Test [CallSessionComponentsFactory]: every native / framework piece is a mock, and the room
- * controller's observable state is driven from the public fields below.
- */
+
+
+
+
 internal class FakeCallSessionComponentsFactory : CallSessionComponentsFactory {
     val callStatus = MutableStateFlow(CallStatus.CALLING)
     val callType = MutableStateFlow(CallType.ONE_ON_ONE.type)
     val errors = Channel<Throwable>(Channel.BUFFERED)
     val micEnabled = MutableStateFlow(false)
 
-    /** Flipped by tests to hit the Phase B abort points. */
+    
     @Volatile var releaseIntended = false
 
-    /** Value of `createRoom()` and the fail-loud `room` getter. */
+    
     var room: Room = mockk(relaxed = true)
 
-    /** When true the fail-loud `room` getter throws, as it does once the room is released. */
+    
     @Volatile var roomGetterThrows = false
 
-    /** When true `roomOrNull()` reads null, as it does once the room is released. */
+    
     @Volatile var roomReleased = false
     var roomState: Room.State? = Room.State.CONNECTED
     var createRoomCalls = 0
@@ -54,8 +54,8 @@ internal class FakeCallSessionComponentsFactory : CallSessionComponentsFactory {
         private set
 
     init {
-        // AudioPipelineProcessor's static init fails to load its native library on the JVM and
-        // reports that through android.util.Log.e, an unmocked android.jar stub here.
+        
+        
         mockkStatic(Log::class)
         every { Log.e(any(), any()) } returns 0
     }
@@ -107,7 +107,7 @@ internal class FakeCallSessionComponentsFactory : CallSessionComponentsFactory {
         cameraRegistrations++
     }
 
-    /** The session's proximity lock: a recording mock (it reaches the power manager on device). */
+    
     val proximity: ProximityScreenOffController = mockk(relaxed = true)
 
     override fun proximity(scope: CoroutineScope, shouldHold: Flow<Boolean>) = proximity

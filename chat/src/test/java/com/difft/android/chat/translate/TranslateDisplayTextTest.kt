@@ -10,18 +10,18 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/**
- * The single owner of the translate setting's display strings — the two settings entry rows, the
- * settings screen footer and the local system message all read it, so a drift here is a drift
- * between the screen and the message it inserts.
- *
- * Robolectric only because the mapping resolves real string resources; there is no view involved.
- *
- * What each case asserts:
- *  - T58 entry value text for (1, ready) / (1, not ready) / (2, ready) / (0, any)
- *  - T61 the system message reuses translateValueDescRes, pairing it with the settings-screen
- *        description string so the two can never drift
- */
+
+
+
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class TranslateDisplayTextTest {
@@ -33,7 +33,7 @@ class TranslateDisplayTextTest {
         context = ApplicationProvider.getApplicationContext()
     }
 
-    // --- label / description mapping ---------------------------------------
+    
 
     @Test
     fun `labels map 0 1 2 and treat an unknown value as off`() {
@@ -55,7 +55,7 @@ class TranslateDisplayTextTest {
         assertEquals(R.string.chat_translate_setting_desc_off, translateValueDescRes(99))
     }
 
-    // --- T58 ----------------------------------------------------------------
+    
 
     @Test
     fun `T58 the entry value is the bare option label`() {

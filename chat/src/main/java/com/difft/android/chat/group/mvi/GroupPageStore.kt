@@ -15,7 +15,7 @@ import org.difft.app.database.models.DBGroupModel
 import org.difft.app.database.wcdb
 import javax.inject.Inject
 
-/** Reads group membership from the database rather than an Activity's potentially huge Bundle. */
+
 class GroupPageStore @Inject constructor() {
     data class Snapshot(
         val gid: String,
@@ -39,7 +39,7 @@ class GroupPageStore @Inject constructor() {
     fun contacts(): List<GroupMemberModel> = wcdb.contactor.allObjects.map { it.toGroupMemberRow() }
 }
 
-/** The member row of a contact: display name (remark first) plus the raw names a search matches. */
+
 internal fun ContactorModel.toGroupMemberRow(): GroupMemberModel {
     val avatar = getEffectiveAvatarJson()?.getContactAvatarData()
     val name = getDisplayNameForUI()

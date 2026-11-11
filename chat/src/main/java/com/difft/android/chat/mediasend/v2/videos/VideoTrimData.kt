@@ -9,9 +9,9 @@ import android.os.Bundle
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.microseconds
 
-/**
- * This represents the editor state for the video trimmer.
- */
+
+
+
 data class VideoTrimData(
   val isDurationEdited: Boolean = false,
   val totalInputDurationUs: Long = 0,

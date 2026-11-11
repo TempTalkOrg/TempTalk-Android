@@ -18,32 +18,32 @@ import androidx.compose.ui.unit.dp
 import com.difft.android.base.ui.compose.DifftSwitch
 import com.difft.android.base.ui.theme.DifftTheme
 
-/**
- * Label + switch settings row: the shape the migrated XML `SwitchCompat` label rows and the Compose
- * settings pages all hand-rolled. The whole row is the touch target (matching `SwitchCompat`, which
- * is a TextView and therefore clickable across its full width); the inner [DifftSwitch] is visual
- * only.
- *
- * A null [onCheckedChange] makes the row inert — used by the
- * [com.difft.android.base.widget.DifftSwitchView] shell, which owns the click and the accessibility
- * node at the View level.
- *
- * [switchAppearsEnabled] decouples the switch's look from the row's interactivity. The one caller
- * that needs it is the proxy "protect IP in calls" row: greyed while the proxy is off, but still
- * tappable so the ViewModel can toast "enable the proxy first" instead of swallowing the tap.
- *
- * Inside a [DifftSettingsGroup] the row must paint the group's row fill itself, since the group
- * paints the divider colour to produce its hairlines:
- * ```
- * DifftSwitchRow(
- *     label = …, checked = …, onCheckedChange = …,
- *     modifier = Modifier.fillMaxWidth().background(DifftSettingsDefaults.RowSurfaceColor),
- *     contentPadding = DifftSettingsDefaults.RowContentPadding,
- * )
- * ```
- * No default fill is applied here: the same row also backs the `DifftSwitchView` shell, whose XML
- * parent owns the colour, and a card fill would be wrong on a non-card surface.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 @Composable
 fun DifftSwitchRow(
     label: String,
@@ -71,7 +71,7 @@ fun DifftSwitchRow(
     )
 }
 
-/** Slot form for rows whose label is composed (e.g. a trailing coloured value). */
+
 @Composable
 fun DifftSwitchRow(
     checked: Boolean,
@@ -94,7 +94,7 @@ fun DifftSwitchRow(
         Modifier
     }
     Row(
-        // toggleable before padding so the padded area is tappable too, as on a `SwitchCompat`.
+        
         modifier = modifier
             .then(interaction)
             .defaultMinSize(minHeight = minHeight)

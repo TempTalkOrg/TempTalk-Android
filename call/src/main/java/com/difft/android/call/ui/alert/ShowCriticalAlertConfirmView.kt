@@ -196,8 +196,8 @@ fun ShowCriticalAlertConfirmView(viewModel: LCallViewModel, onDismiss: () -> Uni
                         )
                     }
 
-                    // Full width, never a fixed width: the sheet is already inset, and a fixed
-                    // width overflows on a narrow screen.
+                    
+                    
                     DifftButton(
                         text = ResUtils.getString(R.string.call_critical_alert_confirm_view_button_send),
                         onClick = { sendCriticalAlert(gid) },

@@ -43,10 +43,10 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 
-/**
- * #1350: the notification test runs (banner, lock screen, call) against a mocked repository, poster
- * and device. Time is virtual: the main and IO dispatchers share one test scheduler.
- */
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class NotificationTestViewModelTest {
 
@@ -71,7 +71,7 @@ class NotificationTestViewModelTest {
             coEvery { prepareCall(any(), any(), any()) } just Runs
             coEvery { cancelCall(any()) } just Runs
             coEvery { record(any(), any(), any(), any()) } just Runs
-            // Mirrors the repository contract: no FAIL once the call screen has opened since the post.
+            
             coEvery { recordCallTimeout(any(), any()) } returns NotificationTestCallUpdate.RECORDED
         }
         poster = mockk {
@@ -222,7 +222,7 @@ class NotificationTestViewModelTest {
         assertEquals(Dialog.Failed(NotificationTestKind.CALL, null), vm.state.value.dialog)
         assertNull(vm.state.value.running)
         coVerify { poster.cancel(runId, NotificationTestKind.CALL) }
-        // The screen-off phase held a wake lock and let it go when the run ended.
+        
         verify(exactly = 1) { device.holdWakeLock(any()) }
         assertEquals(1, wakeLockReleases)
     }

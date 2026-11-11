@@ -29,12 +29,12 @@ import com.difft.android.video.videoconverter.VideoThumbnailsExtractor
 import java.io.IOException
 import java.lang.ref.WeakReference
 
-/**
- * Abstract View that renders a horizontal strip of video thumbnails. Thumbnail extraction runs on a
- * background coroutine (replaces the deprecated AsyncTask) and posts progress back to the main
- * thread via [AppExecutors.mainHandler]. Subclasses must be declared `open` / non-final so
- * [afterDurationChange] remains overridable.
- */
+
+
+
+
+
+
 abstract class VideoThumbnailsView : View {
 
     @JvmField protected var currentUri: Uri? = null
@@ -53,13 +53,13 @@ abstract class VideoThumbnailsView : View {
 
     @JvmField protected val clippingPath = Path()
 
-    /**
-     * Dedicated scope so cancellations cleanly abort in-flight extractions.
-     * On detach we cancel only the **children** (not the scope itself) so that re-attaching
-     * the view — e.g. ViewPager2 re-attach, Fragment back-stack restore, configuration
-     * change — can continue launching new extractions. Cancelling the scope itself would
-     * permanently cancel the backing [SupervisorJob] and silently drop all future work.
-     */
+    
+
+
+
+
+
+
     private val extractionScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
     constructor(context: Context) : super(context)
@@ -67,9 +67,9 @@ abstract class VideoThumbnailsView : View {
     constructor(context: Context, attrs: AttributeSet?, defStyleAttr: Int) :
         super(context, attrs, defStyleAttr)
 
-    /**
-     * @return Whether or not the current URI was changed.
-     */
+    
+
+
     @Throws(IOException::class)
     fun setInput(uri: Uri): Boolean {
         if (uri == currentUri) return false
@@ -89,8 +89,8 @@ abstract class VideoThumbnailsView : View {
         thumbnails = null
         thumbnailsJob?.cancel()
         thumbnailsJob = null
-        // Cancel only in-flight child coroutines. Do NOT cancel the scope itself —
-        // if the view is re-attached later, new extractions must still be able to launch.
+        
+        
         extractionScope.coroutineContext.cancelChildren()
 
         input?.let {
@@ -194,9 +194,9 @@ abstract class VideoThumbnailsView : View {
         collector: ArrayList<Bitmap>,
     ): Job {
         val viewRef = WeakReference(this)
-        // Snapshot the scheme rather than reading it through viewRef later: it is the one piece of
-        // context that tells a provider read from a bare-path read. Never the file name — a
-        // gallery item's name is user content.
+        
+        
+        
         val sourceScheme = currentUri?.scheme
         return extractionScope.launch {
             L.i { "$TAG generate $thumbnailCount thumbnails ${thumbnailWidth}x$thumbnailHeight" }
@@ -214,7 +214,7 @@ abstract class VideoThumbnailsView : View {
                     override fun publishProgress(index: Int, thumbnail: Bitmap): Boolean {
                         val notCanceled = this@launch.isActive
                         if (notCanceled) {
-                            // Mirrors AsyncTask.onProgressUpdate: collect + invalidate on main.
+                            
                             AppExecutors.mainHandler().post {
                                 val view = viewRef.get() ?: return@post
                                 if (view.thumbnails === collector) {
@@ -232,10 +232,10 @@ abstract class VideoThumbnailsView : View {
                 },
             )
 
-            // Final "post-execute" dispatch back to main — match AsyncTask.onPostExecute.
-            // This runs inside the coroutine so withContext is the idiomatic choice here
-            // (AppExecutors.mainHandler().post is still used above inside the Java callback
-            // where we can't suspend).
+            
+            
+            
+            
             withContext(Dispatchers.Main) {
                 val view = viewRef.get() ?: return@withContext
                 view.setDuration(discoveredDuration)
@@ -247,7 +247,7 @@ abstract class VideoThumbnailsView : View {
 
     private companion object {
         private const val TAG = "VideoThumbnailsView"
-        // Getter: the system density changes with the display-size setting while the process lives.
+        
         private val CORNER_RADIUS get() = ViewUtil.dpToPx(8)
     }
 }

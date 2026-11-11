@@ -78,7 +78,7 @@ class VideoEditorFragment : androidx.fragment.app.Fragment(), PositionDragListen
         player = view.findViewById(R.id.video_player)
         hud = view.findViewById(R.id.video_editor_hud)
 
-        // Bundle may lose the Parcelable Uri after process death; null-check instead of !!.
+        
         val args = arguments
         val parcelableUri: Uri? = if (Build.VERSION.SDK_INT >= 33) {
             args?.getParcelable(KEY_URI, Uri::class.java)
@@ -145,8 +145,8 @@ class VideoEditorFragment : androidx.fragment.app.Fragment(), PositionDragListen
         }
 
         sharedViewModel.state.observe(viewLifecycleOwner) { incomingState ->
-            // MediaKey(uri) is rebuilt on every emission rather than cached: `uri` is a lateinit
-            // var that setUri() may replace, so a cached key would go stale silently.
+            
+            
             val focusedKey = incomingState.focusedMedia?.mediaKey()
             val currentlyFocused = focusedKey != null && focusedKey == MediaKey(uri)
             if (MediaConstraints.isVideoTranscodeAvailable()) {

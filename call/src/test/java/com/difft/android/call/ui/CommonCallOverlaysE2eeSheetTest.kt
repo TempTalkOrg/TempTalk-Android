@@ -22,19 +22,11 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/**
- * Exercises `CommonCallOverlays`' new `showE2eeSheet` state + `E2eeInfoSheetDialog` mount
- * (`CallOverlays.kt`), covering T5-18/T5-19.
- *
- * Mirrors the exact production wiring snippet added to `CommonCallOverlays` — `showE2eeSheet`
- * state plus `viewModel.callUiController.isInPipMode.collectAsState(false)` gating
- * `E2eeInfoSheetDialog`'s `showSheet` param — against a real [CallUiController] and the real
- * (Task 1) [E2eeInfoSheetDialog]. Constructing the full `CommonCallOverlays` composable would
- * additionally require `MainPageWithBottomControlView`/participants-list/critical-alert
- * rendering off a fully room-wired `LCallViewModel`, far beyond what this sheet-wiring test
- * needs — same "mirror the exact production pattern" precedent as
- * `BubbleOverlayDeferralIntegrationTest`.
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(application = TestScopeApplication::class, sdk = [30])
@@ -60,9 +52,9 @@ class CommonCallOverlaysE2eeSheetTest {
 
     private val sheetTitle get() = ResUtils.getString(BaseR.string.e2ee_sheet_title)
 
-    // ---------------------------------------------------------------------------------
-    // T5-18 — showE2eeSheet=true (chained from a TopStatusBar click), !isInPipMode → visible.
-    // ---------------------------------------------------------------------------------
+    
+    
+    
     @Test
     fun `T5-18 - sheet mounts and becomes visible when showE2eeSheet is true and not in PiP`() {
         val callUiController = CallUiController()
@@ -79,9 +71,9 @@ class CommonCallOverlaysE2eeSheetTest {
         composeTestRule.onNodeWithText(sheetTitle).assertExists()
     }
 
-    // ---------------------------------------------------------------------------------
-    // T5-19 — showE2eeSheet=true then isInPipMode flips true → force-dismissed.
-    // ---------------------------------------------------------------------------------
+    
+    
+    
     @Test
     fun `T5-19 - sheet force-dismisses when PiP mode is entered while shown`() {
         val callUiController = CallUiController()
@@ -101,9 +93,9 @@ class CommonCallOverlaysE2eeSheetTest {
 
         composeTestRule.onNodeWithText(sheetTitle).assertDoesNotExist()
 
-        // Regression guard: returning FROM PiP must not resurrect the sheet. The underlying
-        // `showE2eeSheet` state (not just the derived `showSheet` gate) is reset on PiP entry, so
-        // leaving PiP with no new tap on the header must leave the sheet dismissed.
+        
+        
+        
         composeTestRule.runOnIdle { callUiController.setPipModeEnabled(false) }
         composeTestRule.waitForIdle()
 

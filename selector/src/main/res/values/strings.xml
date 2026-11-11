@@ -1,5 +1,5 @@
 <resources>
-    <!-- Placeholder for duration display (not translatable) -->
+    
     <string name="ps_duration_placeholder" translatable="false">00:00</string>
     <string name="ps_camera_roll">Camera Roll</string>
     <string name="ps_camera_roll_num">%1$s (%2$d)</string>

@@ -15,7 +15,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** [MigrationPauseLoginScope]: a pause ends when the login that started it is no longer current (T21, #1382). */
+
 class MigrationPauseLoginScopeTest {
 
     private val owner = "11111111-aaaa-bbbb-cccc-000000000001"
@@ -24,7 +24,7 @@ class MigrationPauseLoginScopeTest {
     private val gate = MessagingGate()
     private val pause = MigrationMessagePause(RecordingPreferencesDataStore(), gate)
 
-    /** Each drop records the gate state it saw: the held sends must go while messaging is closed. */
+    
     private val drops = mutableListOf<MessagingPauseState>()
     private val keptLogins = mutableListOf<String?>()
     private val heldSends = HeldSendJobs { _, keepLogin ->
@@ -98,7 +98,7 @@ class MigrationPauseLoginScopeTest {
         assertEquals(1, drops.size)
         assertIs<MessagingPauseState.Paused>(drops.single())
         assertEquals(MessagingPauseState.Open, gate.state)
-        // The new login's own sends, possibly queued already, are kept.
+        
         assertEquals(listOf<String?>(MigrationPauseScope.credentialHash("auth-2")), keptLogins)
     }
 

@@ -11,10 +11,10 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/**
- * Mirrors the server's `GroupPushDeciderTest` (steps 1-5) so the WebSocket path and the offline push
- * path decide alike; the feature-off and mention-category cases are the client-only additions.
- */
+
+
+
+
 class GroupNotifyPolicyTest {
 
     private fun focusOn(vararg gids: String, mutate: EffectiveFocus.() -> EffectiveFocus = { this }) = EffectiveFocus(
@@ -41,7 +41,7 @@ class GroupNotifyPolicyTest {
         assertEquals(expected in NOTIFYING, actual.notify, message)
     }
 
-    // ---------------------------------------------------------------- step 1 (A16)
+    
 
     @Test
     fun `step1 private chat follows mute only and ignores focus`() {
@@ -52,7 +52,7 @@ class GroupNotifyPolicyTest {
         assertDecision(Reason.PRIVATE_PUSH, private(muted = false, focus = EffectiveFocus(featureEnabled = false)))
     }
 
-    // ---------------------------------------------------------------- step 2 (categorize)
+    
 
     @Test
     fun `step2 categorize`() {
@@ -61,17 +61,17 @@ class GroupNotifyPolicyTest {
         assertEquals(Category.MENTION_ME, GroupNotifyPolicy.categorize(listOf(ME), ME))
         assertEquals(Category.MENTION_ME, GroupNotifyPolicy.categorize(listOf(OTHER, ME), ME))
         assertEquals(Category.MENTION_ALL, GroupNotifyPolicy.categorize(listOf(all), ME))
-        // The local user in the list is @me, even when @all comes first.
+        
         assertEquals(Category.MENTION_ME, GroupNotifyPolicy.categorize(listOf(all, ME), ME))
         assertEquals(Category.MENTION_ME, GroupNotifyPolicy.categorize(listOf(ME, all), ME))
         assertEquals(Category.MENTION_ME, GroupNotifyPolicy.categorize(listOf(OTHER, all, ME), ME))
-        // @all without the local user is @all, wherever it sits.
+        
         assertEquals(Category.MENTION_ALL, GroupNotifyPolicy.categorize(listOf(all, OTHER), ME))
         assertEquals(Category.MENTION_ALL, GroupNotifyPolicy.categorize(listOf(OTHER, all), ME))
         assertEquals(Category.OTHER, GroupNotifyPolicy.categorize(listOf(OTHER), ME))
     }
 
-    // ---------------------------------------------------------------- step 3a
+    
 
     @Test
     fun `step3a focused group notifies every category regardless of mute and level`() {
@@ -92,13 +92,13 @@ class GroupNotifyPolicyTest {
         assertDecision(Reason.FOCUS_GROUP, group(Category.OTHER, gid = "B", focus = focus))
         assertDecision(Reason.FOCUS_OTHER_BLOCK, group(Category.OTHER, gid = "C", focus = focus))
 
-        // B dropped from the set: it follows the "others" options.
+        
         val single = focusOn("A")
         assertDecision(Reason.FOCUS_OTHER_ALLOW, group(Category.MENTION_ME, gid = "B", focus = single))
         assertDecision(Reason.FOCUS_OTHER_BLOCK, group(Category.OTHER, gid = "B", focus = single))
     }
 
-    // ---------------------------------------------------------------- step 3b
+    
 
     @Test
     fun `step3b default others options let only mention-me through`() {
@@ -107,7 +107,7 @@ class GroupNotifyPolicyTest {
         for (blocked in listOf(Category.OTHER, Category.MENTION_ALL, Category.GROUP_CALL)) {
             assertDecision(Reason.FOCUS_OTHER_BLOCK, group(blocked, focus = focus), blocked.name)
         }
-        // Mute state and level are not consulted during focus.
+        
         assertDecision(Reason.FOCUS_OTHER_ALLOW, group(Category.MENTION_ME, muted = true, focus = focus))
         assertDecision(Reason.FOCUS_OTHER_ALLOW, group(Category.MENTION_ME, level = NotifyLevel.OFF, focus = focus))
         assertDecision(Reason.FOCUS_OTHER_BLOCK, group(Category.OTHER, muted = false, level = NotifyLevel.ALL, focus = focus))
@@ -137,7 +137,7 @@ class GroupNotifyPolicyTest {
 
     @Test
     fun `step3 focus that has expired falls through to the mute and level steps`() {
-        // EffectiveFocus.derive turns an expired snapshot into active=false; the policy then runs steps 4 and 5.
+        
         val expired = EffectiveFocus.derive(
             GroupFocusState(true, FocusSnapshot(enabled = true, groupIds = listOf("A"), until = NOW, version = 2)),
             now = NOW,
@@ -148,7 +148,7 @@ class GroupNotifyPolicyTest {
         assertDecision(Reason.LEVEL_ALLOW, group(Category.OTHER, gid = "A", focus = expired))
     }
 
-    // ---------------------------------------------------------------- step 4
+    
 
     @Test
     fun `step4 muted without focus uses the default sub-options`() {
@@ -173,7 +173,7 @@ class GroupNotifyPolicyTest {
         assertDecision(Reason.MUTE_BLOCK, group(Category.OTHER, muted = true, level = NotifyLevel.ALL))
     }
 
-    // ---------------------------------------------------------------- step 5
+    
 
     @Test
     fun `step5 level ALL notifies everything`() {
@@ -198,7 +198,7 @@ class GroupNotifyPolicyTest {
         assertDecision(Reason.LEVEL_ALLOW, group(Category.GROUP_CALL, level = NotifyLevel.MENTION))
     }
 
-    // ---------------------------------------------------------------- feature off (old rules)
+    
 
     @Test
     fun `feature off keeps the old rules - mute blocks everything and focus is ignored`() {
@@ -210,7 +210,7 @@ class GroupNotifyPolicyTest {
                 category.name,
             )
         }
-        // A stale focus object must not take effect when the switch is off.
+        
         val stale = focusOn("A") { copy(featureEnabled = false) }
         assertDecision(Reason.LEVEL_ALLOW, group(Category.OTHER, gid = "B", focus = stale))
     }
@@ -227,7 +227,7 @@ class GroupNotifyPolicyTest {
         assertDecision(Reason.LEVEL_BLOCK, group(Category.MENTION_ME, level = NotifyLevel.OFF, focus = off))
     }
 
-    // ---------------------------------------------------------------- derived focus
+    
 
     @Test
     fun `EffectiveFocus derive requires the feature, enabled and an unreached until`() {

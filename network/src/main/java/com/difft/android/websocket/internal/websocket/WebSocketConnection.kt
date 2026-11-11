@@ -66,12 +66,12 @@ class WebSocketConnection @AssistedInject constructor(
 
     private val incomingRequests = LinkedBlockingQueue<WebSocketRequestMessage>()
 
-    /**
-     * Shared OkHttpClient instance to avoid thread pool leaks.
-     * Creating a new OkHttpClient for each connection causes thread pool accumulation
-     * because each client has its own ConnectionPool and Dispatcher threads.
-     * Reusing a single client prevents OutOfMemoryError from pthread_create failures.
-     */
+    
+
+
+
+
+
     private val okHttpClient: OkHttpClient by lazy {
         val customConnectionSpec: ConnectionSpec = ConnectionSpec.Builder(RESTRICTED_TLS)
             .tlsVersions(TlsVersion.TLS_1_2, TlsVersion.TLS_1_3)
@@ -79,8 +79,8 @@ class WebSocketConnection @AssistedInject constructor(
 
         val clientBuilder: OkHttpClient.Builder = OkHttpClient.Builder()
             .connectionSpecs(Util.immutableList(customConnectionSpec))
-            // Tunnels the WSS through the self-hosted proxy when enabled;
-            // falls back to system DNS + plain socket otherwise.
+            
+            
             .dns(ProxyTunnelDns(proxyConfigProvider))
             .socketFactory(ProxyTunnelSocketFactory(proxyConfigProvider))
             .connectTimeout(60, TimeUnit.SECONDS)
@@ -102,7 +102,7 @@ class WebSocketConnection @AssistedInject constructor(
         clientBuilder.build()
     }
 
-    // Guarded by synchronized(this) at every access site.
+    
     private val outgoingRequests: MutableMap<Long, OutgoingRequest> = HashMap()
 
     val name: String = "[ws][chat:" + System.identityHashCode(this) + "]"
@@ -124,20 +124,20 @@ class WebSocketConnection @AssistedInject constructor(
     @Volatile
     private var startConnectTime = 0L
 
-    /**
-     * True when the last socket ended with a close frame from the server (idle timeout, server
-     * shutdown) rather than a transport failure or a local cancel: the host answered, so the
-     * reconnect can stay on it. Reset on every [connect].
-     */
+    
+
+
+
+
     @Volatile
     var closedByServer: Boolean = false
         private set
 
-    /**
-     * Why this app itself dropped the last socket via [cancelConnection] or [disconnectWhenConnected];
-     * null when it ended any other way. Lets the reconnect policy tell a host timeout from a
-     * proxy-change cancel or a stop. Reset on every [connect].
-     */
+    
+
+
+
+
     @Volatile
     var localDisconnectReason: LocalDisconnectReason? = null
         private set
@@ -146,23 +146,23 @@ class WebSocketConnection @AssistedInject constructor(
         _webSocketConnectionState.tryEmit(WebSocketConnectionState.DISCONNECTED)
     }
 
-    /**
-     * Start monitoring and auto-reconnect logic
-     */
+    
+
+
     fun startMonitoring() {
         healthMonitor.monitor(this)
     }
 
-    /**
-     * Stop monitoring and auto-reconnect logic
-     */
+    
+
+
     fun stopMonitoring() {
         healthMonitor.stopMonitoring(this)
     }
 
-    /**
-     * All connect actions should only be triggered by healthMonitor, you should not invoke this function directly
-     */
+    
+
+
     @Synchronized
     internal fun connect() {
         startConnectTime = System.currentTimeMillis()
@@ -199,7 +199,7 @@ class WebSocketConnection @AssistedInject constructor(
         if (webSocketConnectionState.value == WebSocketConnectionState.CONNECTED) {
             currentWebsocket?.let {
                 L.i { "$name Client not null when disconnect" }
-                it.cancel() //use [cancel()] function instead of [close()] can terminate the connection immediately
+                it.cancel() 
                 currentWebsocket = null
                 currentWebsocketListener?.invalidate()
                 currentWebsocketListener = null
@@ -223,18 +223,18 @@ class WebSocketConnection @AssistedInject constructor(
         }
     }
 
-    /**
-     * Forces OkHttp to drop all idle pooled sockets so the next `newWebSocket()` call
-     * builds a fresh TCP+TLS connection via [ProxyTunnelSocketFactory] / [ProxyTunnelDns].
-     *
-     * Defense-in-depth for the proxy-toggle reconnect path: even though [cancelConnection]
-     * closes the active socket, pooled idle entries (rare on a single-WS client but
-     * possible during handshake / before connect completes) could otherwise be reused
-     * by OkHttp's connection-pool fast-path, bypassing the updated proxy state.
-     *
-     * Cheap and idempotent — typically a no-op since this client has at most one
-     * connection at a time. Safe to call from any thread.
-     */
+    
+
+
+
+
+
+
+
+
+
+
+
     fun evictConnectionPool() {
         L.i { "$name evictConnectionPool — flushing pooled idle sockets" }
         okHttpClient.connectionPool.evictAll()
@@ -244,10 +244,10 @@ class WebSocketConnection @AssistedInject constructor(
         return incomingRequests.take()
     }
 
-    /**
-     * Drops frames read from a socket that is gone, so none is ACKed on a later socket; the server
-     * redelivers every unacknowledged one. @return how many were dropped.
-     */
+    
+
+
+
     fun clearIncomingRequests(): Int {
         val dropped = incomingRequests.size
         incomingRequests.clear()
@@ -341,7 +341,7 @@ class WebSocketConnection @AssistedInject constructor(
     @Synchronized
     override fun onOpen(webSocket: WebSocket, response: Response) {
         if (currentWebsocket == null) {
-            // onOpen() is executed immediately after cancelConnection, which will cause the state to be wrong
+            
             L.i { "$name onOpen() currentWebsocket is null, ignore this call back" }
             return
         }
@@ -394,9 +394,9 @@ class WebSocketConnection @AssistedInject constructor(
 
     @Synchronized
     override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-        // Plain connection drops are expected and frequent (server idle timeout, network
-        // change): one line with the cause and the connection age is enough to diagnose
-        // them. Anything else keeps the full stack trace.
+        
+        
+        
         if (t.isPlainConnectionDrop()) {
             L.w { "$name onFailure() ${t.javaClass.simpleName}: ${t.message} httpCode=${response?.code} alive=${System.currentTimeMillis() - startConnectTime}ms" }
         } else {
@@ -415,8 +415,8 @@ class WebSocketConnection @AssistedInject constructor(
             L.i { "$name onFailure() Canceled, ignore this call back as all cancel is handled manually" }
             return
         }
-        // The WebSocket always pins trust to the chative CA (OfficialSSLSocketFactoryCreator),
-        // so a certificate validation failure here is a possible MITM attack.
+        
+        
         if (CertValidationFailureDetector.isCertValidationFailure(t)) {
             NetworkRiskNotifier.onCertValidationFailed("websocket")
         }
@@ -440,13 +440,13 @@ class WebSocketConnection @AssistedInject constructor(
 
     @Synchronized
     private fun cleanupAfterShutdown() {
-        // Snapshot + clear first, then iterate the snapshot to fire onError.
-        // Decouples the iteration from the map so the map is in a clean state
-        // even if onError throws, and matches the onMessage pattern of
-        // extract-under-lock + invoke-callback-on-a-local-reference.
+        
+        
+        
+        
         val pending = outgoingRequests.entries.toList()
         outgoingRequests.clear()
-        currentWebsocket = null // Allow garbage collection
+        currentWebsocket = null 
         currentWebsocketListener?.invalidate()
         currentWebsocketListener = null
         L.d { "$name WebSocket connection cleaned up and set to null." }

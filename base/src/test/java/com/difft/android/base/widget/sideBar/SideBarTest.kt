@@ -45,7 +45,7 @@ class SideBarTest {
     @Test
     fun `short rail condenses and tapping its ends selects the end letters`() {
         val density = ApplicationProvider.getApplicationContext<android.content.Context>().resources.displayMetrics.density
-        // Room for exactly three 12dp slots: A, dot, #.
+        
         val (sideBar, selected) = layOut((36 * density).toInt())
 
         sideBar.touch(MotionEvent.ACTION_DOWN, 2f)

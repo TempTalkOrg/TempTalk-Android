@@ -10,7 +10,10 @@ import com.difft.android.call.layout.Tile
 import com.difft.android.call.layout.TileRole
 import com.difft.android.call.layout.resolveLayout
 import com.difft.android.call.ui.video.EdgeColors
+import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.dp
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -21,7 +24,7 @@ import com.difft.android.call.layout.Size as LayoutSize
 private const val EPS = 1e-6
 private const val PORTRAIT = 9.0 / 16
 
-/** The ambient letterbox (call-layout simulator `src/sim/letterbox.ts`): when a tile samples, and where its bands are. */
+
 class AmbientBandsTest {
 
     private fun groupInput(vararg people: Participant) = LayoutInput(
@@ -60,7 +63,7 @@ class AmbientBandsTest {
 
     @Test
     fun `a floating window widened past its video has side bands like a card`() {
-        // Call-layout decision 41: a floating window kept 100 wide shows a narrower video whole.
+        
         val band = ambientBandOf(card(LayoutRect(10.0, 20.0, 130.0, 160.0), role = TileRole.PIP), groupInput(portrait))
         assertEquals(20.0, band, EPS)
         assertEquals(0.0, ambientBandOf(card(LayoutRect(10.0, 20.0, 130.0, 160.0), ContentMode.FILL, TileRole.PIP), groupInput(portrait)), EPS)
@@ -68,7 +71,7 @@ class AmbientBandsTest {
 
     @Test
     fun `the 1on1 main view's bands are the window around its card, the video itself`() {
-        // A phone held level, the other person's portrait video in the middle, your camera off.
+        
         val input = LayoutInput(
             window = LayoutSize(852.0, 393.0),
             content = LayoutRect(0.0, 0.0, 852.0, 393.0),
@@ -76,7 +79,7 @@ class AmbientBandsTest {
             participants = listOf(Participant(id = "me", isLocal = true, videoOn = false), portrait),
         )
         val main = resolveLayout(input).tiles.single { it.role == TileRole.MAIN }
-        // Plan rects are rounded to 0.01.
+        
         assertEquals((852.0 - 393.0 * PORTRAIT) / 2, ambientBandOf(main, input), 0.01)
     }
 
@@ -121,5 +124,22 @@ class AmbientBandsTest {
         val mid = lerpEdges(from, to, 0.5f)
         assertEquals("the new shape at once", 2f, mid.aspect)
         assertTrue("halfway is grey", mid.left[3] != black && mid.left[3] != white)
+    }
+
+    @Test
+    fun `a sample of the same shape eases in, a new shape or the first sample takes its colours at once`() {
+        fun edges(aspect: Float) = EdgeColors(aspect, IntArray(8), IntArray(8), IntArray(8), IntArray(8))
+        assertTrue(easesBetween(edges(PORTRAIT.toFloat()), edges(PORTRAIT.toFloat() + 0.005f)))
+        assertFalse("the far end turned", easesBetween(edges(PORTRAIT.toFloat()), edges(16f / 9)))
+        assertFalse("nothing to ease from", easesBetween(null, edges(1f)))
+    }
+
+    @Test
+    fun `the 1on1 main card draws bands inside itself too, while its video shows`() {
+        val main = CallTileStyle(TileRole.MAIN, ContentMode.FIT, DpSize(300.dp, 400.dp), ambient = true)
+        assertTrue("its card keeps the old shape while the new one settles", cardAmbientShown(main, showVideo = true))
+        assertFalse(cardAmbientShown(main, showVideo = false))
+        assertFalse(cardAmbientShown(main.copy(ambient = false), showVideo = true))
+        assertTrue(cardAmbientShown(main.copy(role = TileRole.GRID), showVideo = true))
     }
 }

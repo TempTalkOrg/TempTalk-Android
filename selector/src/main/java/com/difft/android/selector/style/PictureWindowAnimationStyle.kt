@@ -5,7 +5,7 @@ import com.difft.android.selector.R
 
 class PictureWindowAnimationStyle {
 
-    /** Fields are accessed bare from remaining Java (fragments/activities) → @JvmField. */
+    
     @JvmField
     @AnimRes
     var activityEnterAnimation: Int = 0

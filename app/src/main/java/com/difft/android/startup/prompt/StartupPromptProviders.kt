@@ -10,6 +10,7 @@ import com.difft.android.base.migration.PeerApps
 import com.difft.android.base.network.NetworkRiskNotifier
 import com.difft.android.base.monitor.LateDeliveryRule
 import com.difft.android.base.monitor.LateDeliveryTracker
+import com.difft.android.base.monitor.StallDayTracker
 import com.difft.android.base.notification.NotificationReadiness
 import com.difft.android.base.notification.NotificationReadinessProvider
 import com.difft.android.base.notification.ReadinessIssue
@@ -33,10 +34,10 @@ import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Eligibility of every startup prompt and the state of the gates. Reads only: system state,
- * readiness, the FCM result, the update result and the service state. Never touches channel code.
- */
+
+
+
+
 @Singleton
 class StartupPromptProviders @Inject constructor(
     @param:ApplicationContext private val context: Context,
@@ -48,9 +49,10 @@ class StartupPromptProviders @Inject constructor(
     private val securityChecks: StartupSecurityChecks,
     private val globalConfigsManager: GlobalConfigsManager,
     private val lateDeliveryTracker: LateDeliveryTracker,
+    private val stallDayTracker: StallDayTracker,
 ) {
 
-    /** Starts the checks whose results gate or feed the prompts. */
+    
     fun onSessionStart() {
         securityChecks.ensureChecked()
         updateChecker.onSessionStart()
@@ -61,12 +63,13 @@ class StartupPromptProviders @Inject constructor(
             PromptId.LEGACY_MIGRATION -> legacyMigrationAnswer()
             PromptId.NOTIFICATIONS -> notificationsAnswer(readinessProvider.readBlocking(), isPermissionRequestable())
             PromptId.BACKGROUND_CONNECTION -> backgroundConnectionAnswer()
+            PromptId.BACKGROUND_RESTRICTED -> backgroundRestrictedAnswer()
             PromptId.FULL_SCREEN -> fullScreenAnswer(readinessProvider.readBlocking())
             PromptId.OPTIONAL_UPDATE -> optionalUpdateAnswer(updateChecker.state.value)
         }
     }
 
-    /** Active gates. Forced update and security warnings are rendered by the host, the others app-wide. */
+    
     fun gates(): Flow<Set<GateId>> = combine(
         InactiveDeviceNotifier.pending,
         NetworkRiskNotifier.warningPending,
@@ -81,7 +84,7 @@ class StartupPromptProviders @Inject constructor(
         }
     }.distinctUntilChanged()
 
-    /** Sources whose change can turn an UNKNOWN answer definite (late FCM or update results). */
+    
     fun changes(): Flow<Unit> = merge(
         pushUtil.fcmInitResult.map { },
         updateChecker.state.map { },
@@ -95,9 +98,22 @@ class StartupPromptProviders @Inject constructor(
             autoStart = userManager.getUserData()?.autoStartMessageService ?: true,
             requirementsMet = messageServiceManager::checkBackgroundConnectionRequirements,
             notificationsEnabled = notificationsAnswer(readinessProvider.readBlocking(), false).eligibility != Eligibility.ELIGIBLE,
-            lateDays = lateDeliveryTracker.lateDays(),
+            problemDays = problemDays(),
         )
     }
+
+    private suspend fun backgroundRestrictedAnswer(): ProviderAnswer {
+        if (!MessageForegroundService.isRunning) return ProviderAnswer.NOT_ELIGIBLE
+        return backgroundRestrictedAnswer(
+            serviceRunning = true,
+            keepAliveEnabled = userManager.getUserData()?.keepAliveEnabled == true,
+            notificationsEnabled = notificationsAnswer(readinessProvider.readBlocking(), false).eligibility != Eligibility.ELIGIBLE,
+            problemDays = restrictedProblemDays(lateDeliveryTracker.lateDayKeys(), stallDayTracker.stallDayKeys(), stallDayTracker.keepAliveOnDay()),
+        )
+    }
+
+    
+    private suspend fun problemDays(): Int = (lateDeliveryTracker.lateDayKeys() + stallDayTracker.stallDayKeys()).size
 
     private fun legacyMigrationAnswer(): ProviderAnswer {
         if (!PeerApps.isLegacy(context)) return ProviderAnswer.NOT_ELIGIBLE
@@ -114,11 +130,11 @@ class StartupPromptProviders @Inject constructor(
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
 }
 
-/**
- * Notifications slot: eligible exactly where `MessageNotificationUtil.canShowNotifications()` is
- * false (permission or app switch off = N1; MESSAGE group blocked, category missing or NONE = N2 off).
- * An unreadable category (unspecified importance) is UNKNOWN, never a reason to prompt.
- */
+
+
+
+
+
 fun notificationsAnswer(readiness: NotificationReadiness, permissionRequestable: Boolean): ProviderAnswer {
     val n1 = readiness.item(ReadinessItemId.N1)
     val n2 = readiness.item(ReadinessItemId.N2)
@@ -132,14 +148,14 @@ fun notificationsAnswer(readiness: NotificationReadiness, permissionRequestable:
     }
 }
 
-/** Full-screen slot: eligible on API 34+ when the full-screen intent permission is denied (readiness C2). */
+
 fun fullScreenAnswer(readiness: NotificationReadiness): ProviderAnswer =
     readiness.callPromptIssue()?.let { ProviderAnswer(Eligibility.ELIGIBLE, it) } ?: ProviderAnswer.NOT_ELIGIBLE
 
-/**
- * Trigger 1 of the background-connection slot: eligible only when FCM is unavailable, the service is
- * not running and [FcmFallbackStarter] cannot start it (auto-start off, or a requirement not met).
- */
+
+
+
+
 fun backgroundConnectionEligibility(
     fcm: FcmInitResult,
     serviceRunning: Boolean,
@@ -155,25 +171,25 @@ fun backgroundConnectionEligibility(
     }
 }
 
-/**
- * Background-connection slot. Eligible when the service is not running, notifications are enabled and
- * any [BackgroundTrigger] holds: FCM unavailable (see [backgroundConnectionEligibility]), at least
- * [LateDeliveryRule.MIN_DAYS] days with a late delivery in the window. Dismissal history is applied by
- * the coordinator, not here.
- */
+
+
+
+
+
+
 fun backgroundConnectionAnswer(
     fcm: FcmInitResult,
     serviceRunning: Boolean,
     autoStart: Boolean,
     requirementsMet: () -> Boolean,
     notificationsEnabled: Boolean,
-    lateDays: Int,
+    problemDays: Int,
 ): ProviderAnswer {
     if (serviceRunning) return ProviderAnswer.NOT_ELIGIBLE
     val fcmEligibility = backgroundConnectionEligibility(fcm, serviceRunning, autoStart, requirementsMet)
     val triggers = buildSet {
         if (fcmEligibility == Eligibility.ELIGIBLE) add(BackgroundTrigger.FCM_UNAVAILABLE)
-        if (lateDays >= LateDeliveryRule.MIN_DAYS) add(BackgroundTrigger.LATE_DELIVERY)
+        if (problemDays >= LateDeliveryRule.MIN_DAYS) add(BackgroundTrigger.LATE_DELIVERY)
     }
     return when {
         !notificationsEnabled -> ProviderAnswer.NOT_ELIGIBLE
@@ -183,12 +199,36 @@ fun backgroundConnectionAnswer(
     }
 }
 
+
+
+
+
+
+fun backgroundRestrictedAnswer(
+    serviceRunning: Boolean,
+    keepAliveEnabled: Boolean,
+    notificationsEnabled: Boolean,
+    problemDays: Int,
+): ProviderAnswer =
+    if (serviceRunning && keepAliveEnabled && notificationsEnabled && problemDays >= LateDeliveryRule.MIN_DAYS) {
+        ProviderAnswer(Eligibility.ELIGIBLE)
+    } else {
+        ProviderAnswer.NOT_ELIGIBLE
+    }
+
+
+
+
+
+fun restrictedProblemDays(lateDays: Set<Long>, stallDays: Set<Long>, keepAliveOnDay: Long): Int =
+    (lateDays + stallDays).count { it > keepAliveOnDay }
+
 fun optionalUpdateAnswer(state: UpdateCheckState): ProviderAnswer = when (state) {
     is UpdateCheckState.Optional -> ProviderAnswer(
         Eligibility.ELIGIBLE,
         offerKey = updateOfferKey(state.response.apkHash, state.response.url),
     )
     UpdateCheckState.NoUpdate -> ProviderAnswer.NOT_ELIGIBLE
-    // A forced offer is a gate, not this prompt; an unchecked or failed check is unknown.
+    
     is UpdateCheckState.Forced, UpdateCheckState.Unknown -> ProviderAnswer.UNKNOWN
 }

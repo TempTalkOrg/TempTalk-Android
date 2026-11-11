@@ -5,18 +5,18 @@ import android.text.TextUtils
 import com.difft.android.base.log.lumberjack.L
 import java.util.Locale
 
-/**
- * Rom version helper. Only the samsung check remains live (used by DensityUtil);
- * the light-status-bar / MIUI / Flyme cluster was removed with ImmersiveManager (issue #1077).
- */
+
+
+
+
 object RomUtils {
 
     private val ROM_SAMSUNG = arrayOf("samsung")
     private const val UNKNOWN = "unknown"
 
-    /**
-     * Return whether the rom is made by samsung.
-     */
+    
+
+
     fun isSamsung(): Boolean {
         val brand = getBrand()
         val manufacturer = getManufacturer()

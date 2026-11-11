@@ -34,21 +34,21 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
-/**
- * Exit semantics of [CallExitHandler] around the outbound hangup control message.
- *
- * An instant meeting has no owning conversation — `conversationId` is null by design all the way
- * down ([com.difft.android.websocket.api.util.CallMessageCreator] resolves instant recipients from
- * the participant uid list instead). A blanket "conversationId must be present" precondition
- * therefore swallowed end-for-all on instant meetings entirely, while 1v1 and group genuinely need
- * it to address the message. Both halves of that split are pinned here, together with the meeting
- * type the handler trusts and the point at which the uid list is sampled.
- *
- * The handler is owned by the call session (row T4-25): every exit branch E1-E7 ends through
- * `onEndCall`, and E1 (the initiator leaving before the call connects) sets the
- * pre-connect cancel latch synchronously, before its signaling coroutine is even started. A
- * signaling send that throws still ends the call.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class CallExitHandlerTest {
 
@@ -69,7 +69,7 @@ class CallExitHandlerTest {
 
         session = FakeCallExitSession(remoteUids = listOf(REMOTE_UID))
         callToChatController = mockk(relaxed = true)
-        // Real instance: a dependency-free holder, so the handler's own removeCallData runs for real.
+        
         callDataManager = CallDataManager()
         endCallCount = 0
     }
@@ -107,17 +107,17 @@ class CallExitHandlerTest {
         assertTrue("call must still be torn down locally", endCallCount > 0)
     }
 
-    /**
-     * `CallExitParams.callType` is built from the intent-seeded state holder, which stays empty
-     * until [com.difft.android.call.session.CallTypeCoordinator] resolves the server type; the
-     * resolved value lands on the `CallData` entry, so that is what decides instant-ness here.
-     */
+    
+
+
+
+
     @Test
     fun `resolved call data type wins over an unresolved params type`() {
         val handler = buildHandler(
             callDataType = CallType.INSTANT.type,
             conversationId = null,
-            // Intent-seeded fallback still carries the pre-join type; it must not win.
+            
             fallbackType = CallType.ONE_ON_ONE.type,
         )
 
@@ -318,11 +318,11 @@ class CallExitHandlerTest {
         )
     }
 
-    /**
-     * The session side of the exit decision. Remote peers leave the room as soon as the end-call RTM
-     * lands, which is what empties the uid list: sampling it after that point is the race the
-     * handler must not lose.
-     */
+    
+
+
+
+
     private class FakeCallExitSession(private var remoteUids: List<String>) : CallExitSession {
         val status = MutableStateFlow(CallStatus.CONNECTED)
         override val callStatus: StateFlow<CallStatus> = status

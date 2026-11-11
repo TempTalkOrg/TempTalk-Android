@@ -1,7 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Scan line: primary-blue (#056FFA) horizontal band, brightest in the centre and fading to
-     transparent at both ends. Replaces the old orange scan_icon_scanline.png so the colour follows
-     the app primary and stays mode-identical. Swept top<->bottom by ScanFrameOverlayView. -->
+
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:aapt="http://schemas.android.com/aapt"
     android:width="200dp"
@@ -18,7 +16,7 @@
                 android:endX="200"
                 android:endY="3">
                 <item android:offset="0.0" android:color="#00056FFA" />
-                <item android:offset="0.5" android:color="#FF056FFA" />
+                <item android:offset="0.5" android:color="@color/info" />
                 <item android:offset="1.0" android:color="#00056FFA" />
             </gradient>
         </aapt:attr>

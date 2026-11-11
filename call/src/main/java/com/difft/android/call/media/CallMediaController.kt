@@ -22,12 +22,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/**
- * Centralizes microphone, camera, denoise and voice-preset controls that were
- * previously scattered across `LCallViewModel`. Keeps the ViewModel focused on
- * orchestration; all direct `localParticipant.setMicrophoneEnabled/setCameraEnabled`
- * calls and `audioProcessor` wiring live here.
- */
+
 class CallMediaController(
     private val room: Room,
     private val roomCtl: CallRoomController,
@@ -58,16 +53,15 @@ class CallMediaController(
         audioProcessor.setSoundTouchPreset(preset.sdkKey)
     }
 
-    /**
-     * Enables or disables the local microphone with optional publish-muted control.
-     *
-     * Last-line permission gate for EVERY enable path (toolbar tap, 1v1 auto-enable,
-     * silence pre-publish, server-switch restore): without RECORD_AUDIO nothing may reach
-     * `setMicrophoneEnabled(true)` — SDK 2.27.0.1 only logs a warning and would still
-     * create/publish the track. Disabling is deliberately NOT gated (spec: close never
-     * checks permission), and a blocked enable resets the controller state so the toggle
-     * cannot render an "on" state that publishes nothing.
-     */
+    
+
+
+
+
+
+
+
+
     fun setMicEnabled(
         enabled: Boolean,
         publishMuted: Boolean = false,
@@ -114,12 +108,12 @@ class CallMediaController(
         showBarrage(room.localParticipant, message)
     }
 
-    /**
-     * Enables or disables the local camera with error/permission fallback.
-     *
-     * Same last-line gate as [setMicEnabled]: covers the non-UI enable paths (server-switch
-     * restore in RoomEventDispatcher) that skip the toolbar permission flow. Disable is not gated.
-     */
+    
+
+
+
+
+
     fun setCameraEnabled(enabled: Boolean) {
         if (enabled && !PermissionUtil.arePermissionsGranted(ApplicationHelper.instance, arrayOf(Manifest.permission.CAMERA))) {
             L.w { "[Call] CallMediaController setCameraEnabled blocked, CAMERA missing" }
@@ -158,7 +152,7 @@ class CallMediaController(
         roomCtl.updateCameraEnabled(enabled)
     }
 
-    /** Flips the local camera between front and back. No-op if camera is not publishing. */
+    
     fun flipCamera() {
         val vt = room.localParticipant.getTrackPublication(Track.Source.CAMERA)?.track as? LocalVideoTrack ?: return
         val newPos = when (vt.options.position) {

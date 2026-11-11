@@ -8,7 +8,7 @@ import org.robolectric.RobolectricTestRunner
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
-/** Design §8: only the category's own page, actually opened, is recorded as seen. */
+
 @RunWith(RobolectricTestRunner::class)
 class NotificationFixJumpSeenCategoryTest {
 

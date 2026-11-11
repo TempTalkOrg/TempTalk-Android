@@ -5,7 +5,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** Pure badge-state rule: hidden at null/0, raw count with no cap. No Fragment/Android needed. */
+
 class MeFragmentBadgeStateTest {
 
     @Test

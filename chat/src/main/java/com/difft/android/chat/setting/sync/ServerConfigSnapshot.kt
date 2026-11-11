@@ -3,26 +3,26 @@ package com.difft.android.chat.setting.sync
 import com.difft.android.network.responses.ConversationSetResponseBody
 import com.difft.android.websocket.api.messages.NotifyConversation
 
-/**
- * A server conversation-config snapshot as seen by [ConversationSettingsApplier]. A null field
- * means the source does not carry it and the local column is left alone.
- */
+
+
+
+
 data class ServerConfigSnapshot(
     val conversation: String,
     val version: Int,
     val muteStatus: Int?,
     val blockStatus: Int?,
     val confidentialMode: Int?,
-    /** Raw server value; the applier normalises it. */
+    
     val messageExpiry: Long?,
     val messageClearAnchor: Long?,
-    /** Mute sub-options; null when the source does not carry them. */
+    
     val allowMentionMe: Boolean? = null,
     val allowMentionAll: Boolean? = null,
     val allowGroupCall: Boolean? = null,
 ) {
     companion object {
-        /** `v1/conversation/get`: every field. */
+        
         fun fromPull(body: ConversationSetResponseBody) = ServerConfigSnapshot(
             conversation = body.conversation,
             version = body.version,
@@ -36,7 +36,7 @@ data class ServerConfigSnapshot(
             allowGroupCall = body.allowGroupCall,
         )
 
-        /** `v1/conversation/set` echo: the expiry fields belong to another API and are never applied from it. */
+        
         fun fromEcho(body: ConversationSetResponseBody) = ServerConfigSnapshot(
             conversation = body.conversation,
             version = body.version,
@@ -50,7 +50,7 @@ data class ServerConfigSnapshot(
             allowGroupCall = body.allowGroupCall,
         )
 
-        /** Notify type 4: mute (with sub-options), block and confidential only. */
+        
         fun fromNotify(notify: NotifyConversation) = ServerConfigSnapshot(
             conversation = notify.conversation,
             version = notify.version,
@@ -66,18 +66,18 @@ data class ServerConfigSnapshot(
     }
 }
 
-/** Where a [ServerConfigSnapshot] came from; decides how the managed fields are gated. */
+
 sealed class SnapshotSource {
-    /** `v1/conversation/get`. Authoritative: a same-version snapshot may re-apply. */
+    
     data object Pull : SnapshotSource()
 
-    /** `v1/conversation/set` echo of a request that changed a non-managed field. */
+    
     data object Echo : SnapshotSource()
 
-    /**
-     * Notify type 4. [serverTimestamp] is when the server accepted the change, which is the other
-     * device's operation time for conflict resolution.
-     */
+    
+
+
+
     data class Push(
         val serverTimestamp: Long,
         val changeType: Int,
@@ -86,14 +86,14 @@ sealed class SnapshotSource {
     ) : SnapshotSource()
 }
 
-/** Result of [ConversationSettingsApplier.applyFinal]; the job decides its fate from it. */
+
 enum class FinalOutcome {
-    /** The managed field was written from the snapshot; the job is done. */
+    
     COMPLETED,
 
-    /** A newer local intent exists; nothing written for the managed field; the job is done. */
+    
     SUPERSEDED,
 
-    /** The snapshot is older than what this job needs; the job must fetch again. */
+    
     NEEDS_RECONCILE,
 }

@@ -3,10 +3,7 @@
     android:height="24dp"
     android:viewportWidth="24"
     android:viewportHeight="24">
-    <!-- Tabler "lock" icon. Colors below are placeholder-only (see Vector Drawable
-         Pre-flight): tinted exclusively via Icon()/Drawable.setTint() (BlendMode.SrcIn) at
-         every call site — never rendered through Image()/painterResource, which would
-         freeze this baked-in color instead of adapting to theme/context. -->
+    
     <path
         android:pathData="M5,13a2,2 0,0 1,2 -2h10a2,2 0,0 1,2 2v6a2,2 0,0 1,-2 2h-10a2,2 0,0 1,-2 -2v-6z"
         android:fillColor="@android:color/transparent"

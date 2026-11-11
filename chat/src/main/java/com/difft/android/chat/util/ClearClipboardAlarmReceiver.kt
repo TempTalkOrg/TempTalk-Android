@@ -7,19 +7,19 @@ import android.content.Intent
 import android.os.Build
 import com.difft.android.base.log.lumberjack.L
 
-/**
- * BroadcastReceiver that clears the clipboard after a timeout.
- * Used to automatically remove sensitive content from the clipboard.
- */
+
+
+
+
 class ClearClipboardAlarmReceiver : android.content.BroadcastReceiver() {
 
     companion object {
         private const val TAG = "ClearClipboardAlarm"
 
-        /**
-         * Special label used to identify clipboard content copied by our app.
-         * This allows us to avoid clearing content copied by other apps.
-         */
+        
+
+
+
         const val CLIPBOARD_LABEL = "difft_sensitive_copy"
     }
 
@@ -29,20 +29,20 @@ class ClearClipboardAlarmReceiver : android.content.BroadcastReceiver() {
         try {
             val label = clipboard.primaryClip?.description?.label?.toString()
 
-            // Only skip if we can clearly identify it's from another app
+            
             if (label != null && label != CLIPBOARD_LABEL) {
                 L.i { "[$TAG] Skipping clear: content from another app" }
                 return
             }
         } catch (e: Exception) {
-            // Android 10+ may fail to read clipboard in background, proceed with clear
+            
             L.w { "[ClearClipboardAlarmReceiver] failed to read clipboard: ${e.stackTraceToString()}" }
         }
 
-        // Clear the clipboard
-        // Wrap in try-catch: some Android 9 (API 28) devices (e.g. vivo) have a system bug
-        // where ClipboardService.setPrimaryClipInternal throws a NullPointerException internally,
-        // which propagates back via Binder IPC and crashes the receiver.
+        
+        
+        
+        
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 clipboard.clearPrimaryClip()

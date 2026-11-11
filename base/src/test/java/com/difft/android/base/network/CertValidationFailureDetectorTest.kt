@@ -35,7 +35,7 @@ class CertValidationFailureDetectorTest {
 
     @Test
     fun `SSLHandshakeException wrapping a CertificateException cause is detected`() {
-        // The common Conscrypt/JSSE shape: handshake exception wraps the real cert cause.
+        
         val handshake = SSLHandshakeException("handshake failed").apply {
             initCause(CertificateException("Trust anchor for certification path not found."))
         }
@@ -56,8 +56,8 @@ class CertValidationFailureDetectorTest {
 
     @Test
     fun `bare SSLHandshakeException without a typed cert cause is not detected (typed-only)`() {
-        // Typed-only: a handshake exception whose message mentions certificates but which
-        // carries no typed cert exception in its cause chain must NOT trigger the warning.
+        
+        
         assertFalse(
             CertValidationFailureDetector.isCertValidationFailure(
                 SSLHandshakeException("Trust anchor for certification path not found.")
@@ -89,7 +89,7 @@ class CertValidationFailureDetectorTest {
 
     @Test
     fun `self-referential cause chain terminates without infinite loop`() {
-        // A throwable whose cause is itself must not hang the detector.
+        
         val looping = object : Exception("loop") {
             override val cause: Throwable get() = this
         }
@@ -98,8 +98,8 @@ class CertValidationFailureDetectorTest {
 
     @Test
     fun `cert failure beyond the cause-depth cap is not detected`() {
-        // 16+ wrapper frames before the cert exception: intentionally not reported
-        // (guards against pathological chains; real chains are shallow).
+        
+        
         var current: Throwable = CertificateException("deep cert")
         repeat(20) { current = IOException("wrapper", current) }
         assertFalse(CertValidationFailureDetector.isCertValidationFailure(current))

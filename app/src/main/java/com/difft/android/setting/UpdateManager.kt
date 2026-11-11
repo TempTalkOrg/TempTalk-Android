@@ -48,10 +48,10 @@ class UpdateManager @Inject constructor(
 ) {
     private var foreUpdateMessageDialog: ComposeDialog? = null
 
-    /**
-     * Called on every delivery hand-off; the startup update checker ignores it unless a forced offer
-     * currently blocks the app, and then lets that gate expire (#1355).
-     */
+    
+
+
+
     var onForcedHandOff: (() -> Unit)? = null
 
 
@@ -118,7 +118,7 @@ class UpdateManager @Inject constructor(
         }
     }
 
-    /** Page-owned settings check. The caller binds busy/wait once with waitWhileVisibleTop. */
+    
     fun checkUpdate(page: Fragment, busy: MutableStateFlow<Boolean>, wait: PageWait): Job {
         val originalView = page.requireView()
         return page.viewLifecycleOwner.lifecycleScope.launch {
@@ -204,14 +204,14 @@ class UpdateManager @Inject constructor(
         }
     }
 
-    /** Hooks the delivery's completion events to [activity]; call once from the host's onCreate. */
+    
     fun attach(activity: FragmentActivity) = delivery.attach(activity, ::handOff)
 
-    /**
-     * The optional-update dialog. The startup prompt host passes [onClosed] and runs the update
-     * itself through [confirmOptionalUpdate] once its outcome is recorded; other callers keep the
-     * direct confirm.
-     */
+    
+
+
+
+
     fun showUpdateDialog(
         context: Context,
         response: CheckUpdateResponse,
@@ -229,10 +229,10 @@ class UpdateManager @Inject constructor(
     fun confirmOptionalUpdate(context: Context, response: CheckUpdateResponse) =
         confirmUpdate(context, response.toOffer(), isForce = false)
 
-    /**
-     * Non-dismissable; closed when the delivery hands off (see [attach]) or by
-     * [dismissForceUpdateDialog]. A new offer replaces the one on screen, never stacks on it.
-     */
+    
+
+
+
     fun showForceUpdateDialog(context: FragmentActivity, response: CheckUpdateResponse) {
         closeForceUpdateDialog()
         foreUpdateMessageDialog = ComposeDialogManager.showMessageDialog(
@@ -260,7 +260,7 @@ class UpdateManager @Inject constructor(
         onForcedHandOff?.invoke()
     }
 
-    /** The forced offer was withdrawn: take its dialog down. */
+    
     fun dismissForceUpdateDialog() = closeForceUpdateDialog()
 
     private fun closeForceUpdateDialog() {
@@ -269,7 +269,7 @@ class UpdateManager @Inject constructor(
     }
 }
 
-/** Waits only for the original retained view; DESTROYED is never treated as a visible shell. */
+
 internal suspend fun awaitSettingsPageVisible(page: Fragment, originalView: View): Boolean {
     if (page.view !== originalView) return false
     val state = page.detailBackOwner().lifecycle.currentStateFlow.first {

@@ -17,14 +17,14 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
 
-/**
- * A coroutine-based runner that constantly checks for available [Job]s owned by the [JobController].
- * When one is available, this class will execute it and call the appropriate methods on
- * [JobController] based on the result.
- *
- * [JobRunner] and [JobController] were written such that you should be able to have
- * N concurrent [JobRunner]s operating over the same [JobController].
- */
+
+
+
+
+
+
+
+
 internal class JobRunner(
     private val application: Application,
     private val id: Int,
@@ -36,9 +36,9 @@ internal class JobRunner(
     fun launchIn(scope: CoroutineScope): kotlinx.coroutines.Job {
         return scope.launch(Dispatchers.IO) {
             while (isActive) {
-                // Fail-soft: no wcdb handle here, so type-catch rather than flag-guard the DB
-                // chokepoint. A cipher-key failure is process-lifetime dead — stop this runner,
-                // jobs stay persisted. CancellationException isn't a subtype, so it still propagates.
+                
+                
+                
                 try {
                     val job = jobController.pullNextEligibleJobForExecution(jobPredicate, managementDispatcher)
                     try {
@@ -49,7 +49,7 @@ internal class JobRunner(
                         }
                         recordResult(job, result)
                     } finally {
-                        // After the result is recorded, so a send ticket also covers onFailure's writes (#1382).
+                        
                         job.closeRunResources()
                     }
                 } catch (e: WCDBKeyUnavailableException) {
@@ -103,8 +103,8 @@ internal class JobRunner(
                 result = Job.Result.failure()
             }
         } catch (e: CancellationException) {
-            // Real cancellation of this runner propagates; a stray one thrown by the job would
-            // otherwise end this runner for the rest of the process.
+            
+            
             currentCoroutineContext().ensureActive()
             L.w { JobLogger.format(job, id.toString(), "Failing due to a stray cancellation.") + e }
             return Job.Result.failure()

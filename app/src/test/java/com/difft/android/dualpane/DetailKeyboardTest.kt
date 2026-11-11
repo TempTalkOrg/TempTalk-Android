@@ -28,11 +28,11 @@ import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import java.util.concurrent.TimeUnit
 
-/**
- * [detailKeyboard] on a page pushed onto a detail stack: the keyboard opens once on a fresh open
- * (not again after a fold recreation), and is hidden when the page stops being the visible top,
- * so it does not stay over the page shown next.
- */
+
+
+
+
+
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [33], qualifiers = "w840dp-h900dp")
 class DetailKeyboardTest {
@@ -59,10 +59,10 @@ class DetailKeyboardTest {
         }
     }
 
-    /**
-     * Stands in for ChatFragment / GroupChatFragment, which hold the lease from onViewCreated to
-     * onDestroyView (pinned by HostedConversationSourceGuardTest); the real roots need Hilt.
-     */
+    
+
+
+
     class LeasingRoot : Fragment() {
         override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View =
             FrameLayout(inflater.context)
@@ -186,7 +186,7 @@ class DetailKeyboardTest {
         nav.replaceRoot(TAB_CONTACTS, LeasingRoot(), selectionId = "g")
         settle()
 
-        nav.clear(TAB_CONTACTS) // the hidden group conversation is disbanded
+        nav.clear(TAB_CONTACTS) 
         settle()
         assertTrue(resizes())
 

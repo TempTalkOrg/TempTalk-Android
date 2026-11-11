@@ -12,7 +12,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import java.io.File
 
-/** The on-disk memory of how sessions ended: round-trips, survives a missing dir, and reads garbage as nothing. */
+
 @RunWith(RobolectricTestRunner::class)
 class FileTerminalRecordStoreTest {
 
@@ -35,9 +35,9 @@ class FileTerminalRecordStoreTest {
 
     @Test
     fun `a record with no terminal round-trips through a real on-disk store`() {
-        // P2pJson omits a null field, so the reloaded record has no `terminal` key at all. Without an
-        // explicit default on the field that decode throws, and the store's own runCatching would drop
-        // EVERY retained record — turning /status into a 404 no sender can tell from "session forgotten".
+        
+        
+        
         val dir = tempFolder.newFolder("unconfirmed")
         val store = FileTerminalRecordStore(dir)
         val unconfirmed = record("committed", 7).copy(terminal = null, stage = TransferStages.PROMOTING)

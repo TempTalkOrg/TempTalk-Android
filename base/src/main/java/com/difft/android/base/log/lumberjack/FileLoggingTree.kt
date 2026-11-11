@@ -21,9 +21,9 @@ import java.util.Locale
 import java.util.TimeZone
 
 
-/**
- * Created by Michael on 17.10.2016.
- */
+
+
+
 
 class FileLoggingTree(
     setup: FileLoggingSetup?
@@ -41,19 +41,18 @@ class FileLoggingTree(
         val lc = LoggerFactory.getILoggerFactory() as LoggerContext
         lc.reset()
 
-        // 1) FileLoggingSetup - Encoder for File
+        
         val encoder1 = PatternLayoutEncoder()
         encoder1.context = lc
         encoder1.pattern = setup.setup.logPattern
         encoder1.start()
 
-        // 2) FileLoggingSetup - rolling file appender
+        
         val rollingFileAppender = RollingFileAppender<ILoggingEvent>()
         rollingFileAppender.isAppend = true
         rollingFileAppender.context = lc
-        //rollingFileAppender.setFile(setup.folder + "/" + setup.fileName + "." + setup.fileExtension);
 
-        // 3) FileLoggingSetup - Rolling policy (one log per day)
+        
         var triggeringPolicy: TriggeringPolicy<ILoggingEvent>? = null
         when (setup) {
             is FileLoggingSetup.DateFiles -> {
@@ -94,38 +93,37 @@ class FileLoggingTree(
         rollingFileAppender.encoder = encoder1
         rollingFileAppender.start()
 
-        // add the newly created appenders to the root logger;
-        // qualify Logger to disambiguate from org.slf4j.Logger
+        
+        
         val root = mLogger as ch.qos.logback.classic.Logger
         root.detachAndStopAllAppenders()
         root.addAppender(rollingFileAppender)
 
-        // enable all log level
+        
         root.level = Level.ALL
     }
 
-    // 时间格式化器，使用调用时捕获的时间戳
+    
     private val dateFormatter = SimpleDateFormat("yyyy-MM-dd HH:mm:ss,SSS", Locale.US)
 
     override fun log(priority: Int, prefix: String, message: String, t: Throwable?, stackData: StackData) {
-        // 获取调用时捕获的时间戳（如果有），否则使用当前时间
         val timestamp = getLogTimestamp() ?: System.currentTimeMillis()
-        // SimpleDateFormat is not thread-safe and SDK passthrough (LiveKit) logs from its own
-        // threads; a garbled prefix would also corrupt the day key of the daily budget.
+        
+        
         val formattedTime = synchronized(dateFormatter) {
-            // Follow a time zone change in a long-lived process (#1395).
+            
             val zone = TimeZone.getDefault()
             if (zone.id != dateFormatter.timeZone.id) dateFormatter.timeZone = zone
             dateFormatter.format(Date(timestamp))
         }
 
-        // Backstop redaction on the persisted line: covers Timber-appended throwable text and
-        // SDK passthrough that never went through L.replaceUid.
+        
+        
         val logMessage = formatLine(prefix, LogScrubber.scrub(message))
-        // 在 message 前添加调用时的时间戳，保证时间准确性
+        
         val logMessageWithTime = "$formattedTime $logMessage"
 
-        //L.kt已经将日志处理整个放在子线程
+        
         doRealLog(priority, logMessageWithTime)
     }
 
@@ -135,12 +133,12 @@ class FileLoggingTree(
 
     @Synchronized
     private fun doRealLog(priority: Int, logMessage: String) {
-        // slf4j:   TRACE   <   DEBUG < INFO < WARN < ERROR < FATAL
-        // Android: VERBOSE <   DEBUG < INFO < WARN < ERROR < ASSERT
+        
+        
 
         if (priority == Log.VERBOSE || priority == Log.DEBUG) return
 
-        // logMessage starts with the formatted call-time timestamp (yyyy-MM-dd …).
+        
         val day = logMessage.take(DAY_PREFIX_LENGTH)
         when (dailyBudget.admit(day, priority, logMessage.length + 1)) {
             DailyLogBudget.Admission.WRITE -> Unit
@@ -152,8 +150,6 @@ class FileLoggingTree(
         }
 
         when (priority) {
-//            Log.VERBOSE -> mLogger.trace(logMessage)
-//            Log.DEBUG -> mLogger.debug(logMessage)
             Log.INFO -> mLogger.info(logMessage)
             Log.WARN -> mLogger.warn(logMessage)
             Log.ERROR -> mLogger.error(logMessage)
@@ -163,7 +159,7 @@ class FileLoggingTree(
 
     companion object {
 
-        /** INFO bytes allowed per calendar day; WARN/ERROR are exempt (see DailyLogBudget). */
+        
         private const val DAILY_INFO_BUDGET_BYTES = 10L * 1024 * 1024
         private const val DAY_PREFIX_LENGTH = "yyyy-MM-dd".length
         private const val TIME_PREFIX_LENGTH = "yyyy-MM-dd HH:mm:ss,SSS".length
@@ -172,6 +168,6 @@ class FileLoggingTree(
         const val NUMBERED_FILE_NAME_PATTERN = "%s\\d*.%s"
 
         internal var mLogger =
-            LoggerFactory.getLogger(FileLoggingTree::class.java)//Logger.ROOT_LOGGER_NAME);
+            LoggerFactory.getLogger(FileLoggingTree::class.java)
     }
 }

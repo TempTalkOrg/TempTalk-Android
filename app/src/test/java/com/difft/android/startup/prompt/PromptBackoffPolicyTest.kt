@@ -5,7 +5,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Time ladder 1/3/7/30 d then 30 d (#1355 D1 = A) and the clock-rollback clamp. */
+
 class PromptBackoffPolicyTest {
 
     private val day = 86_400_000L
@@ -28,7 +28,7 @@ class PromptBackoffPolicyTest {
             t = record.snoozeUntil
             shownOnDays += (t - now) / day
         }
-        // Shown on days 0, 1, 4, 11, 41, 71: five times in the first six weeks, then monthly.
+        
         assertEquals(listOf(0L, 1L, 4L, 11L, 41L, 71L), shownOnDays)
         assertEquals(5, record.declines)
     }

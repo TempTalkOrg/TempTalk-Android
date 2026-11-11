@@ -12,26 +12,26 @@ import androidx.compose.ui.window.DialogWindowProvider
 import kotlinx.coroutines.flow.MutableStateFlow
 import java.util.WeakHashMap
 
-/**
- * Where an activity's dialogs ([MessageDialog], [WaitDialog]) centre vertically: a window y in px,
- * or null for the window's middle (the default everywhere). A page whose middle is unusable, such
- * as a call on a half-open fold, registers the centre it wants and clears it when it leaves; a
- * dialog already showing moves with the change.
- */
+
+
+
+
+
+
 object DialogAnchor {
     private val centres = MutableStateFlow<Map<Activity, Int>>(emptyMap())
 
-    /** Centres [activity]'s dialogs on window y [centerYPx]; null restores the default. */
+    
     fun set(activity: Activity, centerYPx: Int?) {
         centres.value = WeakHashMap(centres.value).apply {
             if (centerYPx == null) remove(activity) else put(activity, centerYPx)
         }
     }
 
-    /**
-     * Inside a dialog's content: moves the dialog window so it centres on the anchor registered for
-     * the host activity, and back to the window's middle when the anchor is cleared.
-     */
+    
+
+
+
     @Composable
     internal fun Effect() {
         val view = LocalView.current

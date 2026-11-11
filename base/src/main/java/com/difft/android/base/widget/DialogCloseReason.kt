@@ -1,25 +1,25 @@
 package com.difft.android.base.widget
 
-/** Why a message dialog left the screen; reported exactly once per dialog through `onClosed`. */
+
 enum class DialogCloseReason {
-    /** The confirm button, with `autoDismiss`. */
+    
     CONFIRM,
 
-    /** The cancel button, with `autoDismiss`. */
+    
     CANCEL,
 
-    /** Outside tap or back, on a cancelable dialog. */
+    
     OUTSIDE,
 
-    /** [ComposeDialog.dismiss] called by the code that showed it. */
+    
     PROGRAMMATIC,
 }
 
-/**
- * Close bookkeeping of one message dialog: unmount and `onClosed` run at most once, and
- * `onDismiss` runs at most once, for an outside tap, back or [ComposeDialog.dismiss], never for the
- * buttons.
- */
+
+
+
+
+
 internal class MessageDialogCloser(
     private val unmount: () -> Unit,
     private val onDismiss: () -> Unit,

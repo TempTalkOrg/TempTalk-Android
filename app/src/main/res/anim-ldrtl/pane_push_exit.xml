@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- RTL mirror of anim/pane_push_exit: the covered page drifts back toward the start (right). -->
-<translate xmlns:android="http://schemas.android.com/apk/res/android"
-    android:duration="250"
-    android:fromXDelta="0"
-    android:interpolator="@android:anim/decelerate_interpolator"
-    android:toXDelta="25%" />

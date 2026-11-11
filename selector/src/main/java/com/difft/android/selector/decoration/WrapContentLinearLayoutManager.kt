@@ -5,10 +5,10 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.difft.android.base.log.lumberjack.L
 
-/**
- * Guards against RecyclerView "IndexOutOfBoundsException: Inconsistency detected.
- * Invalid view holder adapter" during layout.
- */
+
+
+
+
 open class WrapContentLinearLayoutManager(context: Context) : LinearLayoutManager(context) {
 
     override fun onLayoutChildren(recycler: RecyclerView.Recycler?, state: RecyclerView.State?) {

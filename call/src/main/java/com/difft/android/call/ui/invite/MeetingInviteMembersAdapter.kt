@@ -12,9 +12,9 @@ import com.difft.android.call.data.AvatarData
 import com.difft.android.call.data.InviteMember
 import kotlinx.coroutines.CoroutineScope
 
-/**
- * 已选成员列表适配器
- */
+
+
+
 class MeetingInviteMembersAdapter(
     private val onRemoveClick: (InviteMember) -> Unit,
     private val lifecycleScope: CoroutineScope

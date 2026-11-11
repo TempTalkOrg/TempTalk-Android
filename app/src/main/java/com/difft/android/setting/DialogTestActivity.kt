@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.sp
 import androidx.fragment.app.FragmentActivity
 import com.difft.android.R
 import com.difft.android.base.BaseActivity
+import com.difft.android.base.ui.compose.systemBarsWithCutoutPadding
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.FullScreenBottomDialog
@@ -30,16 +31,16 @@ import com.difft.android.base.widget.WaitDialog
 import com.difft.android.base.widget.MessageDialog
 import dagger.hilt.android.AndroidEntryPoint
 
-/**
- * Unified Dialog Test Page
- * Demonstrates two ways to call ComposeDialogManager:
- * 1. Direct API Call - Works with all Activities
- * 2. Composable Functions - Compose environment only
- *
- * The screen hosts DifftTheme because the dialog composables it calls inline read
- * `DifftTheme.colors`. Its own chrome stays on `colorResource` / raw literals — the same
- * night-qualified values, kept as-is on this dev-only screen.
- */
+
+
+
+
+
+
+
+
+
+
 @AndroidEntryPoint
 class DialogTestActivity : BaseActivity() {
 
@@ -60,7 +61,7 @@ class DialogTestActivity : BaseActivity() {
         }
     }
 
-    // === Direct API methods - Works with all Activities ===
+    
 
     fun showMessageDialogDirect() {
         ComposeDialogManager.showMessageDialog(
@@ -113,7 +114,7 @@ class DialogTestActivity : BaseActivity() {
                 )
 
                 Button(
-                    onClick = { /* Close logic handled in onDismiss */ },
+                    onClick = {  },
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text("Close")
@@ -131,7 +132,7 @@ class DialogTestActivity : BaseActivity() {
             }
         ) { view ->
             view.findViewById<View>(R.id.btn_close)?.setOnClickListener {
-                // Close logic handled in onDismiss
+                
             }
         }
     }
@@ -162,7 +163,7 @@ class DialogTestActivity : BaseActivity() {
                 )
 
                 Button(
-                    onClick = { /* Close logic handled in onDismiss */ },
+                    onClick = {  },
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text("Close")
@@ -180,7 +181,7 @@ class DialogTestActivity : BaseActivity() {
             }
         ) { view ->
             view.findViewById<View>(R.id.btn_close)?.setOnClickListener {
-                // Close logic handled in onDismiss
+                
             }
         }
     }
@@ -208,7 +209,7 @@ class DialogTestActivity : BaseActivity() {
 fun DialogTestScreen() {
     val activity = LocalActivity.current as? DialogTestActivity ?: return
 
-    // === Composable function state ===
+    
     var showMessageDialogComposable by remember { mutableStateOf(false) }
     var showWaitDialogComposable by remember { mutableStateOf(false) }
     var showBottomDialogComposable by remember { mutableStateOf(false) }
@@ -220,7 +221,7 @@ fun DialogTestScreen() {
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .systemBarsPadding()
+            .systemBarsWithCutoutPadding()
             .background(colorResource(id = com.difft.android.base.R.color.bg))
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -242,7 +243,7 @@ fun DialogTestScreen() {
             )
         }
 
-        // === Method 1: Direct API Call ===
+        
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -266,7 +267,7 @@ fun DialogTestScreen() {
                         modifier = Modifier.padding(bottom = 12.dp)
                     )
 
-                    // Message Dialog
+                    
                     Button(
                         onClick = { activity.showMessageDialogDirect() },
                         modifier = Modifier.fillMaxWidth()
@@ -276,7 +277,7 @@ fun DialogTestScreen() {
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    // Wait Dialog
+                    
                     Button(
                         onClick = { activity.showWaitDialogDirect() },
                         modifier = Modifier.fillMaxWidth()
@@ -286,7 +287,7 @@ fun DialogTestScreen() {
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    // Bottom Dialog
+                    
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -308,7 +309,7 @@ fun DialogTestScreen() {
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    // Fullscreen Bottom Dialog
+                    
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -330,7 +331,7 @@ fun DialogTestScreen() {
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    // Non-dismissible Dialog
+                    
                     Button(
                         onClick = { activity.showNonDismissibleDialogDirect() },
                         modifier = Modifier.fillMaxWidth()
@@ -341,7 +342,7 @@ fun DialogTestScreen() {
             }
         }
 
-        // === Method 2: Composable Functions ===
+        
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -365,7 +366,7 @@ fun DialogTestScreen() {
                         modifier = Modifier.padding(bottom = 12.dp)
                     )
 
-                    // Message Dialog
+                    
                     Button(
                         onClick = { showMessageDialogComposable = true },
                         modifier = Modifier.fillMaxWidth()
@@ -375,7 +376,7 @@ fun DialogTestScreen() {
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    // Wait Dialog
+                    
                     Button(
                         onClick = { showWaitDialogComposable = true },
                         modifier = Modifier.fillMaxWidth()
@@ -385,7 +386,7 @@ fun DialogTestScreen() {
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    // Bottom Dialog
+                    
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -407,7 +408,7 @@ fun DialogTestScreen() {
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    // Fullscreen Bottom Dialog
+                    
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -429,7 +430,7 @@ fun DialogTestScreen() {
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    // Non-dismissible Dialog
+                    
                     Button(
                         onClick = { showNonDismissibleDialogComposable = true },
                         modifier = Modifier.fillMaxWidth()
@@ -440,7 +441,7 @@ fun DialogTestScreen() {
             }
         }
 
-        // === Snackbar Tips Test ===
+        
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -528,9 +529,9 @@ fun DialogTestScreen() {
         }
     }
 
-    // === Composable function Dialog calls ===
+    
 
-    // Message Dialog
+    
     MessageDialog(
         isVisible = showMessageDialogComposable,
         title = "Composable Function",
@@ -551,14 +552,14 @@ fun DialogTestScreen() {
         }
     )
 
-    // Wait Dialog
+    
     WaitDialog(
         isVisible = showWaitDialogComposable,
         message = "Processing...",
         cancelable = true
     )
 
-    // Bottom Dialog - Compose content
+    
     BottomDialog(
         isVisible = showBottomDialogComposable,
         onDismiss = { 
@@ -604,7 +605,7 @@ fun DialogTestScreen() {
         }
     }
 
-    // Bottom Dialog - Custom View
+    
     BottomDialog(
         isVisible = showBottomDialogViewComposable,
         onDismiss = { 
@@ -618,7 +619,7 @@ fun DialogTestScreen() {
         }
     }
 
-    // Fullscreen Bottom Dialog
+    
     FullScreenBottomDialog(
         isVisible = showFullScreenDialogComposable,
         onDismiss = { 
@@ -654,7 +655,7 @@ fun DialogTestScreen() {
         }
     }
 
-    // Fullscreen Bottom Dialog - Custom View
+    
     FullScreenBottomDialog(
         isVisible = showFullScreenDialogViewComposable,
         onDismiss = { 
@@ -668,7 +669,7 @@ fun DialogTestScreen() {
         }
     }
 
-    // Non-dismissible Dialog
+    
     MessageDialog(
         isVisible = showNonDismissibleDialogComposable,
         title = "Important Notice",
@@ -690,7 +691,7 @@ fun DialogTestScreen() {
 @Preview(showBackground = true, name = "Dialog Test Preview")
 @Composable
 fun DialogTestPreview() {
-    // Preview version, no dependency on specific Activity
+    
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -715,7 +716,7 @@ fun DialogTestPreview() {
             )
         }
 
-        // === Method 1: Direct API Call ===
+        
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -739,9 +740,9 @@ fun DialogTestPreview() {
                         modifier = Modifier.padding(bottom = 12.dp)
                     )
 
-                    // Sample buttons (not clickable in preview mode)
+                    
                     Button(
-                        onClick = { /* Preview mode */ },
+                        onClick = {  },
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text("Message Dialog (Direct)")
@@ -750,7 +751,7 @@ fun DialogTestPreview() {
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Button(
-                        onClick = { /* Preview mode */ },
+                        onClick = {  },
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text("Wait Dialog (Direct)")
@@ -759,7 +760,7 @@ fun DialogTestPreview() {
             }
         }
 
-        // === Method 2: Composable Functions ===
+        
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -784,7 +785,7 @@ fun DialogTestPreview() {
                     )
 
                     Button(
-                        onClick = { /* Preview mode */ },
+                        onClick = {  },
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text("Message Dialog (Composable)")
@@ -793,7 +794,7 @@ fun DialogTestPreview() {
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Button(
-                        onClick = { /* Preview mode */ },
+                        onClick = {  },
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text("Wait Dialog (Composable)")

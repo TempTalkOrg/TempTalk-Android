@@ -14,16 +14,16 @@ import androidx.core.content.withStyledAttributes
 import com.difft.android.base.widget.DifftComposeView
 import com.difft.android.call.R
 
-/**
- * XML-hostable shell around [IncomingCallControls] (the tap buttons) for the View-based
- * incoming-call screen.
- *
- * The host must give an explicit width (`match_parent`): the row fills the width it is offered.
- * Icons come from `app:icc_rejectIcon` / `app:icc_acceptIcon` so the shell can live in :call while
- * the assets stay with the layout's module. The clicks live in the composition (one clickable per
- * button); the shell contributes theming, lazy composition, the enabled state and [touchObserver]
- * (every pointer event that reaches this row, for the accept/reject log line).
- */
+
+
+
+
+
+
+
+
+
+
 class IncomingCallControlsView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
@@ -36,7 +36,7 @@ class IncomingCallControlsView @JvmOverloads constructor(
     var onReject: (() -> Unit)? = null
     var onAccept: (() -> Unit)? = null
 
-    /** Sees every pointer event dispatched into this row before the composition handles it. */
+    
     var touchObserver: ((MotionEvent) -> Unit)? = null
 
     init {

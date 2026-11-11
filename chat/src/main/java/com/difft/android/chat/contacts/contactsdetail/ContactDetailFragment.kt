@@ -1,7 +1,6 @@
 package com.difft.android.chat.contacts.contactsdetail
 
 import com.difft.android.base.utils.pane.PageWait
-import com.difft.android.base.utils.pane.SettingsIdiomPage
 import android.os.Bundle
 import android.text.TextUtils
 import android.view.LayoutInflater
@@ -9,18 +8,16 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.flow.filterNotNull
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.ui.theme.tokens.ColorTokens
-import com.difft.android.base.utils.globalServices
 import com.difft.android.base.utils.pane.dismissWithView
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
@@ -34,65 +31,43 @@ import com.difft.android.base.utils.pane.isInDetailStack
 import com.difft.android.base.utils.pane.DetailDestination
 import com.difft.android.base.utils.pane.containerPadsBottom
 import com.difft.android.base.utils.pane.detailPageInsets
-import com.difft.android.base.utils.pane.ownsWindow
 import com.difft.android.base.utils.pane.ConversationTarget
 import com.difft.android.base.utils.pane.detailNavigation
 import com.difft.android.chat.R
-import com.difft.android.chat.common.AvatarCacheCipher
-import com.difft.android.chat.common.AvatarUtil
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.difft.android.chat.common.AvatarPreviewFlight
 import com.difft.android.chat.common.AvatarPreviewLauncher
 import com.difft.android.chat.contacts.contactsdetail.mvi.ContactRemarkEditContract
 import com.difft.android.chat.contacts.contactsdetail.mvi.ContactRemarkEditViewModel
-import com.difft.android.chat.contacts.data.ContactorUtil
-import com.difft.android.chat.contacts.data.ContactorUtil.getEntryPoint
 import com.difft.android.chat.contacts.data.getContactAvatarData
 import com.difft.android.chat.contacts.data.getContactAvatarUrl
-import com.difft.android.chat.contacts.data.isOfficialAccount
 import com.difft.android.chat.recent.ConversationNavigationCallback
 import com.difft.android.chat.ui.ChatInputFocusable
 import com.difft.android.chat.ui.ChatPopupActivity
 import com.difft.android.chat.ui.GroupInCommonDestination
 import com.difft.android.chat.ui.SelectChatsUtils
 import com.difft.android.chat.ui.SingleChatSettingDestination
-import com.difft.android.messageserialization.db.store.formatBase58Id
-import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.difft.android.messageserialization.db.store.getDisplayNameWithoutRemarkForUI
 import com.difft.android.messageserialization.db.store.getEffectiveAvatarJson
 import com.difft.android.chat.util.Util
 import com.difft.android.base.security.SafeLinkOpener
-import com.difft.android.network.UrlManager
 import dagger.hilt.android.AndroidEntryPoint
 import difft.android.messageserialization.For
 import difft.android.messageserialization.model.ForwardContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.drop
-import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.difft.app.database.cache.ContactRemarkCache
-import org.difft.app.database.cache.OfficialAccountCache
-import org.difft.app.database.convertToContactorModel
-import org.difft.app.database.getCommonGroupsCount
-import org.difft.app.database.models.ContactorModel
-import org.difft.app.database.models.DBContactorModel
-import org.difft.app.database.models.DBGroupMemberContactorModel
-import org.difft.app.database.wcdb
 import javax.inject.Inject
 import dagger.Lazy
 
 @AndroidEntryPoint
-class ContactDetailFragment : Fragment(), SettingsIdiomPage {
-    // Wait dialog claim scoped to this page (released with its view, dismissed by token only).
+class ContactDetailFragment : Fragment() {
+    
     private val pageWait = PageWait(this)
     private val previewFlight = AvatarPreviewFlight(this)
-
 
     @Inject
     lateinit var onGoingCallStateManager: OnGoingCallStateManager
@@ -109,28 +84,25 @@ class ContactDetailFragment : Fragment(), SettingsIdiomPage {
     @Inject
     lateinit var selectChatsUtils: SelectChatsUtils
 
-    @Inject
-    lateinit var urlManager: UrlManager
-
     private val callDataManager: CallDataManager by lazy {
         callDataManagerLazy.get()
     }
 
     companion object {
-        /**
-         * A sheet shown on the home screen with no conversation on screen behind it (the list, in
-         * either layout) has no chat to pop a chat over, so the conversation opens as a full page,
-         * like a list tap would. Over a conversation (home detail stack or a chat Activity) the
-         * sheet keeps the popup chat.
-         */
+        
+
+
+
+
+
         internal fun isSheetOverList(isPopupMode: Boolean, inHome: Boolean, conversationOnScreen: String?): Boolean =
             isPopupMode && inHome && conversationOnScreen == null
 
-        /**
-         * Closes the card [card]: the bottom sheet it sits in, else the page through the detail
-         * navigation (pops it in the home detail stack, finishes ContactDetailActivity). A
-         * [contactGone] card is closed even as a two-pane root, where a plain pop has nowhere to go.
-         */
+        
+
+
+
+
         internal fun closeCard(card: Fragment, contactGone: Boolean = false) {
             val sheet = card.parentFragment as? com.google.android.material.bottomsheet.BottomSheetDialogFragment
             when {
@@ -140,7 +112,7 @@ class ContactDetailFragment : Fragment(), SettingsIdiomPage {
             }
         }
 
-        // Public so IndexActivity can read it when reconstructing the dual-pane detail after recreation.
+        
         const val ARG_CONTACT_ID = "ARG_CONTACT_ID"
         private const val ARG_CUSTOM_ID = "ARG_CUSTOM_ID"
         private const val ARG_CONTACT_NAME = "ARG_CONTACT_NAME"
@@ -148,9 +120,7 @@ class ContactDetailFragment : Fragment(), SettingsIdiomPage {
         private const val ARG_SOURCE = "ARG_SOURCE"
         private const val ARG_AVATAR = "ARG_AVATAR"
         private const val ARG_JOINED_AT = "ARG_JOINED_AT"
-
-        /** Server business status: target account logged out / deregistered / unavailable. */
-        private const val ERR_ACCOUNT_UNAVAILABLE = 19009
+        private const val ARG_PRELOAD_KEY = "ARG_PRELOAD_KEY"
 
         fun newInstance(
             contactId: String,
@@ -159,10 +129,12 @@ class ContactDetailFragment : Fragment(), SettingsIdiomPage {
             sourceType: String? = null,
             source: String? = null,
             avatar: String? = null,
-            joinedAt: String? = null
+            joinedAt: String? = null,
+            preloadKey: String? = null,
         ): ContactDetailFragment {
             return ContactDetailFragment().apply {
                 arguments = Bundle().apply {
+                    putString(ARG_PRELOAD_KEY, preloadKey)
                     putString(ARG_CONTACT_ID, contactId)
                     putString(ARG_CUSTOM_ID, customId)
                     putString(ARG_CONTACT_NAME, contactName)
@@ -175,10 +147,10 @@ class ContactDetailFragment : Fragment(), SettingsIdiomPage {
         }
     }
 
-    private var mContactor: ContactorModel? = null
-
-    /** Skip next self-triggered update event to avoid redundant reload */
-    private var skipNextUpdate = false
+    private val detailViewModel: com.difft.android.chat.contacts.contactsdetail.mvi.ContactDetailViewModel by viewModels()
+    private val uiState get() = detailViewModel.state.value.ui
+    private val mContactor get() = uiState.contactor
+    private val commonGroupsCount get() = uiState.commonGroupsCount
 
     private val contactId: String by lazy {
         arguments?.getString(ARG_CONTACT_ID) ?: ""
@@ -208,21 +180,14 @@ class ContactDetailFragment : Fragment(), SettingsIdiomPage {
         arguments?.getString(ARG_JOINED_AT)
     }
 
-    private var isFriend = true
+    private val isWeakPending get() = uiState.isWeakPending
 
-    /** Weak-pending (delayed-removal) contact — drives the "Remove Now" entry. */
-    private var isWeakPending = false
-
-    /** Whether this fragment is displayed in popup (BottomSheet) mode */
     private val isPopupMode: Boolean
         get() = parentFragment is com.google.android.material.bottomsheet.BottomSheetDialogFragment
 
-    // Compose UI state
-    private var uiState by mutableStateOf(ContactDetailUiState())
-    private var commonGroupsCount by mutableIntStateOf(0)
     private val remarkEditViewModel: ContactRemarkEditViewModel by viewModels()
 
-    // Field so the picker's permission contract registers before STARTED.
+    
     private val remarkEditBinder = ContactRemarkEditBinder(this, { remarkEditViewModel }, ::performClose)
 
     override fun onCreateView(
@@ -230,23 +195,21 @@ class ContactDetailFragment : Fragment(), SettingsIdiomPage {
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
-        // Self is known from the arguments alone, so the self card never flashes another layout.
-        if (uiState.contactor == null) {
-            uiState = uiState.copy(isSelf = contactId.isNotEmpty() && contactId == globalServices.myId)
-        }
-        // The home screen's panes leave the navigation-bar strip to the page; a shell and a sheet
-        // pad it already.
         val padsBottom = containerPadsBottom()
         return ComposeView(requireContext()).apply {
+            if (!isPopupMode) background = com.difft.android.chat.ui.ChatBackgroundDrawable(context, this)
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                // A hosted card shares the home screen's window; only a shell card owns it.
-                DifftTheme(applyWindowBackground = !isPopupMode && ownsWindow()) {
+                
+                DifftTheme(applyWindowBackground = false) {
+                    val detail by detailViewModel.state.collectAsStateWithLifecycle()
+                    val uiState = detail.ui
                     val remarkEdit by remarkEditViewModel.state.collectAsStateWithLifecycle()
                     Box(Modifier.detailPageInsets(padsBottom)) {
                     ContactDetailScreen(
                         uiState = uiState.copy(
                             commonGroupsCount = commonGroupsCount,
+                            actionsEnabled = !detail.submitting,
                             isEditingRemark = remarkEdit.isEditing,
                             editingRemarkName = remarkEdit.editingName,
                             quickFillName = remarkEdit.quickFillName,
@@ -266,7 +229,7 @@ class ContactDetailFragment : Fragment(), SettingsIdiomPage {
                         onCommonGroupsClick = ::handleCommonGroupsClick,
                         onCopyUserId = ::handleCopyUserId,
                         onWebsiteClick = ::handleWebsiteClick,
-                        onRemoveNowClick = ::requestRemoveNow,
+                        onRemoveNowClick = ::confirmRemoveNow,
                         onEditingRemarkNameChange = { remarkEditViewModel.dispatch(ContactRemarkEditContract.Intent.ChangeName(it)) },
                         onSubmitRemark = { remarkEditViewModel.dispatch(ContactRemarkEditContract.Intent.SubmitName) },
                         onAvatarClickInEdit = { remarkEditViewModel.dispatch(ContactRemarkEditContract.Intent.AvatarClick) },
@@ -286,189 +249,33 @@ class ContactDetailFragment : Fragment(), SettingsIdiomPage {
             return
         }
 
-        initData()
-        observeContactsUpdate()
+        detailViewModel.dispatch(com.difft.android.chat.contacts.contactsdetail.mvi.ContactDetailContract.Intent.Load(
+            com.difft.android.chat.contacts.contactsdetail.mvi.ContactDetailContract.Input(
+                contactId, customId, contactName, avatar, joinedAt, sourceType, source,
+            ),
+            preloadKey = arguments?.getString(ARG_PRELOAD_KEY),
+        ))
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+                launch {
+                    detailViewModel.state.map { it.ui.contactor }.filterNotNull().distinctUntilChanged().collect {
+                        remarkEditViewModel.dispatch(ContactRemarkEditContract.Intent.Load(it))
+                    }
+                }
+                launch { detailViewModel.effect.collect(::handleDetailEffect) }
+            }
+        }
         remarkEditBinder.observe()
     }
 
     override fun onResume() {
         super.onResume()
-        handleCommonGroupsDisplay()
+        if (uiState.isRelationResolved) detailViewModel.dispatch(
+            com.difft.android.chat.contacts.contactsdetail.mvi.ContactDetailContract.Intent.Refresh
+        )
     }
 
-    private fun initData() {
-        // SharedFlow tryEmit can resume collector before viewLifecycleOwner cancels — guard before sync access (Crashlytics 936790a0).
-        if (!isAdded || view == null) return
-        viewLifecycleOwner.lifecycleScope.launch {
-            try {
-                // Weak-pending check: pending contacts are already moved out of the contactor table,
-                // so isPending=true forces non-friend + the "Remove Now" entry. Re-evaluated on every
-                // initData() — observeContactsUpdate() re-runs this on contactsUpdate emits
-                // (remove-now / reconcile), giving a reactive refresh.
-                isWeakPending = withContext(Dispatchers.IO) {
-                    requireContext().getEntryPoint().getPendingRemovalContactRepository().isPending(contactId)
-                }
-
-                val contact = withContext(Dispatchers.IO) {
-                    java.util.Optional.ofNullable(wcdb.contactor.getFirstObject(DBContactorModel.id.eq(contactId)))
-                }
-
-                val finalContact = if (contact.isPresent && !isWeakPending) {
-                    isFriend = true
-                    contact
-                } else {
-                    isFriend = false
-                    withContext(Dispatchers.IO) {
-                        // Weak-pending: use the value chain (getContactWithID inserts the weak
-                        // snapshot layer) so the name/avatar render even after the peer deregisters.
-                        if (isWeakPending) {
-                            ContactorUtil.getContactWithID(requireContext(), contactId)
-                        } else {
-                            val rows = wcdb.groupMemberContactor.getAllObjects(DBGroupMemberContactorModel.id.eq(contactId))
-                            val selected = rows.firstOrNull { it.gid == "" } ?: rows.firstOrNull()
-                            java.util.Optional.ofNullable(selected?.convertToContactorModel())
-                        }
-                    }
-                }
-
-                if (!isAdded || view == null) return@launch
-                if (finalContact.isPresent) {
-                    updateContactView(finalContact.get())
-                }
-                // Resolve even without local contact data, so an unknown peer shows the non-friend
-                // actions right away instead of waiting for the server round-trip.
-                markRelationResolved()
-                getContactorInfoFromServer()
-            } catch (e: Exception) {
-                L.e { "[ContactDetailFragment] Error in initData: ${e.stackTraceToString()}" }
-                // Never leave the action row blank: fall back to the last known relation.
-                if (isAdded && view != null) markRelationResolved()
-            }
-        }
-    }
-
-    private fun markRelationResolved() {
-        uiState = uiState.copy(isFriend = isFriend, isWeakPending = isWeakPending, isRelationResolved = true)
-    }
-
-    private fun getContactorInfoFromServer() {
-        viewLifecycleOwner.lifecycleScope.launch {
-            try {
-                val contacts = ContactorUtil.fetchContactors(listOf(contactId), requireContext())
-                if (!isAdded || view == null) return@launch
-                contacts.firstOrNull()?.let { serverContact ->
-                    checkAndNotifyIfNeeded(serverContact)
-                    updateContactView(serverContact)
-                }
-            } catch (e: Exception) {
-                L.e { "[ContactDetailFragment] Error fetching contact info: ${e.message}" }
-            }
-        }
-    }
-
-    /**
-     * Check if contact info changed, emit update event if needed.
-     * Also triggers original avatar download if only small image is cached.
-     */
-    private fun checkAndNotifyIfNeeded(serverContact: ContactorModel) {
-        if (mContactor != serverContact) {
-            val localAvatar = mContactor?.avatar
-            val serverAvatar = serverContact.avatar
-            L.i { "[ContactDetailFragment] Contact info changed for $contactId, localAvatar:${localAvatar != null}, serverAvatar:${serverAvatar != null}, notify update" }
-            skipNextUpdate = true
-            ContactorUtil.emitContactsUpdate(listOf(contactId))
-            return
-        }
-
-        // Data unchanged, ensure original avatar is cached
-        ensureOriginalAvatarCached(serverContact)
-    }
-
-    /**
-     * Check if original avatar image is cached, if not download it in background.
-     * This gradually replaces small avatar cache with original images.
-     */
-    private fun ensureOriginalAvatarCached(contact: ContactorModel) {
-        val avatarData = contact.avatar?.getContactAvatarData() ?: return
-        val avatarUrl = avatarData.getContactAvatarUrl() ?: return
-
-        viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
-            // Check if original image exists (new format without _SMALL suffix)
-            val originalFile = java.io.File(
-                com.difft.android.base.utils.FileUtil.getAvatarCachePath(),
-                "avatar_${avatarUrl.substringAfterLast("/")}"
-            )
-
-            if (originalFile.exists()) {
-                L.d { "[ContactDetailFragment] Original avatar already cached" }
-                return@launch
-            }
-
-            // Original not found, download it
-            L.i { "[ContactDetailFragment] Original avatar not cached, downloading in background..." }
-            try {
-                val bytes = AvatarUtil.fetchAvatar(requireContext(), avatarUrl, avatarData.encKey ?: "")
-                AvatarCacheCipher.writeEncrypted(originalFile, bytes)
-                L.i { "[ContactDetailFragment] Original avatar downloaded and cached" }
-            } catch (e: Exception) {
-                L.e { "[ContactDetailFragment] Failed to download original avatar: ${e.message}" }
-            }
-        }
-    }
-
-    private fun observeContactsUpdate() {
-        ContactorUtil.contactsUpdate
-            .filter { it.contains(contactId) }
-            .onEach {
-                if (!isAdded || view == null) return@onEach // belt-and-suspenders, initData also guards
-                if (skipNextUpdate) {
-                    // Skip self-triggered update to avoid redundant reload
-                    skipNextUpdate = false
-                    L.d { "[ContactDetailFragment] Skip self-triggered update" }
-                    return@onEach
-                }
-                initData()
-            }
-            .launchIn(viewLifecycleOwner.lifecycleScope)
-
-        // Self-heal if the official-account cache populates after this screen was built during the
-        // pre-preload window. initData() rebuilds the UiState, so isOfficialAccount + the derived
-        // website/label recompute.
-        OfficialAccountCache.state
-            .map { contactId in it }
-            .distinctUntilChanged()
-            .drop(1)
-            .onEach {
-                if (!isAdded || view == null) return@onEach
-                initData()
-            }
-            .launchIn(viewLifecycleOwner.lifecycleScope)
-    }
-
-    /**
-     * Handle the display and query of common groups between current user and contact
-     */
-    private fun handleCommonGroupsDisplay() {
-        if (contactId == globalServices.myId) {
-            commonGroupsCount = 0
-        } else {
-            viewLifecycleOwner.lifecycleScope.launch {
-                try {
-                    val count = withContext(Dispatchers.IO) {
-                        wcdb.getCommonGroupsCount(contactId, globalServices.myId)
-                    }
-
-                    if (!isAdded || view == null) return@launch
-                    commonGroupsCount = count
-                } catch (e: Exception) {
-                    L.e { "[ContactDetailFragment] Error querying common groups: ${e.stackTraceToString()}" }
-                    commonGroupsCount = 0
-                }
-            }
-        }
-    }
-
-    /** Close / back go through the ViewModel so an unsaved remark change can prompt first. */
+    
     private fun handleCloseClick() {
         remarkEditViewModel.dispatch(ContactRemarkEditContract.Intent.RequestClose)
     }
@@ -489,7 +296,6 @@ class ContactDetailFragment : Fragment(), SettingsIdiomPage {
         remarkEditViewModel.dispatch(ContactRemarkEditContract.Intent.EnterEdit)
     }
 
-
     private fun handleCallClick() {
         viewLifecycleOwner.lifecycleScope.launch {
             try {
@@ -505,7 +311,6 @@ class ContactDetailFragment : Fragment(), SettingsIdiomPage {
                         ToastUtil.show(R.string.call_is_calling_tip)
                     }
                 } else {
-                    // 判断当前是否有livekit会议，有则join会议
                     val callData = callDataManager.getCallDataByConversationId(contactId)
                     if (callData != null) {
                         L.i { "[call] ContactDetailFragment join call, roomId:${callData.roomId}." }
@@ -516,7 +321,6 @@ class ContactDetailFragment : Fragment(), SettingsIdiomPage {
                         }
                         return@launch
                     }
-                    // 否则发起livekit call通话
                     L.i { "[call] ContactDetailFragment start call." }
                     callManager.startCall(requireActivity(), For.Account(contactId), chatRoomName) { status, message ->
                         if (!status) {
@@ -539,11 +343,12 @@ class ContactDetailFragment : Fragment(), SettingsIdiomPage {
             inHome = navigationCallback != null,
             conversationOnScreen = navigationCallback?.currentConversationOnScreen(),
         )
+        val fullConversation = (parentFragment as? ContactDetailBottomSheetDialogFragment)?.opensFullConversation == true
         if (isPopupMode) {
             (parentFragment as? androidx.fragment.app.DialogFragment)?.dismiss()
         }
         when {
-            isPopupMode && !sheetOverList -> {
+            isPopupMode && !sheetOverList && !fullConversation -> {
                 val focusable = activity as? ChatInputFocusable
                 if (focusable?.focusCurrentChatInputIfMatches(contactId) != true) {
                     ChatPopupActivity.startActivity(
@@ -554,8 +359,8 @@ class ContactDetailFragment : Fragment(), SettingsIdiomPage {
                     )
                 }
             }
-            // Home detail stack: that tab's stack; ContactDetailActivity or a sheet over the home
-            // list: the conversation router.
+            
+            
             else -> detailNavigation().openConversation(
                 ConversationTarget(ConversationTarget.Kind.ONE_ON_ONE, contactId, sourceType = sourceType, source = source)
             )
@@ -588,117 +393,27 @@ class ContactDetailFragment : Fragment(), SettingsIdiomPage {
         )
     }
 
-    private fun updateContactView(contactor: ContactorModel?) {
-        if (contactor == null || contactor == mContactor) {
-            L.d { "[ContactDetailFragment] Contact data is null or same, skip refresh" }
-            return
-        }
-        mContactor = contactor
+    private fun requestAddFriend() = detailViewModel.dispatch(
+        com.difft.android.chat.contacts.contactsdetail.mvi.ContactDetailContract.Intent.AddFriend
+    )
 
-        // 通过邀请码查找联系人，部分信息是直接带过来的
-        if (!avatar.isNullOrEmpty()) {
-            contactor.avatar = avatar
-        }
-        if (!joinedAt.isNullOrEmpty()) {
-            contactor.joinedAt = joinedAt
-        }
-
-        val isSelf = globalServices.myId == contactId
-        val isOfficialAccount = contactor.id.isOfficialAccount()
-        // Mirror the priority chain that getDisplayNameForUI() walks for remarks
-        // so hasRemark reflects what displayName actually surfaces, otherwise the
-        // "原名" line under displayName would be dropped when remark only lives on
-        // the group-member row (cache cold + contactor.remark null).
-        val effectiveRemark = ContactRemarkCache.getRemark(contactor.id)?.takeIf { it.isNotEmpty() }
-            ?: contactor.remark?.takeIf { it.isNotEmpty() }
-            ?: contactor.groupMemberContactor?.remark?.takeIf { it.isNotEmpty() }
-        val hasRemark = !effectiveRemark.isNullOrEmpty()
-        val displayName = effectiveRemark ?: contactor.getDisplayNameForUI()
-
-        val originalName = if (hasRemark) contactor.getDisplayNameWithoutRemarkForUI() else null
-
-        // Same priority chain as remark name above.
-        val effectiveRemarkAvatar = ContactRemarkCache.getRemarkAvatar(contactor.id)?.takeIf { it.isNotEmpty() }
-            ?: contactor.remarkAvatar?.takeIf { it.isNotEmpty() }
-            ?: contactor.groupMemberContactor?.remarkAvatar?.takeIf { it.isNotEmpty() }
-        val hasRemarkAvatar = !effectiveRemarkAvatar.isNullOrEmpty()
-
-        // Build userId display value (prefer customUid)
-        val userId = if (contactor.customUid.isNullOrEmpty() && customId.isNullOrEmpty()) {
-            contactor.id.formatBase58Id(false)
-        } else {
-            contactor.customUid ?: customId ?: ""
-        }
-
-        remarkEditViewModel.dispatch(ContactRemarkEditContract.Intent.Load(contactor))
-
-        uiState = ContactDetailUiState(
-            contactor = contactor,
-            isFriend = isFriend,
-            isWeakPending = isWeakPending,
-            isRelationResolved = true,
-            isSelf = isSelf,
-            isOfficialAccount = isOfficialAccount,
-            displayName = displayName,
-            originalName = originalName,
-            hasRemark = hasRemark,
-            hasRemarkAvatar = hasRemarkAvatar,
-            originalAvatarJson = if (hasRemarkAvatar) contactor.avatar else null,
-            userId = userId,
-            joinedAt = contactor.joinedAt,
-            sourceDescribe = if (!isSelf) contactor.sourceDescribe else null,
-            commonGroupsCount = commonGroupsCount,
-            website = if (isOfficialAccount) urlManager.installationGuideUrl else null
-        )
-    }
-
-    private fun requestAddFriend() {
-        pageWait.show()
-        viewLifecycleOwner.lifecycleScope.launch {
-            try {
-                val response = ContactorUtil.fetchAddFriendRequest(
-                    requireContext(),
-                    contactId,
-                    sourceType,
-                    source
-                )
-
-                if (!isAdded || view == null) return@launch
-                if (response.status == 0) {
-                    ContactorUtil.sendFriendRequestMessage(
-                        viewLifecycleOwner.lifecycleScope,
-                        getString(R.string.contact_friend_request),
-                        For.Account(contactId)
-                    )
-                    pageWait.dismiss()
-                    navigateToChat()
-                } else {
-                    pageWait.dismiss()
-                    when {
-                        // 19009 = peer account logged out / deregistered. Weak-pending (still in the
-                        // address book, removable) → alert offering a delete entry; otherwise a plain
-                        // toast. Both use the product-fixed copy, not the server reason.
-                        response.status == ERR_ACCOUNT_UNAVAILABLE && isWeakPending ->
-                            showAccountUnavailableDialog()
-
-                        response.status == ERR_ACCOUNT_UNAVAILABLE ->
-                            ToastUtil.show(getString(R.string.weak_contact_account_unavailable_message))
-
-                        else -> response.reason?.let { ToastUtil.show(it) }
-                    }
-                }
-            } catch (e: Exception) {
-                pageWait.dismiss()
-                e.message?.let { ToastUtil.show(it) }
+    private fun handleDetailEffect(effect: com.difft.android.chat.contacts.contactsdetail.mvi.ContactDetailContract.Effect) {
+        when (effect) {
+            com.difft.android.chat.contacts.contactsdetail.mvi.ContactDetailContract.Effect.ShowWait -> pageWait.show()
+            com.difft.android.chat.contacts.contactsdetail.mvi.ContactDetailContract.Effect.DismissWait -> pageWait.dismiss()
+            com.difft.android.chat.contacts.contactsdetail.mvi.ContactDetailContract.Effect.FriendAdded -> { pageWait.dismiss(); navigateToChat() }
+            is com.difft.android.chat.contacts.contactsdetail.mvi.ContactDetailContract.Effect.AccountUnavailable -> {
+                if (effect.removable) showAccountUnavailableDialog()
+                else ToastUtil.show(getString(R.string.weak_contact_account_unavailable_message))
             }
+            is com.difft.android.chat.contacts.contactsdetail.mvi.ContactDetailContract.Effect.Failed ->
+                ToastUtil.show(effect.message ?: getString(R.string.chat_net_error))
+            com.difft.android.chat.contacts.contactsdetail.mvi.ContactDetailContract.Effect.Removed -> closeCard(this, contactGone = true)
+            com.difft.android.chat.contacts.contactsdetail.mvi.ContactDetailContract.Effect.RemoveFailed -> ToastUtil.show(getString(R.string.weak_contact_remove_now_failed))
         }
     }
 
-    /**
-     * 19009 + weak-pending: the peer account is gone but the contact is still in the address book.
-     * Offer a delete entry (reuses "Remove Now") so the user can clear it instead of retrying add.
-     * Not weak-pending → the caller shows a toast instead (no delete entry, per the product spec).
-     */
+    
     private fun showAccountUnavailableDialog() {
         dismissWithView(ComposeDialogManager.showMessageDialog(
             context = requireContext(),
@@ -706,38 +421,37 @@ class ContactDetailFragment : Fragment(), SettingsIdiomPage {
             message = getString(R.string.weak_contact_account_unavailable_message),
             confirmText = getString(R.string.contact_remove),
             cancelText = getString(R.string.weak_contact_account_unavailable_ok),
-            confirmButtonColor = ColorTokens.Error, // align with detail page "Remove Now" (DifftTheme.colors.error)
+            confirmButtonColor = ColorTokens.Error, 
             onConfirm = { requestRemoveNow() }
         ))
     }
 
-    /**
-     * "Remove Now" for a weak-pending contact. Pessimistic: the server DELETE must succeed before
-     * the local removal happens — onSuccess means the record is gone, so close the card; onFailure
-     * leaves the card open with a retry toast.
-     */
-    private fun requestRemoveNow() {
-        viewLifecycleOwner.lifecycleScope.launch {
-            requireContext().getEntryPoint().getWeakContactReconciler().removeNow(contactId)
-                .onSuccess {
-                    // The contact is gone: close the card even at a two-pane root (sheet dismissed,
-                    // home stack cleared, ContactDetailActivity finished).
-                    if (isAdded) closeCard(this@ContactDetailFragment, contactGone = true)
-                }
-                .onFailure {
-                    if (isAdded) ToastUtil.show(getString(R.string.weak_contact_remove_now_failed))
-                }
-        }
+    private fun confirmRemoveNow() {
+        if (!uiState.presentation.showDelete) return
+        dismissWithView(ComposeDialogManager.showMessageDialog(
+            context = requireContext(),
+            title = getString(R.string.contact_remove),
+            message = getString(R.string.contacts_card_remove_confirmation),
+            confirmText = getString(R.string.contact_remove),
+            cancelText = getString(R.string.contact_remove_dialog_cancel),
+            confirmButtonColor = ColorTokens.Error,
+            onConfirm = ::requestRemoveNow,
+        ))
     }
 
-    /** Preview the rendered (effective) avatar — honors the remark chain. */
+    
+    private fun requestRemoveNow() = detailViewModel.dispatch(
+        com.difft.android.chat.contacts.contactsdetail.mvi.ContactDetailContract.Intent.RemoveNow
+    )
+
+    
     private fun handleAvatarClick() {
         val contact = mContactor ?: return
         val data = contact.getEffectiveAvatarJson()?.getContactAvatarData() ?: return
         previewAvatar(data.getContactAvatarUrl(), data.encKey)
     }
 
-    /** Preview the public (non-remark) avatar from the inline subtitle thumbnail. */
+    
     private fun handleOriginalAvatarClick() {
         val contact = mContactor ?: return
         val data = contact.avatar?.getContactAvatarData() ?: return

@@ -9,7 +9,7 @@ import kotlin.test.assertTrue
 
 class JobResultTest {
 
-    // region success
+    
 
     @Test
     fun `success returns isSuccess true`() {
@@ -41,9 +41,9 @@ class JobResultTest {
         assertEquals("SUCCESS", result.toString())
     }
 
-    // endregion
+    
 
-    // region retry
+    
 
     @Test
     fun `retry returns isRetry true`() {
@@ -88,9 +88,9 @@ class JobResultTest {
         assertEquals("RETRY", result.toString())
     }
 
-    // endregion
+    
 
-    // region failure
+    
 
     @Test
     fun `failure returns isFailure true`() {
@@ -122,9 +122,9 @@ class JobResultTest {
         assertEquals("FAILURE", result.toString())
     }
 
-    // endregion
+    
 
-    // region fatalFailure
+    
 
     @Test
     fun `fatalFailure returns isFailure true`() {
@@ -165,9 +165,9 @@ class JobResultTest {
         assertEquals("FATAL_FAILURE", result.toString())
     }
 
-    // endregion
+    
 
-    // region success is singleton
+    
 
     @Test
     fun `success returns same instance`() {
@@ -176,9 +176,9 @@ class JobResultTest {
         assertTrue(result1 === result2, "success() should return the same singleton instance")
     }
 
-    // endregion
+    
 
-    // region failure is singleton
+    
 
     @Test
     fun `failure returns same instance`() {
@@ -187,9 +187,9 @@ class JobResultTest {
         assertTrue(result1 === result2, "failure() should return the same singleton instance")
     }
 
-    // endregion
+    
 
-    // region retry creates new instances
+    
 
     @Test
     fun `retry creates distinct instances`() {
@@ -207,9 +207,9 @@ class JobResultTest {
         assertEquals(2000L, result2.getBackoffInterval())
     }
 
-    // endregion
+    
 
-    // region fatalFailure creates new instances
+    
 
     @Test
     fun `fatalFailure creates distinct instances`() {
@@ -223,5 +223,5 @@ class JobResultTest {
         assertEquals("error 2", result2.getException()!!.message)
     }
 
-    // endregion
+    
 }

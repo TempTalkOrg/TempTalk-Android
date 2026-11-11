@@ -84,9 +84,6 @@ class PermissionChecker private constructor() {
             return mInstance!!
         }
 
-        /**
-         * 检查是否有某个权限
-         */
         @JvmStatic
         fun checkSelfPermission(ctx: Context, permissions: Array<String>?): Boolean {
             var isAllGranted = true
@@ -103,16 +100,13 @@ class PermissionChecker private constructor() {
             return isAllGranted
         }
 
-        /**
-         * 检查读写权限是否存在
-         */
         @JvmStatic
         fun isCheckReadStorage(chooseMode: Int, context: Context): Boolean {
             return if (SdkVersionUtils.isTIRAMISU()) {
-                // Android 14+ "Select photos" partial access: system holds READ_MEDIA_VISUAL_USER_SELECTED
-                // while IMAGES/VIDEO stay denied. Treat it as readable so this upfront gate does not
-                // re-launch the system re-selection dialog on every gallery open. Audio has no partial
-                // visual access, so it is excluded. Mirrors PermissionUtil.isAllGranted's skip logic.
+                
+                
+                
+                
                 if (chooseMode != SelectMimeType.ofAudio() && isPartialVisualAccessGranted(context)) {
                     return true
                 }
@@ -130,10 +124,10 @@ class PermissionChecker private constructor() {
             }
         }
 
-        /**
-         * Android 14+ partial visual access ("Select photos"): READ_MEDIA_VISUAL_USER_SELECTED granted.
-         * Guarded by targetSdk to mirror PermissionUtil.isAllGranted.
-         */
+        
+
+
+
         private fun isPartialVisualAccessGranted(context: Context): Boolean {
             if (context.applicationInfo.targetSdkVersion < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                 return false
@@ -144,44 +138,29 @@ class PermissionChecker private constructor() {
             ) == PackageManager.PERMISSION_GRANTED
         }
 
-        /**
-         * 检查读取图片权限是否存在
-         */
         @RequiresApi(api = 33)
         @JvmStatic
         fun isCheckReadImages(context: Context): Boolean {
             return checkSelfPermission(context, arrayOf(PermissionConfig.READ_MEDIA_IMAGES))
         }
 
-        /**
-         * 检查读取视频权限是否存在
-         */
         @RequiresApi(api = 33)
         @JvmStatic
         fun isCheckReadVideo(context: Context): Boolean {
             return checkSelfPermission(context, arrayOf(PermissionConfig.READ_MEDIA_VIDEO))
         }
 
-        /**
-         * 检查读取音频权限是否存在
-         */
         @RequiresApi(api = 33)
         @JvmStatic
         fun isCheckReadAudio(context: Context): Boolean {
             return checkSelfPermission(context, arrayOf(PermissionConfig.READ_MEDIA_AUDIO))
         }
 
-        /**
-         * 检查读取权限是否存在
-         */
         @JvmStatic
         fun isCheckReadExternalStorage(context: Context): Boolean {
             return checkSelfPermission(context, arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE))
         }
 
-        /**
-         * 权限是否已申请
-         */
         @JvmStatic
         fun isCheckSelfPermission(context: Context, permissions: Array<String>): Boolean {
             return checkSelfPermission(context, permissions)

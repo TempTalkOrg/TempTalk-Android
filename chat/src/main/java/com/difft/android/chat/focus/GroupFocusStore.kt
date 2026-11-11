@@ -11,13 +11,13 @@ import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Persists [GroupFocusState] as one JSON value in the app_state DataStore (cleared with it on logout). */
+
 @Singleton
 class GroupFocusStore @Inject constructor(
     @param:AppStateDataStore private val dataStore: DataStore<Preferences>,
     private val gson: Gson,
 ) {
-    /** The persisted state; an absent, blank or unreadable value is the default (feature off). */
+    
     suspend fun read(): GroupFocusState {
         val raw = runCatching { dataStore.data.first()[AppStateKeys.GROUP_FOCUS_STATE] }
             .onFailure { L.w { "[GroupFocus] store read failed: ${it.message}" } }

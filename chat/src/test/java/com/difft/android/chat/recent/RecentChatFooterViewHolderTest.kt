@@ -23,19 +23,19 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 
-/**
- * T4-8/T4-9 — the [android.text.Spannable] the footer hint builds.
- *
- * Adapter/view-type/DiffUtil coverage (T4-1..T4-7) lives in [RecentChatAdapterFooterTest]; this
- * file isolates the span-construction contract, which is what actually renders the "Learn more"
- * link styling and guards against a regression that would swallow the row's own click (E11).
- *
- * Inflates against an AppCompat-themed Activity context (not the raw application context) —
- * the row layout's `?attr/selectableItemBackground` fails to resolve under the bare
- * `Theme.DeviceDefault` a plain `ApplicationProvider` context carries.
- *
- * Run: :chat:testDebugUnitTest
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33])
 class RecentChatFooterViewHolderTest {
@@ -62,11 +62,11 @@ class RecentChatFooterViewHolderTest {
         return RecentChatFooterViewHolder(view)
     }
 
-    /**
-     * T4-8 — the built [Spanned] carries [ForegroundColorSpan] + [StyleSpan] (BOLD) over
-     * "Learn more", and contains ZERO [ClickableSpan] anywhere — the whole row is the tap target,
-     * a nested clickable span would swallow the row's own click (E11 regression guard).
-     */
+    
+
+
+
+
     @Test
     fun `bound hint text has color and bold spans over Learn more and no ClickableSpan`() {
         val holder = inflateHolder()
@@ -87,11 +87,11 @@ class RecentChatFooterViewHolderTest {
         assertTrue(spanned.toString().contains(learnMore))
     }
 
-    /**
-     * T4-9 — when [ContextCompat.getDrawable] returns null (e.g. resource resolution failure),
-     * the hint text still renders the hint copy + "Learn more" with no crash — the lock icon
-     * [android.text.style.ImageSpan] is simply omitted.
-     */
+    
+
+
+
+
     @Test
     fun `null lock drawable still renders hint copy without crashing`() {
         mockkStatic(ContextCompat::class)

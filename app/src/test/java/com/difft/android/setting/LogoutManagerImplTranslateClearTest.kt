@@ -25,23 +25,11 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 
-/**
- * Translate cleanup on ACTIVE logout.
- *
- * The asymmetry is the point: a user-initiated wipe cancels every queued translation and clears the
- * model-download bookkeeping before the database goes away, while a passive logout (kicked from
- * another device) leaves both alone — the conversation translate setting and the failure records
- * survive a kick, exactly like `saveToPhotos`.
- *
- * The downloaded ML Kit models themselves are deliberately NOT deleted in either case: they are a
- * device-level resource with no account affinity.
- *
- * `appScope` is the real global scope here (as in [LogoutManagerImplExitTest]), so the assertions
- * use MockK's timeout verification rather than virtual time.
- *
- * What each case asserts:
- *  - T62 clearData() calls translateQueue.cancelAll() and translateModelStore.clearOnLogout() once
- */
+
+
+
+
+
 class LogoutManagerImplTranslateClearTest {
 
     @get:Rule
@@ -116,8 +104,6 @@ class LogoutManagerImplTranslateClearTest {
         heldSendJobs = heldSendJobs,
     )
 
-    // --- T62 ----------------------------------------------------------------
-
     @Test
     fun `T62 an active logout cancels the queue and clears the model bookkeeping`() {
         build().doLogout()
@@ -130,8 +116,7 @@ class LogoutManagerImplTranslateClearTest {
     fun `T62 the cleanup runs before the database is deleted`() {
         build().doLogout()
 
-        // Ordering matters: a translation still in flight must not write a translate row into a
-        // store that is being wiped.
+        
         verify(timeout = 5_000, exactly = 1) { messageStore.deleteDatabase() }
         io.mockk.verifyOrder {
             translateQueue.cancelAll()
@@ -144,7 +129,7 @@ class LogoutManagerImplTranslateClearTest {
     fun `T62 a passive logout leaves the translate state untouched`() {
         build().doLogoutWithoutRemoveData()
 
-        // The kick path reaches the exit, so waiting on that is what proves the sequence ran.
+        
         verify(timeout = 5_000) { appExiter.exit(any()) }
         verify(exactly = 0) { translateQueue.cancelAll() }
         verify(exactly = 0) { translateModelStore.clearOnLogout() }

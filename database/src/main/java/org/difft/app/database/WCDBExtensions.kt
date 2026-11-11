@@ -15,11 +15,8 @@ import com.difft.android.messageserialization.db.store.getDisplayNameWithoutRema
 import com.google.gson.JsonObject
 import com.tencent.wcdb.base.Value
 import com.tencent.wcdb.core.Table
-import com.tencent.wcdb.winq.Column
 import com.tencent.wcdb.winq.Expression
 import com.tencent.wcdb.winq.Order
-import com.tencent.wcdb.winq.OrderingTerm
-import com.tencent.wcdb.winq.StatementSelect
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -50,7 +47,7 @@ import difft.android.messageserialization.model.isAttachmentMessage
 import difft.android.messageserialization.model.isAudioFile
 import difft.android.messageserialization.model.isAudioMessage
 import difft.android.messageserialization.model.isImage
-import difft.android.messageserialization.model.isVideo
+import difft.android.messageserialization.model.isWhitelistedVideoType
 import org.difft.app.database.models.AttachmentModel
 import org.difft.app.database.models.ContactorModel
 import org.difft.app.database.models.DBAttachmentModel
@@ -116,7 +113,7 @@ fun Table<GroupMemberContactorModel>.search(keyword: String): List<GroupMemberCo
     )
 }
 
-/** Weak-snapshot row → ContactorModel (via globalServices.gson). Returns null on malformed JSON. */
+
 private fun PendingRemovalContactModel.deserializeSnapshot(): ContactorModel? =
     snapshotJson?.let { runCatching { globalServices.gson.fromJson(it, ContactorModel::class.java) }.getOrNull() }
 
@@ -131,23 +128,23 @@ fun WCDB.getContactorFromAllTable(id: String): ContactorModel? {
         L.i { "[WCDBExtensions] getContactorFromAllTable id:$id from groupMemberContactor gid=${fromGroupMember.gid}" }
         return fromGroupMember.convertToContactorModel()
     }
-    // Weak-snapshot fallback: keeps message rendering from degrading to a bare UID after the peer deregisters.
+    
     return pendingRemovalContact.getFirstObject(DBPendingRemovalContactModel.uid.eq(id))?.deserializeSnapshot()
 }
 
-/**
- * Whether [uid] already has a row in the local contactor table. Used by the E2EE hint's
- * non-friend decision.
- *
- * Exists as an extension so the winq `Expression` it builds sits behind a function the host-JVM
- * tests can replace via `mockkStatic("org.difft.app.database.WCDBExtensionsKt")` — referencing a
- * winq type directly from the ViewModel loads `CppObject`'s native library, which the host JVM
- * cannot provide.
- */
+
+
+
+
+
+
+
+
+
 fun WCDB.isKnownContact(uid: String): Boolean =
     contactor.getFirstObject(DBContactorModel.id.eq(uid)) != null
 
-/** Fetch a single message row by id. */
+
 fun WCDB.getMessageById(id: String): MessageModel? =
     message.getFirstObject(DBMessageModel.id.eq(id))
 
@@ -161,10 +158,10 @@ fun WCDB.getContactorsFromAllTable(ids: List<String>, preferredGid: String? = nu
 
     val rawGroupMemberRows = groupMemberContactor.getAllObjects(DBGroupMemberContactorModel.id.`in`(otherIds))
 
-    // Deduplicate: when a person has rows in multiple groups, pick by priority:
-    // 1. Row matching preferredGid (current group)
-    // 2. Row with gid="" (contacts API stub)
-    // 3. Any other row
+    
+    
+    
+    
     val deduplicatedRows = rawGroupMemberRows.groupBy { it.id }.map { (_, rows) ->
         if (rows.size > 1) {
             preferredGid?.let { gid -> rows.firstOrNull { it.gid == gid } }
@@ -178,7 +175,7 @@ fun WCDB.getContactorsFromAllTable(ids: List<String>, preferredGid: String? = nu
     val othersFromGroupMember = deduplicatedRows.map { it.convertToContactorModel() }
     val merged = (foundContactors + othersFromGroupMember).distinctBy { it.id }
 
-    // Weak-snapshot fallback: batch-fill any ids still missing from the two local tables.
+    
     val stillMissing = ids.toList() - merged.map { it.id }.toSet()
     if (stillMissing.isEmpty()) {
         return merged
@@ -197,35 +194,29 @@ fun GroupMemberContactorModel.group(wcdb: WCDB): GroupModel? {
 }
 
 fun Table<GroupModel>.searchByNameAndGroupMembers(key: String): List<GroupModel> {
-    // 1. Query groups by name (case-insensitive search)
-    // Use LOWER in your schema or conditions for case-insensitive if needed.
+    
     val groupsByName = getAllObjects(
         DBGroupModel.name.like("%$key%").and(DBGroupModel.status.eq(0))
     )
-    // 2. Query group member contactors who match the key in any of the specified fields
     val contactors = wcdb.groupMemberContactor.search(key)
-    // 3. Extract distinct GIDs from these contactors
     val groupGids = contactors.map { it.gid }.filter { it.matches(Regex("^[0-9a-fA-F]+$")) }.distinct()
-    // 4. Query groups by these GIDs
     val groupsByMember = if (groupGids.isNotEmpty()) {
         getAllObjects(DBGroupModel.gid.`in`(*groupGids.toTypedArray()).and(DBGroupModel.status.eq(0)))
     } else {
         emptyList()
     }
-    // 5. Combine and deduplicate by `gid`
     return (groupsByName + groupsByMember).distinctBy { it.gid }
 }
 
-/**
- * Get the count of common groups between two users.
- * This method efficiently queries the database to find groups where both users are members.
- *
- * @param userId1 The first user's ID
- * @param userId2 The second user's ID
- * @return The count of active common groups
- */
+
+
+
+
+
+
+
+
 fun WCDB.getCommonGroupsCount(userId1: String, userId2: String): Int {
-    // First, get groups where the first user is a member
     val user1Groups = groupMemberContactor.getAllObjects(
         DBGroupMemberContactorModel.id.eq(userId1)
     ).map { it.gid }.distinct()
@@ -233,7 +224,6 @@ fun WCDB.getCommonGroupsCount(userId1: String, userId2: String): Int {
         return 0
     }
 
-    // Then, get groups where the second user is a member and intersect with first user's groups
     val user2Groups = groupMemberContactor.getAllObjects(
         DBGroupMemberContactorModel.id.eq(userId2)
     ).map { it.gid }.distinct()
@@ -246,7 +236,6 @@ fun WCDB.getCommonGroupsCount(userId1: String, userId2: String): Int {
         return 0
     }
 
-    // Finally, count only active groups
     return group.getAllObjects(
         DBGroupModel.gid.`in`(*commonGroupIdsClean.toTypedArray())
             .and(DBGroupModel.status.eq(0))
@@ -255,17 +244,16 @@ fun WCDB.getCommonGroupsCount(userId1: String, userId2: String): Int {
 
 
 fun MessageModel.convertToTextMessage(): TextMessage {
-    // Retrieve all attachments for this message
     val attachmentModels = wcdb.attachment.getAllObjects(DBAttachmentModel.messageId.eq(id))
     val attachments = if (attachmentModels.isNotEmpty()) {
         attachmentModels.map { am ->
             Attachment(
-                // Empty for every row written since the server-side id stopped being seeded; it
-                // identifies nothing locally and only feeds the legacy job locator for older rows.
+                
+                
                 id = am.id.orEmpty(),
-                // A row may carry no server id (never uploaded, or imported from a device that had
-                // none) and no content type; 0 is the shared "no server id" signal and the generic
-                // MIME type keeps the bubble on the file path instead of failing the whole hydration.
+                
+                
+                
                 authorityId = am.authorityId ?: NO_SERVER_ATTACHMENT_ID,
                 contentType = am.contentType ?: GENERIC_CONTENT_TYPE,
                 key = am.key,
@@ -276,11 +264,12 @@ fun MessageModel.convertToTextMessage(): TextMessage {
                 flags = am.flags,
                 width = am.width,
                 height = am.height,
-                path = null, // not persisted; send-time transient only
+                path = null, 
                 status = am.status,
                 totalTime = am.totalTime,
                 amplitudes = convertAmplitudes(am.amplitudes),
                 localId = am.localId ?: am.synthesizedLocalId(),
+                videoProbeState = am.videoProbeState,
             )
         }
     } else {
@@ -296,14 +285,9 @@ fun MessageModel.convertToTextMessage(): TextMessage {
     val speechToTextData: SpeechToTextData? = speechToTextData()
     val screenShot: ScreenShot? = screenShot()
 
-    // Construct the `For` objects.
-    // Adjust the logic to match how you define and use `For` in your codebase.
-    // For example:
-    // For a user: For(fromWho, For.Type.USER)
-    // For a room: For(roomId, if (roomType == 1) For.Type.GROUP else For.Type.ONE_TO_ONE)
 
-    val fromWhoFor = For.Account(fromWho ?: "") // replace 0 with the correct type value for a user
-    val forWhatFor = if (roomType == 0) For.Account(roomId ?: "") else For.Group(roomId ?: "")// if roomType == 1 is group, else one-to-one
+    val fromWhoFor = For.Account(fromWho ?: "")
+    val forWhatFor = if (roomType == 0) For.Account(roomId ?: "") else For.Group(roomId ?: "")
 
     return TextMessage(
         id = id,
@@ -334,21 +318,21 @@ fun MessageModel.convertToTextMessage(): TextMessage {
     )
 }
 
-/** Attachment rows without a server-side id use 0, the signal every repair/re-upload path tests for. */
+
 const val NO_SERVER_ATTACHMENT_ID = 0L
 
-/** Content type for rows that carried none: rendered as a plain file, never dropped. */
+
 const val GENERIC_CONTENT_TYPE = "application/octet-stream"
 
-/**
- * A row whose `localId` column is still NULL gets a synthesized id so the domain object always has
- * one — deterministic per row (see [synthesizedLocalId]), so repeated reads agree with each other
- * and with the backfill stage. The synthesized id is NOT written back here — persisting it is the
- * migration's job, and a read path must never write.
- */
+
+
+
+
+
+
 fun AttachmentModel.toAttachment(): Attachment {
     return Attachment(
-        // See convertToTextMessage: empty for every row written since the id stopped being seeded.
+        
         id = id.orEmpty(),
         authorityId = authorityId ?: NO_SERVER_ATTACHMENT_ID,
         contentType = contentType ?: GENERIC_CONTENT_TYPE,
@@ -360,21 +344,22 @@ fun AttachmentModel.toAttachment(): Attachment {
         flags = flags,
         width = width,
         height = height,
-        path = null, // not persisted; send-time transient only
+        path = null, 
         status = status,
         totalTime = totalTime,
         amplitudes = convertAmplitudes(amplitudes),
         localId = localId ?: synthesizedLocalId(),
-        // The row's own table membership is the authoritative ownership fact: an attachment carrying a
-        // forwardModelDatabaseId hangs off a Forward, so it is addressed by localId, not by a message id.
+        
+        
         isForwardCopy = forwardModelDatabaseId != null,
+        videoProbeState = videoProbeState,
     )
 }
 
 fun Attachment.toAttachmentModel(messageId: String): AttachmentModel {
     return AttachmentModel().also {
-        // NULL, never "": the legacy job locator queries `id.eq(<job's id>)`, and an empty string
-        // stored here would make every id-less row a candidate for the same query.
+        
+        
         it.id = id.takeIf { value -> value.isNotEmpty() }
         it.localId = localId
         it.messageId = messageId
@@ -394,7 +379,7 @@ fun Attachment.toAttachmentModel(messageId: String): AttachmentModel {
 
 fun Attachment.toAttachmentModel(forwardDatabaseId: Long): AttachmentModel {
     return AttachmentModel().also {
-        // NULL, never "" — see the message-owned overload above.
+        
         it.id = id.takeIf { value -> value.isNotEmpty() }
         it.localId = localId
         it.forwardModelDatabaseId = forwardDatabaseId
@@ -412,12 +397,8 @@ fun Attachment.toAttachmentModel(forwardDatabaseId: Long): AttachmentModel {
     }
 }
 
-// The child-row point queries below and the batch hydration path
-// (org.difft.app.database.hydration) share the mappers in ChildRowMappers.kt, and both order by
-// `databaseId ASC`. The ORDER BY is an identity transform today (databaseId is the rowid, so every
-// plan already returns insertion order) but it turns that plan coincidence into a contract: these
-// lists take part in ChatMessage.equals, so a different intra-group order between the two paths
-// would show up as a DiffUtil inequality and a full-window rebind.
+
+
 
 fun MessageModel.attachment(): Attachment? =
     wcdb.attachment.getAllObjects(
@@ -548,22 +529,16 @@ fun MessageModel.forwardContext(): ForwardContext? = forwardContextDatabaseId?.l
     }
 }
 
-// ---------------------------
-// Extension functions on WCDB for CRUD Operations
-// ---------------------------
 
-/** @return true if the message was inserted, false if a row with the same id already existed. */
+
+
+
+
 fun WCDB.putMessageIfNotExists(message: Message, roomReadPosition: Long = 0L): Boolean {
-    // #971: wrap the single-message cascade (existence check + putMessage's ~11 child inserts)
-    // in ONE transaction so it is atomic — no "half message" (e.g. message row inserted but its
-    // attachment/mention/reaction rows missing, or vice-versa) on partial failure. Per-message
-    // grain ONLY — never spans messages (that would re-introduce #197 eager-ACK batch-loss +
-    // long-tx white-screen). runTransaction is BEGIN IMMEDIATE (takes the write lock up front, so
-    // even the existence-check read runs under the write lock) — intentional: one lock for
-    // atomicity. The body is pure synchronous WCDB calls (no suspend / network). On throw,
-    // runTransaction rolls back AND re-throws, so the exception still propagates to
-    // putWhenNonExist → process.classify → FailedMessage retry — the message-loss safety net is
-    // preserved unchanged.
+    
+    
+    
+    
     var inserted = false
     this.db.runTransaction {
         val existing = this.message.getFirstObject(DBMessageModel.id.eq(message.id))
@@ -573,7 +548,7 @@ fun WCDB.putMessageIfNotExists(message: Message, roomReadPosition: Long = 0L): B
         } else {
             L.i { "[Message] message existing:${message.timeStamp}" }
         }
-        true // commit
+        true 
     }
     return inserted
 }
@@ -591,11 +566,11 @@ private fun WCDB.putTextMessage(message: TextMessage, roomReadPosition: Long = 0
     this.message.insertObject(messageModel)
 }
 
-/**
- * Builds the [MessageModel] AND inserts all its child-table rows (attachments/quote/forward/
- * mentions/reactions/sharedContact/...) as a side effect. Does NOT insert the message row — go
- * through [putMessageIfNotExists] so the id existence-check prevents duplicate children (#997).
- */
+
+
+
+
+
 fun WCDB.insertChildrenAndBuildMessageModel(message: TextMessage, roomReadPosition: Long = 0L): MessageModel {
     val quoteDatabaseId = message.quote?.let { quote ->
         val quoteModel = QuoteModel().apply {
@@ -607,15 +582,15 @@ fun WCDB.insertChildrenAndBuildMessageModel(message: TextMessage, roomReadPositi
 
         quote.attachments?.forEach { qa ->
             val attachmentModel = AttachmentModel().apply {
-                quoteModelDatabaseId = quoteModel.databaseId.toLong() // #901: QuoteModel.databaseId is Int, FK column is Long?
+                quoteModelDatabaseId = quoteModel.databaseId.toLong() 
                 contentType = qa.contentType
                 fileName = qa.fileName
                 flags = qa.flags
-                // null (not empty array) when there are no inline bytes — honors the "null = no bytes"
-                // convention so future consumers don't read a zero-length array as "has bytes".
+                
+                
                 val bytes = qa.thumbnail?.thumbnail?.takeIf { it.isNotEmpty() }
                 thumbnail = bytes
-                size = bytes?.size ?: 0 // mirror toAttachmentModel: persist size alongside thumbnail bytes
+                size = bytes?.size ?: 0 
                 width = qa.thumbnail?.width ?: 0
                 height = qa.thumbnail?.height ?: 0
                 status = qa.thumbnail?.status ?: AttachmentStatus.SUCCESS.code
@@ -711,9 +686,8 @@ fun WCDB.insertChildrenAndBuildMessageModel(message: TextMessage, roomReadPositi
         message.isAttachmentMessage() -> MessageModel.TYPE_ATTACHMENT
         else -> MessageModel.TYPE_TEXT
     }
-    // 计算 readTime:
-    // 1. 如果是自己发的消息，直接设置 readTime = systemShowTimestamp（自己发的消息视为已读）
-    // 2. 如果消息的 systemShowTimestamp <= room.readPosition，说明这条消息已经被读过了
+    
+    
     val calculatedReadTime = when {
         message.fromWho.id == globalServices.myId -> message.systemShowTimestamp
         roomReadPosition > 0 && message.systemShowTimestamp <= roomReadPosition -> roomReadPosition
@@ -747,8 +721,7 @@ fun WCDB.insertChildrenAndBuildMessageModel(message: TextMessage, roomReadPositi
 }
 
 private fun WCDB.putNotifyMessage(message: NotifyMessage, roomReadPosition: Long = 0L) {
-    // 如果消息的 systemShowTimestamp <= room.readPosition，说明这条消息已经被读过了
-    // 设置 readTime 为 roomReadPosition，避免归档逻辑漏掉这条消息
+    
     val calculatedReadTime = if (roomReadPosition > 0 && message.systemShowTimestamp <= roomReadPosition) {
         roomReadPosition
     } else {
@@ -768,7 +741,7 @@ private fun WCDB.putNotifyMessage(message: NotifyMessage, roomReadPosition: Long
         sequenceId = message.sequenceId
         mode = message.mode
         messageText = message.notifyContent
-        type = 2 // Notify
+        type = 2 
         readTime = calculatedReadTime
     }
 
@@ -822,11 +795,11 @@ fun MessageModel.delete() {
     RoomChangeTracker.trackRoom(roomId ?: "", RoomChangeType.MESSAGE)
 }
 
-/**
- * Drops the pending rows (reaction, recall, receipt) waiting on this message, which can never apply
- * once it is gone. Only a real deletion does this: a confidential placeholder keeps the message, so
- * a row on it (e.g. a recall that failed transiently) must stay for its retry (#1382).
- */
+
+
+
+
+
 private fun MessageModel.deletePendingMessagesTargetingThis() {
     try {
         wcdb.pendingMessageNew.deleteObjects(DBPendingMessageModelNew.originalMessageTimeStamp.eq(timeStamp))
@@ -835,63 +808,36 @@ private fun MessageModel.deletePendingMessagesTargetingThis() {
     }
 }
 
-// region #909 paged message access
-// Helpers that bound peak memory when operating over a conversation's messages.
-// Never materialize an entire conversation's MessageModel list into memory:
-// - messageCount       → SQL COUNT, no object load.
-// - deleteMessagesPaged→ paged per-row delete (cascades attachment files + related tables).
-// - forEachMessagePaged→ keyset-cursor paged read, peak memory = one page.
 
-/**
- * SQL COUNT of messages matching [condition]. No object load. (#909 TP1)
- *
- * Mirrors the existing `selectableMessageCount` idiom (`getValue(col.count(), cond)`),
- * generalized to any [Expression]. Returns `Long`; callers needing `Int` call `.toInt()`.
- */
+
+
+
+
+
+
+
 fun messageCount(condition: Expression): Long =
     wcdb.message.getValue(DBMessageModel.databaseId.count(), condition)?.long ?: 0L
 
-/**
- * Current MAX(databaseId) among messages of [roomId], or 0 if none. (#969)
- *
- * databaseId is the autoincrement PK ([MessageModel.databaseId], #901) — strictly monotonic,
- * so this is a STABLE upper bound: any message inserted AFTER this call gets a databaseId
- * greater than the returned value. Used to snapshot a room-delete's match set so concurrent
- * inserts during the paged delete cannot extend it — the unbounded `roomId.eq` match set
- * never converges under a message flood. No object load — SQL MAX only. Mirrors the
- * `messageCount` `getValue(col.aggregate(), cond)` idiom.
- *
- * @WorkerThread — blocking WCDB read; callers MUST invoke off the main thread. NOTE this is the
- * ONLY guard and it is advisory at runtime: detekt's BlockingWcdbInSuspend matches only DIRECT
- * `wcdb.*` call expressions (rootReceiverText == "wcdb"), so an indirect call to this helper from a
- * `suspend fun` without `withContext(IO)` is NOT flagged. Current callers are already off-main
- * (`appScope.launch` = Dispatchers.IO in DBMessageStore; `withContext(IO)` in cleanEmptyRooms);
- * a new suspend caller must wrap it itself. #969
- */
+
+
+
+
+
+
+
 @WorkerThread
 fun maxMessageDatabaseId(roomId: String): Int =
     wcdb.message.getValue(DBMessageModel.databaseId.max(), DBMessageModel.roomId.eq(roomId))?.int ?: 0
 
-/**
- * Delete all messages matching [condition] in pages, calling [MessageModel.delete]
- * per row so attachment files + related tables are cascaded. (#909 #1)
- *
- * MUST stay per-row delete — a bulk SQL `deleteObjects` would orphan attachment files
- * on disk and related-table rows (see [MessageModel.deleteRelatedDataForMessage]).
- *
- * Plain re-`LIMIT pageSize` from the front is correct here because `delete()` shrinks
- * the matching set each iteration — no OFFSET needed. Mirrors
- * `MessageArchiveManager.clearMessagesBeforeTimestamp`. Exceptions propagate to the
- * caller's try/catch; [delay] respects coroutine cancellation.
- *
- * Convergence note (#969): re-LIMIT-from-front only converges when the match set is
- * monotonically non-increasing. A `databaseId.le(snapshotMax)` upper bound is REQUIRED
- * whenever [condition] has no natural converging boundary (e.g. `roomId.eq` alone — a
- * concurrent insert flood keeps extending the set). Conditions that already carry an upper
- * bound — time/anchor cutoffs like `systemShowTimestamp.lt(ts)` in MessageArchiveManager —
- * converge on their own and need no databaseId snapshot. Do not re-introduce an unbounded
- * `roomId.eq` delete without a snapshot.
- */
+
+
+
+
+
+
+
+
 suspend fun deleteMessagesPaged(
     condition: Expression,
     pageSize: Long = 100,
@@ -910,18 +856,18 @@ suspend fun deleteMessagesPaged(
     }
 }
 
-/**
- * Iterate messages matching [condition] in `databaseId ASC` keyset pages — one page in memory
- * at a time, not the whole match set. (#909 #5)
- *
- * Cursor is the autoincrement PK `databaseId`: single column → pure `AND` WHERE (no OR/AND
- * nesting whose SQL grouping would depend on winq), and strictly monotonic → concurrent inserts
- * are never skipped or revisited. Order is insertion order, not message time — the sole caller
- * only aggregates, so order is irrelevant.
- *
- * `.select(*...allBindingFields())` is REQUIRED — without it `allObjects()` NPEs
- * (`Select.fields` null); see WcdbJobStorage. (#909 regression)
- */
+
+
+
+
+
+
+
+
+
+
+
+
 suspend fun forEachMessagePaged(
     condition: Expression,
     pageSize: Long = 200,
@@ -942,13 +888,13 @@ suspend fun forEachMessagePaged(
         yield()
     }
 }
-// endregion
 
-/**
- * Removes what this message owns (attachment files and rows, mentions, reactions, forwards, quote,
- * translations). Pending rows waiting on the message are not owned by it: [delete] drops them, a
- * confidential placeholder keeps them (#1382).
- */
+
+
+
+
+
+
 fun MessageModel.deleteRelatedDataForMessage() {
     try {
         deleteOwnAttachmentFiles()
@@ -983,20 +929,11 @@ fun MessageModel.deleteRelatedDataForMessage() {
     }
 }
 
-/**
- * Removes the files of the attachments this message owns directly (its forward tree and its quote are
- * cascaded separately).
- *
- * One directory per attachment ROW, not one per message: with per-copy addressing a message's two
- * attachments live in two directories, and neither is named by the message. The message-named
- * directory is still cleared while legacy addresses may exist, because a file written before the
- * addressing flip is there and this deletion is the last chance to reclaim it — see
- * [LegacyAttachmentAddresses].
- *
- * Both deletions are directory-scoped and driven by rows this message owns, so neither can reach
- * another message's file. `deleteMessageFile` also drops the affected paths from the file-validity
- * cache, which otherwise keeps reporting the deleted files as readable.
- */
+
+
+
+
+
 private fun MessageModel.deleteOwnAttachmentFiles() {
     val rowLocalIds = wcdb.attachment
         .getOneColumnString(DBAttachmentModel.localId, DBAttachmentModel.messageId.eq(id))
@@ -1004,13 +941,13 @@ private fun MessageModel.deleteOwnAttachmentFiles() {
         .forEach { FileUtil.deleteMessageFile(it) }
 }
 
-/**
- * Directory keys a message's own deletion clears: one per attachment row that names a local id, plus
- * the message's own key while legacy addresses may still hold a file (see [deleteOwnAttachmentFiles]).
- *
- * A row whose localId column is still NULL contributes nothing — it names no directory, and its file
- * is reached through the message key instead.
- */
+
+
+
+
+
+
+
 internal fun messageAttachmentDirectoryKeys(
     messageId: String,
     rowLocalIds: List<String?>,
@@ -1020,15 +957,15 @@ internal fun messageAttachmentDirectoryKeys(
     return if (legacyWindowOpen) (keys + messageId).distinct() else keys.distinct()
 }
 
-/**
- * Attachment directories a forward node's deletion removes: one per attachment (not just the first —
- * writing inserts them all), each the attachment's OWN per-copy directory, so removing one message's
- * copy can never take another message's file with it.
- *
- * A row whose localId column is still NULL reads back as a synthesized id that names no directory on
- * disk, so it contributes a harmless no-op — deliberately: its file may still sit in a shared legacy
- * directory that other rows reference, and only the migration's verified sweep may remove that.
- */
+
+
+
+
+
+
+
+
+
 internal fun forwardAttachmentDirectoryKeys(attachments: List<Attachment>): List<String> =
     attachments.mapNotNull { it.localId.takeIf { localId -> localId.isNotEmpty() } }
 
@@ -1038,10 +975,10 @@ private fun ForwardModel.deleteForwardRelatedData() {
     val legacyAuthorityIds = attachments.asSequence().map { it.authorityId }.filter { it != 0L }.distinct().toList()
     wcdb.attachment.deleteObjects(DBAttachmentModel.forwardModelDatabaseId.eq(databaseId))
     wcdb.mention.deleteObjects(DBMentionModel.forwardModelDatabaseId.eq(databaseId))
-    // With this node's rows gone, reclaim any legacy shared directory whose LAST reference just
-    // disappeared. The migration's sweep enumerates legacy directories from LIVE rows only, so a
-    // pre-migration forward deleted before the sweep visits it would otherwise leave its media on
-    // disk forever.
+    
+    
+    
+    
     legacyAuthorityIds.forEach { reclaimLegacyAttachmentDirectory(it) }
 
     val subForwards = wcdb.forward.getAllObjects(DBForwardModel.parentForwardModelDatabaseId.eq(databaseId))
@@ -1053,18 +990,11 @@ private fun ForwardModel.deleteForwardRelatedData() {
     wcdb.forward.deleteObjects(DBForwardModel.databaseId.eq(databaseId))
 }
 
-/**
- * Removes the shared legacy `attachment/<authorityId>/` directory once the LAST row referencing
- * that authorityId is gone. Two guards keep it safe: any remaining referencing row keeps the
- * directory (per-copy deletion never reaches across messages), and a directory whose name collides
- * with a live message id is never touched.
- *
- * That second guard is deliberately CONSERVATIVE now that no attachment is addressed by a message
- * id: what it protects is a file the migration has not moved out of that message's directory yet.
- * Once it has, the guard only ever declines to delete a directory that is already empty — failing to
- * delete costs nothing, and deleting something that cannot be verified is the one thing none of this
- * is allowed to do.
- */
+
+
+
+
+
 private fun reclaimLegacyAttachmentDirectory(authorityId: Long) {
     try {
         if (wcdb.attachment.getFirstObject(DBAttachmentModel.authorityId.eq(authorityId)) != null) return
@@ -1076,14 +1006,14 @@ private fun reclaimLegacyAttachmentDirectory(authorityId: Long) {
     }
 }
 
-/**
- * Convert a confidential message to a placeholder (recipient has read, awaiting sender confirmation to delete).
- * 1. Delete all sub-data (attachments, quotes, mentions, reactions, etc.); pending rows targeting it stay
- *    for their retry (#1382)
- * 2. Update message type to TYPE_CONFIDENTIAL_PLACEHOLDER
- * 3. Clear message text and related IDs
- * 4. Notify UI to refresh
- */
+
+
+
+
+
+
+
+
 fun MessageModel.convertToConfidentialPlaceholder() {
     if (type == MessageModel.TYPE_CONFIDENTIAL_PLACEHOLDER) return
     deleteRelatedDataForMessage()
@@ -1130,7 +1060,7 @@ fun MessageModel.previewContent(): String {
     val from = fromWho ?: ""
     val senderName = if (roomType == 1) (wcdb.getContactorFromAllTable(from)?.getDisplayNameForUI()
         ?: from) + ": " else ""
-    // Check unsupported message first
+    
     return if (isUnsupportedMessage()) {
         senderName + ResUtils.getString(R.string.chat_message_unsupported)
     } else if (mode == 1) {
@@ -1142,7 +1072,7 @@ fun MessageModel.previewContent(): String {
                 senderName + ResUtils.getString(R.string.chat_message_gif)
             } else if (attachment?.isImage() == true) {
                 senderName + ResUtils.getString(R.string.chat_message_image)
-            } else if (attachment?.isVideo() == true) {
+            } else if (isWhitelistedVideoType(attachment?.contentType)) {
                 senderName + ResUtils.getString(R.string.chat_message_video)
             } else if (attachment?.isAudioMessage() == true || attachment?.isAudioFile() == true) {
                 senderName + ResUtils.getString(R.string.chat_message_audio)
@@ -1155,7 +1085,7 @@ fun MessageModel.previewContent(): String {
             } else if (forwardContext() != null) {
                 senderName + "[" + ResUtils.getString(R.string.chat_history) + "]"
             } else {
-                // Imported text rows may carry no body; never render the literal "null".
+                
                 senderName + messageText.orEmpty()
             }
         } else if (isNotifyMessage()) {
@@ -1197,7 +1127,7 @@ fun RoomModel.updateRoomUnreadState(readPosition: Long = this.readPosition) {
         }
     }
 
-    // 如果当前有 critical alert 高亮，检查是否还有未读的 critical alert 消息
+    
     val newCriticalAlertType = if (this.criticalAlertType == difft.android.messageserialization.model.CRITICAL_ALERT_TYPE_ALERT) {
         val hasUnreadCriticalAlert = wcdb.message.getValue(
             DBMessageModel.criticalAlertType,
@@ -1222,11 +1152,11 @@ fun RoomModel.updateRoomUnreadState(readPosition: Long = this.readPosition) {
     )
 }
 
-/**
- * Clears the READ state only. Do NOT add `sendStatus` here: a failed outgoing message is not an
- * unread marker — opening and leaving a conversation must not drop its "send failed" signal. The
- * only legal clear is `clearRoomSendStatusIfNoFailure`, driven by the message table.
- */
+
+
+
+
+
 fun RoomModel.resetRoomUnreadState() {
     if (unreadMessageNum != 0) {
         L.d { "reset room unread state:$roomName" }
@@ -1238,9 +1168,9 @@ fun RoomModel.resetRoomUnreadState() {
     }
 }
 
-/**
- * Extension function for easy way of Value(this)
- */
+
+
+
 fun Any?.dbValue() = Value(this)
 
 fun RoomModel.updateRoomNameAndAvatar() {
@@ -1276,17 +1206,17 @@ fun RoomModel.updateRoomNameAndAvatar() {
     }
 }
 
-/**
- * Converts [ContactorModel] into [GroupMemberContactorModel].
- *
- * NOTE: This conversion does NOT preserve avatar data.
- *
- * `displayName` is intentionally set to the remark-less name. The remark is stored
- * separately on `memberContactor.remark`, and the display layer ([getDisplayNameForUI]
- * via cache + remark column) layers it on top. Storing the remark-included name here
- * would contaminate `displayName` and surface the remark through callers such as
- * [getDisplayNameWithoutRemarkForUI] that intentionally exclude remarks.
- */
+
+
+
+
+
+
+
+
+
+
+
 fun ContactorModel.covertToGroupMemberContactorModel(): GroupMemberContactorModel {
     if (this.avatar != null) {
         L.w { "[WCDBExtensions] covertToGroupMemberContactorModel id:${this.id} avatar will be lost" }
@@ -1300,7 +1230,7 @@ fun ContactorModel.covertToGroupMemberContactorModel(): GroupMemberContactorMode
     return memberContactor
 }
 
-//涉及耗时操作，请异步处理
+
 fun GroupMemberContactorModel.convertToContactorModel(): ContactorModel {
     checkThread()
     val contactor = wcdb.contactor.getFirstObject(DBContactorModel.id.eq(this.id)) ?: ContactorModel()
@@ -1308,7 +1238,7 @@ fun GroupMemberContactorModel.convertToContactorModel(): ContactorModel {
     return contactor
 }
 
-//涉及耗时操作，请异步处理
+
 fun List<GroupMemberContactorModel>.convertToContactorModels(): List<ContactorModel> {
     checkThread()
     val contactorIds = this.map { it.id }
@@ -1337,15 +1267,15 @@ fun WCDB.getReadInfoList(roomId: String): List<ReadInfoModel> {
     return wcdb.readInfo.getAllObjects(DBReadInfoModel.roomId.eq(roomId)).toList()
 }
 
-/**
- * Check whether a user is a member of a given group.
- *
- * Uses a composite `gid + id` predicate that returns at most one row, so the
- * full member list is never loaded into memory (matters for large groups).
- *
- * General single-row membership predicate: true iff `userId` has a member row
- * in group `gid`.
- */
+
+
+
+
+
+
+
+
+
 fun WCDB.isGroupMember(gid: String, userId: String): Boolean {
     return groupMemberContactor.getFirstObject(
         DBGroupMemberContactorModel.gid.eq(gid)
@@ -1353,9 +1283,6 @@ fun WCDB.isGroupMember(gid: String, userId: String): Boolean {
     ) != null
 }
 
-/**
- * 获取群成员数量
- */
 fun WCDB.getGroupMemberCount(gid: String): Int {
     return groupMemberContactor.getValue(
         DBGroupMemberContactorModel.databaseId.count(),
@@ -1363,13 +1290,12 @@ fun WCDB.getGroupMemberCount(gid: String): Int {
     )?.int ?: 0
 }
 
-/**
- * 批量更新群成员的已读位置
- * @param gid 群组ID
- * @param readPosition 已读位置（时间戳）
- */
+
+
+
+
+
 fun WCDB.updateGroupMembersReadPosition(gid: String, readPosition: Long) {
-    // 获取所有群成员（排除自己）
     val memberIds = groupMemberContactor.getOneColumnString(
         DBGroupMemberContactorModel.id,
         DBGroupMemberContactorModel.gid.eq(gid)
@@ -1378,7 +1304,6 @@ fun WCDB.updateGroupMembersReadPosition(gid: String, readPosition: Long) {
 
     if (memberIds.isEmpty()) return
 
-    // 批量插入或替换已读信息
     val readInfoModels = memberIds.map { uid ->
         ReadInfoModel().apply {
             this.roomId = gid
@@ -1391,7 +1316,7 @@ fun WCDB.updateGroupMembersReadPosition(gid: String, readPosition: Long) {
 }
 
 fun clearInvalidGroupMembers() {
-    // Delete any groups with non-zero status that may have been left over from previous sessions
+    
     wcdb.group.deleteObjects(DBGroupModel.status.notEq(0))
     val allGroupIds = wcdb.group.allObjects.map { it.gid }
     if (allGroupIds.isNotEmpty()) {
@@ -1402,14 +1327,7 @@ fun clearInvalidGroupMembers() {
     }
 }
 
-// ─── Message Search ───────────────────────────────────────────────────────────
 
-data class RoomSearchResult(
-    val room: RoomModel,
-    val messageCount: Int,
-    val singleMessage: MessageModel?,
-    val latestTimestamp: Long
-)
 
 data class PaginatedMessageSearchResult(
     val messages: List<MessageModel>,
@@ -1417,81 +1335,20 @@ data class PaginatedMessageSearchResult(
     val lastTimestamp: Long?
 )
 
-/**
- * Groups matching messages by conversation. Uses a single batch room query instead of N
- * individual room queries, eliminating the N+1 problem.
- *
- * @param maxRooms limits how many conversations are returned (useful for preview in SearchActivity)
- */
-fun WCDB.loadRoomSearchResultsByKeyword(
-    keyword: String,
-    maxRooms: Int? = null
-): List<RoomSearchResult> {
-    val like = "%${keyword.uppercase()}%"
 
-    // Step 1: GROUP BY in DB — only 3 lightweight values per row, no full MessageModel load
-    // SELECT roomId, COUNT(*), MAX(systemShowTimestamp) FROM message
-    //   WHERE UPPER(messageText) LIKE ? AND type NOT IN (2,3,100) AND mode != 1
-    //   GROUP BY roomId ORDER BY MAX(systemShowTimestamp) DESC
-    val colRoomId = Column("roomId")
-    val colCount = Column.all().count()
-    val colMaxTs = DBMessageModel.systemShowTimestamp.max()
-    val statement = StatementSelect()
-        .select(colRoomId, colCount, colMaxTs)
-        .from("message")
-        .where(
-            DBMessageModel.messageText.upper().like(like)
-                .and(DBMessageModel.type.`in`(MessageModel.TYPE_TEXT, MessageModel.TYPE_ATTACHMENT))
-                .and(DBMessageModel.mode.notEq(1))
-        )
-        .groupBy(colRoomId)
-        .orderBy(OrderingTerm(colMaxTs).order(Order.Desc))
-        .apply { if (maxRooms != null) limit(maxRooms.toLong()) }
 
-    val rows = db.getAllRowsFromStatement(statement)
-    if (rows.isEmpty()) return emptyList()
 
-    // rows: List<Value[]>, each row = [roomId, count, maxTs]
-    val roomGroups = rows
-        .map { row -> Triple(row[0].text, row[1].long, row[2].long) }
 
-    val roomIds = roomGroups.map { it.first }
 
-    // Step 2: Batch fetch rooms (1 IN query)
-    val roomMap = room.getAllObjects(DBRoomModel.roomId.`in`(*roomIds.toTypedArray()))
-        .associateBy { it.roomId }
-
-    // Step 3: For rooms with exactly 1 match, fetch that single message for preview
-    val singleMatchRoomIds = roomGroups.filter { it.second == 1L }.map { it.first }
-    val singleMessages = if (singleMatchRoomIds.isNotEmpty()) {
-        message.getAllObjects(
-            DBMessageModel.roomId.`in`(*singleMatchRoomIds.toTypedArray())
-                .and(DBMessageModel.messageText.upper().like(like))
-                .and(DBMessageModel.type.`in`(MessageModel.TYPE_TEXT, MessageModel.TYPE_ATTACHMENT))
-                .and(DBMessageModel.mode.notEq(1))
-        ).associateBy { it.roomId }
-    } else emptyMap()
-
-    return roomGroups.mapNotNull { (roomId, count, latestTimestamp) ->
-        val roomModel = roomMap[roomId] ?: return@mapNotNull null
-        RoomSearchResult(roomModel, count.toInt(), singleMessages[roomId], latestTimestamp)
-    }
-}
-
-/**
- * Cursor-based paginated search across all conversations.
- * Pass cursorTimestamp=null for the first page; subsequent pages use lastTimestamp from the
- * previous result.
- */
 fun WCDB.loadPaginatedMessagesByKeyword(
     keyword: String,
     limit: Int = 20,
     cursorTimestamp: Long? = null,
-    conversationId: String? = null  // null = search across all conversations
+    conversationId: String? = null  
 ): PaginatedMessageSearchResult {
     var baseCondition = DBMessageModel.messageText.upper().like("%${keyword.uppercase()}%")
         .and(DBMessageModel.type.`in`(MessageModel.TYPE_TEXT, MessageModel.TYPE_ATTACHMENT))
-        .and(DBMessageModel.mode.notEq(1))          // exclude Confidential mode
+        .and(DBMessageModel.mode.notEq(1))          
 
     if (conversationId != null) {
         baseCondition = baseCondition.and(DBMessageModel.roomId.eq(conversationId))
@@ -1501,7 +1358,7 @@ fun WCDB.loadPaginatedMessagesByKeyword(
         baseCondition = baseCondition.and(DBMessageModel.systemShowTimestamp.lt(cursorTimestamp))
     }
 
-    // Fetch limit+1 to detect whether more pages exist without an extra count query
+    
     val fetched = message.getAllObjects(
         baseCondition,
         DBMessageModel.systemShowTimestamp.order(Order.Desc),

@@ -5,11 +5,11 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * [RoomStateSupport.hasFailedOutgoingMessage] must keep the same scope as
- * `RoomSendStatusQueries.realOutgoingMessageScope`, so an imported room is tagged "Send failed"
- * exactly when the live query would tag it.
- */
+
+
+
+
+
 class RoomStateSupportFailedOutgoingTest {
 
     private val roomId = "+10000000002"

@@ -146,8 +146,8 @@ class DifftWidgetDetectorTest {
     }
 
     private companion object {
-        // File names matter: Kotlin compiles top-level functions into `<FileName>Kt`, and the
-        // detector matches on those facade classes.
+        
+        
         val MATERIAL3_BUTTON_STUB = kotlin(
             "src/androidx/compose/material3/Button.kt",
             """

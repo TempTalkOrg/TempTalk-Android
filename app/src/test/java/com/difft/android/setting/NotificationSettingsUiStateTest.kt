@@ -23,7 +23,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** Row visibility, summaries and jumps of the notification settings page and its Calls and Critical Alerts pages. */
+
 class NotificationSettingsUiStateTest {
 
     private fun ok(id: ReadinessItemId) = ReadinessItem(id, ReadinessStatus.OK)
@@ -148,7 +148,7 @@ class NotificationSettingsUiStateTest {
         assertEquals(CategoryLevel.OFF, off.callLevel)
     }
 
-    // ---------------------------------------------------------------- Calls summary
+    
 
     @Test
     fun `the calls summary is off with a warning while app notifications are off`() {
@@ -175,16 +175,16 @@ class NotificationSettingsUiStateTest {
         assertEquals(SettingStatus.NONE, state(brand = OemBrand.SAMSUNG).callSummary)
         assertEquals(SettingStatus.NONE, state(c3Check, brand = OemBrand.HONOR).callSummary)
         assertEquals(SettingStatus.NONE, state(ReadinessItem(ReadinessItemId.C1, ReadinessStatus.UNKNOWN)).callSummary)
-        // A passed call test vouches for the category level but is no reading.
+        
         val passed = NotificationTestResults(call = NotificationTestResult(NotificationTestOutcome.OK, 1L, "fp"))
         val tested = state(c3Check, brand = OemBrand.HONOR, tests = passed)
         assertEquals(CategoryLevel.TESTED_OK, tested.callLevel)
         assertEquals(SettingStatus.NONE, tested.callSummary)
-        // Problems are still named on those brands.
+        
         assertEquals(problem(StatusLabel.NEEDS_FULL_SCREEN), state(c2Denied, c3Check, brand = OemBrand.XIAOMI).callSummary)
     }
 
-    // ---------------------------------------------------------------- Critical Alerts summary
+    
 
     @Test
     fun `missing access reads off without a warning whatever else is wrong`() {
@@ -210,19 +210,19 @@ class NotificationSettingsUiStateTest {
         assertEquals(problem(StatusLabel.NEEDS_FULL_SCREEN), state(c2Denied, running = false).criticalSummary)
         assertEquals(problem(StatusLabel.NEEDS_CONNECTION), state(c2Denied, sdk = 33, running = false).criticalSummary)
         assertEquals(problem(StatusLabel.NEEDS_CONNECTION), state(running = false).criticalSummary)
-        // An unread bypass does not hide the connection problem.
+        
         assertEquals(problem(StatusLabel.NEEDS_CONNECTION), state(bypass = CriticalAlertBypass.NOT_APPLICABLE, running = false).criticalSummary)
     }
 
     @Test
     fun `the critical summary says on once access is granted and no dependency has a definite problem`() {
         assertEquals(on, state().criticalSummary)
-        // Unreadable parts do not hide that the feature is on; the category row stays silent instead.
+        
         assertEquals(on, state(bypass = CriticalAlertBypass.NOT_APPLICABLE).criticalSummary)
         assertEquals(SettingStatus.NONE, state(bypass = CriticalAlertBypass.NOT_APPLICABLE).criticalCategoryStatus)
-        // A missing or unreadable category is not "on": it may not post at all.
+        
         assertEquals(SettingStatus.NONE, state(ReadinessItem(ReadinessItemId.A1, ReadinessStatus.UNKNOWN)).criticalSummary)
-        // Below API 26 there is no channel bypass to read back.
+        
         assertEquals(on, state(sdk = 25, bypass = CriticalAlertBypass.NOT_APPLICABLE).criticalSummary)
     }
 
@@ -243,7 +243,7 @@ class NotificationSettingsUiStateTest {
         assertEquals(problem(StatusLabel.LOCK_HIDDEN), state(hidden).criticalSummary)
     }
 
-    // ---------------------------------------------------------------- Critical Alerts page
+    
 
     @Test
     fun `the category row follows app notifications, the category and the bypass only`() {
@@ -253,7 +253,7 @@ class NotificationSettingsUiStateTest {
         assertEquals(problem(StatusLabel.DND_BLOCKED), state(bypass = CriticalAlertBypass.NEEDS_USER_ACTION).criticalCategoryStatus)
         assertEquals(on, state(c2Denied, running = false).criticalCategoryStatus)
         assertEquals(SettingStatus.NONE, state(bypass = CriticalAlertBypass.NOT_APPLICABLE).criticalCategoryStatus)
-        // Without access the bypass cannot be read back.
+        
         assertEquals(SettingStatus.NONE, state(dnd = false, bypass = CriticalAlertBypass.NOT_APPLICABLE).criticalCategoryStatus)
     }
 
@@ -276,7 +276,7 @@ class NotificationSettingsUiStateTest {
         assertFalse(state(running = false).backgroundConnectionOn)
     }
 
-    // ---------------------------------------------------------------- unreadable signals
+    
 
     @Test
     fun `the vendor pop-up item and notification test results feed no summary or status`() {
@@ -316,7 +316,7 @@ class NotificationSettingsUiStateTest {
         assertFalse(state(n1Off, brand = OemBrand.XIAOMI).showOverviewHint)
     }
 
-    // Design §7: Xiaomi categories the user never set, through the evaluator into the page state.
+    
     private fun xiaomiState(userSet: Boolean, brand: OemBrand = OemBrand.XIAOMI, dnd: Boolean = true, running: Boolean = true): NotificationSettingsUiState {
         val channel = ChannelReading(NotificationManager.IMPORTANCE_HIGH, hasSound = true, userSetImportance = userSet)
         val input = ReadinessInput(
@@ -341,9 +341,9 @@ class NotificationSettingsUiStateTest {
         assertEquals(problem(StatusLabel.NEEDS_CHECK), state.callSummary)
         assertEquals(problem(StatusLabel.NEEDS_CHECK), state.criticalCategoryStatus)
         assertEquals(problem(StatusLabel.NEEDS_CHECK), state.criticalSummary)
-        // The category comes before the connection in the Critical Alerts summary.
+        
         assertEquals(problem(StatusLabel.NEEDS_CHECK), xiaomiState(userSet = false, running = false).criticalSummary)
-        // Without Do Not Disturb access the feature is not in use.
+        
         assertEquals(SettingStatus(StatusLabel.OFF), xiaomiState(userSet = false, dnd = false).criticalSummary)
     }
 

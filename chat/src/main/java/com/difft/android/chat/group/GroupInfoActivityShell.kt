@@ -6,12 +6,15 @@ import com.difft.android.base.log.lumberjack.L
 import com.difft.android.chat.R
 import dagger.hilt.android.AndroidEntryPoint
 
-/**
- * Full-window shell for [GroupInfoFragment], used where the page is not pushed onto the home
- * screen's detail stack (group chat shell, popups). Launched with [KEY_GROUP_ID].
- */
+
+
+
+
 @AndroidEntryPoint
 class GroupInfoActivity : BaseActivity() {
+
+    
+    override fun participatesInSideChrome(): Boolean = true
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

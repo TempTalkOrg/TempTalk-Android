@@ -36,7 +36,7 @@ class FastJobStorageTest {
         clearMocks(jobStorage)
     }
 
-    // -- init() --
+    
 
     @Test
     fun `init loads jobs and constraints from database into memory`() {
@@ -68,7 +68,7 @@ class FastJobStorageTest {
         assertTrue(storage.getAllJobSpecs().isEmpty())
     }
 
-    // -- insertJobs() --
+    
 
     @Test
     fun `insertJobs adds jobs to memory and persists durable jobs to DB`() {
@@ -121,7 +121,7 @@ class FastJobStorageTest {
         assertEquals(listOf(constraint), storage.getConstraintSpecs("job-c1"))
     }
 
-    // -- getJobSpec() --
+    
 
     @Test
     fun `getJobSpec returns matching job`() {
@@ -139,7 +139,7 @@ class FastJobStorageTest {
         assertNull(storage.getJobSpec("nonexistent"))
     }
 
-    // -- getPendingJobsWithNoDependenciesInCreatedOrder() --
+    
 
     @Test
     fun `getPending returns empty list when storage is empty`() {
@@ -198,7 +198,7 @@ class FastJobStorageTest {
 
     @Test
     fun `getPending head job in backoff or running blocks later eligible job in same queue`() {
-        // SettingSyncJob relies on this: a job that runs knows every earlier job in its queue is gone.
+        
         storage.init()
         val backingOff = buildJobSpec(id = "head", queueKey = "q1", createTime = 100, nextRunAttemptTime = 5000L)
         val later = buildJobSpec(id = "later", queueKey = "q1", createTime = 200, nextRunAttemptTime = 0)
@@ -290,7 +290,7 @@ class FastJobStorageTest {
         assertTrue(result.isEmpty())
     }
 
-    // -- updateJobRunningState() --
+    
 
     @Test
     fun `updateJobRunningState updates memory and DB for durable job`() {
@@ -316,7 +316,7 @@ class FastJobStorageTest {
         verify(exactly = 0) { jobStorage.updateJobRunningState("mem-1", any()) }
     }
 
-    // -- updateJobAfterRetry() --
+    
 
     @Test
     fun `updateJobAfterRetry updates all fields in memory`() {
@@ -333,7 +333,7 @@ class FastJobStorageTest {
         assertEquals("new-data", updated.serializedData)
     }
 
-    // -- deleteJobs() --
+    
 
     @Test
     fun `deleteJobs removes from memory and DB`() {
@@ -361,7 +361,7 @@ class FastJobStorageTest {
         verify(exactly = 0) { jobStorage.deleteJobs(any()) }
     }
 
-    // -- getAllJobSpecs() --
+    
 
     @Test
     fun `getAllJobSpecs returns copy of jobs list`() {
@@ -376,7 +376,7 @@ class FastJobStorageTest {
         assertEquals(setOf("j1", "j2"), result.map { it.id }.toSet())
     }
 
-    // -- Helper --
+    
 
     private fun buildJobSpec(
         id: String = "test-job",

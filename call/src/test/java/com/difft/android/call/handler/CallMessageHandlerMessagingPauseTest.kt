@@ -49,11 +49,11 @@ import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
-/**
- * Incoming call messages under the migration message pause (#1382): the asynchronous `Calling`
- * and `Joined` work keeps the envelope's receive admission until its database write is done, and
- * nothing rings while messaging is paused. Robolectric only for `LCallManager` and resources.
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [33])
 class CallMessageHandlerMessagingPauseTest {
@@ -119,7 +119,7 @@ class CallMessageHandlerMessagingPauseTest {
         coVerify(exactly = 1) {
             chat.saveReceivedCallTextMessage(CallActionType.JOINED, any(), any(), CALL_TIMESTAMP, any(), any(), any())
         }
-        // Paused before the live-call stage: no checkCall, no ring.
+        
         coVerify(exactly = 0) { callService.checkCall(any()) }
         verify(exactly = 0) { LCallManager.startIncomingCallService(any()) }
     }
@@ -137,7 +137,7 @@ class CallMessageHandlerMessagingPauseTest {
 
         withTimeout(5.seconds) { checked.await() }
         assertTrue(messaging.gate.closeAndAwaitIdle(TestMessagingPause.OWNER, 5.seconds))
-        // The call data is added right before the ring is posted to the main thread.
+        
         assertTrue(pumpMainUntil(5_000) { callDataManager.getCallData(ROOM_ID) != null })
         pumpMainUntil(300) { false }
         verify(exactly = 0) { LCallManager.startIncomingCallService(any()) }
@@ -175,7 +175,7 @@ class CallMessageHandlerMessagingPauseTest {
 
     private fun rings(): Int = ringCount
 
-    /** Runs main-thread work (the ring is started on Main) until [done] or [timeoutMs] passes. */
+    
     private fun pumpMainUntil(timeoutMs: Long, done: () -> Boolean): Boolean {
         val end = System.currentTimeMillis() + timeoutMs
         while (System.currentTimeMillis() < end) {
@@ -186,7 +186,7 @@ class CallMessageHandlerMessagingPauseTest {
         return done()
     }
 
-    /** Processes [message] under its own receive ticket, closed when processing returns, as the receive path does. */
+    
     private fun receive(message: SignalServiceDataClass) {
         val admission: MessagingTicket = assertNotNull(messaging.gate.tryAdmit(AdmissionKind.RECEIVE, "ws"))
         admission.use { handler.handleCallMessage(message, it) }

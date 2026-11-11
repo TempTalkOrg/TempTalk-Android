@@ -18,12 +18,12 @@ import com.difft.android.base.log.lumberjack.L
 import kotlin.math.max
 import kotlin.math.min
 
-/**
- * The component of PhotoView which does the work allowing for zooming, scaling, panning, etc.
- *
- * 1:1 verbatim port of upstream matrix/gesture math (issue #1077) — splitting risks silent zoom
- * regressions; structural split deferred.
- */
+
+
+
+
+
+
 @Suppress("LargeClass")
 class PhotoViewAttacher(imageView: ImageView) : View.OnTouchListener, View.OnLayoutChangeListener {
 
@@ -38,18 +38,18 @@ class PhotoViewAttacher(imageView: ImageView) : View.OnTouchListener, View.OnLay
 
     private val mImageView: ImageView = imageView
 
-    // Gesture Detectors
+    
     private var mGestureDetector: GestureDetector? = null
     private var mScaleDragDetector: CustomGestureDetector? = null
 
-    // These are set so we don't keep allocating them on the heap
+    
     private val mBaseMatrix = Matrix()
     private val mDrawMatrix = Matrix()
     private val mSuppMatrix = Matrix()
     private val mDisplayRect = RectF()
     private val mMatrixValues = FloatArray(9)
 
-    // Listeners
+    
     private var mMatrixChangeListener: OnMatrixChangedListener? = null
     private var mPhotoTapListener: OnPhotoTapListener? = null
     private var mOutsidePhotoTapListener: OnOutsidePhotoTapListener? = null
@@ -71,7 +71,7 @@ class PhotoViewAttacher(imageView: ImageView) : View.OnTouchListener, View.OnLay
     private val onGestureListener: OnGestureListener = object : OnGestureListener {
         override fun onDrag(dx: Float, dy: Float) {
             if (mScaleDragDetector!!.isScaling()) {
-                return  // Do not drag if we are already scaling
+                return  
             }
             if (mOnViewDragListener != null) {
                 mOnViewDragListener!!.onDrag(dx, dy)
@@ -79,15 +79,15 @@ class PhotoViewAttacher(imageView: ImageView) : View.OnTouchListener, View.OnLay
             mSuppMatrix.postTranslate(dx, dy)
             checkAndDisplayMatrix()
 
-            /*
-             * Here we decide whether to let the ImageView's parent to start taking
-             * over the touch event.
-             *
-             * First we check whether this function is enabled. We never want the
-             * parent to take over if we're scaling. We then check the edge we're
-             * on, and the direction of the scroll (i.e. if we're pulling against
-             * the edge, aka 'overscrolling', let the parent take over).
-             */
+            
+
+
+
+
+
+
+
+
             val parent = mImageView.parent
             if (mAllowParentInterceptOnEdge && !mScaleDragDetector!!.isScaling() && !mBlockParentIntercept) {
                 if (mHorizontalScrollEdge == HORIZONTAL_EDGE_BOTH
@@ -133,11 +133,11 @@ class PhotoViewAttacher(imageView: ImageView) : View.OnTouchListener, View.OnLay
         imageView.addOnLayoutChangeListener(this)
         if (!imageView.isInEditMode) {
             mBaseRotation = 0.0f
-            // Create Gesture Detectors...
+            
             mScaleDragDetector = CustomGestureDetector(imageView.context, onGestureListener)
             mGestureDetector = GestureDetector(imageView.context, object : GestureDetector.SimpleOnGestureListener() {
 
-                // forward long click listener
+                
                 override fun onLongPress(e: MotionEvent) {
                     if (mLongClickListener != null) {
                         mLongClickListener!!.onLongClick(mImageView)
@@ -172,7 +172,7 @@ class PhotoViewAttacher(imageView: ImageView) : View.OnTouchListener, View.OnLay
                         mViewTapListener!!.onViewTap(mImageView, x, y)
                     }
                     if (displayRect != null) {
-                        // Check to see if the user tapped on the photo
+                        
                         if (displayRect.contains(x, y)) {
                             val xResult = (x - displayRect.left) / displayRect.width()
                             val yResult = (y - displayRect.top) / displayRect.height()
@@ -202,14 +202,14 @@ class PhotoViewAttacher(imageView: ImageView) : View.OnTouchListener, View.OnLay
                             setScale(getMinimumScale(), x, y, true)
                         }
                     } catch (e: ArrayIndexOutOfBoundsException) {
-                        // Can sometimes happen when getX() and getY() is called
+                        
                         L.w(e) { "[PhotoViewAttacher] onDoubleTap scale failed" }
                     }
                     return true
                 }
 
                 override fun onDoubleTapEvent(e: MotionEvent): Boolean {
-                    // Wait for the confirmed onDoubleTap() instead
+                    
                     return false
                 }
             })
@@ -280,8 +280,8 @@ class PhotoViewAttacher(imageView: ImageView) : View.OnTouchListener, View.OnLay
     }
 
     fun getScale(): Float {
-        // Match Java exactly: two (float)Math.pow(...) values are summed in single
-        // precision, then widened to double for Math.sqrt, then cast back to float.
+        
+        
         return Math.sqrt(
             (Math.pow(getValue(mSuppMatrix, Matrix.MSCALE_X).toDouble(), 2.0).toFloat()
                 + Math.pow(getValue(mSuppMatrix, Matrix.MSKEW_Y).toDouble(), 2.0).toFloat()).toDouble()
@@ -296,7 +296,7 @@ class PhotoViewAttacher(imageView: ImageView) : View.OnTouchListener, View.OnLay
         v: View, left: Int, top: Int, right: Int, bottom: Int, oldLeft: Int, oldTop: Int,
         oldRight: Int, oldBottom: Int
     ) {
-        // Update our base matrix, as the bounds have changed
+        
         if (left != oldLeft || top != oldTop || right != oldRight || bottom != oldBottom) {
             updateBaseMatrix(mImageView.drawable)
         }
@@ -308,16 +308,16 @@ class PhotoViewAttacher(imageView: ImageView) : View.OnTouchListener, View.OnLay
             when (ev.action) {
                 MotionEvent.ACTION_DOWN -> {
                     val parent = v.parent
-                    // First, disable the Parent from intercepting the touch
-                    // event
+                    
+                    
                     parent?.requestDisallowInterceptTouchEvent(true)
-                    // If we're flinging, and the user presses down, cancel
-                    // fling
+                    
+                    
                     cancelFling()
                 }
                 MotionEvent.ACTION_CANCEL, MotionEvent.ACTION_UP -> {
-                    // If the user has zoomed less than min scale, zoom back
-                    // to min scale
+                    
+                    
                     if (getScale() < mMinScale) {
                         val rect = getDisplayRect()
                         if (rect != null) {
@@ -343,7 +343,7 @@ class PhotoViewAttacher(imageView: ImageView) : View.OnTouchListener, View.OnLay
                     }
                 }
             }
-            // Try the Scale/Drag detector
+            
             val scaleDragDetector = mScaleDragDetector
             if (scaleDragDetector != null) {
                 val wasScaling = scaleDragDetector.isScaling()
@@ -353,7 +353,7 @@ class PhotoViewAttacher(imageView: ImageView) : View.OnTouchListener, View.OnLay
                 val didntDrag = !wasDragging && !scaleDragDetector.isDragging()
                 mBlockParentIntercept = didntScale && didntDrag
             }
-            // Check to see if the user double tapped
+            
             val gestureDetector = mGestureDetector
             if (gestureDetector != null && gestureDetector.onTouchEvent(ev)) {
                 handled = true
@@ -430,7 +430,7 @@ class PhotoViewAttacher(imageView: ImageView) : View.OnTouchListener, View.OnLay
     }
 
     fun setScale(scale: Float, focalX: Float, focalY: Float, animate: Boolean) {
-        // Check to see if the scale is within bounds
+        
         if (scale < mMinScale || scale > mMaxScale) {
             throw IllegalArgumentException("Scale must be within the range of minScale and maxScale")
         }
@@ -444,11 +444,11 @@ class PhotoViewAttacher(imageView: ImageView) : View.OnTouchListener, View.OnLay
         }
     }
 
-    /**
-     * Set the zoom interpolator
-     *
-     * @param interpolator the zoom interpolator
-     */
+    
+
+
+
+
     fun setZoomInterpolator(interpolator: Interpolator) {
         mInterpolator = interpolator
     }
@@ -471,26 +471,26 @@ class PhotoViewAttacher(imageView: ImageView) : View.OnTouchListener, View.OnLay
 
     fun update() {
         if (mZoomEnabled) {
-            // Update the base matrix using the current drawable
+            
             updateBaseMatrix(mImageView.drawable)
         } else {
-            // Reset the Matrix...
+            
             resetMatrix()
         }
     }
 
-    /**
-     * Get the display matrix
-     *
-     * @param matrix target matrix to copy to
-     */
+    
+
+
+
+
     fun getDisplayMatrix(matrix: Matrix) {
         matrix.set(getDrawMatrix())
     }
 
-    /**
-     * Get the current support matrix
-     */
+    
+
+
     fun getSuppMatrix(matrix: Matrix) {
         matrix.set(mSuppMatrix)
     }
@@ -509,21 +509,21 @@ class PhotoViewAttacher(imageView: ImageView) : View.OnTouchListener, View.OnLay
         mZoomDuration = milliseconds
     }
 
-    /**
-     * Helper method that 'unpacks' a Matrix and returns the required value
-     *
-     * @param matrix     Matrix to unpack
-     * @param whichValue Which value from Matrix.M* to return
-     * @return returned value
-     */
+    
+
+
+
+
+
+
     private fun getValue(matrix: Matrix, whichValue: Int): Float {
         matrix.getValues(mMatrixValues)
         return mMatrixValues[whichValue]
     }
 
-    /**
-     * Resets the Matrix back to FIT_CENTER, and then displays its contents
-     */
+    
+
+
     private fun resetMatrix() {
         mSuppMatrix.reset()
         setRotationBy(mBaseRotation)
@@ -533,7 +533,7 @@ class PhotoViewAttacher(imageView: ImageView) : View.OnTouchListener, View.OnLay
 
     private fun setImageViewMatrix(matrix: Matrix) {
         mImageView.imageMatrix = matrix
-        // Call MatrixChangedListener if needed
+        
         if (mMatrixChangeListener != null) {
             val displayRect = getDisplayRect(matrix)
             if (displayRect != null) {
@@ -542,21 +542,21 @@ class PhotoViewAttacher(imageView: ImageView) : View.OnTouchListener, View.OnLay
         }
     }
 
-    /**
-     * Helper method that simply checks the Matrix, and then displays the result
-     */
+    
+
+
     private fun checkAndDisplayMatrix() {
         if (checkMatrixBounds()) {
             setImageViewMatrix(getDrawMatrix())
         }
     }
 
-    /**
-     * Helper method that maps the supplied Matrix to the current Drawable
-     *
-     * @param matrix - Matrix to map Drawable against
-     * @return RectF - Displayed Rectangle
-     */
+    
+
+
+
+
+
     private fun getDisplayRect(matrix: Matrix): RectF? {
         val d = mImageView.drawable
         if (d != null) {
@@ -570,11 +570,11 @@ class PhotoViewAttacher(imageView: ImageView) : View.OnTouchListener, View.OnLay
         return null
     }
 
-    /**
-     * Calculate Matrix for FIT_CENTER
-     *
-     * @param drawable - Drawable being displayed
-     */
+    
+
+
+
+
     private fun updateBaseMatrix(drawable: Drawable?) {
         if (drawable == null) {
             return
@@ -666,7 +666,7 @@ class PhotoViewAttacher(imageView: ImageView) : View.OnTouchListener, View.OnLay
         } else {
             mHorizontalScrollEdge = HORIZONTAL_EDGE_NONE
         }
-        // Finally actually translate the matrix
+        
         mSuppMatrix.postTranslate(deltaX, deltaY)
         return true
     }
@@ -702,7 +702,7 @@ class PhotoViewAttacher(imageView: ImageView) : View.OnTouchListener, View.OnLay
             val scale = mZoomStart + t * (mZoomEnd - mZoomStart)
             val deltaScale = scale / getScale()
             onGestureListener.onScale(deltaScale, mFocalX, mFocalY)
-            // We haven't hit our target scale yet, so post ourselves again
+            
             if (t < 1f) {
                 Compat.postOnAnimation(mImageView, this)
             }
@@ -750,7 +750,7 @@ class PhotoViewAttacher(imageView: ImageView) : View.OnTouchListener, View.OnLay
             }
             mCurrentX = startX
             mCurrentY = startY
-            // If we actually can move, fling the scroller
+            
             if (startX != maxX || startY != maxY) {
                 mScroller.fling(
                     startX, startY, velocityX, velocityY, minX,
@@ -761,7 +761,7 @@ class PhotoViewAttacher(imageView: ImageView) : View.OnTouchListener, View.OnLay
 
         override fun run() {
             if (mScroller.isFinished) {
-                return  // remaining post that should not be handled
+                return  
             }
             if (mScroller.computeScrollOffset()) {
                 val newX = mScroller.currX
@@ -770,7 +770,7 @@ class PhotoViewAttacher(imageView: ImageView) : View.OnTouchListener, View.OnLay
                 checkAndDisplayMatrix()
                 mCurrentX = newX
                 mCurrentY = newY
-                // Post On animation
+                
                 Compat.postOnAnimation(mImageView, this)
             }
         }

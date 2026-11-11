@@ -8,17 +8,17 @@ import android.os.ParcelFileDescriptor
 import java.io.File
 import java.io.FileNotFoundException
 
-/**
- * Test-only ContentProvider that serves a real file descriptor for a registered backing file.
- *
- * Required because ShadowContentResolver does NOT shadow openFileDescriptor: a registered
- * input-stream supplier can serve openInputStream but never a file descriptor. The fd path
- * therefore needs a real provider.
- *
- * Register with Robolectric.setupContentProvider(FakeFileProvider::class.java, AUTHORITY) —
- * ShadowContentResolver.registerProviderInternal does NOT work (no ProviderInfo attached, so
- * the framework's authority check rejects the call with SecurityException).
- */
+
+
+
+
+
+
+
+
+
+
+
 class FakeFileProvider : ContentProvider() {
 
     override fun onCreate(): Boolean = true
@@ -51,10 +51,10 @@ class FakeFileProvider : ContentProvider() {
     companion object {
         const val AUTHORITY = "com.difft.android.test.fakefiles"
 
-        /** Backing files by URI. Populate before the call under test. */
+        
         val files: MutableMap<Uri, File> = mutableMapOf()
 
-        /** Number of openFile() invocations — asserted to be exactly 1 on the fd path. */
+        
         var openFileCalls: Int = 0
 
         fun reset() {

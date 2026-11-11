@@ -17,7 +17,7 @@ import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** T-S1, T-S2, T-S3, T-S5, T-S7 — prepare-upload + upload state machine (design §13). */
+
 class UploadFlowTest {
 
     private val info = com.difft.android.p2p.engine.model.DeviceInfo(alias = "Sender", fingerprint = "fp")
@@ -44,8 +44,7 @@ class UploadFlowTest {
         assertTrue(resp.sessionId.isNotBlank())
         assertEquals(setOf("f1"), resp.files.keys)
         assertTrue(resp.files.getValue("f1").isNotBlank())
-        // The session-level credential and the capability list the cross-platform contract adds:
-        // 128 bits base64url without padding is 22 characters; the receiver declares what it serves.
+        
         assertEquals(22, resp.sessionToken?.length)
         assertTrue(resp.caps.orEmpty().contains(ReceiverCaps.STATUS_V1))
     }
@@ -77,7 +76,7 @@ class UploadFlowTest {
     fun `prepare-upload without PIN requirement skips the PIN check`() {
         val sm = SessionManager()
         val pin = PinPolicy()
-        val handler = PrepareUploadHandler(sm, pin, requirePin = false) // multicast oracle path
+        val handler = PrepareUploadHandler(sm, pin, requirePin = false) 
         val req = PrepareUploadRequest(info, mapOf("f1" to fileMeta("f1", "x".toByteArray())))
         val resp = handler.handle(req, "1.1.1.1", null)
         assertEquals(setOf("f1"), resp.files.keys)
@@ -124,7 +123,7 @@ class UploadFlowTest {
         assertEquals("/captured/f1.bin", sink.finalized)
     }
 
-    /** A precondition the receiver honoured rides back on the 200 as a header; a plain sink adds none. */
+    
     @Test
     fun `upload carries the sink's success headers back to the sender`() {
         val sm = SessionManager()
@@ -149,7 +148,7 @@ class UploadFlowTest {
         val sm = SessionManager()
         val sink = CapturingFileSink()
         val realBytes = "real content".toByteArray()
-        // Declare a metadata sha256 for DIFFERENT bytes → mismatch on stream.
+        
         val lyingMeta = fileMeta("f1", "other content".toByteArray())
         val (sid, slots) = sm.createSession("1.1.1.1", mapOf("f1" to lyingMeta))
         val token = slots.getValue("f1").token

@@ -15,7 +15,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** Which jobs [MessagingPauseJobHold] parks, and when it releases them (#1382). */
+
 class MessagingPauseJobHoldTest {
 
     private val sendKeys = listOf(
@@ -61,7 +61,7 @@ class MessagingPauseJobHoldTest {
         val hold = testJobHold(pause.gate)
 
         hold.released.test {
-            awaitItem() // the wake for the login already signed in
+            awaitItem() 
             pause.open()
             awaitItem()
             pause.pauseMessaging()
@@ -93,12 +93,12 @@ class MessagingPauseJobHoldTest {
         assertEquals(TEST_LOGIN, hold.current())
     }
 
-    // Jobs held for no login may be scanned before the job manager subscribes; a login already
-    // signed in by then must still wake them.
+    
+    
     @Test
     fun `released emits for a login already signed in when the collector subscribes`() = runTest {
         val login = MutableStateFlow<String?>(null)
-        // Messaging still loading, so the only wake is the login's.
+        
         val hold = MessagingPauseJobHold(TestMessagingPause().gate, login)
         login.value = TEST_LOGIN
 

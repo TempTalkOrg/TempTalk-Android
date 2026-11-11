@@ -21,26 +21,12 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlin.test.assertTrue
 
-/**
- * I5 F4 — deterministic test for the coroutine-cancel → `Call.cancel()` bridge every [SenderHttpClient]
- * call goes through (`Call.await()`), pinned on [SenderHttpClient.upload] and [ReversePairClient.reversePair]
- * (`suspendCancellableCoroutine { cont.invokeOnCancellation { call.cancel() } ; call.enqueue(...) }`).
- *
- * The bridge exists because a cancelled coroutine (the FGS tearing down on user-cancel, I5 §5 sender
- * row) must ABORT the in-flight upload. The removed loopback test was flaky because it depended on
- * real-socket timing; this test is socket-free and timing-deterministic:
- *   - inject a mocked [OkHttpClient] (via the `clientOverride` test seam) whose `newCall` returns a
- *     mocked [Call] whose `enqueue` NEVER invokes the callback — i.e. the upload is "in flight forever",
- *   - launch `upload(...)` on a real coroutine, wait until `enqueue` is reached (the coroutine is now
- *     suspended in `suspendCancellableCoroutine`),
- *   - cancel the job → `invokeOnCancellation` fires immediately (while suspended),
- *   - assert `call.cancel()` was invoked (the bridge fired) within a bound.
- *
- * This also pins the FIX for the latent defect F4 uncovered: the previous bridge used the DEFAULT
- * `invokeOnCompletion` (onCancelling=false) over a BLOCKING `execute()`, which fires only AFTER the body
- * returns — so `call.cancel()` ran too late to abort a truly in-flight upload (a no-op). The
- * enqueue + invokeOnCancellation form fires the cancel the moment cancellation begins.
- */
+
+
+
+
+
+
 class SenderHttpClientCancelTest {
 
     @Test
@@ -49,10 +35,10 @@ class SenderHttpClientCancelTest {
         val cancelInvoked = CountDownLatch(1)
 
         val call = mockk<Call>(relaxed = true)
-        // enqueue() accepts the callback but NEVER completes it — models an upload stuck in flight, so
-        // the coroutine stays suspended inside suspendCancellableCoroutine until it is cancelled.
+        
+        
         every { call.enqueue(any()) } answers { enqueued.countDown() }
-        // Record the cancel bridge firing so the test can await it deterministically.
+        
         every { call.cancel() } answers { cancelInvoked.countDown() }
 
         val okHttp = mockk<OkHttpClient>()
@@ -70,12 +56,12 @@ class SenderHttpClientCancelTest {
             )
         }
 
-        // Wait until enqueue() is reached (coroutine suspended in suspendCancellableCoroutine), THEN
-        // cancel — guarantees invokeOnCancellation is registered on a live, suspended continuation.
+        
+        
         assertTrue(enqueued.await(5, TimeUnit.SECONDS), "upload must enqueue the call")
         job.cancel()
 
-        // invokeOnCancellation must fire Call.cancel() the moment cancellation begins — the F4 contract.
+        
         assertTrue(
             cancelInvoked.await(5, TimeUnit.SECONDS),
             "coroutine cancellation must invoke Call.cancel() (the upload cancel bridge)",
@@ -84,12 +70,12 @@ class SenderHttpClientCancelTest {
         verify { call.cancel() }
     }
 
-    /**
-     * The computer holds `/reverse-pair` open until the person at it confirms, and learns that the
-     * phone left ONLY from that connection closing. A cancel during the hang must therefore reach
-     * `Call.cancel()` at once — a blocking `execute()` would keep the connection up until the
-     * 5-minute deadline, with the computer still showing the phone as waiting.
-     */
+    
+
+
+
+
+
     @Test
     fun `coroutine cancel hangs up a held reverse-pair via Call cancel`() = runBlocking {
         val enqueued = CountDownLatch(1)
@@ -120,7 +106,7 @@ class SenderHttpClientCancelTest {
         precheck = ReversePairPrecheck(env = "test", formatVersion = "1.0", account = "u_a"),
     )
 
-    /** Minimal known-length source — `writeTo` is never reached (the call never completes). */
+    
     private object EmptyFileSource : FileSource {
         override val fileName = "empty.bin"
         override val size = 0L

@@ -17,12 +17,12 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/**
- * [DifftSwitchView]-specific behaviour (issue #1206): the two layout forms chosen by `android:text`
- * and how each measures, including View padding, which `AbstractComposeView` subtracts in onMeasure
- * and offsets in onLayout. The shared [DifftToggleView] contract comes from
- * [DifftToggleViewContractTest].
- */
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34])
@@ -41,7 +41,7 @@ class DifftSwitchViewTest : DifftToggleViewContractTest() {
         return DifftSwitchView(activity, builder.build())
     }
 
-    // ---------- Measurement ----------
+    
 
     @Test
     fun `the bare control is the 52 by 32 design box and an explicit size wins`() {
@@ -54,7 +54,7 @@ class DifftSwitchViewTest : DifftToggleViewContractTest() {
         assertEquals(activity.px(52), view.measuredWidth)
         assertEquals(activity.px(32), view.measuredHeight)
 
-        // wrap_content inside a real parent arrives as AT_MOST: must never fill the parent.
+        
         val atMost = MeasureSpec.makeMeasureSpec(activity.px(1000), MeasureSpec.AT_MOST)
         view.measure(atMost, atMost)
         assertEquals(activity.px(52), view.measuredWidth)
@@ -108,7 +108,7 @@ class DifftSwitchViewTest : DifftToggleViewContractTest() {
         assertTrue(view.measuredHeight <= activity.px(52))
     }
 
-    // ---------- Label and accessibility ----------
+    
 
     @Test
     fun `android text lands as the row label`() {

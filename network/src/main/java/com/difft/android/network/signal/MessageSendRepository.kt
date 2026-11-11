@@ -36,17 +36,17 @@ import javax.inject.Singleton
 class MessageSendRepository @Inject constructor(
     @param:ChativeHttpClientModule.SignalApi
     private val httpClient: ChativeHttpClient,
-    // Lazy breaks the Dagger cycle: the sink implementation reaches back into the device
-    // endpoints to confirm a rejection before acting on it.
+    
+    
     private val authFailureSink: dagger.Lazy<AuthFailureSink>,
 ) {
     private val messageApiService: MessageApiService =
         httpClient.getService(MessageApiService::class.java)
-    /**
-     * Send a message via HTTP fallback.
-     * Replaces PushServiceSocket.sendMessageNew().
-     * Error semantics are identical to PushServiceSocket.validateResponse().
-     */
+    
+
+
+
+
     suspend fun sendMessage(
         message: NewOutgoingPushMessage,
         recipient: For
@@ -95,10 +95,10 @@ class MessageSendRepository @Inject constructor(
     private fun readErrorBody(response: Response<ResponseBody>): String? =
         try { response.errorBody()?.string() } catch (_: Exception) { null }
 
-    /**
-     * Maps HTTP error codes to domain exceptions.
-     * Directly mirrors PushServiceSocket.validateResponse().
-     */
+    
+
+
+
     private fun throwForErrorCode(
         code: Int,
         bodyString: String?,
@@ -108,8 +108,8 @@ class MessageSendRepository @Inject constructor(
         L.d { "[MessageSendRepository] throwForErrorCode: code=$code, body=$bodyString" }
         when (code) {
             401, 403 -> {
-                // Signal only: the sink confirms against the device endpoint before any logout,
-                // so a business 403 here costs one extra probe, never a session.
+                
+                
                 authFailureSink.get().onAuthRejected(AuthFailureSource.MESSAGE_SEND)
                 throw AuthorizationFailedException(code, "Authorization failed!")
             }
@@ -125,7 +125,7 @@ class MessageSendRepository @Inject constructor(
                     } catch (e: AccountOfflineException) {
                         throw e
                     } catch (_: Exception) {
-                        // Ignore parsing errors, fall through to UnregisteredUserException
+                        
                     }
                 }
                 L.w { "[MessageSendRepository] throwForErrorCode: unregistered user $recipientId" }
@@ -140,7 +140,7 @@ class MessageSendRepository @Inject constructor(
                         L.w { "[MessageSendRepository] throwForErrorCode: mismatched devices for $recipientId" }
                         throw e
                     } catch (_: Exception) {
-                        // Ignore parsing errors, fall through
+                        
                     }
                 }
                 throw NonSuccessfulResponseCodeException(409, "Mismatched devices")
@@ -154,7 +154,7 @@ class MessageSendRepository @Inject constructor(
                         L.w { "[MessageSendRepository] throwForErrorCode: stale devices for $recipientId" }
                         throw e
                     } catch (_: Exception) {
-                        // Ignore parsing errors, fall through
+                        
                     }
                 }
                 throw NonSuccessfulResponseCodeException(410, "Stale devices")

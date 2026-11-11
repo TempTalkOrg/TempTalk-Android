@@ -6,13 +6,10 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * Which directories deleting a forward node removes.
- *
- * Two defects are pinned here: deletion used to remove only the FIRST attachment's directory (write
- * inserts them all), and it removed the shared `authorityId` directory — so deleting one message took
- * every other message's copy of that file with it.
- */
+
+
+
+
 class ForwardAttachmentDeletionTest {
 
     private fun attachment(localId: String, authorityId: Long = 777L) = Attachment(
@@ -44,7 +41,7 @@ class ForwardAttachmentDeletionTest {
 
     @Test
     fun `the shared authorityId directory is never removed`() {
-        // Two copies of the same authorized file: deleting one must not name the shared directory.
+        
         val keys = forwardAttachmentDirectoryKeys(
             listOf(attachment("local-a", authorityId = 777L), attachment("local-b", authorityId = 777L))
         )

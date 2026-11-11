@@ -8,7 +8,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** Which rows, in which order, with which hints the background-connection page shows per brand. */
+
 class BackgroundConnectionRowsTest {
 
     private val generic = listOf(BgRow.BACKGROUND_RESTRICTION, BgRow.BATTERY_OPTIMIZATION, BgRow.DATA_SAVER)
@@ -53,7 +53,7 @@ class BackgroundConnectionRowsTest {
             generic + listOf(BgRow.AUTO_START, BgRow.BACKGROUND_ACTIVITY),
             backgroundRowOrder(OemBrand.XIAOMI, flags(autoStart = true, background = true)),
         )
-        // The power page is not offered on every HyperOS build.
+        
         assertEquals(generic + BgRow.AUTO_START, backgroundRowOrder(OemBrand.XIAOMI, flags(autoStart = true)))
     }
 

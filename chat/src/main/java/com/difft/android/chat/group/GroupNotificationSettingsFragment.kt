@@ -44,14 +44,14 @@ import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import kotlin.coroutines.cancellation.CancellationException
 
-/**
- * This user's notification setting in one group: follow the global default, or an explicit
- * option. A page of the home detail stack or its shell.
- *
- * Writes outlive the page (a fold recreates it) and are tracked under [operationKey]: the page
- * restored meanwhile shows the wait while one runs and re-reads the stored values when it ends.
- * Values are also re-read on every resume, which covers returning from the global page.
- */
+
+
+
+
+
+
+
+
 @AndroidEntryPoint
 class GroupNotificationSettingsFragment : Fragment(), SettingsIdiomPage {
 
@@ -99,7 +99,7 @@ class GroupNotificationSettingsFragment : Fragment(), SettingsIdiomPage {
         if (groupId.isNotEmpty() && view != null) readValues()
     }
 
-    /** Re-reads the global default and this group's member row (cheap: one row, one preference). */
+    
     private fun readValues() {
         globalNotificationType.intValue = userManager.getUserData()?.globalNotification ?: 0
         val groupId = groupId
@@ -116,11 +116,11 @@ class GroupNotificationSettingsFragment : Fragment(), SettingsIdiomPage {
         }
     }
 
-    /**
-     * Sends [request]; the shown value moves only once the server accepted it ([onAccepted], with
-     * the page). One write at a time: a tap while one runs is ignored (alternating taps could
-     * otherwise land out of order).
-     */
+    
+
+
+
+
     private fun changeSettings(request: ChangeSelfSettingsInGroupReq, onAccepted: () -> Unit) {
         if (PageOperations.running(operationKey).value) return
         val groupId = groupId
@@ -130,7 +130,7 @@ class GroupNotificationSettingsFragment : Fragment(), SettingsIdiomPage {
         launchOutlivingPage {
             val accepted = PageOperations.track(key) {
                 try {
-                    // Stored locally on acceptance, so the re-read when the key ends shows it.
+                    
                     val response = withContext(Dispatchers.IO) {
                         changeSelfNotification(repo, store, groupId, globalServices.myId, request)
                     }
@@ -168,13 +168,13 @@ class GroupNotificationSettingsFragment : Fragment(), SettingsIdiomPage {
                     detailNavigation().push(this@GroupNotificationSettingsFragment, GroupGlobalNotificationSettingsDestination)
                 },
                 onSwitchChanged = { newValue ->
-                    // Keep the current notification setting; only follow / leave the global one.
+                    
                     changeSettings(ChangeSelfSettingsInGroupReq(notification = null, useGlobal = newValue)) {
                         isDefaultEnabled.value = newValue
                     }
                 },
                 onOptionSelected = { option ->
-                    // Picking an explicit option always leaves the global setting.
+                    
                     changeSettings(ChangeSelfSettingsInGroupReq(notification = option, useGlobal = false)) {
                         currentType.intValue = option
                     }
@@ -191,7 +191,7 @@ class GroupNotificationSettingsFragment : Fragment(), SettingsIdiomPage {
     }
 }
 
-/** A group's notification settings as a detail destination (home detail stack, or its shell). */
+
 class GroupNotificationSettingsDestination(private val groupId: String) : DetailDestination {
     override fun newFragment(): Fragment = GroupNotificationSettingsFragment.newInstance(groupId)
     override fun shellIntent(context: Context): Intent = GroupNotificationSettingsActivity.intent(context, groupId)

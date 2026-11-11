@@ -22,7 +22,7 @@
             android:orientation="vertical"
             android:paddingBottom="20dp">
 
-            <!-- Centered identity header (avatar + name); the whole block opens the contact card -->
+            
             <androidx.compose.ui.platform.ComposeView
                 android:id="@+id/compose_identity_header"
                 android:layout_width="match_parent"

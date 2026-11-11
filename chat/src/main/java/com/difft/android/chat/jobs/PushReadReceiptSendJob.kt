@@ -70,10 +70,9 @@ class PushReadReceiptSendJob @AssistedInject constructor(
     }
 
     public override suspend fun onPushSend() {
-        // Outside the try: its catch-all rethrows, and a refusal must not look like a failure.
+        
         val admission = admitSend() ?: return
         try {
-            //change upon to dsl builder
             val receiptMessage = receiptMessage {
                 type = SignalServiceProtos.ReceiptMessage.Type.READ
                 this.timestamp.addAll(messageSentTimestamps)
@@ -101,14 +100,14 @@ class PushReadReceiptSendJob @AssistedInject constructor(
                 admission
             )
         } catch (e: NoValidRecipientKeysException) {
-            // issue #970 ②: invalid group / account deregistered → permanent. Intentionally swallowed
-            // so the job leaves the queue without retrying; a read receipt needs no failure surface.
-            // Logged at W (apart from the generic E) so production can confirm "stopped permanently".
+            
+            
+            
             L.w { "[Message][PushReadReceiptSendJob] permanent failure, dropping job -> target=$recipientId, RetryCount: $runAttempt" }
         } catch (e: Exception) {
-            // Everything else keeps its normal path: rethrow so BaseJob maps it via onShouldRetry
-            // (IOException → retry; otherwise → Result.failure + onFailure). This also avoids
-            // swallowing CancellationException / ServerRejectedException as a silent success.
+            
+            
+            
             L.e { "[Message][PushReadReceiptSendJob] send read receipt message exception -> ${e.stackTraceToString()}" }
             throw e
         }
@@ -143,7 +142,7 @@ class PushReadReceiptSendJob @AssistedInject constructor(
             )
             val conversationId = data.getString(KEY_MESSAGE_CONVERSATION_ID)!!
 
-            // 向后兼容：如果旧Job数据中没有这两个字段，使用默认值true（保持原有行为）
+            
             val sendReceiptToSender = data.getBooleanOrDefault(KEY_SEND_RECEIPT_TO_SENDER, true)
             val sendSyncToSelf = data.getBooleanOrDefault(KEY_SEND_SYNC_TO_SELF, true)
 

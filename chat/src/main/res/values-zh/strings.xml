@@ -1,16 +1,16 @@
 <resources>
-    <!-- LearnMoreTextView -->
+    
     <string name="LearnMoreTextView_learn_more">了解更多</string>
     <string name="SpanUtil__read_more">查看更多</string>
 
     <string name="you">您</string>
 
-    <!-- Contact -->
+    
     <string name="contact_all">全部</string>
     <string name="contact_groups">群组</string>
-    <string name="contact_name_profile">ID:</string>
-    <string name="contact_join_at">注册时间:</string>
-    <string name="contact_how_you_met">如何相遇:</string>
+    <string name="contact_name_profile">ID</string>
+    <string name="contact_join_at">注册时间</string>
+    <string name="contact_how_you_met">如何相遇</string>
     <string name="contact_info_website">网站:</string>
     <string name="contact_official_account_label">官方账号</string>
     <string name="contact_name_label">名字: %s</string>
@@ -23,10 +23,10 @@
     <string name="unsaved_changes_discard">不保存</string>
     <string name="contact_remark_avatar_choose_photos">相册</string>
     <string name="contact_remark_avatar_restore">还原头像</string>
-    <string name="contact_info_title">联系人信息</string>
-    <string name="contact_action_message">发消息</string>
-    <string name="contact_action_call">语音通话</string>
-    <string name="contact_action_share">分享名片</string>
+    <string name="contact_info_title">联系信息</string>
+    <string name="contact_action_message">消息</string>
+    <string name="contact_action_call">通话</string>
+    <string name="contact_action_share">分享</string>
     <string name="contact_removed">联系人已删除</string>
     <string name="contact_remove">删除联系人</string>
     <string name="contact_remove_dialog_title">删除联系人</string>
@@ -64,7 +64,7 @@
     <string name="contact_ignore">忽略</string>
     <string name="contact_not_in_list">用户不在联系人列表中!</string>
 
-    <!-- Chat -->
+    
     <string name="chat_chats">消息</string>
     <string name="chat_contacts">通讯录</string>
     <string name="chat_me">我</string>
@@ -155,7 +155,7 @@
     <string name="chat_speech_to_text_isblank">未识别到文字</string>
     <string name="chat_translate_fail">翻译失败</string>
     <string name="chat_translate_to_language">翻译成%s</string>
-    <!-- Conversation auto-translate -->
+    
     <string name="chat_translate_setting_title">翻译</string>
     <string name="chat_translate_setting_off">关闭</string>
     <string name="chat_translate_setting_zh">中文</string>
@@ -193,6 +193,7 @@
     <string name="chat_action_contact">联系人</string>
     <string name="chat_action_file">文件</string>
     <string name="chat_action_call">通话</string>
+    <string name="chat_action_more">更多</string>
     <string name="chat_action_newcall">视频会议</string>
     <string name="chat_action_confidential_mode">机密模式</string>
     <string name="chat_action_mention">提及</string>
@@ -213,19 +214,16 @@
     <string name="chat_message_delete_tips">是否删除这条消息？</string>
     <string name="chat_label_new_message">新消息</string>
 
-    <!--Chat Option -->
+    
     <string name="chat_option_create_group">创建群组</string>
     <string name="chat_option_scan">扫一扫</string>
     <string name="chat_option_add_contact">添加联系人</string>
     <string name="chat_option_mark_all_as_read">全部标为已读</string>
-    <!-- Topic -->
-    <!--
--->
-    <!--
--->
+    
+
     <string name="chat_topic_title1">%1$s - %2$s</string>
     <string name="chat_topic_title2">%1$s</string>
-    <!-- Group -->
+    
     <string name="new_group">新群组</string>
     <string name="create_group_input_hint">命名此群聊</string>
     <string name="create_group_button">创建</string>
@@ -246,7 +244,7 @@
     <string name="group_create_a_group">%s创建了群组。</string>
     <string name="group_left_the_group">%s离开了群组。</string>
     <string name="group_invited_join_group">%1$s邀请%2$s加入群组。</string>
-    <!-- <string name="group_invited_join_group">%1$s加入了群组。</string> -->
+
     <string name="group_removed_from_group">%1$s已从群组中移除。</string>
     <string name="group_changed_group_name">%1$s更改了群组名称。</string>
     <string name="group_changed_group_avatar">%1$s更改了群头像。</string>
@@ -255,6 +253,7 @@
     <string name="group_permission_denied">没有权限，请联系群协调人</string>
     <string name="group_unknown_group">未知群组</string>
     <string name="group_not_your_friend">%1$s还不是你的朋友，您不能邀请他们加入群组，请先添加他们。</string>
+    <string name="group_create_result_unknown">无法确认结果，再次创建前请先查看会话列表。</string>
     <string name="group_allow_everyone_to_speak">群组已被设置为所有人可发言</string>
     <string name="group_only_moderators_can_speak">群组已被设置仅协调人可发言</string>
     <string name="group_only_moderators_can_speak_tip">仅协调人可发言</string>
@@ -271,7 +270,7 @@
     <string name="group_members_view_all">查看全部</string>
     <string name="group_members_collapse">收起</string>
 
-    <!-- Me -->
+    
     <string name="me_account">帐户</string>
     <string name="me_privacy">安全和隐私</string>
     <string name="me_advanced">高级</string>
@@ -301,55 +300,64 @@
     <string name="me_delete_dialog_ok">删除</string>
     <string name="me_language">语言</string>
     <string name="me_help">帮助与反馈</string>
-    <string name="me_theme">主题</string>
+    <string name="me_appearance">外观</string>
     <string name="me_theme_dark">深色</string>
     <string name="me_theme_light">浅色</string>
-    <string name="me_theme_system">系统</string>
+    <string name="me_theme_system">跟随\u200B系统</string>
+    <string name="chat_theme">聊天主题</string>
+    <string name="me_color_mode">颜色模式</string>
+    <string name="me_color_mode_note">选择「跟随系统」后，将随手机的深色模式设置自动切换。</string>
+    <string name="me_text">文字</string>
+    <string name="me_text_preview">字体大小预览</string>
+    <string name="me_text_preview_notice">消息已端到端加密</string>
+    <string name="me_text_preview_received">方案发你了，只有我们俩能看到</string>
+    <string name="me_text_preview_sent">收到，连服务器也读不到，安心</string>
+    <string name="chat_theme_note">更改聊天背景和你发出的消息气泡颜色，浅色和深色模式下均生效。</string>
+    <string name="chat_theme_classic">经典</string>
+    <string name="chat_theme_gradient">渐变</string>
     <string name="me_chat">聊天和通话</string>
     <string name="me_chat_and_call">聊天和通话</string>
     <string name="me_save_to_photos">保存至相册</string>
     <string name="me_automatically_save_photos">自动将收到的照片和视频保存到"照片"中；机密模式下不保存。</string>
 
-    <!-- Conversation-level save to photos settings -->
+    
     <string name="save_to_photos_default">默认 (%s)</string>
     <string name="save_to_photos_always">始终</string>
     <string name="save_to_photos_never">从不</string>
     <string name="save_to_photos_on">开启</string>
     <string name="save_to_photos_off">关闭</string>
 
-    <!-- Voice playback speed settings -->
+    
     <string name="me_voice_playback_speed">语音播放速度</string>
     <string name="me_voice_playback_speed_desc">设置语音消息的默认播放速度。</string>
     <string name="voice_speed_1x">1×</string>
     <string name="voice_speed_1_5x">1.5×</string>
     <string name="voice_speed_2x">2×</string>
 
-    <!-- Voice changer (call) settings -->
+    
     <string name="me_call_voice_changer">变声</string>
     <string name="me_call_voice_changer_desc">设置通话中的变声效果。</string>
 
-    <!-- Contact profile setting-->
+    
     <string name="contact_profile_info">资料</string>
     <string name="contact_profile_skip">跳过</string>
     <string name="contact_profile_done">完成</string>
     <string name="contact_profile_next">下一步</string>
     <string name="contact_name">名字</string>
 
-    <!-- MainActivity -->
+    
     <string name="not_granted_necessary_permissions">未获得必要的权限</string>
     <string name="invalid_link">无效链接</string>
     <string name="not_supported_link">不支持的链接。请升级客户端后重试。</string>
     <string name="unsupported_file_type">不支持的文件类型</string>
     <string name="file_unavailable">无法读取该文件，它可能已被移动或删除</string>
 
-    <!-- Forward message -->
-    <string name="forwarded_message">转发消息</string>
-    <string name="forwarded_from">来自：</string>
+    
+    <string name="chat_forwarded_from">转发自 %1$s</string>
     <string name="group_chat_history">群聊记录</string>
     <string name="chat_history">聊天记录</string>
     <string name="chat_history_for">%s的聊天记录</string>
     <string name="chat_select_dialog_close">关闭</string>
-    <string name="chat_select_dialog_multiple">多选</string>
     <string name="select_chat">选择聊天</string>
     <string name="select_contact">选择联系人</string>
     <string name="chat_select_recent_chats">最近聊天</string>
@@ -365,7 +373,7 @@
     <string name="chat_recall_tips">您确定要撤回信息吗？</string>
     <string name="chat_recall_dialog_yes">是</string>
     <string name="chat_recall_dialog_cancel">取消</string>
-    <!--    invite-->
+    
     <string name="invite_link">邀请链接</string>
     <string name="invite_regenerate">重新生成</string>
     <string name="invite_share">分享</string>
@@ -381,13 +389,13 @@
     <string name="invite_regenerate_dialog_content">旧的邀请码将过期。您确定要继续吗？</string>
     <string name="invite_regenerate_dialog_cancel">取消</string>
     <string name="invite_regenerate_dialog_ok">重新生成</string>
-    <!--    <string name="invite_disable_only_moderators">%1$s invite_disable_only_moderators</string>-->
+
     <string name="invite_only_moderators_can_add">此群组仅允许协调人邀请。</string>
     <string name="invite_code">%s邀请码</string>
     <string name="invite_joined_at">%s加入</string>
     <string name="invite_code_error_tips">邀请已满，请稍后重试！</string>
 
-    <!--    scan-->
+    
     <string name="scan_scan">扫描</string>
     <string name="scan_camera_open_failed">打开相机失败，请重试。</string>
     <string name="scan_computer_export_code_hint">如需从电脑迁移聊天记录，请在接收手机登录时的迁移页面选择「从电脑迁移」。</string>
@@ -397,7 +405,6 @@
     <string name="link_device_cancel">取消</string>
     <string name="chat_dialog_ok">确认</string>
     <string name="chat_dialog_cancel">取消</string>
-    <string name="search_title_recent">最近</string>
     <string name="search_title_contacts">联系人</string>
     <string name="search_title_group">群组</string>
     <string name="search_chat_history">查找聊天内容</string>
@@ -430,6 +437,7 @@
     <string name="notification_no_permission_tip">应用没有显示通知的权限，您可以在系统设置中启用它。</string>
     <string name="notification_no_permission_tip1">请允许%s显示通知，以便您能正常接收到消息和电话通知。</string>
     <string name="background_connection_prompt_delay">消息或来电可能无法及时送达。开启后台连接，可以更及时地收到消息和来电。</string>
+    <string name="background_connection_prompt_restricted">系统可能在后台限制了 %1$s，消息或来电可能会延迟。请检查后台连接相关设置，并参考设置指引。</string>
     <string name="background_connection_prompt_critical">你已开启紧急联络。开启后台连接，紧急联络才能尽可能及时送达。</string>
     <string name="notification_ignore">稍后</string>
     <string name="notification_go_to_settings">设置</string>
@@ -617,7 +625,7 @@
     <string name="background_connection_enabled">后台连接已启用</string>
     <string name="background_connection_status_off">未开启</string>
 
-    <!-- 后台连接检查项 -->
+    
     <string name="background_restriction_check">后台限制</string>
     <string name="background_restriction_restricted">受限</string>
     <string name="background_restriction_unrestricted">正常</string>
@@ -651,7 +659,6 @@
 
     <string name="background_connection_fix_first">请先完成「%s」，再开启后台连接</string>
 
-
     <string name="disappearing_messages">倒计时</string>
     <string name="disappearing_messages_tips">消息在被阅读后会自动过期，它们将会被删除，无法以任何方式查看。</string>
     <string name="disappearing_messages_not_archive">不自动过期</string>
@@ -662,14 +669,14 @@
     <string name="group_remove_member_confirm">移出</string>
     <string name="chat_group_in_common">共同群</string>
     <string name="critical_alerts">紧急联络</string>
-    <!-- Chat Archive Settings -->
+    
     <string name="chat_archive_extend_time_title">延长时间设置？</string>
     <string name="chat_archive_extend_time_message">你正在延长会话的消息销毁时长。请注意：此前已被销毁的消息无法恢复。</string>
     <string name="chat_archive_shorten_time_title">缩短时间设置？</string>
     <string name="chat_archive_shorten_time_message">你正在缩短会话的消息销毁时长。可能更多历史消息被销毁且无法恢复，该操作将同步至你所有设备。</string>
     <string name="chat_archive_messages_expired">之前消息已过期</string>
 
-    <!-- Group Encryption -->
+    
     <string name="group_upgrade_to_encrypted">增强加密</string>
     <string name="group_encrypted_label">已增强加密</string>
     <string name="group_encrypted_title">增强加密</string>
@@ -690,18 +697,16 @@
     <string name="group_name_encrypted_placeholder">🔒 群组</string>
     <string name="group_encryption_update_required">暂时无法操作</string>
     <string name="group_edit_name_done">完成</string>
+    <string name="group_edit">编辑</string>
     <string name="group_edit_name_empty">群组名不能为空</string>
-    <!-- Forward notice (system message shown after a forward completes).
-         Terminal punctuation is appended by ForwardNoticeRenderer; %3$s is the
-         locale-formatted author list (Chinese uses 、 separator, 等 N 人 overflow).
-         PRD v1.0 §5.4.2. -->
+    
     <plurals name="chat_forward_notice">
         <item quantity="other">\"%1$s\" 转发了 %2$d 条来自 %3$s 的消息</item>
     </plurals>
     <plurals name="chat_forward_notice_self_only">
         <item quantity="other">\"%1$s\" 转发了 %2$d 条消息</item>
     </plurals>
-    <!-- Combined-forward (聊天记录) variants — PRD v1.0 §5.4.2 -->
+    
     <plurals name="chat_forward_notice_chat_history">
         <item quantity="other">\"%1$s\" 转发了 %2$d 条来自 %3$s 的聊天记录</item>
     </plurals>
@@ -728,7 +733,7 @@
     <plurals name="chat_copy_notice_self_only">
         <item quantity="other">\"%1$s\" 复制了 %2$d 条消息</item>
     </plurals>
-    <!-- SUB_COMBINED_FORWARD copy variant — PRD v1.0 §5.4.1 -->
+    
     <plurals name="chat_copy_notice_from_chat_history">
         <item quantity="other">\"%1$s\" 复制了 %2$d 条来自 %3$s 聊天记录中的消息</item>
     </plurals>
@@ -737,28 +742,26 @@
     </plurals>
     <string name="chat_copy_notice_sentence_terminator">。</string>
 
-    <!-- GIF panel (M1: browse + search + send) -->
+    
     <string name="gif_search_hint">搜索 GIF</string>
     <string name="gif_no_result">没有找到相关 GIF</string>
     <string name="gif_load_failed">无法加载 GIF，请稍后重试</string>
     <string name="gif_tab_trending">热门</string>
 
-    <!-- GIF favorites (M3: favorites data flow) -->
+    
     <string name="gif_favorites_empty">暂无 GIF 收藏</string>
-    <!-- Unified favorite menu labels (message long-press menu + GIF grid long-press floating menu). -->
+    
     <string name="gif_favorites_add_full">收藏GIF</string>
     <string name="gif_favorites_remove">从 GIF 收藏移除</string>
     <string name="gif_favorites_added">已添加到 GIF 收藏</string>
     <string name="gif_favorites_failed">无法添加到 GIF 收藏，请稍后重试</string>
     <string name="gif_favorites_add_size_limit">此 GIF 过大，无法添加到 GIF 收藏</string>
-    <!-- Cap-reached confirm dialog (limit 200). Secondary "取消" just dismisses (current GIF not added). -->
+    
     <string name="gif_favorites_cap_title">GIF 收藏已达上限</string>
     <string name="gif_favorites_cap_message">GIF 收藏最多 200 个。你可以替换最早添加的一个，或先移除部分。</string>
     <string name="gif_favorites_cap_confirm">替换最早的</string>
     <string name="gif_favorites_cap_cancel">取消</string>
-    <!-- Media send failure surface: dialog titles, per-item lines, overflow line and buttons.
-         Deliberately does not reuse file_unavailable: that wording asserts the file was moved or
-         deleted, which is the wrong attribution for a read that the system refused. -->
+    
     <string name="media_send_failed_title_single">无法发送该文件</string>
     <string name="media_send_failed_title_all">%1$d 项均无法发送</string>
     <string name="media_send_failed_title_partial">%1$d 项中有 %2$d 项无法发送</string>
@@ -770,17 +773,13 @@
     <string name="media_send_failed_retry">重试</string>
     <string name="media_send_failed_back">返回修改</string>
     <string name="media_send_failed_send_rest">发送其余 %1$d 项</string>
-    <!-- Short reason labels, one per failure reason. Kept to a fragment so they read inside an item line. -->
+    
     <string name="media_send_reason_unreadable">无法读取</string>
     <string name="media_send_reason_unsupported">格式不支持</string>
     <string name="media_send_reason_no_space">存储空间不足</string>
     <string name="media_send_reason_transform">处理失败</string>
     <string name="media_send_reason_unknown">未知错误</string>
-    <!-- Next-step guidance, one line per reason. media_send_next_restart_or_file covers both the
-         "read was refused with no attribution available" and "access looks granted yet the read
-         failed" cases, so it states only the observable fact and must not name a permission state;
-         it must keep the restart advice, which is what helps under either mechanism. The "文件"
-         literal in it and in media_send_next_reselect_photos must match chat_action_file. -->
+    
     <string name="media_send_next_restart_or_file">系统拒绝了对该文件的读取。请重启应用后重试；若仍失败，可改用“文件”方式发送。</string>
     <string name="media_send_next_grant">应用当前没有相册访问权限。请在系统设置中允许后重试。</string>
     <string name="media_send_next_reselect_photos">该文件不在你已授权访问的照片范围内。请重新选择要授权的照片，或改用“文件”方式发送。</string>
@@ -790,10 +789,32 @@
     <string name="media_send_next_retry_or_plain">请重试，或取消编辑后直接发送原文件。</string>
     <string name="media_send_next_unknown">出现未知错误（%1$s），请重试。</string>
 
-    <!-- 旧包：标题栏迁移入口 + 首次启动一次性提示 -->
+    
     <string name="legacy_migration_app_name_new">Quicall（新版）</string>
     <string name="legacy_migration_entry_short">迁移到新版</string>
     <string name="notification_test_busy">已有通知测试正在进行。</string>
     <string name="notification_test_persistence_failed">无法保存测试结果，请重新测试。</string>
     <string name="group_change_followup_pending">变更已接受，本地更新尚未完成。重试将仅完成后续步骤，不会再次提交变更。</string>
+    <string name="chat_expiry_minutes_short">分</string>
+    <string name="contacts_days_short">%d天</string>
+    <string name="contacts_today">今天</string>
+    <string name="contacts_official">官方</string>
+    <string name="contacts_card_group_info">群信息</string>
+    <string name="contacts_card_countdown">倒计时</string>
+    <string name="contacts_card_invite">邀请</string>
+    <string name="contacts_card_add">添加</string>
+    <string name="contacts_card_group_members">群成员</string>
+    <plurals name="group_dissolve_in_days">
+        <item quantity="other">%1$d 天后解散</item>
+    </plurals>
+    <string name="group_dissolve_today">今天解散</string>
+    <string name="group_dissolve_keep_hint">发言或修改群资料即可保留</string>
+    <string name="weak_contact_keep_hint">重新添加好友即可保留</string>
+    <string name="contacts_card_remove_confirmation">立即删除此联系人？</string>
+    <string name="contacts_directory_contacts">联系人</string>
+    <string name="contacts_expiring_groups">即将解散</string>
+    <string name="group_member_list_title">成员列表</string>
+    <string name="group_member_list_moderators">协调人</string>
+    <string name="group_member_list_participants">参加者</string>
+    <string name="group_member_list_no_match">没有找到“%1$s”相关成员</string>
 </resources>

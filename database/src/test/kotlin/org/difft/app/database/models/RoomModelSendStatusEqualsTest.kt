@@ -8,15 +8,15 @@ import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * Guards that `sendStatus` participates in [RoomModel]'s value semantics.
- *
- * The conversation-list refresh gate is `RoomViewData` equality, not this one — but every new
- * `RoomModel` column is expected to be in `equals`/`hashCode`/`toString`, and omitting it here
- * would silently defeat any future `distinctUntilChanged`/cache consumer keyed on `RoomModel`.
- *
- * Covers T3-4.
- */
+
+
+
+
+
+
+
+
+
 class RoomModelSendStatusEqualsTest {
 
     private fun room(status: Int) = RoomModel().apply {

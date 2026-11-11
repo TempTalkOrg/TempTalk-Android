@@ -33,7 +33,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowActivityManager
 import kotlin.test.assertEquals
 
-/** #1328: exit samples are collected for every reporting install, not only keep-alive-on ones. */
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class ProcessExitProbeTest {

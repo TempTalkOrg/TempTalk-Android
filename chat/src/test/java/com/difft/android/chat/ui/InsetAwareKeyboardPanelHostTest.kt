@@ -11,14 +11,14 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/**
- * H1/H2 — the full-screen adapter must be a pure pass-through.
- *
- * These are the machine-checked half of the zero-delta constraint: the full-screen chat path must
- * behave exactly as it did before [KeyboardPanelHost] existed. H1 pins that the four real methods
- * delegate 1:1 (same call, same listener instance); H2 pins that the one genuinely new method
- * touches the wrapped layout not at all.
- */
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28])
 class InsetAwareKeyboardPanelHostTest {
@@ -43,8 +43,8 @@ class InsetAwareKeyboardPanelHostTest {
         verify(exactly = 1) { layout.releaseKeyboardPaddingFreeze() }
         confirmVerified(layout)
 
-        // The SAME object must reach the layout's listener list on both sides, or removal in
-        // onDestroyView would silently leak the listener.
+        
+        
         assertSame(listener, added.captured)
         assertSame(listener, removed.captured)
     }
@@ -54,8 +54,8 @@ class InsetAwareKeyboardPanelHostTest {
         host.onChatPanelVisibilityChanged(true, 500)
         host.onChatPanelVisibilityChanged(false, 0)
 
-        // No verify() calls recorded, so confirmVerified asserts ZERO interactions: the full-screen
-        // path gains no view mutation, no inset pass, no state write from the new host method.
+        
+        
         confirmVerified(layout)
     }
 }

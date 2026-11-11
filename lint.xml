@@ -1,34 +1,25 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <lint>
-    <!-- L10N warnings -->
+    
     <issue id="MissingTranslation" severity="ignore" />
     <issue id="ExtraTranslation" severity="warning" />
     <issue id="MissingDefaultResource" severity="error">
         <ignore path="*/res/values-*/strings.xml" />
     </issue>
 
-    <!-- UI related -->
+    
     <issue id="HardcodedText" severity="error" />
     <issue id="ButtonOrder" severity="error" />
     <issue id="VectorRaster" severity="error" />
     
-    <!-- Common issues -->
+    
     <issue id="UnspecifiedImmutableFlag" severity="error" />
     
-    <!-- Ignore some common warnings that might affect development efficiency -->
+    
     <issue id="OptionalUsedAsFieldOrParameterType" severity="ignore" />
     <issue id="SameParameterValue" severity="ignore" />
 
-    <!--
-        :lintchecks custom detectors — the logger implementation itself MUST
-        call android.util.Log / Timber directly (it is the source of those
-        wrappers; using L from L would be infinite recursion). The
-        printStackTrace(stream) overloads in BaseTree are the standard Java
-        idiom for stack-trace string extraction.
-
-        Scope is narrowly limited to the logger implementation files; all
-        other code MUST go through L.
-    -->
+    
     <issue id="LogNotL">
         <ignore path="base/src/main/java/timber/log/" />
         <ignore path="base/src/main/java/com/difft/android/base/log/lumberjack/" />
@@ -37,36 +28,17 @@
         <ignore path="base/src/main/java/com/difft/android/base/log/lumberjack/" />
     </issue>
 
-    <!--
-        ChativeHttpClient — the :network module hosts the wrapper itself plus
-        documented low-level clients (WebSocketConnection, SpeedTestModule)
-        that cannot reuse ChativeHttpClient due to circular DI dependencies.
-        Business modules outside :network MUST go through ChativeHttpClient.
-    -->
+    
     <issue id="ChativeHttpClientRequired">
         <ignore path="network/" />
     </issue>
 
-    <!--
-        ForegroundServiceStarter — the wrapper itself MUST call the raw
-        Service.startForeground. All other Service subclasses must go
-        through `ForegroundServiceStarter.startForegroundSafely(...)`.
-    -->
+    
     <issue id="ForegroundServiceStarterRequired">
         <ignore path="base/src/main/java/com/difft/android/base/utils/ForegroundServiceStarter.kt" />
     </issue>
 
-    <!--
-        DifftWidgetRequired — :base hosts the DifftButton / DifftSwitch / DifftCheckBox
-        composables and their XML shells, so it is the one module allowed to touch the raw
-        widgets. The files below predate the rule and are excluded on purpose:
-          - DialogTestActivity + test_custom_view_dialog: the dialog test page and its
-            fixture layout, kept as-is by decision (its Material3 Buttons are test scaffolding)
-          - ps_bottom_nav_bar: the media picker's drawable-driven "original" toggle, not a
-            settings checkbox
-          - layout_media_quality_select_dialog: a text-only option pair with no matching
-            DifftButton size yet (#1217 item 3)
-    -->
+    
     <issue id="DifftWidgetRequired">
         <ignore path="base/" />
         <ignore path="app/src/main/java/com/difft/android/setting/DialogTestActivity.kt" />
@@ -75,58 +47,44 @@
         <ignore path="chat/src/main/res/layout/layout_media_quality_select_dialog.xml" />
     </issue>
 
-    <!--
-        DifftTypeScaleRequired (issue #1232) — the theme package defines DifftTheme.typography,
-        so it alone builds TextStyles by hand; the rest of :base uses the scale like everyone
-        else. DifftClearableInputView copies an XML android:textSize into its field style — the
-        size is the layout's, not a hand-written metric. DialogTestActivity is the dialog test
-        fixture kept as-is. The remaining entries are genuine one-off sizes that are not on the
-        Figma type scale (11, 17, 18, 22, 23, 28/38, 48 sp — badges, timers, barrage text,
-        emoji, the intro title); each stays hand-written until design either adds the step or
-        drops the size.
-    -->
+    
     <issue id="DifftTypeScaleRequired">
         <ignore path="base/src/main/java/com/difft/android/base/ui/theme/" />
         <ignore path="base/src/main/java/com/difft/android/base/widget/DifftClearableInputView.kt" />
         <ignore path="app/src/main/java/com/difft/android/setting/DialogTestActivity.kt" />
-        <!-- 22sp Bold intro title (titleLarge.copy) -->
+        
         <ignore path="login/src/main/java/com/difft/android/login/intro/RegisterIntroPage.kt" />
-        <!-- 18sp group name input (bodyMedium.copy) -->
+        
         <ignore path="chat/src/main/java/com/difft/android/chat/group/GroupInfoCryptoFlows.kt" />
-        <!-- 48sp barrage bubble text -->
+        
         <ignore path="call/src/main/java/com/difft/android/call/ui/barrage/BubbleView.kt" />
-        <!-- 28/38 emoji glyphs in the reaction sheet -->
+        
         <ignore path="call/src/main/java/com/difft/android/call/ui/actionbar/EmojiReactionSheet.kt" />
-        <!-- 17sp audio device name -->
+        
         <ignore path="call/src/main/java/com/difft/android/call/ui/ShowAudioDeviceOnClickView.kt" />
-        <!-- participant name sized from the tile (11sp or unspecified) -->
+        
         <ignore path="call/src/main/java/com/difft/android/call/ui/SingleParticipantCallPage.kt" />
-        <!-- 23sp emoji glyph and 11/14 shortcut labels in the message action menu -->
+        
+        <ignore path="base/src/main/java/com/difft/android/base/ui/compose/AzIndexBar.kt" />
+        
         <ignore path="chat/src/main/java/com/difft/android/chat/ui/messageaction/MessageActionContent.kt" />
     </issue>
 
-    <!--
-        DifftColorTokenRequired — colours come from `DifftTheme.colors` (semantic) or
-        `Palette` (raw ramp step); the theme package defines both, so it alone writes
-        colour literals. Everything below is a deliberate one-off that has no token, with
-        the reason on each line.
-    -->
+    
     <issue id="DifftColorTokenRequired">
         <ignore path="base/src/main/java/com/difft/android/base/ui/theme/" />
-        <!-- dev-only dialog test screen, kept as-is -->
+        
         <ignore path="app/src/main/java/com/difft/android/setting/DialogTestActivity.kt" />
-        <!-- bg_confidential_area has no token -->
-        <ignore path="chat/src/main/java/com/difft/android/chat/presend/FilePreSendActivity.kt" />
-        <!-- launcher-style background, theme-independent by design -->
+        
         <ignore path="app/src/main/java/com/difft/android/ui/KeyUnavailableScreen.kt" />
-        <!-- Figma knob shadow rgba(0, 35, 11, .2), not a library colour -->
+        
         <ignore path="base/src/main/java/com/difft/android/base/ui/compose/DifftSwitch.kt" />
-        <!-- Material tip hues with no library equivalent -->
+        
         <ignore path="base/src/main/java/com/difft/android/base/widget/ComposeDialogManager.kt" />
-        <!-- overlay alphas over arbitrary content -->
+        
         <ignore path="chat/src/main/java/com/difft/android/chat/ui/messageaction/MessageActionContent.kt" />
         <ignore path="chat/src/main/java/com/difft/android/chat/ui/messageaction/MessageActionMenuColors.kt" />
-        <!-- call shadow / veil literals over live video, no token -->
+        
         <ignore path="call/src/main/java/com/difft/android/call/ui/CountDownTimerView.kt" />
         <ignore path="call/src/main/java/com/difft/android/call/ui/screenshare/ScreenShareSpeakerBanner.kt" />
         <ignore path="call/src/main/java/com/difft/android/call/ui/alert/CallCriticalAlertBanner.kt" />
@@ -137,61 +95,37 @@
         <ignore path="call/src/main/java/com/difft/android/call/ui/alert/CriticalAlertFullScreen.kt" />
     </issue>
 
-    <!--
-        DifftRadiusRequired — corner radii come from `DifftTheme.radius` (2 / 4 / 8 / pill);
-        the theme package defines the tiers. The rest are radii that are simply not on the
-        scale, each with its value noted, and stay hand-written until design adds the step
-        or drops the size.
-    -->
+    
     <issue id="DifftRadiusRequired">
         <ignore path="base/src/main/java/com/difft/android/base/ui/theme/" />
-        <!-- 12 -->
+        
         <ignore path="call/src/main/java/com/difft/android/call/ui/ShowBottomCallEndView.kt" />
         <ignore path="app/src/main/java/com/difft/android/setting/TestScreen.kt" />
-        <!-- 20 -->
+        <ignore path="app/src/main/java/com/difft/android/search/GlobalSearchRowsUi.kt" />
+        
         <ignore path="call/src/main/java/com/difft/android/call/ui/alert/CriticalAlertFullScreen.kt" />
-        <!-- 16 -->
+        
         <ignore path="call/src/main/java/com/difft/android/call/ui/actionbar/CallActionBarLayouts.kt" />
-        <!-- 24 -->
+        
         <ignore path="login/src/main/java/com/difft/android/login/intro/RegisterIntroPage.kt" />
-        <!-- 6 -->
+        
         <ignore path="chat/src/main/java/com/difft/android/chat/ui/messageaction/TextSelectionMenuPopup.kt" />
-        <!-- 3 -->
+        
         <ignore path="login/src/main/java/com/difft/android/login/intro/RegisterIntroScreen.kt" />
     </issue>
 
-    <!--
-        Third-party lint detectors shipping with bundled libraries (e.g. Timber's
-        `WrongTimberUsageDetector`) sometimes use deprecated lint APIs that
-        produce a `LintError` meta-warning on AGP 8+. This is not a defect in
-        our code — it's a vendor-side issue we can't fix downstream.
-    -->
+    
     <issue id="LintError" severity="ignore" />
 
-    <!--
-        The L wrapper (base/log/lumberjack/L.kt) MUST call android.util.Log
-        directly inside the catch-block fallbacks for the very tree that backs
-        L — otherwise L's own failures would invoke L recursively. The wider
-        LogNotL detector already whitelists this path; the upstream Timber
-        `LogNotTimber` check needs the same scope exception.
-    -->
+    
     <issue id="LogNotTimber">
         <ignore path="base/src/main/java/com/difft/android/base/log/lumberjack/" />
     </issue>
 
-    <!--
-        GifUsage — speaking.gif is the legacy speaking-indicator animation
-        used in call/chat UI. Kept until migration to animated WebP / Lottie.
-        Tracker: #872 deps/build cleanup.
-    -->
+    
     <issue id="GifUsage" severity="ignore" />
 
-    <!--
-        Icon-density / vector-compat rules — project uses vector drawables
-        (VectorDrawableCompat) and AppCompat as primary icon strategy. The
-        few raster legacy icons don't warrant maintaining mdpi/hdpi/xhdpi
-        density variants.
-    -->
+    
     <issue id="IconDensities" severity="ignore" />
     <issue id="IconMissingDensityFolder" severity="ignore" />
     <issue id="IconLocation" severity="ignore" />
@@ -202,109 +136,46 @@
     <issue id="UseAppTint" severity="ignore" />
     <issue id="VectorPath" severity="ignore" />
 
-    <!--
-        Per-locale resource override / app-bundle locale changes — we ship
-        all locales in the base APK; not splitting per-language.
-    -->
+    
     <issue id="AppBundleLocaleChanges" severity="ignore" />
 
-    <!--
-        Kapt → KSP migration is a long-running, separate workstream.
-        Tracker: #872 deps/build cleanup.
-    -->
+    
     <issue id="KaptUsageInsteadOfKsp" severity="ignore" />
 
-    <!--
-        Compose-Hilt @FieldSiteTargetOnQualifierAnnotation — Hilt's @AssistedInject
-        annotation processing emits @field:Qualifier internally; the warning is
-        for legacy Java field injection that we don't use.
-    -->
+    
     <issue id="FieldSiteTargetOnQualifierAnnotation" severity="ignore" />
 
-    <!--
-        GestureBackNavigation — predictive back gesture is not enabled
-        project-wide; activity-specific opt-in handled per-case.
-    -->
+    
     <issue id="GestureBackNavigation" severity="ignore" />
 
-    <!--
-        FrequentlyChangingValue — Compose State-snapshot hint; the flagged
-        case is intentional for animation drivers.
-    -->
+    
     <issue id="FrequentlyChangingValue" severity="ignore" />
 
-    <!--
-        MergeRootFrame — FrameLayout-could-be-merge optimization; the
-        flagged layouts are intentionally inflated as standalone roots.
-    -->
+    
     <issue id="MergeRootFrame" severity="ignore" />
 
-    <!--
-        InternalInsetResource — accessing Android internal "status_bar_height"
-        / "navigation_bar_height" identifiers; intentional for legacy inset
-        calculation paths (covered separately by @SuppressLint where needed).
-    -->
+    
     <issue id="InternalInsetResource" severity="ignore" />
 
-    <!--
-        PrivateResource — using @internal resource from a dependency;
-        flagged cases are intentional re-use of platform/library identifiers.
-    -->
+    
     <issue id="PrivateResource" severity="ignore" />
 
-    <!--
-        Dependency-freshness nags (default Warning, so they never gated CI under
-        warningsAsErrors=false). They're "a newer version is available" reminders,
-        not quality issues — but because we use lint baselines, updateLintBaseline
-        snapshots them and they drift on every upstream release, polluting unrelated
-        PR diffs. Dependency upgrades are tracked separately (#872) and done as
-        deliberate, regression-tested batches — not driven by lint. Disabled to stop
-        the baseline churn. (Signal leaves these at default Warning; we diverge only
-        because we baseline and Signal does not.)
-    -->
+    
     <issue id="NewerVersionAvailable" severity="ignore" />
     <issue id="GradleDependency" severity="ignore" />
     <issue id="AndroidGradlePluginVersion" severity="ignore" />
 
-    <!--
-        ObsoleteSdkInt on mipmap-anydpi-v26 — lint advises "v26 is unnecessary at
-        minSdk 26, merge into mipmap-anydpi". That advice is WRONG for us: PR #887
-        proved the v26 qualifier is load-bearing for resource-resolution priority.
-        Without it the density WEBP rasters outrank the adaptive-icon XML and the
-        launcher renders a small centered icon on white. We keep v26 deliberately;
-        scope-ignore so this warning stops drifting back into the baseline on every
-        regen. Rule stays active everywhere else (real dead SDK_INT checks).
-    -->
+    
     <issue id="ObsoleteSdkInt">
         <ignore path="**/mipmap-anydpi-v26/**" />
         <ignore path="**/mipmap-anydpi-v26" />
     </issue>
 
-    <!--
-        DiscouragedApi on android:screenOrientation — every opaque activity declares
-        `locked` on purpose: it stops the window manager from consulting the sensor in
-        the gap before OrientationPolicy writes the real orientation in onCreate (a phone
-        held landscape used to cold-start in landscape and snap to portrait). The policy,
-        not the manifest, decides the final orientation, and Android 16's large-screen
-        exemption ignoring the manifest value is exactly the behaviour we want there.
-        ManifestOrientationLockInvariantTest pins the manifests. Scoped to the
-        orientation message so other DiscouragedApi findings stay active.
-    -->
+    
     <issue id="DiscouragedApi">
         <ignore regexp="Fixed screen orientations will be ignored" />
     </issue>
 
-    <!--
-        Aligned16KB — the app ships on Google Play with all RELEASED ABIs
-        (arm64-v8a + armeabi-v7a) 16 KB-aligned. The only Aligned16KB warnings
-        come from x86 / x86_64 native libs in dependencies (e.g. JNA's
-        libjnidispatch.so), and x86 is NOT in our abiFilters — those .so files
-        are stripped at packaging and never reach a device. lint attributes the
-        warning to the dependency declaration (libs.versions.toml), not the .so
-        path, so a path-scoped <ignore> can't target "x86 only". Since every
-        warning is a guaranteed non-shipped-ABI false positive (and Google Play
-        itself enforces 16 KB compliance on the ABIs we DO ship), disable the
-        rule. Re-enable if abiFilters ever adds x86.
-    -->
+    
     <issue id="Aligned16KB" severity="ignore" />
 </lint>

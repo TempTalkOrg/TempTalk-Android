@@ -10,7 +10,7 @@ import kotlin.test.assertTrue
 
 class DataBuilderAndGetterTest {
 
-    // region Builder: put all types and verify getters
+    
 
     @Test
     fun `builder puts and gets string`() {
@@ -146,9 +146,9 @@ class DataBuilderAndGetterTest {
         assertContentEquals(arr, data.getBooleanArray("key"))
     }
 
-    // endregion
+    
 
-    // region getString / getStringOrDefault
+    
 
     @Test
     fun `getString throws for absent key`() {
@@ -185,9 +185,9 @@ class DataBuilderAndGetterTest {
         assertNull(data.getStringOrDefault("key", "default"))
     }
 
-    // endregion
+    
 
-    // region getInt / getIntOrDefault
+    
 
     @Test
     fun `getInt throws for absent key`() {
@@ -214,9 +214,9 @@ class DataBuilderAndGetterTest {
         assertEquals(99, data.getIntOrDefault("missing", 99))
     }
 
-    // endregion
+    
 
-    // region getLong / getLongOrDefault
+    
 
     @Test
     fun `getLong throws for absent key`() {
@@ -243,9 +243,9 @@ class DataBuilderAndGetterTest {
         assertEquals(999L, data.getLongOrDefault("missing", 999L))
     }
 
-    // endregion
+    
 
-    // region getFloat / getFloatOrDefault
+    
 
     @Test
     fun `getFloat throws for absent key`() {
@@ -272,9 +272,9 @@ class DataBuilderAndGetterTest {
         assertEquals(9.9f, data.getFloatOrDefault("missing", 9.9f))
     }
 
-    // endregion
+    
 
-    // region getDouble / getDoubleOrDefault
+    
 
     @Test
     fun `getDouble throws for absent key`() {
@@ -301,9 +301,9 @@ class DataBuilderAndGetterTest {
         assertEquals(7.7, data.getDoubleOrDefault("missing", 7.7))
     }
 
-    // endregion
+    
 
-    // region getBoolean / getBooleanOrDefault
+    
 
     @Test
     fun `getBoolean throws for absent key`() {
@@ -330,9 +330,9 @@ class DataBuilderAndGetterTest {
         assertTrue(data.getBooleanOrDefault("missing", true))
     }
 
-    // endregion
+    
 
-    // region Array getters throw for absent keys
+    
 
     @Test
     fun `getStringArray throws for absent key`() {
@@ -397,9 +397,9 @@ class DataBuilderAndGetterTest {
         }
     }
 
-    // endregion
+    
 
-    // region putBlobAsString / getStringAsBlob — Base64 roundtrip
+    
 
     @Test
     fun `putBlobAsString and getStringAsBlob roundtrip`() {
@@ -435,5 +435,5 @@ class DataBuilderAndGetterTest {
         assertContentEquals(original, decoded)
     }
 
-    // endregion
+    
 }

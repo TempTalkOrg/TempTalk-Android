@@ -32,10 +32,10 @@ import javax.inject.Singleton
 class ProfileAcceptedLocalCommitException(cause: Exception) : Exception(cause)
 class ProfileSessionExpiredException : CancellationException("Profile account session changed")
 
-/** An in-memory lease; authorization is never written to saved state or diagnostic output. */
+
 class ProfileSession internal constructor(val accountId: String, internal val authorization: String?)
 
-/** Shared by registration, signup and the profile editor; accepted writes finish outside UI scope. */
+
 @Singleton
 class ProfileSaveRepository @Inject constructor(
     @ChativeHttpClientModule.Chat private val httpClient: ChativeHttpClient,

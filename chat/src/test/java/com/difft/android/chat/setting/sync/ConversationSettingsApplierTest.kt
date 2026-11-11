@@ -17,11 +17,11 @@ import org.junit.Before
 import org.junit.Test
 import kotlin.test.assertEquals
 
-/**
- * The gating table of [ConversationSettingsApplier] (design §3.3) plus the interleavings the
- * cross-platform review found: stale echo after a newer push, same-version reconcile, same-version
- * push adjudication, and version comparison against the version read on entry.
- */
+
+
+
+
+
 class ConversationSettingsApplierTest {
 
     private val field = SyncField.CONFIDENTIAL_MODE
@@ -74,7 +74,7 @@ class ConversationSettingsApplierTest {
         verify(exactly = 0) { dbRoomStore.updateConversationSettings(any(), any(), any(), any(), any(), any(), any()) }
     }
 
-    // --- no pending ---
+    
 
     @Test
     fun `newer pull with nothing pending writes every field and the version in one statement`() = runTest {
@@ -99,7 +99,7 @@ class ConversationSettingsApplierTest {
 
     @Test
     fun `same-version pull or echo re-applies the managed field but a same-version push does not`() = runTest {
-        // Recovery path: the row was written locally but the job never landed; the pull restores the server value.
+        
         roomIs(confidential = 1, version = 10)
         applier.applyServerSnapshot(snapshot(version = 10, confidential = 0), SnapshotSource.Pull)
         verifyWrite(confidential = 0, version = null)
@@ -138,7 +138,7 @@ class ConversationSettingsApplierTest {
         applier.applyServerSnapshot(snapshot(version = 0, confidential = 0, mute = 1), push(ts = 1, changeType = 0))
         verifyWrite(confidential = 0, version = null, mute = 1)
 
-        // While pending it is still gated like any other snapshot.
+        
         q.queue(pendingSpec("a", ts = 1_000))
         applier.applyServerSnapshot(snapshot(version = 0, confidential = 1, mute = 0), SnapshotSource.Pull)
         verify(exactly = 1) { dbRoomStore.updateConversationSettings(ROOM, 0, any(), null, any(), any(), null) }
@@ -154,7 +154,7 @@ class ConversationSettingsApplierTest {
         verifyNoWrite()
     }
 
-    // --- pending ---
+    
 
     @Test
     fun `pending keeps the managed field but still advances other fields and the version from a pull`() = runTest {
@@ -168,20 +168,20 @@ class ConversationSettingsApplierTest {
 
     @Test
     fun `pending and a later push that changed this field lets the server win, even at the same version`() = runTest {
-        // Pull V11 already brought the version while the field stayed gated; the V11 push still adjudicates.
+        
         roomIs(confidential = 1, version = 11)
         q.queue(pendingSpec("a", ts = 1_000))
 
         applier.applyServerSnapshot(snapshot(version = 11, confidential = 0), push(ts = 2_000, changeType = field.changeType))
 
-        // Only the adjudicated field: a same-version push is not authoritative for the others.
+        
         verifyWrite(confidential = 0, version = null, mute = null)
     }
 
     @Test
     fun `a field push behind the local version is ignored even while pending`() = runTest {
-        // Out-of-order replay: the V12 push (enable, ts 3000) already won; the older V11 push
-        // (disable, ts 2000) must not re-open the conflict and hand the local SEND its old value back.
+        
+        
         roomIs(confidential = 1, version = 12)
         q.queue(pendingSpec("a", ts = 1_000))
 
@@ -212,17 +212,16 @@ class ConversationSettingsApplierTest {
         verifyWrite(confidential = null, version = 11)
     }
 
-    // --- applyFinal ---
+    
 
     @Test
     fun `final snapshot below the local or accepted version needs reconcile and writes nothing for the field`() = runTest {
-        // v4 review: the job's echo (V10) arrives after a newer push (V11) already landed.
+        
         roomIs(confidential = 0, version = 11)
         assertEquals(FinalOutcome.NEEDS_RECONCILE, applier.applyFinal(snapshot(version = 10, confidential = 1), "a", 1_000, minVersion = 10))
         verifyNoWrite()
 
-        // v8 review: GET read a replica that does not yet contain the accepted V11 write. A lagging
-        // read is trusted for nothing, not even the other fields (Bugbot on #1337).
+        
         roomIs(confidential = 1, version = 10)
         assertEquals(FinalOutcome.NEEDS_RECONCILE, applier.applyFinal(snapshot(version = 10, confidential = 0, mute = 1), "a", 1_000, minVersion = 11))
         verifyNoWrite()
@@ -230,7 +229,7 @@ class ConversationSettingsApplierTest {
 
     @Test
     fun `final snapshot at the same version aligns the field when the job is the newest intent`() = runTest {
-        // v5 review: a pull already advanced the version while the field was gated; the reconcile GET returns the same version.
+        
         roomIs(confidential = 1, version = 10)
         q.queue(pendingSpec("a", ts = 1_000))
 
@@ -238,7 +237,7 @@ class ConversationSettingsApplierTest {
 
         assertEquals(FinalOutcome.COMPLETED, outcome)
         verifyWrite(confidential = 0, version = null)
-        // Finalized: the job no longer gates the room even though the framework has not deleted it yet.
+        
         roomIs(confidential = 0, version = 10)
         applier.applyServerSnapshot(snapshot(version = 12, confidential = 1), SnapshotSource.Pull)
         verify(exactly = 1) { dbRoomStore.updateConversationSettings(ROOM, any(), any(), 1, any(), any(), 12) }
@@ -255,7 +254,7 @@ class ConversationSettingsApplierTest {
         assertEquals(FinalOutcome.SUPERSEDED, applier.applyFinal(snapshot(version = 12, confidential = 1), "a", 1_000, minVersion = 11))
 
         verify(exactly = 0) { dbRoomStore.updateConversationSettings(ROOM, any(), any(), 1, any(), any(), any()) }
-        // Other fields and the version still advance so the floor is reflected locally.
+        
         verify(exactly = 2) { dbRoomStore.updateConversationSettings(ROOM, any(), any(), null, any(), any(), any()) }
     }
 

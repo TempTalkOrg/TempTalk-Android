@@ -18,27 +18,14 @@ import org.difft.app.database.WCDB
 import org.difft.app.database.hydration.MessageHydrator
 import org.difft.app.database.test.fakes.FakeMessageChildRowLoader
 
-/**
- * T1-13 — `reSendMessage` is the single funnel both retry entry points go through (the out-of-bubble
- * status-row tap and the long-press Resend action), and it is the one place the resend flow is
- * observable. Adding the funnel log must not change its emission behaviour: still exactly one
- * `messageResend` emission per call, still non-suspending `tryEmit`.
- *
- * `globalServices`/`wcdb` (both Hilt-EntryPoint-backed globals) are mocked here because
- * [ChatMessageViewModel]'s constructor now eagerly evaluates `isE2eeHintEligible` and
- * `initE2eeHintObservers()` (Task 2), both of which read `globalServices.myId` synchronously at
- * construction time — without this stub, constructing the ViewModel in a plain (non-Robolectric)
- * unit test throws `UninitializedPropertyAccessException` (no Android Application present).
- *
- * Fixture uses `For.Group`, NOT `For.Account`, deliberately: `initE2eeHintObservers()`'s
- * non-self/non-official-1v1 branch calls `DBContactorModel.id.eq(...)`, a real WCDB winq
- * `Expression` — those classes extend `CppObject` and load a native library via
- * `System.loadLibrary` in their static initializer, unavailable on the host JVM (same constraint
- * documented on `database/.../QuoteAttachmentRoundTripTest`'s `@Ignore`). The crash is
- * asynchronous (inside a `viewModelScope.launch(Dispatchers.IO)`), so it does not fail the
- * triggering test itself but leaks an uncaught exception that fails the NEXT `runTest` anywhere
- * in the same JVM worker — `For.Group` conversations skip that branch entirely.
- */
+
+
+
+
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class ChatMessageResendLogTest {
 

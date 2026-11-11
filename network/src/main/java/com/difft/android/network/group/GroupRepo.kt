@@ -83,6 +83,7 @@ constructor(
             this.gid = groupResp.gid
             this.name = groupResp.name
             this.messageExpiry = groupResp.messageExpiry
+            this.expireTime = groupResp.expireTime?.takeIf { it > 0 }
             this.avatar = groupResp.avatar
             this.status = groupResp.status
             this.invitationRule = groupResp.invitationRule
@@ -92,6 +93,7 @@ constructor(
             this.anyoneRemove = groupResp.anyoneRemove
             this.rejoin = groupResp.rejoin
             this.publishRule = groupResp.publishRule
+            this.criticalAlert = groupResp.criticalAlert
             this.groupCryptoMode = groupResp.groupCryptoMode
             this.encryptedName = groupResp.encryptedName
             this.encryptedAvatar = groupResp.encryptedAvatar
@@ -205,8 +207,9 @@ data class GetGroupInfoResp(
     val encryptedName: String? = null,
     val encryptedAvatar: String? = null,
     val groupMemberVerifyPublicKey: String? = null,
-    // Server-authoritative crypto-key generation. null = un-rotated/legacy (== 0).
+    
     val groupCryptoKeyVersion: Int? = null,
+    val expireTime: Long? = null,
 )
 
 data class Member(
@@ -243,8 +246,9 @@ data class GroupResp(
     val groupCryptoMode: Int? = null,
     val encryptedName: String? = null,
     val encryptedAvatar: String? = null,
-    // Server-authoritative crypto-key generation. null = un-rotated/legacy (== 0).
+    
     val groupCryptoKeyVersion: Int? = null,
+    val expireTime: Long? = null,
 )
 
 data class GroupAvatarResponse(
@@ -303,7 +307,7 @@ data class RotateGroupCryptoReq(
     val encryptedName: String,
     val encryptedAvatar: String? = null,
     val groupMemberVerifyPublicKey: String,
-    // CAS base: the current groupCryptoKeyVersion the client saw from GET before rotating.
+    
     val baseGroupCryptoKeyVersion: Int,
     val memberBindings: List<GroupMemberBinding>
 )

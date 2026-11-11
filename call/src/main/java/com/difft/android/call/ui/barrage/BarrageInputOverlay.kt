@@ -33,10 +33,10 @@ import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.call.R
 
-/**
- * Full-screen text input overlay with IME tracking. Automatically dismisses
- * when the software keyboard is hidden.
- */
+
+
+
+
 @Composable
 fun BarrageInputOverlay(
     inputText: String,
@@ -93,7 +93,7 @@ fun BarrageInputOverlay(
                 singleLine = false,
                 minLines = 1,
                 maxLines = 4,
-                // Library field type scale and caret; the overlay keeps its own transparent box.
+                
                 textStyle = DifftTheme.typography.p3.copy(color = DifftTheme.colors.textPrimary),
                 placeholder = {
                     Text(
@@ -111,7 +111,7 @@ fun BarrageInputOverlay(
                     focusedIndicatorColor = Color.Transparent,
                     unfocusedIndicatorColor = Color.Transparent,
                     disabledIndicatorColor = Color.Transparent,
-                    cursorColor = DifftTheme.colors.primary
+                    cursorColor = DifftTheme.colors.info
                 )
             )
         }

@@ -32,7 +32,7 @@ class BoundedCopyTest {
 
     @Test
     fun `a stream longer than the limit fails without writing past it`() {
-        // Stands in for a provider that reports a small SIZE but streams more (#1429).
+        
         val maxBytes = 5_000L
         val out = ByteArrayOutputStream()
 

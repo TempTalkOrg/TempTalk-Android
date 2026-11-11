@@ -22,38 +22,26 @@ import org.difft.app.database.toTranslateData
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Hard ceiling on nested-forward depth.
- *
- * The point-query path (`ForwardModel.forwards()`) recurses without a bound and without cycle
- * detection: a corrupt `parentForwardModelDatabaseId` loop is a `StackOverflowError` today. This
- * path trades that crash for truncation — a node past the cap reports `forwards = emptyList()`,
- * which is shape-identical to a real leaf, plus one `L.w`. For any acyclic tree at or under this
- * depth (i.e. all real data) output is field-for-field identical to the point-query path.
- */
+
+
+
+
+
 internal const val MAX_FORWARD_DEPTH = 16
 
-/**
- * Resolves every child-table row for a window of messages in a handful of batched `IN` queries
- * instead of the ~7-9 point queries per message the per-message extensions issue.
- *
- * Contains zero winq: grouping, ordering, the nested-forward BFS and all domain assembly happen
- * here over plain model lists supplied by [MessageChildRowLoader], so the whole thing runs under a
- * fake on the host JVM.
- *
- * Failure semantics are deliberately unchanged from the point-query path: nothing is caught, a
- * loader exception propagates to the caller exactly as a point-query exception does today.
- */
+
+
+
+
+
 @Singleton
 class MessageHydrator @Inject constructor(
     private val loader: MessageChildRowLoader,
 ) {
 
-    /**
-     * `withContext(IO)` even though the current caller is already on IO: same-dispatcher
-     * `withContext` is a context comparison, not a thread hop, and it keeps the guarantee if a
-     * future caller invokes this from elsewhere.
-     */
+    
+
+
     suspend fun hydrate(messages: List<MessageModel>): MessageHydration =
         withContext(Dispatchers.IO) { hydrateBlocking(messages) }
 
@@ -141,10 +129,10 @@ class MessageHydrator @Inject constructor(
         return MessageHydration(byMessageId)
     }
 
-    /**
-     * Level-by-level fetch of the nested-forward forest, then ONE attachment query and ONE mention
-     * query covering every level at once.
-     */
+    
+
+
+
     private fun loadForwardTree(fcIds: List<Long>, stats: Stats): ForwardTree {
         val top = stats.load("fwdTop", fcIds) { loader.topLevelForwardsByContextId(it) }
         if (top.isEmpty()) return ForwardTree.EMPTY
@@ -156,8 +144,8 @@ class MessageHydrator @Inject constructor(
         var frontier = top.map { it.databaseId.toLong() }
         var depth = 0
         while (frontier.isNotEmpty() && depth < MAX_FORWARD_DEPTH) {
-            // The visited filter is the cycle guard: a node already materialised never re-enters
-            // the frontier, so a corrupt parent loop terminates instead of spinning.
+            
+            
             val next = stats.load("fwdChild", frontier) { loader.forwardsByParentId(it) }
                 .filter { visited.add(it.databaseId.toLong()) }
             if (next.isEmpty()) {
@@ -189,11 +177,11 @@ class MessageHydrator @Inject constructor(
         )
     }
 
-    /**
-     * Depth-bounded rebuild. Both guards are needed: `visited` stops the BFS from re-fetching a
-     * cycle, [MAX_FORWARD_DEPTH] stops THIS walk from looping over a cycle that the BFS already
-     * materialised into `childrenByParent`.
-     */
+    
+
+
+
+
     private fun buildForwards(nodes: List<ForwardModel>, tree: ForwardTree, depth: Int): List<Forward> {
         if (depth > MAX_FORWARD_DEPTH) return emptyList()
         return nodes.map { node ->
@@ -223,15 +211,15 @@ class MessageHydrator @Inject constructor(
         }
     }
 
-    /**
-     * Counters for the single exit log line. `queries` counts loader calls, not SQL statements.
-     *
-     * Per-loader keys and elapsed time are accumulated so the one log line can say WHERE a slow
-     * hydration went, which is the split between fixed and per-row cost that a single total hides.
-     */
+    
+
+
+
+
+
     private class Stats(var queries: Int = 0, var forwardDepth: Int = 0) {
 
-        // Insertion-ordered so the breakdown reads in call order; a loader that never ran is absent.
+        
         private val loaderCosts = LinkedHashMap<String, LoaderCost>()
 
         fun record(loader: String, keys: Int, elapsedNs: Long) {
@@ -240,7 +228,7 @@ class MessageHydrator @Inject constructor(
             cost.elapsedNs += elapsedNs
         }
 
-        /** `att:82/3ms,quote:4/1ms` — key counts and timings only, never row content. */
+        
         fun breakdown(): String =
             loaderCosts.entries.joinToString(",") { (loader, cost) ->
                 "$loader:${cost.keys}/${cost.elapsedNs / NANOS_PER_MILLI}ms"
@@ -249,7 +237,7 @@ class MessageHydrator @Inject constructor(
         private class LoaderCost(var keys: Int = 0, var elapsedNs: Long = 0)
     }
 
-    /** Runs [query] only when there is at least one key — an empty key set issues no query. */
+    
     private inline fun <K, R> Stats.load(
         loader: String,
         keys: List<K>,
@@ -268,11 +256,11 @@ class MessageHydrator @Inject constructor(
     }
 }
 
-/**
- * Groups preserving encounter order inside each group (the loader hands rows back in
- * `databaseId ASC`, and that intra-group order participates in `ChatMessage.equals`). Rows whose
- * key is null are dropped — the `IN` predicate that produced them cannot match a NULL key.
- */
+
+
+
+
+
 private inline fun <T, K : Any> List<T>.groupByNotNull(key: (T) -> K?): Map<K, List<T>> {
     val grouped = LinkedHashMap<K, MutableList<T>>()
     for (row in this) {

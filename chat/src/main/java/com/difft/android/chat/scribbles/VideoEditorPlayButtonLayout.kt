@@ -9,9 +9,9 @@ import com.difft.android.chat.R
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.chat.util.createDefaultCubicBezierInterpolator
 
-/**
- * The play button overlay for controlling playback in the video editor.
- */
+
+
+
 class VideoEditorPlayButtonLayout @JvmOverloads constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0) : android.widget.FrameLayout(context, attrs, defStyleAttr) {
     private val playOverlay: View = inflate(this.context, R.layout.video_editor_hud, this).findViewById(R.id.play_overlay)
 

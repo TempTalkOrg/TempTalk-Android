@@ -6,11 +6,11 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import kotlin.test.assertEquals
 
-/**
- * WebSocket host marks through the real [UrlManager] and coordinator (#1396): a failure marks the
- * host the socket dialled, a connect lifts the mark, and neither is attributed to a host the socket
- * never used.
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 class UrlManagerWebSocketHostTest {
 
@@ -32,8 +32,8 @@ class UrlManagerWebSocketHostTest {
         assertEquals("wss://$B/chat/v1/websocket/", f.urlManager.getChatWebsocketUrl())
     }
 
-    // T16 — B was marked (an HTTP failure landed while the socket was connecting), then the socket
-    // connected on B: B answers, so it is eligible again.
+    
+    
     @Test
     fun `a websocket connect lifts the mark on the host it connected to`() {
         val f = pool()

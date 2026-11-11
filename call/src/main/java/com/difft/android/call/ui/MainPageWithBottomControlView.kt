@@ -76,15 +76,15 @@ import io.livekit.android.room.track.Track
 import io.livekit.android.util.flow
 
 
-/** Control size on the tabletop dock (iOS standing console). */
+
 private const val TABLETOP_DOCK_BUTTON_DP = 56
 
-/**
- * Call action bar. The layout (two rows / split / one row / emoji outside / compact) comes from
- * [rememberCallActionBarPlan], a pure width-budget decision; this composable only binds the
- * controls to view-model state and hands them to the matching layout. Tall landscape windows
- * get the side rail instead of the bar (#1451).
- */
+
+
+
+
+
+
 @Composable
 fun MainPageWithBottomControlView(
     viewModel: LCallViewModel,
@@ -99,10 +99,10 @@ fun MainPageWithBottomControlView(
     val onRail = rail != null
     ControlsPlacementLog(rail = rail, isGroup = !isOneVOneCall, dock = dock)
 
-    // The fade is read in the draw phase only. Once fully faded out the controls leave the tree,
-    // so a hidden bar neither swallows taps meant for the 1v1 self-video underneath nor needs a
-    // tap interceptor: the root's own click brings the chrome back. `derivedStateOf` flips this
-    // Boolean only at the two ends of the fade, so the animation itself never recomposes here.
+    
+    
+    
+    
     val bottomAlpha = rememberChromeAlpha(controller, controller.showBottomToolBarViewEnabled)
     val barComposed by remember(bottomAlpha) { derivedStateOf { bottomAlpha.value > 0f } }
 
@@ -111,15 +111,15 @@ fun MainPageWithBottomControlView(
     val videoEnabled by viewModel.cameraEnabled.collectAsState(false)
     val currentCallType by viewModel.callType.collectAsState()
     val voicePreset by viewModel.voicePreset.collectAsState()
-    // Tap routing + system-request launching + Settings guide all live in
-    // LCallActivityMediaPermissions (single decision point). Compose only renders
-    // the mic badge from the coordinator state — camera is dialog-only, no badge.
+    
+    
+    
     val micPermissionState by viewModel.mediaPermissions.micState.collectAsState()
     val showMicPermissionBadge = micPermissionState.showsBadge
     val context = LocalContext.current
 
-    // The rail always has room for full-size controls; only the bar shrinks them (COMPACT). The
-    // tabletop dock uses the standing console's larger controls.
+    
+    
     val size = when {
         dock != null -> TABLETOP_DOCK_BUTTON_DP.dp
         onRail -> CallSideRailSpec.BUTTON_DP.dp
@@ -141,7 +141,7 @@ fun MainPageWithBottomControlView(
         },
         video = {
             val icon = if (videoEnabled) R.drawable.call_ic_camera_on else R.drawable.call_ic_camera_off
-            // Camera-off keeps its red slash like the mic, so it is drawn untinted.
+            
             SimpleActionButton(icon, "Camera", size, testTag = "call_btn_camera", tintIcon = videoEnabled) {
                 L.i { "[call] LCallActivity onClick Camera" }
                 onMediaTap(CallMediaPermission.Camera)
@@ -193,14 +193,14 @@ fun MainPageWithBottomControlView(
             alpha = { bottomAlpha.value },
         )
     } else {
-        // Book posture: the bar splits around the fold the plan was laid out with (design §4.5).
+        
         val layoutState by viewModel.layout.state.collectAsState()
         val bookFold = viewModel.layout.lastInput?.fold?.takeIf { layoutState.plan?.posture == Posture.BOOK }
         BottomActionBar(plan, slots, controller, micEnabled, videoEnabled, participants, barComposed, bottomAlpha, bookFold)
     }
 }
 
-/** The bottom bar for [plan]: the planned layout, with the outside Emoji pill above it when planned. */
+
 @Composable
 private fun BottomActionBar(
     plan: ActionBarPlan,
@@ -214,7 +214,7 @@ private fun BottomActionBar(
     bookFold: LayoutRect?,
 ) {
     val remoteCameraOn = rememberRemoteCameraOn(participants)
-    // The book bar is one row with Emoji in it: no plate and no outside pill (it reserves one row).
+    
     val showPlate = bookFold == null && plan.layout == ActionBarLayout.TWO_ROW && (videoEnabled || remoteCameraOn)
     val bottomMargin = if (showPlate) CallActionBarPlanner.TWO_ROW_PLATE_BOTTOM_DP.dp else plan.bottomMarginDp.dp
 
@@ -259,7 +259,7 @@ private fun BottomActionBar(
     }
 }
 
-/** A plain bar control: glyph resource in, tap out. [iconSize] defaults to the full-frame glyph. */
+
 @Composable
 private fun SimpleActionButton(
     iconRes: Int,
@@ -281,7 +281,7 @@ private fun SimpleActionButton(
     )
 }
 
-/** People control with the participant count badge; toggles the participant list. */
+
 @Composable
 private fun PeopleActionButton(controller: CallUiController, participantCount: Int, size: Dp) {
     CallActionButton(
@@ -298,10 +298,10 @@ private fun PeopleActionButton(controller: CallUiController, participantCount: I
     }
 }
 
-/**
- * 1v1: hang up. Group: leave, with the chevron tail opening the end menu; on the rail and the
- * tabletop dock ([onRail]) a single End control opens that menu directly.
- */
+
+
+
+
 @Composable
 private fun EndActionButton(
     controller: CallUiController,
@@ -323,7 +323,7 @@ private fun EndActionButton(
     }
 }
 
-/** Mic control with its two overlays: the permission badge, or the voice-preset ring + badge. */
+
 @Composable
 private fun MicActionButton(
     micEnabled: Boolean,
@@ -332,16 +332,13 @@ private fun MicActionButton(
     size: Dp,
     onClick: () -> Unit,
 ) {
-    // Preset ring hides with the preset badge while mic permission is denied: the voice changer
-    // only shapes local capture, and with no RECORD_AUDIO there is no capture — advertising it
-    // would mislead. The permission badge replaces the entire voice-preset treatment while
-    // visible (Figma 17129:3875 shows only the alert badge).
+    
     val showPreset = voicePreset.isEnabled && !showPermissionBadge
     CallActionButton(
         painter = painterResource(id = if (micEnabled) R.drawable.call_ic_mic_on else R.drawable.call_ic_mic_off),
         contentDescription = "Mic",
         size = size,
-        // The muted glyph keeps its red slash (pre-existing salience cue), so it is not tinted.
+        
         tintIcon = micEnabled,
         testTag = "call_btn_mic",
         onClick = onClick,
@@ -379,10 +376,10 @@ private fun MicActionButton(
     }
 }
 
-/**
- * Whether the (first) remote participant is publishing an unmuted camera track. Drives the
- * two-row backplate together with the local camera, so captions stay legible over video.
- */
+
+
+
+
 @Composable
 private fun rememberRemoteCameraOn(participants: List<Participant>): Boolean {
     val remote = participants.filterIsInstance<RemoteParticipant>().firstOrNull() ?: return false
@@ -403,13 +400,7 @@ private fun rememberRemoteCameraOn(participants: List<Participant>): Boolean {
     return !muted
 }
 
-/**
- * Red alert badge on the mic toggle while RECORD_AUDIO is denied (spec: persistent,
- * non-blocking denial indicator; mic only — camera/screen-share are dialog-only).
- *
- * Per the Figma spec (node 17129:3860): 16dp tabler alert-circle-filled, error red,
- * flush to the button's top-end corner; the "!" is a cutout showing the background.
- */
+
 @Composable
 internal fun MicPermissionBadge(modifier: Modifier = Modifier) {
     Image(

@@ -40,23 +40,23 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 
-/**
- * Driving, observation and bounded retry in [AudioRouteApplier] (design inventory group B —
- * rows #26–#32, #35, #36, #39–#46, #51–#55). Absence debounce and failure classification live in
- * [AudioRouteAbsenceTest]; the framework assumptions live in [AudioRouteApplierFrameworkTest].
- *
- * Virtual time throughout: one `StandardTestDispatcher` serves as both the work dispatcher and the
- * "main" dispatcher, so the 500ms / 5000ms parameters are asserted exactly rather than waited for.
- * The interval and budget are hard-coded here on purpose — they are `private` constants in the
- * applier and a test that reads them could not detect them changing.
- */
+
+
+
+
+
+
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class AudioRouteApplierTest {
 
-    /**
-     * The row that constructs the applier with production defaults (#52) needs a Main dispatcher
-     * installed; every other row injects the work dispatcher explicitly.
-     */
+    
+
+
+
     @get:Rule
     val dispatcherRule = TestDispatcherRule(StandardTestDispatcher())
 
@@ -65,7 +65,7 @@ class AudioRouteApplierTest {
     private val audioManager = mockk<AudioManager>(relaxed = true)
     private val host = FakeAudioRouteHost()
 
-    /** Every `selectDevice` argument in submission order — round shape and counts are read off it. */
+    
     private val selectCalls = mutableListOf<AudioDevice?>()
 
     private var scoOn = false
@@ -82,7 +82,7 @@ class AudioRouteApplierTest {
         every { audioHandler.selectDevice(captureNullable(selectCalls)) } just Runs
     }
 
-    @Suppress("DEPRECATION") // the legacy readings are the applier's primary judgement
+    @Suppress("DEPRECATION") 
     private fun stubAudioManager() {
         every { audioManager.isBluetoothScoOn } answers { scoOn }
         every { audioManager.isSpeakerphoneOn } answers { speakerOn }
@@ -108,19 +108,19 @@ class AudioRouteApplierTest {
         ).also { it.start() }
     }
 
-    // ── #26 ─────────────────────────────────────────────────────────────────────
+    
     @Test
     fun `a round issues selectDevice null then the target, in that order`() = runTest {
         startApplier()
         host.emit(applyingSnapshot(bt, listOf(bt, spk)))
         runCurrent()
 
-        // The null hop is what breaks the library's "already selected, nothing to do" early return.
+        
         assertEquals(listOf<AudioDevice?>(null, bt), selectCalls)
         assertEquals("driving is not confirming", 0, host.terminalCount)
     }
 
-    // ── #27 ─────────────────────────────────────────────────────────────────────
+    
     @Test
     fun `a route that is already active is confirmed without any routing action`() = runTest {
         scoOn = true
@@ -132,19 +132,19 @@ class AudioRouteApplierTest {
         assertTrue("a working route must not be torn down to verify it", selectCalls.isEmpty())
     }
 
-    // ── #28 ─────────────────────────────────────────────────────────────────────
+    
     @Test
     fun `retries repeat every 500ms while the route is not observed`() = runTest {
         startApplier()
         host.emit(applyingSnapshot(bt, listOf(bt, spk)))
         advanceTimeBy(2_100)
 
-        // Rounds at 0 / 500 / 1000 / 1500 / 2000, two calls each.
+        
         assertEquals(10, selectCalls.size)
         assertTrue("still inside the budget", host.failed.isEmpty())
     }
 
-    // ── #29 ─────────────────────────────────────────────────────────────────────
+    
     @Test
     fun `the attempt fails with TIMEOUT after 5000ms when the target stayed present`() = runTest {
         startApplier()
@@ -160,12 +160,12 @@ class AudioRouteApplierTest {
         assertEquals(1, host.terminalCount)
     }
 
-    // ── #30 ─────────────────────────────────────────────────────────────────────
+    
     @Test
     fun `retrying stops the moment the route is observed`() = runTest {
         startApplier()
         host.emit(applyingSnapshot(bt, listOf(bt, spk)))
-        advanceTimeBy(1_100) // rounds at 0 / 500 / 1000
+        advanceTimeBy(1_100) 
         assertEquals(6, selectCalls.size)
 
         scoOn = true
@@ -176,7 +176,7 @@ class AudioRouteApplierTest {
         assertEquals("no round after the confirming one", 6, selectCalls.size)
     }
 
-    // ── #31 ─────────────────────────────────────────────────────────────────────
+    
     @Test
     fun `an SCO CONNECTED broadcast confirms without waiting out the interval`() = runTest {
         val applier = startApplier()
@@ -191,7 +191,7 @@ class AudioRouteApplierTest {
         assertTrue("woke up early instead of polling at 500ms", currentTime < 500)
     }
 
-    // ── #32 ─────────────────────────────────────────────────────────────────────
+    
     @Test
     fun `a new target structurally cancels the previous attempt without reporting it`() = runTest {
         startApplier()
@@ -208,7 +208,7 @@ class AudioRouteApplierTest {
         assertTrue("a superseded attempt reports nothing", host.failed.isEmpty())
     }
 
-    // ── #35 ─────────────────────────────────────────────────────────────────────
+    
     @Test
     fun `a drifted audio mode is corrected before the route is re-driven`() = runTest {
         mode = AudioManager.MODE_NORMAL
@@ -223,7 +223,7 @@ class AudioRouteApplierTest {
         verify(exactly = 1) { audioManager.mode = AudioManager.MODE_IN_COMMUNICATION }
     }
 
-    // ── #36 ─────────────────────────────────────────────────────────────────────
+    
     @Test
     fun `MODE_IN_CALL is tolerated and never overwritten`() = runTest {
         mode = AudioManager.MODE_IN_CALL
@@ -231,12 +231,12 @@ class AudioRouteApplierTest {
         host.emit(applyingSnapshot(bt, listOf(bt, spk)))
         runCurrent()
 
-        // A real cellular call owns that mode; clobbering it would break the call.
+        
         verify(exactly = 0) { audioManager.mode = any() }
         assertEquals(listOf<AudioDevice?>(null, bt), selectCalls)
     }
 
-    // ── #39 ─────────────────────────────────────────────────────────────────────
+    
     @Test
     fun `an earpiece target already routed to the earpiece is confirmed with zero actions`() = runTest {
         startApplier()
@@ -247,7 +247,7 @@ class AudioRouteApplierTest {
         assertTrue(selectCalls.isEmpty())
     }
 
-    // ── #40 ─────────────────────────────────────────────────────────────────────
+    
     @Test
     fun `an earpiece target is driven and confirmed when coming from the speaker`() = runTest {
         speakerOn = true
@@ -263,7 +263,7 @@ class AudioRouteApplierTest {
         assertEquals(listOf(ear), host.confirmed)
     }
 
-    // ── #41 ─────────────────────────────────────────────────────────────────────
+    
     @Test
     fun `a speakerphone target is confirmed from the speakerphone reading`() = runTest {
         startApplier()
@@ -281,7 +281,7 @@ class AudioRouteApplierTest {
         )
     }
 
-    // ── #42 ─────────────────────────────────────────────────────────────────────
+    
     @Test
     fun `a non-bluetooth route is confirmed within one interval`() = runTest {
         startApplier()
@@ -290,13 +290,13 @@ class AudioRouteApplierTest {
         speakerOn = true
         advanceTimeBy(1_000)
 
-        // The Maestro smoke test asserts the horn icon right after tapping; anything slower than
-        // one interval would make that assertion flaky.
+        
+        
         assertEquals(listOf(spk), host.confirmed)
         assertTrue(currentTime <= 1_000)
     }
 
-    // ── #43 ─────────────────────────────────────────────────────────────────────
+    
     @Test
     fun `a throwing AudioManager read degrades to a negative observation`() = runTest {
         @Suppress("DEPRECATION")
@@ -309,7 +309,7 @@ class AudioRouteApplierTest {
         assertEquals(listOf(bt to AudioRouteFailure.TIMEOUT), host.failed)
     }
 
-    // ── #44 / AP-5 ──────────────────────────────────────────────────────────────
+    
     @Test
     fun `a throwing selectDevice does not break the retry loop`() = runTest {
         every { audioHandler.selectDevice(any()) } throws RuntimeException("handler gone")
@@ -317,19 +317,19 @@ class AudioRouteApplierTest {
         host.emit(applyingSnapshot(bt, listOf(bt, spk)))
         advanceTimeBy(5_600)
 
-        // TIMEOUT, not ERROR: the round trip has its own guard, so the loop kept verifying.
+        
         assertEquals(listOf(bt to AudioRouteFailure.TIMEOUT), host.failed)
-        // The guard is inside the non-suspending round trip: exactly one outcome, reached at the
-        // end of the budget rather than on the first throw.
+        
+        
         assertEquals(1, host.terminalCount)
     }
 
-    // ── AP-1 ────────────────────────────────────────────────────────────────────
-    /**
-     * A supersession landing between the loop-top ownership check and the round trip must issue no
-     * routing call for the superseded target: the observation and mode reads separate the two, and
-     * only the re-check inside the round trip covers that window.
-     */
+    
+    
+
+
+
+
     @Test
     fun `a supersession between the ownership check and the round trip drives nothing`() = runTest {
         var flipped = false
@@ -349,7 +349,7 @@ class AudioRouteApplierTest {
         assertEquals("an aborted attempt reports nothing", 0, host.terminalCount)
     }
 
-    // ── AP-2 ────────────────────────────────────────────────────────────────────
+    
     @Test
     fun `a supersession before the next round stops the previous target at the loop top`() = runTest {
         startApplier()
@@ -368,7 +368,7 @@ class AudioRouteApplierTest {
         assertEquals(0, host.terminalCount)
     }
 
-    // ── #45 ─────────────────────────────────────────────────────────────────────
+    
     @Test
     fun `start and stop are idempotent`() = runTest {
         val applier = startApplier()
@@ -382,7 +382,7 @@ class AudioRouteApplierTest {
         applier.stop()
     }
 
-    // ── #46 ─────────────────────────────────────────────────────────────────────
+    
     @Test
     fun `stop cancels the in-flight attempt and reports nothing`() = runTest {
         val applier = startApplier()
@@ -397,15 +397,15 @@ class AudioRouteApplierTest {
         assertEquals(0, host.terminalCount)
     }
 
-    // ── #51 ─────────────────────────────────────────────────────────────────────
+    
     @Test
     fun `the applier never writes the global communication route and cannot pick one`() = runTest {
-        // A confirmed attempt…
+        
         scoOn = true
         startApplier()
         host.emit(applyingSnapshot(bt, listOf(bt, spk)))
         runCurrent()
-        // …and a timed-out one.
+        
         scoOn = false
         host.emit(applyingSnapshot(spk, listOf(bt, spk)))
         advanceTimeBy(5_600)
@@ -420,15 +420,15 @@ class AudioRouteApplierTest {
             audioManager.startBluetoothSco()
             audioManager.stopBluetoothSco()
         }
-        // Route *policy* is equally out of reach: the host contract exposes no way to pick a device,
-        // so the applier cannot bypass the loop guard with a fallback of its own.
+        
+        
         assertTrue(
             "AudioRouteHost must not expose a route-selection entry",
             AudioRouteHost::class.java.methods.none { it.name.startsWith("select") },
         )
     }
 
-    // ── #52 ─────────────────────────────────────────────────────────────────────
+    
     @Test
     fun `constructing the applier registers nothing and touches no handler`() {
         mockkStatic(ContextCompat::class)
@@ -442,8 +442,8 @@ class AudioRouteApplierTest {
                 scope = CoroutineScope(SupervisorJob()),
             )
 
-            // The ViewModel constructs this eagerly in Phase A; a receiver or coroutine here would
-            // fire during every ViewModel test.
+            
+            
             verify(exactly = 0) { ContextCompat.registerReceiver(any(), any(), any(), any()) }
             confirmVerified(audioHandler)
         } finally {
@@ -451,10 +451,10 @@ class AudioRouteApplierTest {
         }
     }
 
-    // ── #53 ─────────────────────────────────────────────────────────────────────
+    
     @Test
     fun `each attempt reports exactly one outcome, or none when ownership is lost`() = runTest {
-        // Confirmed.
+        
         val confirmedHost = FakeAudioRouteHost()
         scoOn = true
         startApplier(confirmedHost).let { applier ->
@@ -465,7 +465,7 @@ class AudioRouteApplierTest {
             applier.stop()
         }
 
-        // TIMEOUT.
+        
         scoOn = false
         val timeoutHost = FakeAudioRouteHost()
         startApplier(timeoutHost).let { applier ->
@@ -476,7 +476,7 @@ class AudioRouteApplierTest {
             applier.stop()
         }
 
-        // DEVICE_GONE.
+        
         val goneHost = FakeAudioRouteHost()
         startApplier(goneHost).let { applier ->
             goneHost.emit(applyingSnapshot(bt, listOf(bt, spk)))
@@ -488,7 +488,7 @@ class AudioRouteApplierTest {
             applier.stop()
         }
 
-        // ERROR — an unexpected exception escaping the loop.
+        
         val errorHost = FakeAudioRouteHost()
         startApplier(errorHost).let { applier ->
             errorHost.emit(applyingSnapshot(bt, listOf(bt, spk)))
@@ -501,7 +501,7 @@ class AudioRouteApplierTest {
             applier.stop()
         }
 
-        // Ownership lost — no outcome at all.
+        
         val abortedHost = FakeAudioRouteHost()
         startApplier(abortedHost).let { applier ->
             abortedHost.emit(applyingSnapshot(bt, listOf(bt, spk)))
@@ -513,7 +513,7 @@ class AudioRouteApplierTest {
         }
     }
 
-    // ── #54 ─────────────────────────────────────────────────────────────────────
+    
     @Test
     fun `losing ownership of the attempt aborts silently`() = runTest {
         startApplier()
@@ -521,8 +521,8 @@ class AudioRouteApplierTest {
         advanceTimeBy(600)
         val callsAtInvalidation = selectCalls.size
 
-        // What `onAudioSwitchInvalidated` does: pendingRoute does not emit for it, so only the
-        // per-round ownership check can end this attempt.
+        
+        
         host.setState(AudioRouteState.Idle)
         advanceTimeBy(6_000)
 
@@ -530,19 +530,19 @@ class AudioRouteApplierTest {
         assertEquals(callsAtInvalidation, selectCalls.size)
     }
 
-    // ── #55 ─────────────────────────────────────────────────────────────────────
+    
     @Test
     fun `a replayed target after a generation boundary restarts with a fresh budget`() = runTest {
         startApplier()
         host.emit(applyingSnapshot(bt, listOf(bt, spk)))
         advanceTimeBy(600)
 
-        // Generation reset: state back to Idle and the device list emptied.
+        
         host.emit(AudioRouteSnapshot(requested = bt))
         advanceTimeBy(600)
         assertEquals("the abandoned attempt reports nothing", 0, host.terminalCount)
 
-        // Ready edge replays the same target: Applying -> Idle -> Applying re-emits.
+        
         host.emit(applyingSnapshot(bt, listOf(bt, spk)))
         runCurrent()
         val callsAtRestart = selectCalls.size

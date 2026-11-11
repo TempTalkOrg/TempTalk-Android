@@ -4,13 +4,13 @@ import com.difft.android.chat.common.AvatarCacheCipher
 import com.difft.android.selector.entity.LocalMedia
 import java.io.File
 
-/**
- * Builds a [LocalMedia] entry for the full-screen [com.difft.android.selector.PictureSelector] avatar
- * preview so the image engine (Glide) reads **decrypted** bytes through [AvatarEncryptedProvider] —
- * no plaintext is materialised on disk. The avatar analogue of [AttachmentPreview].
- *
- * [dir] is [AvatarEncryptedProvider.DIR_AVATAR] or [AvatarEncryptedProvider.DIR_GROUP_AVATAR].
- */
+
+
+
+
+
+
+
 object AvatarPreview {
 
     fun localMediaFor(dir: String, cacheFile: File): LocalMedia {

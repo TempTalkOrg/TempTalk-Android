@@ -7,16 +7,16 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * The credential record's wire shape. Two things are pinned here:
- *
- *  - the round trip, including the FROZEN `"credential"` tag — the tag can never change once a
- *    shipped build has written it;
- *  - the forward-compatibility contract every OTHER reader relies on: a tag a build does not know is
- *    reported and SKIPPED, not fatal. That is what lets a container carrying this record stay
- *    readable by an older build, and it is the second line of defence behind "a cross-device
- *    container never carries the record in the first place".
- */
+
+
+
+
+
+
+
+
+
+
 class CredentialRecordCodecTest {
 
     private val codec = RecordJsonCodec()
@@ -50,7 +50,7 @@ class CredentialRecordCodecTest {
 
     @Test
     fun `an unknown record tag is reported and skipped, never fatal`() {
-        // Stands in for what an older build sees when it meets a tag added after it shipped.
+        
         val unknown = """{"type":"somethingNewerShipped","value":{"a":1}}"""
         val seen = mutableListOf<String>()
 

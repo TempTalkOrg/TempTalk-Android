@@ -14,7 +14,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
-/** The Google Play build carries none of the Play-restricted pieces of the sideload channels. */
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [34])
 class GooglePlayChannelPolicyTest {

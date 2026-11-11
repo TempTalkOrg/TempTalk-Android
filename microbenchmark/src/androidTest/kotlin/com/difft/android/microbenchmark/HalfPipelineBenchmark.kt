@@ -18,19 +18,19 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos
 
-/**
- * L3 of issue #1166: the constructible half of the incoming pipeline chained in one timed
- * region — serialized envelope → proto parse → decrypt → unpad + Content parse → minimal
- * model conversion → batched persist into the real encrypted WCDB. The endpoint is the
- * insert transaction completing, a synchronous and unambiguous signal.
- *
- * Purpose is reconciliation: the chained total should approximate the sum of the isolated
- * L2 stages plus the L1 batched-insert cost; a large gap would indicate hidden inter-stage
- * losses (intermediate copies, allocation storms) — or, in production, that scheduling and
- * queueing (the non-constructible remainder: MessageContentProcessor side effects, job
- * managers, notification fan-out) dominate — which is the explicit trigger for the deferred
- * L4 Hilt-hosted benchmark.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
 @RunWith(AndroidJUnit4::class)
 class HalfPipelineBenchmark {
 
@@ -45,8 +45,8 @@ class HalfPipelineBenchmark {
     fun setUp() {
         context.deleteDatabase(WCDB.DATABASE_NAME)
         wcdb = WCDB(context, CoroutineScope(SupervisorJob()))
-        // Pin the production synchronous mode — a sibling class's FULL pin may have leaked
-        // (WCDB's config registry is per-path process-global).
+        
+        
         wcdb.db.setConfig(
             "bench_synchronous_pin",
             { handle -> handle.execute("PRAGMA synchronous=1") },

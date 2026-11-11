@@ -33,18 +33,18 @@ import java.io.IOException
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/**
- * Unit tests for [SessionAuthGuard] — the single owner of the "credential rejected server-side"
- * decision (issue #1230).
- *
- * The guard is driven from a real `MutableSharedFlow(replay = 1, DROP_OLDEST)`, the exact type
- * `WebSocketConnection.webSocketConnectionState` exposes in production. That matters: the flow does
- * NOT conflate equal consecutive values, so every failed handshake re-emits AUTHENTICATION_FAILED
- * and the single-flight + min-interval behaviour tested here is load-bearing, not defensive.
- *
- * The guard is constructed against the test's own `TestScope`, so `delay(MIN_CONFIRM_INTERVAL_MS)`
- * runs on virtual time.
- */
+
+
+
+
+
+
+
+
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class SessionAuthGuardTest {
 
@@ -70,17 +70,17 @@ class SessionAuthGuardTest {
 
     @After
     fun tearDown() {
-        // InactiveDeviceNotifier is a process-global object; leaving it raised would leak into
-        // any other test in this module.
+        
+        
         InactiveDeviceNotifier.clear()
         unmockkAll()
     }
 
-    /**
-     * Runs [body] against a started guard and always stops it afterwards: the guard's socket-state
-     * collector never completes on its own, and `runTest` fails the test if a coroutine launched in
-     * its scope is still active when the body returns.
-     */
+    
+
+
+
+
     private fun guardTest(body: suspend TestScope.(SessionAuthGuard) -> Unit) = runTest {
         val guard = SessionAuthGuard(
             appWebSocketHelper = appWebSocketHelper,
@@ -97,7 +97,7 @@ class SessionAuthGuardTest {
         }
     }
 
-    // T1
+    
     @Test
     fun `handshake rejection confirmed as 401 logs out exactly once`() = guardTest { guard ->
         coEvery { deviceRepository.checkDeviceAuthAs("Basic dGVzdA==", true) } throws AuthorizationFailedException(401, "nope")
@@ -122,7 +122,7 @@ class SessionAuthGuardTest {
         verify(exactly = 0) { logoutManager.doLogoutWithoutRemoveData() }
     }
 
-    // T2
+    
     @Test
     fun `five back-to-back rejections collapse into one confirm`() = guardTest { guard ->
         repeat(5) { stateFlow.emit(WebSocketConnectionState.AUTHENTICATION_FAILED) }
@@ -131,7 +131,7 @@ class SessionAuthGuardTest {
         coVerify(exactly = 1) { deviceRepository.checkDeviceAuthAs("Basic dGVzdA==", true) }
     }
 
-    // T3
+    
     @Test
     fun `a second confirm waits out the five second minimum interval`() = guardTest { guard ->
         stateFlow.emit(WebSocketConnectionState.AUTHENTICATION_FAILED)
@@ -146,7 +146,7 @@ class SessionAuthGuardTest {
         coVerify(exactly = 2) { deviceRepository.checkDeviceAuthAs("Basic dGVzdA==", true) }
     }
 
-    // T4
+    
     @Test
     fun `a 2xx confirm is a false alarm and leaves the guard armed`() = guardTest { guard ->
         stateFlow.emit(WebSocketConnectionState.AUTHENTICATION_FAILED)
@@ -161,7 +161,7 @@ class SessionAuthGuardTest {
         verify(exactly = 0) { logoutManager.doLogoutWithoutRemoveData() }
     }
 
-    // T5
+    
     @Test
     fun `a network error is inconclusive and leaves the guard armed`() = guardTest { guard ->
         coEvery { deviceRepository.checkDeviceAuthAs("Basic dGVzdA==", true) } throws PushNetworkException(IOException("offline"))
@@ -178,7 +178,7 @@ class SessionAuthGuardTest {
         verify(exactly = 0) { logoutManager.doLogoutWithoutRemoveData() }
     }
 
-    // T6
+    
     @Test
     fun `after a confirmed kick every later signal is dropped`() = guardTest { guard ->
         coEvery { deviceRepository.checkDeviceAuthAs("Basic dGVzdA==", true) } throws AuthorizationFailedException(401, "nope")
@@ -196,12 +196,12 @@ class SessionAuthGuardTest {
         verify(exactly = 1) { logoutManager.doLogoutWithoutRemoveData() }
     }
 
-    // T7 — a reconnect does NOT discard a queued signal: the socket coming up says nothing about a
-    // 401 another Basic-auth channel just saw. The queued signal still confirms after the cooldown.
+    
+    
     @Test
     fun `a reconnect does not discard a signal queued during the cooldown`() = guardTest { guard ->
         stateFlow.emit(WebSocketConnectionState.AUTHENTICATION_FAILED)
-        runCurrent() // first confirm done, consumer now inside delay()
+        runCurrent() 
         guard.onAuthRejected(AuthFailureSource.DEVICE_API)
         stateFlow.emit(WebSocketConnectionState.CONNECTED)
         runCurrent()
@@ -213,7 +213,7 @@ class SessionAuthGuardTest {
         verify(exactly = 0) { logoutManager.doLogoutWithoutRemoveData() }
     }
 
-    // T8
+    
     @Test
     fun `connectivity states are not triggers`() = guardTest { guard ->
         listOf(
@@ -229,7 +229,7 @@ class SessionAuthGuardTest {
         verify(exactly = 0) { logoutManager.doLogoutWithoutRemoveData() }
     }
 
-    // T9
+    
     @Test
     fun `451 raises the activation prompt instead of confirming`() = guardTest { guard ->
         InactiveDeviceNotifier.pending.test {
@@ -243,7 +243,7 @@ class SessionAuthGuardTest {
         verify(exactly = 0) { logoutManager.doLogoutWithoutRemoveData() }
     }
 
-    // T10
+    
     @Test
     fun `a reconnect clears the activation prompt`() = guardTest { guard ->
         stateFlow.emit(WebSocketConnectionState.INACTIVE_FAILED)
@@ -255,7 +255,7 @@ class SessionAuthGuardTest {
         assertFalse(InactiveDeviceNotifier.pending.value)
     }
 
-    // T11
+    
     @Test
     fun `no credential means no confirming call`() = guardTest { guard ->
         every { userManager.getUserData() } returns UserData(baseAuth = null)
@@ -267,7 +267,7 @@ class SessionAuthGuardTest {
         verify(exactly = 0) { logoutManager.doLogoutWithoutRemoveData() }
     }
 
-    // T12
+    
     @Test
     fun `a sink report confirmed as 403 logs out`() = guardTest { guard ->
         coEvery { deviceRepository.checkDeviceAuthAs("Basic dGVzdA==", true) } throws AuthorizationFailedException(403, "nope")
@@ -279,7 +279,7 @@ class SessionAuthGuardTest {
         verify(exactly = 1) { logoutManager.doLogoutWithoutRemoveData() }
     }
 
-    // T13
+    
     @Test
     fun `a stopped guard consumes nothing`() = guardTest { guard ->
         guard.stop()

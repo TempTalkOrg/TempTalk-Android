@@ -10,18 +10,11 @@ import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertSame
 import org.junit.Test
 
-/**
- * [applyTranslateOverlay] — the point at which the coordinator's in-memory state beats whatever the
- * window query read from the database. The overlay wins over hydration for the page's
- * lifetime, and it is applied by copy so a [TranslateData] shared by two rows is never
- * mutated in place.
- *
- * What each case asserts:
- *  - T55 overlay is authoritative: present id overrides hydration, absent id keeps it
- *  - T56 no in-place mutation — a [TranslateData] shared by two messages is never edited, so a list
- *        captured before the write still compares unequal afterwards (which is what makes DiffUtil
- *        see the change)
- */
+
+
+
+
+
 class TranslateOverlayTest {
 
     private fun message(id: String, data: TranslateData?) = TextChatMessage().apply {
@@ -29,7 +22,6 @@ class TranslateOverlayTest {
         translateData = data
     }
 
-    // --- T55 ----------------------------------------------------------------
 
     @Test
     fun `T55a an id present in the overlay overrides the hydrated value`() {
@@ -67,11 +59,10 @@ class TranslateOverlayTest {
         val notify = NotifyChatMessage().apply { id = "m1" }
         val messages = listOf<ChatMessage>(notify)
 
-        // Must not throw and must not try to write a translate block onto a notify row.
+        
         applyTranslateOverlay(messages, mapOf("m1" to TranslateData(TranslateStatus.ShowCN, "x", null)))
     }
 
-    // --- T56 ----------------------------------------------------------------
 
     @Test
     fun `T56 the shared previous value is never mutated in place`() {
@@ -82,8 +73,8 @@ class TranslateOverlayTest {
 
         applyTranslateOverlay(listOf(getsNewValue), mapOf("m-new" to fresh))
 
-        // The instance the other message (and any previously committed list) still points at is
-        // untouched, so equals() can tell the two apart.
+        
+        
         assertSame(shared, keepsOldValue.translateData)
         assertEquals(TranslateStatus.Invisible, keepsOldValue.translateData?.translateStatus)
         assertNotSame(shared, getsNewValue.translateData)

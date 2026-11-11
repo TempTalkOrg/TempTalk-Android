@@ -15,45 +15,22 @@ import org.difft.app.database.models.DBAttachmentModel
 import org.difft.app.database.wcdb
 import java.io.File
 
-/**
- * One-time, idempotent background migration that purges **legacy plaintext** media left on disk by
- * builds that predate the encrypted-at-rest change.
- *
- * Before the migration, downloaded images/voice were decrypted to a plaintext file at
- * `.../attachment/<messageId>/<fileName>`. New downloads now keep only the ciphertext
- * (`<fileName>.encrypt`) and decrypt on demand via [EncryptedAttachmentProvider]. Readers still
- * auto-fall-back to any remaining plaintext, so the app works without this migration — but the
- * security benefit of encryption-at-rest is only realised once the plaintext copies are gone.
- *
- * For each legacy plaintext media file this:
- *  1. drops it outright if a structurally-valid `.encrypt` already exists;
- *  2. otherwise re-encrypts it with the attachment's DB key into `<fileName>.encrypt.tmp`, verifies
- *     the HMAC, atomically renames it to `<fileName>.encrypt`, then deletes the plaintext.
- *
- * Files without a usable key, or whose type is not kept encrypted-at-rest, are left untouched.
- *
- * **Completion is defined by disk state, not by "the loop ran once".** The version stamp is written
- * **only** when a full pass leaves **zero transient failures** — i.e. no encryptable plaintext
- * remains. Per-file transient failures (disk full, interrupted IO, rename/MAC failure) do NOT stamp
- * the version, so they are retried on every subsequent launch until clean; re-scans are cheap
- * because already-migrated entries are skipped fast and the plaintext remainder only shrinks.
- *
- * We deliberately never "give up" while encryptable plaintext is still on disk: claiming completion
- * with plaintext left behind would defeat encryption-at-rest (and a transient cause such as a full
- * disk self-heals once the user frees space). The worst case — a file that can genuinely never be
- * encrypted — costs only a cheap re-scan per launch, which is the right price for the guarantee.
- */
+
+
+
+
+
 object LegacyPlaintextAttachmentMigration {
 
     private const val TAG = "[LegacyPlaintextMigration]"
     private const val PREFS = "attachment_migration"
     private const val KEY_VERSION = "legacy_plaintext_purge_version"
-    // Retry counter kept purely for observability (logged), never used to abandon the migration.
+    
     private const val KEY_ATTEMPTS = "legacy_plaintext_purge_attempts"
-    // v2: video added to the encrypt-at-rest set — bump so legacy plaintext videos are purged too.
-    // v3: long text (text/x-signal-plain) added — bump so legacy plaintext long-text files are purged too.
-    // v4: all remaining generic files added (uniform encrypt-at-rest) — bump so legacy plaintext
-    //     documents / audio files / archives / apk / octet-stream are purged too.
+    
+    
+    
+    
     private const val CURRENT_VERSION = 4
     private const val TMP_SUFFIX = ".encrypt.tmp"
     private const val KEY_REDUNDANT_PURGE_VERSION = "redundant_plaintext_purge_version"
@@ -62,10 +39,10 @@ object LegacyPlaintextAttachmentMigration {
     @Volatile
     private var running = false
 
-    /**
-     * Runs the migration once (no-op if already completed or currently running). Safe to call from
-     * app startup on a background scope; performs all IO on [Dispatchers.IO].
-     */
+    
+
+
+
     suspend fun runIfNeeded() = withContext(Dispatchers.IO) {
         val prefs = application.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         if (prefs.getInt(KEY_VERSION, 0) >= CURRENT_VERSION) return@withContext
@@ -74,33 +51,28 @@ object LegacyPlaintextAttachmentMigration {
         try {
             val stats = purgeLegacyPlaintext()
             if (stats.failedTransient == 0) {
-                // Only stamp when no encryptable plaintext remains — never claim "done" while a
-                // legacy plaintext copy is still on disk (encryption-at-rest is the whole point).
+                
+                
                 prefs.edit().putInt(KEY_VERSION, CURRENT_VERSION).remove(KEY_ATTEMPTS).apply()
                 L.i { "$TAG done: migrated=${stats.migrated}, dropped=${stats.dropped}, skipped=${stats.skippedPermanent}" }
             } else {
-                // Do NOT stamp: retry on every launch until clean. Re-scan is cheap (already-migrated
-                // entries are skipped fast) and transient causes (full disk / IO) self-heal over time.
+                
+                
                 val attempts = prefs.getInt(KEY_ATTEMPTS, 0) + 1
                 prefs.edit().putInt(KEY_ATTEMPTS, attempts).apply()
                 L.w { "$TAG incomplete: transientFailures=${stats.failedTransient} (attempt $attempts), retry next launch" }
             }
         } catch (e: Exception) {
-            // Whole-run failure (e.g. DB unavailable): do not stamp or bump, retry next launch.
+            
             L.w { "$TAG failed, will retry next launch: ${e.message}" }
         } finally {
             running = false
         }
     }
 
-    /**
-     * One-time removal of decrypted copies left beside a usable ciphertext (#1438): voice waveform
-     * extraction used to decrypt next to the `.encrypt` and kept the copy whenever it failed, in a
-     * directory other apps can read on Android 8–10. Stricter than [runIfNeeded]'s drop rule: only a
-     * plaintext whose row has a usable key is removed, so a self-sent attachment still uploading
-     * (key stored only after the upload) keeps its source. Not stamped unless the whole root was listed
-     * and it is the external root (see [mayStampRedundantPurge]).
-     */
+    
+
+
     suspend fun purgeRedundantPlaintextIfNeeded() = withContext(Dispatchers.IO) {
         val prefs = application.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         if (prefs.getInt(KEY_REDUNDANT_PURGE_VERSION, 0) >= REDUNDANT_PURGE_VERSION) return@withContext
@@ -116,23 +88,23 @@ object LegacyPlaintextAttachmentMigration {
             if (stamped) prefs.edit().putInt(KEY_REDUNDANT_PURGE_VERSION, REDUNDANT_PURGE_VERSION).apply()
             L.i { "$TAG redundant purge deleted=${result.deleted} complete=${result.complete} stamped=$stamped" }
         } catch (e: Exception) {
-            // DB read failure or IO: not stamped, retried next launch.
+            
             L.w { "$TAG redundant purge failed type=${e.javaClass.simpleName}" }
         }
     }
 
-    /**
-     * The pass is recorded only for a root on mounted external storage. A root reported as
-     * [Environment.MEDIA_UNKNOWN] is internal storage that `FilePathManager` fell back to because
-     * external storage was not mounted when the base dir was resolved: the external tree, where the
-     * leftovers live, was not scanned, so the pass must run again on a later launch.
-     */
+    
+
+
+
+
+
     internal fun mayStampRedundantPurge(complete: Boolean, rootStorageState: String): Boolean =
         complete && rootStorageState == Environment.MEDIA_MOUNTED
 
     internal class PurgeResult(val deleted: Int, val complete: Boolean)
 
-    /** [keyOf] resolves a copy's row key by `(directory name, file name)`; it may throw (aborts, not stamped). */
+    
     internal fun purgeRedundantPlaintext(root: File, keyOf: (String, String) -> ByteArray?): PurgeResult {
         if (!root.exists()) return PurgeResult(0, complete = true)
         val copyDirs = root.listFiles() ?: return PurgeResult(0, complete = false)
@@ -149,8 +121,8 @@ object LegacyPlaintextAttachmentMigration {
                 if (!file.isFile || file.name.endsWith(".encrypt") || file.name.endsWith(TMP_SUFFIX)) continue
                 if (!EncryptedAttachmentAccess.hasEncrypted(file.absolutePath)) continue
                 val key = keyOf(copyDir.name, file.name)?.takeIf(EncryptedAttachmentAccess::isUsableKey) ?: continue
-                // Only when the ciphertext verifies with this row's key: a damaged ciphertext, or a key the
-                // lookup took from a sibling row, leaves the plaintext as the only good copy.
+                
+                
                 if (!FileDecryptionUtil.verifyMac(EncryptedAttachmentAccess.encryptedFile(file.absolutePath), key)) continue
                 if (file.delete()) deleted++ else complete = false
             }
@@ -182,11 +154,11 @@ object LegacyPlaintextAttachmentMigration {
             for (file in files) {
                 if (!file.isFile) continue
                 val name = file.name
-                // Skip ciphertext and leftover temp files; only plaintext candidates remain.
+                
                 if (name.endsWith(".encrypt") || name.endsWith(TMP_SUFFIX)) continue
 
                 val basePath = file.absolutePath
-                // Already migrated (valid ciphertext present): just drop the redundant plaintext.
+                
                 if (EncryptedAttachmentAccess.hasEncrypted(basePath)) {
                     if (file.delete()) dropped++
                     continue
@@ -197,25 +169,25 @@ object LegacyPlaintextAttachmentMigration {
                     MigrateResult.SKIPPED_PERMANENT -> skippedPermanent++
                     MigrateResult.FAILED_TRANSIENT -> failedTransient++
                 }
-                // Cooperative cancellation + yield to avoid hogging the IO dispatcher.
+                
                 yield()
             }
         }
         return Stats(migrated, dropped, skippedPermanent, failedTransient)
     }
 
-    /**
-     * - [MIGRATED]: re-encrypted (or redundant plaintext dropped) — resolved.
-     * - [SKIPPED_PERMANENT]: will never succeed and that's acceptable — not an encrypted-at-rest
-     *   type (correctly stays plaintext), or no usable key / no DB row (cannot encrypt). These do
-     *   NOT block completion.
-     * - [FAILED_TRANSIENT]: encrypt threw, rename failed, or MAC verification failed — should be
-     *   retried on a later launch.
-     */
+    
+
+
+
+
+
+
+
     private enum class MigrateResult { MIGRATED, SKIPPED_PERMANENT, FAILED_TRANSIENT }
 
     private fun migrateOne(messageId: String, fileName: String, plainFile: File): MigrateResult {
-        // No DB row (orphan plaintext) / no usable key / wrong type: cannot or should not encrypt.
+        
         val model = findAttachment(messageId, fileName) ?: return MigrateResult.SKIPPED_PERMANENT
         val key = model.key
         if (key == null || key.size < 64) return MigrateResult.SKIPPED_PERMANENT
@@ -234,7 +206,7 @@ object LegacyPlaintextAttachmentMigration {
                 return MigrateResult.FAILED_TRANSIENT
             }
 
-            // Atomic replace: only delete the plaintext once the ciphertext is durably in place.
+            
             if (encryptedFile.exists()) encryptedFile.delete()
             if (!tmpFile.renameTo(encryptedFile)) {
                 tmpFile.delete()
@@ -250,32 +222,32 @@ object LegacyPlaintextAttachmentMigration {
         }
     }
 
-    /**
-     * Whether a legacy plaintext file of this row's type must be re-encrypted, decided from the DB
-     * model fields. Must stay in step with which types [EncryptedAttachmentAccess] states are kept
-     * encrypted at rest, and [CURRENT_VERSION] bumped whenever that set changes.
-     *
-     * All attachment types are kept encrypted at rest (uniform model), so every legacy
-     * plaintext file with a usable key is migrated. A file whose DB row is missing or whose key is
-     * unusable (`< 64B`) is still handled as a permanent skip by [migrateOne] (stays plaintext,
-     * read via the plaintext-fallback path), so it never blocks migration completion.
-     */
+    
+
+
+
+
+
+
+
+
+
     @Suppress("UNUSED_PARAMETER")
     private fun keepEncryptedAtRest(model: AttachmentModel): Boolean = true
 
-    /**
-     * Resolve the attachment DB row for `(messageId, fileName)`. Mirrors
-     * [EncryptedAttachmentProvider]'s lookup: normal messages match by `messageId`; forward copies
-     * are addressed by their per-copy `localId` (the forward-attachment migration renames/copies
-     * legacy files — plaintext included — into `attachment/<localId>/` directories, so a
-     * localId-named directory holding a plaintext file MUST resolve here or the file would be
-     * misclassified as an orphan and left unencrypted at rest forever); forwarded single attachments
-     * at the pre-localId address are matched by `authorityId` when the id is numeric.
-     */
+    
+
+
+
+
+
+
+
+
     private fun findAttachment(messageId: String, fileName: String): AttachmentModel? {
-        // DB read failures are transient — let them propagate so the whole run aborts and retries,
-        // rather than mislabelling every file as a permanent skip. Return null only for a genuine
-        // "no row" (orphan plaintext).
+        
+        
+        
         val byMessage = wcdb.attachment.getAllObjects(DBAttachmentModel.messageId.eq(messageId))
         (byMessage.firstOrNull { it.fileName == fileName } ?: byMessage.firstOrNull())?.let { return it }
 

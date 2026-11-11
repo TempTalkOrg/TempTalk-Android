@@ -4,12 +4,12 @@ import android.graphics.Matrix
 import android.graphics.RectF
 import com.difft.android.imageeditor.core.model.EditorElement
 
-/**
- * The local extent of a [EditorElement].
- * i.e. all [EditorElement]s have a bounding rectangle from:
- *
- * [LEFT] to [RIGHT] and from [TOP] to [BOTTOM].
- */
+
+
+
+
+
+
 class Bounds {
 
     companion object {
@@ -44,12 +44,12 @@ class Bounds {
             x >= FULL_BOUNDS.left && x <= FULL_BOUNDS.right &&
                 y >= FULL_BOUNDS.top && y <= FULL_BOUNDS.bottom
 
-        /**
-         * Maps all the points of bounds with the supplied matrix and determines whether they are still in bounds.
-         *
-         * @param matrix matrix to transform points by, null is treated as identity.
-         * @return true iff all points remain in bounds after transformation.
-         */
+        
+
+
+
+
+
         @JvmStatic
         fun boundsRemainInBounds(matrix: Matrix?): Boolean {
             if (matrix == null) return true

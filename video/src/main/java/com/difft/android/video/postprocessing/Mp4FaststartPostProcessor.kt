@@ -16,16 +16,16 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.io.SequenceInputStream
 
-/**
- * A post processor that takes a stream of bytes, and using [Mp4Sanitizer], moves the metadata to the front of the file.
- *
- * @property inputStreamFactory factory for the [InputStream]. Expected to be called multiple times.
- */
+
+
+
+
+
 class Mp4FaststartPostProcessor(private val inputStreamFactory: InputStreamFactory) {
 
-  /**
-   * It is the responsibility of the caller to close the resulting [InputStream].
-   */
+  
+
+
   fun process(inputLength: Long = calculateStreamLength(inputStreamFactory.create())): SequenceInputStream {
     val metadata = inputStreamFactory.create().use { inputStream ->
       sanitizeMetadata(inputStream, inputLength)

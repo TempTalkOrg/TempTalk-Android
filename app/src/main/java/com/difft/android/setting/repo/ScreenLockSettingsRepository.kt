@@ -20,7 +20,7 @@ class ScreenLockSettingsRepository @Inject constructor(private val users: UserMa
     fun disable(accountId: String, kind: ScreenLockContract.Kind): Boolean {
         if (accountId != accountId()) return false
         var applied = false
-        // Memory is updated synchronously; the disk write must not block the result callback's thread.
+        
         users.update {
             if (account != accountId) return@update
             applied = true

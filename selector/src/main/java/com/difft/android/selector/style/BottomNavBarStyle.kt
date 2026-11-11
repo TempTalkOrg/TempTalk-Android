@@ -4,7 +4,7 @@ class BottomNavBarStyle {
     var bottomNarBarBackgroundColor: Int = 0
     var bottomPreviewNarBarBackgroundColor: Int = 0
 
-    /** unit dp */
+    
     var bottomNarBarHeight: Int = 0
 
     var bottomPreviewNormalText: String? = null

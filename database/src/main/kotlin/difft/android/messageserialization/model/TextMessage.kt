@@ -10,10 +10,10 @@ open class TextMessage(
     timeStamp: Long,
     receivedTimeStamp: Long,
     sendType: Int,
-    expiresInSeconds: Int, ////0 indicate never expire
+    expiresInSeconds: Int, 
     notifySequenceId: Long,
     sequenceId: Long,
-    mode: Int, // 0: normal, 1: CONFIDENTIAL
+    mode: Int, 
     var text: String?,
     var attachments: List<Attachment>? = null,
     var quote: Quote? = null,
@@ -29,7 +29,7 @@ open class TextMessage(
     var playStatus: Int = 0,
     var receiverIds: String? = null,
     var criticalAlertType: Int = CRITICAL_ALERT_TYPE_NONE,
-    var isUnsupported: Boolean = false, // true if message requires newer client version
+    var isUnsupported: Boolean = false, 
 ) : Message(
     id,
     fromWho,

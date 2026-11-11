@@ -7,7 +7,7 @@ import org.junit.Assert.assertThrows
 import org.junit.Test
 import java.io.EOFException
 
-/** T-T4 — minimal HTTP/1.1 request-head parser (design §13, Risk R1 de-risk). */
+
 class HttpRequestParserTest {
 
     @Test
@@ -40,7 +40,7 @@ class HttpRequestParserTest {
         assertEquals("/api/localsend/v2/prepare-upload", head.path)
         assertEquals("123456", head.query["pin"])
         assertEquals(5L, head.contentLength)
-        // Body is left intact on the source for streaming.
+        
         assertEquals("HELLO", source.readByteString(5).utf8())
     }
 
@@ -81,7 +81,7 @@ class HttpRequestParserTest {
     fun `more header lines than the cap is a bad request`() {
         val raw = buildString {
             append("POST /api/localsend/v2/register HTTP/1.1\r\n")
-            // Repeating one name too: the cap counts lines, not distinct headers.
+            
             repeat(HttpRequestParser.MAX_HEADER_COUNT + 1) { append("X-Pad: $it\r\n") }
             append("\r\n")
         }
@@ -102,7 +102,7 @@ class HttpRequestParserTest {
         }
     }
 
-    /** The bounded length of a control request declaring [contentLength] (absent when null). */
+    
     private fun controlBody(contentLength: String?): Long {
         val raw = "POST /api/localsend/v2/register HTTP/1.1\r\n" +
             (contentLength?.let { "Content-Length: $it\r\n" } ?: "") + "\r\n"

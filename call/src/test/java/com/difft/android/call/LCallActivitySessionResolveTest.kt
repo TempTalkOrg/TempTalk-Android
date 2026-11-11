@@ -12,12 +12,12 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Test
 
-/**
- * Which session a call page attaches to ([resolveCallSession], read in `LCallActivity.onCreate`):
- * a return to the call (no key) and the launch of the live session (its key) attach to it; a page
- * launched for another session, or any page with no live session (a restore after process death),
- * gets none and finishes.
- */
+
+
+
+
+
+
 class LCallActivitySessionResolveTest {
 
     private val live = mockk<CallSession> {

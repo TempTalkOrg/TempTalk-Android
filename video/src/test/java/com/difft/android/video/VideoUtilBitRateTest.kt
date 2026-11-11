@@ -4,14 +4,14 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Test
 
-/**
- * T33 — [VideoUtil.inputBitRate] arithmetic.
- *
- * Plain JUnit on purpose: pure arithmetic with no `Uri` / `Context`, so Robolectric would only
- * make it slower.
- *
- * Run: :video:testDebugUnitTest
- */
+
+
+
+
+
+
+
+
 class VideoUtilBitRateTest {
 
     @Test

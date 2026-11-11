@@ -8,20 +8,21 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 
+import com.difft.android.base.utils.LanguageUtils
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.utils.setSearchRowSelected
 import com.difft.android.base.R
 import com.difft.android.chat.databinding.SearchItemMessageBinding
-import com.difft.android.chat.search.setHighLightText
 import com.difft.android.chat.group.getDisplayAvatarData
 import org.difft.app.database.models.ContactorModel
 import org.difft.app.database.models.GroupModel
+import util.TimeFormatter
 
 abstract class SearchChatHistoryAdapter(private val isForMessageSearch: Boolean = false) : ListAdapter<SearchChatHistoryViewData, SearchChatHistoryViewHolder>(
     object : DiffUtil.ItemCallback<SearchChatHistoryViewData>() {
         override fun areItemsTheSame(oldItem: SearchChatHistoryViewData, newItem: SearchChatHistoryViewData): Boolean {
-            // Use conversationId + messageTimeStamp as composite key so that multiple messages
-            // from the same conversation are treated as distinct items in message-search mode.
+            
+            
             return oldItem.conversationId == newItem.conversationId &&
                     oldItem.messageTimeStamp == newItem.messageTimeStamp
         }
@@ -33,8 +34,8 @@ abstract class SearchChatHistoryAdapter(private val isForMessageSearch: Boolean 
 
     private var searchKey: String = ""
 
-    // Pending until a commit callback actually rebinds: AsyncListDiffer drops superseded
-    // commit callbacks, so a per-call captured flag could be lost with the dropped callback.
+    
+    
     private var pendingHighlightRebind = false
 
     @SuppressLint("NotifyDataSetChanged")
@@ -42,8 +43,8 @@ abstract class SearchChatHistoryAdapter(private val isForMessageSearch: Boolean 
         if (key != searchKey) pendingHighlightRebind = true
         searchKey = key
         submitList(data) {
-            // DiffUtil skips rebinding items whose data is unchanged, so a new search key
-            // would leave stale highlights on surviving items — force a full rebind.
+            
+            
             if (pendingHighlightRebind) {
                 pendingHighlightRebind = false
                 notifyDataSetChanged()
@@ -63,7 +64,7 @@ abstract class SearchChatHistoryAdapter(private val isForMessageSearch: Boolean 
         holder.itemView.setSearchRowSelected(data.conversationId == selectedId)
     }
 
-    /** Two-pane: the conversation open in the detail pane; its rows are highlighted. */
+    
     var selectedId: String? = null
         set(value) {
             if (field == value) return
@@ -84,10 +85,22 @@ class SearchChatHistoryViewHolder(container: ViewGroup, private val isForMessage
 
     fun bind(data: SearchChatHistoryViewData, searchKey: String, onItemClick: () -> Unit) {
         binding.tvName.text = data.label
-        if (isForMessageSearch || data.onlyOneResult) {
+        if (isForMessageSearch) {
             binding.tvDetail.setHighLightText(data.detail?.toString(), searchKey)
         } else {
-            binding.tvDetail.text = data.detail
+            
+            
+            if (data.onlyOneResult) {
+                binding.tvDetail.setHighLightText(searchSnippet(data.detail?.toString().orEmpty(), searchKey), listOf(searchKey))
+            } else {
+                binding.tvDetail.text = data.detail
+            }
+            val matchTime = data.matchTime
+            binding.tvTime.visibility = if (matchTime != null && matchTime > 0) View.VISIBLE else View.GONE
+            if (matchTime != null && matchTime > 0) {
+                val context = binding.root.context
+                binding.tvTime.text = TimeFormatter.formatConversationTime(LanguageUtils.getLanguage(context).language, matchTime)
+            }
         }
 
         binding.imageviewAvatar.visibility = View.GONE
@@ -135,7 +148,10 @@ data class SearchChatHistoryViewData(
     var contactor: ContactorModel? = null,
     var group: GroupModel? = null,
     var onlyOneResult: Boolean = false,
-    var messageTimeStamp: Long? = null  //只包含一条搜索结果时的消息id
+    
+    var messageTimeStamp: Long? = null,
+    
+    var matchTime: Long? = null,
 ) {
     sealed class Type {
         data object OneOnOne : Type()

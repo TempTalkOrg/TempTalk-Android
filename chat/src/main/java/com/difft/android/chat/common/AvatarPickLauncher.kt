@@ -20,14 +20,14 @@ import com.difft.android.selector.pictureselector.PictureSelectorUtils
 import com.difft.android.selector.utils.ToastUtils
 import util.ScreenLockUtil
 
-/**
- * Single-image avatar picker: media permission → gallery (single, direct return) → circular UCrop
- * → Luban compress → [onPicked] with the upload path. Plaintext crop temps are dropped right away;
- * the caller deletes the upload temp once the server copy is rendered.
- *
- * Must be constructed as a field of the Activity / Fragment so the permission contract is
- * registered before STARTED.
- */
+
+
+
+
+
+
+
+
 class AvatarPickLauncher private constructor(
     private val activityProvider: () -> AppCompatActivity,
     private val onPicked: (String) -> Unit,

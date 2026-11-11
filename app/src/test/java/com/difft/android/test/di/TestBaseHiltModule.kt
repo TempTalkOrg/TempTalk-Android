@@ -17,9 +17,9 @@ import javax.inject.Singleton
 )
 object TestBaseHiltModule {
 
-    // Note: This TestScope is independent from runTest{}'s scope.
-    // advanceUntilIdle() won't control coroutines launched via this injected scope.
-    // For timing-sensitive tests, use @BindValue to inject the test's own scope.
+    
+    
+    
     @Singleton
     @Provides
     @Named("application")

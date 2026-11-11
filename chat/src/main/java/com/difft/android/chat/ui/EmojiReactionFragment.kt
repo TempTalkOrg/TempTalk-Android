@@ -29,10 +29,10 @@ import org.difft.app.database.models.DBMessageModel
 import org.difft.app.database.reactions
 import org.difft.app.database.wcdb
 
-/**
- * Who reacted to a message, one tab per emoji. A page of the home detail stack or of its shell
- * [EmojiReactionActivity]; the tabs are this page's children, so ViewPager2 restores them with it.
- */
+
+
+
+
 @AndroidEntryPoint
 class EmojiReactionFragment : Fragment() {
 
@@ -102,7 +102,7 @@ class EmojiReactionFragment : Fragment() {
             override fun onTabSelected(tab: TabLayout.Tab?) {
                 val selected = tab ?: return
                 val binding = _binding ?: return
-                // Scroll the selected tab to the middle of the strip.
+                
                 val scrollX = selected.view.left - (binding.scrollTab.width - selected.view.width) / 2
                 binding.scrollTab.smoothScrollTo(scrollX, 0)
             }
@@ -113,11 +113,11 @@ class EmojiReactionFragment : Fragment() {
         })
     }
 
-    /**
-     * One tab per emoji; each tab loads its reactors by message id (no id lists in arguments).
-     * Item ids come from the emoji, not the position: after a recreation with a different emoji
-     * set (reactions removed meanwhile) a restored tab is reused only for the same emoji.
-     */
+    
+
+
+
+
     internal class ReactionTabsAdapter(
         page: Fragment,
         private val messageId: String,
@@ -135,7 +135,7 @@ class EmojiReactionFragment : Fragment() {
     }
 }
 
-/** Reactions of a message as a detail destination (home detail stack, or its shell Activity). */
+
 class EmojiReactionDestination(private val forWhat: For, private val messageId: String) : DetailDestination {
     override fun newFragment(): Fragment = EmojiReactionFragment.newInstance(EmojiReactionFragment.arguments(forWhat, messageId))
     override fun shellIntent(context: Context): Intent = EmojiReactionActivity.intent(context, forWhat, messageId)

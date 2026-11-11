@@ -8,7 +8,7 @@ import org.junit.Test
 
 class FirstFrameGateTest {
 
-    /** Camera on unless a test says otherwise. */
+    
     private val gate = FirstFrameGate().apply { setAccepting(true) }
     private val first = Any()
     private val second = Any()
@@ -41,7 +41,7 @@ class FirstFrameGateTest {
     fun `a new renderer starts black even if the previous one drew`() {
         gate.attach(first)
         gate.onFrameRendered(first)
-        // A key swap may attach the new renderer before the old one is disposed.
+        
         gate.attach(second)
         gate.detach(first)
         assertFalse(gate.hasFrame)
@@ -88,7 +88,7 @@ class FirstFrameGateTest {
         assertTrue(gate.hasFrame)
     }
 
-    /** Stands in for a renderer: one-shot listeners it drops after a call, and a main-thread queue. */
+    
     private class FakeRenderer {
         val listeners = mutableListOf<EglRenderer.FrameListener>()
         val mainQueue = ArrayDeque<() -> Unit>()
@@ -121,7 +121,7 @@ class FirstFrameGateTest {
         renderer.runMain()
         assertTrue(gate.hasFrame)
 
-        // Reconnect: the camera track goes away but the tile keeps this renderer.
+        
         gate.reset()
         assertEquals("the first listener was spent", 0, renderer.listeners.size)
         reporter.arm()
@@ -174,7 +174,7 @@ class FirstFrameGateTest {
 
     @Test
     fun `a frame drawn while muted never reveals the video after unmute`() {
-        // Tile starts muted (the placeholder's default) while the renderer already draws.
+        
         val renderer = FakeRenderer()
         val reporter = reporterFor(renderer)
         gate.setAccepting(false)
@@ -182,10 +182,10 @@ class FirstFrameGateTest {
         reporter.arm()
         renderer.drawFrame()
         renderer.runMain()
-        // The unmute composition reads the gate before its effect calls setAccepting(true).
+        
         assertFalse("no flicker in the unmute composition", gate.hasFrame)
 
-        // A muted frame drawn just before unmute and delivered after it.
+        
         reporter.arm()
         renderer.drawFrame()
         gate.setAccepting(true)
@@ -228,7 +228,7 @@ class FirstFrameGateTest {
             gate.setAccepting(false)
             reporter.arm()
             assertFalse("cycle $cycle muted", gate.hasFrame)
-            // The kept renderer redraws its last image while muted.
+            
             renderer.drawFrame()
             renderer.runMain()
             assertFalse("cycle $cycle muted redraw ignored", gate.hasFrame)

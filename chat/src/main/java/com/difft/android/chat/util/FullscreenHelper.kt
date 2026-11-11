@@ -6,14 +6,14 @@ import android.view.View
 import android.view.Window
 import android.view.WindowManager
 
-/**
- * Encapsulates logic to properly show/hide system UI/chrome in a full screen setting. Also
- * handles adjusting to notched devices.
- *
- * @param activity             The activity we are controlling
- * @param suppressShowSystemUI Suppresses the initial 'show system ui' call, which can cause the status and navbar to flash
- *                             during some animations.
- */
+
+
+
+
+
+
+
+
 @Suppress("DEPRECATION")
 class FullscreenHelper(private val activity: Activity, suppressShowSystemUI: Boolean) {
 

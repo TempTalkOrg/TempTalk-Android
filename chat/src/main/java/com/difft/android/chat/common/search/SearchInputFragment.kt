@@ -29,35 +29,13 @@ class SearchInputFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-//        refreshClearButton(binding.edittextSearchInput.length())
-//        binding.edittextSearchInput.addTextChangedListener {
-//            refreshClearButton(it?.length ?: 0)
-//
-//            viewModel.setInput(it?.toString())
-//        }
-//        viewModel.setInput(binding.edittextSearchInput.text.toString())
-//        binding.buttonClear.setOnClickListener {
-//            binding.edittextSearchInput.text = null
-//        }
-
         binding.edittextSearchInput.setOnClickListener {
-            // The home screen opens search as a layer over its list; any other host gets the Activity.
+            
             if ((activity as? ListPaneLayerOpener)?.openSearchLayer() != true) {
                 startActivity(Intent(activity, globalServices.activityProvider.getActivityClass(ActivityType.SEARCH)))
             }
         }
 
     }
-
-//    private fun refreshClearButton(inputLength: Int) {
-//        val isShowClearButton = inputLength != 0
-//
-//        binding.buttonClear.animate().apply {
-//            cancel()
-//
-//            val toAlpha = if (isShowClearButton) 1.0f else 0f
-//            alpha(toAlpha)
-//        }
-//    }
 
 }

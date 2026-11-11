@@ -30,25 +30,12 @@ import java.util.Collections
 import java.util.concurrent.CountDownLatch
 import kotlin.concurrent.thread
 
-/**
- * Deterministic concurrency unit tests for [CallRoomController]'s monitor-guarded
- * room create/release lifecycle (design §3.3, two-phase VM room-init ANR fix).
- *
- * Covers the `CallRoomController`-direct rows of the §6 test inventory:
- *  - **T10**  `disconnectAndRelease()` before `createRoom()` is a no-op (no leak, no create).
- *  - **T13**  release races create — exactly one `room.release()`, no leak.
- *  - **T14a** `createRoom()` `synchronized(roomLock)` idempotency — exactly one `LiveKit.create`.
- *  - **T16**  lock-free `isReleaseIntended()` abort observed under the "R during C" interleaving
- *             (R parked on `roomLock` while C still holds it).
- *
- * Concurrency is made deterministic with `CountDownLatch`es and a `@Volatile` spin-await —
- * **no `Thread.sleep`**. `mockkObject(LiveKit)` (NOT `mockkStatic`) is used because
- * `io.livekit.android.LiveKit` is a Kotlin `object` and `create(...)` is a non-static
- * INSTANCE member, so the production call compiles to `LiveKit.INSTANCE.create(...)`.
- *
- * Robolectric is required because `buildSignalingOkHttpClient()` (run inside `createRoom`
- * before `LiveKit.create`) builds an `OkHttpClient` and the proxy tunnel socket factory.
- */
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33])
 class CallRoomControllerConcurrencyTest {
@@ -77,9 +64,7 @@ class CallRoomControllerConcurrencyTest {
         decryptCallMKey = { _, _ -> null },
     )
 
-    // ---------------------------------------------------------------------------------
-    // T10 — disconnectAndRelease() before createRoom(): no-op, no leak, no create.
-    // ---------------------------------------------------------------------------------
+    
     @Test
     fun `T10 - release before create is a no-op and never creates a room`() {
         val ctl = buildController()
@@ -92,9 +77,7 @@ class CallRoomControllerConcurrencyTest {
         verify(exactly = 0) { LiveKit.create(any(), any(), any()) }
     }
 
-    // ---------------------------------------------------------------------------------
-    // T14a — createRoom() synchronized idempotency: two concurrent creators, one create.
-    // ---------------------------------------------------------------------------------
+    
     @Test
     fun `T14a - concurrent createRoom creates exactly one room shared by both callers`() {
         val ctl = buildController()
@@ -113,10 +96,7 @@ class CallRoomControllerConcurrencyTest {
         assertTrue(ctl.isRoomInitialized())
     }
 
-    // ---------------------------------------------------------------------------------
-    // T13 — release races create (R blocks on roomLock while C is inside LiveKit.create):
-    //       exactly one release, no leak.
-    // ---------------------------------------------------------------------------------
+    
     @Test
     fun `T13 - release racing create releases the room exactly once`() {
         val enteredCreate = CountDownLatch(1)
@@ -128,18 +108,18 @@ class CallRoomControllerConcurrencyTest {
         }
         val ctl = buildController()
 
-        // C: enters createRoom, takes roomLock, blocks inside the LiveKit.create stub.
+        
         val tCreate = thread { ctl.createRoom() }
-        enteredCreate.await() // C is confirmed inside create, holding roomLock.
+        enteredCreate.await() 
 
-        // R: sets releaseIntended=true (lock-free, FIRST line) then blocks on roomLock.
+        
         val tRelease = thread { ctl.disconnectAndRelease() }
 
-        // The @Volatile flips on R's first line; spin-await confirms R has started (and is
-        // about to park on the monitor). isReleaseIntended() is lock-free so this never blocks.
+        
+        
         while (!ctl.isReleaseIntended()) { Thread.yield() }
 
-        // Let C finish create and unlock; R then acquires the lock and releases.
+        
         holdCreate.countDown()
         tCreate.join()
         tRelease.join()
@@ -149,10 +129,7 @@ class CallRoomControllerConcurrencyTest {
         assertTrue("room was released exactly once", ctl.isReleased())
     }
 
-    // ---------------------------------------------------------------------------------
-    // T16 — "R during C, Phase B wins lock" lock-free abort: isReleaseIntended() is
-    //       observable as true WHILE C still holds roomLock and R is parked.
-    // ---------------------------------------------------------------------------------
+    
     @Test
     fun `T16 - isReleaseIntended is observed lock-free while createRoom holds the lock`() {
         val enteredCreate = CountDownLatch(1)
@@ -165,13 +142,13 @@ class CallRoomControllerConcurrencyTest {
         val ctl = buildController()
 
         val tCreate = thread { ctl.createRoom() }
-        enteredCreate.await() // C inside create, holding roomLock (holdCreate NOT yet counted down).
+        enteredCreate.await() 
 
         val tRelease = thread { ctl.disconnectAndRelease() }
 
-        // Spin-await proves the read is lock-free: if isReleaseIntended() required roomLock
-        // it would block here (C holds the lock and won't release until holdCreate) → deadlock.
-        // The loop completing is itself the proof; the assertion makes it explicit.
+        
+        
+        
         while (!ctl.isReleaseIntended()) { Thread.yield() }
         assertTrue(
             "releaseIntended must be observable lock-free while createRoom still holds roomLock",
@@ -182,16 +159,13 @@ class CallRoomControllerConcurrencyTest {
         tCreate.join()
         tRelease.join()
 
-        // The release still happens exactly once regardless of lock-acquisition order.
+        
         verify(exactly = 1) { mockRoom.release() }
         assertTrue(ctl.isReleased())
     }
 
-    // ---------------------------------------------------------------------------------
-    // Fail-loud `room` getter: never hands out a pre-create or post-release Room.
-    // The type is part of the contract — connection failover reads this getter inside its
-    // try block and only ends the attempt sequence for a typed precondition failure.
-    // ---------------------------------------------------------------------------------
+    
+    
     @Test
     fun `room getter throws before createRoom`() {
         val ctl = buildController()
@@ -211,13 +185,8 @@ class CallRoomControllerConcurrencyTest {
         assertTrue("post-release access must fail loud", ex.message!!.contains("after release"))
     }
 
-    // ---------------------------------------------------------------------------------
-    // Safe, non-throwing accessors for teardown-racing UI/async callers. Unlike the
-    // fail-loud `room` getter above, these NEVER throw before create / after release — a
-    // gone room reads as "not connected" / "no remotes" / disconnect no-op. Regression
-    // guard for the "room accessed after release" crash family (isControlButtonClickEnabled,
-    // manualSwitchReconnect, connect-failure disconnect).
-    // ---------------------------------------------------------------------------------
+    
+    
     @Test
     fun `roomStateOrNull is null before create, live state after create, null after release`() {
         val ctl = buildController()
@@ -274,7 +243,7 @@ class CallRoomControllerConcurrencyTest {
     fun `disconnectQuietly is a no-op before create and never throws`() {
         val ctl = buildController()
 
-        ctl.disconnectQuietly() // must not throw
+        ctl.disconnectQuietly() 
 
         assertFalse("no room created by a quiet disconnect", ctl.isRoomInitialized())
         verify(exactly = 0) { mockRoom.disconnect() }
@@ -288,8 +257,8 @@ class CallRoomControllerConcurrencyTest {
         ctl.disconnectQuietly()
 
         verify(exactly = 1) { mockRoom.disconnect() }
-        // Quiet disconnect is NOT a release: the room stays usable/created and the fail-loud
-        // getter must still hand it out (only disconnectAndRelease() flips `released`).
+        
+        
         assertFalse("disconnectQuietly must not release the room", ctl.isReleased())
         assertSame(mockRoom, ctl.room)
     }
@@ -298,9 +267,9 @@ class CallRoomControllerConcurrencyTest {
     fun `disconnectQuietly after release does not disconnect the dead room again`() {
         val ctl = buildController()
         ctl.createRoom()
-        ctl.disconnectAndRelease() // releaseLocked() already calls disconnect() once
+        ctl.disconnectAndRelease() 
 
-        ctl.disconnectQuietly() // released → early return, no second disconnect
+        ctl.disconnectQuietly() 
 
         verify(exactly = 1) { mockRoom.disconnect() }
         assertTrue(ctl.isReleased())

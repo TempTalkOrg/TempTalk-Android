@@ -15,18 +15,18 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
-/**
- * [ProxyHttpConnectionRegistry] must evict the connection pool of every registered
- * client exactly once per [ProxyHttpConnectionRegistry.evictAll], dedupe repeat
- * registrations of the same client, and never let one client's eviction failure
- * mask the others. Off the main thread it evicts inline; on the main thread it must hand
- * the eviction to a background thread, because closing a pooled TLS socket there throws
- * `NetworkOnMainThreadException` (#1400).
- */
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 class ProxyHttpConnectionRegistryTest {
 
-    /** Robolectric's test thread is the main thread; evict from a plain thread to exercise the inline path. */
+    
     private fun ProxyHttpConnectionRegistry.evictAllOffMain() {
         val worker = Thread({ evictAll() }, "off-main-caller")
         worker.start()
@@ -71,7 +71,7 @@ class ProxyHttpConnectionRegistryTest {
         registry.register(clientWith(failingPool))
         registry.register(clientWith(healthyPool))
 
-        registry.evictAllOffMain() // must not throw
+        registry.evictAllOffMain() 
 
         verify(exactly = 1) { healthyPool.evictAll() }
     }
@@ -81,7 +81,7 @@ class ProxyHttpConnectionRegistryTest {
         ProxyHttpConnectionRegistry().evictAll()
     }
 
-    /** Pool whose evictAll records the thread it ran on and releases [done]. */
+    
     private fun recordingPool(ranOn: AtomicReference<Thread>, done: CountDownLatch): ConnectionPool =
         mockk {
             every { evictAll() } answers {
@@ -96,7 +96,7 @@ class ProxyHttpConnectionRegistryTest {
         val ranOn = AtomicReference<Thread>()
         val done = CountDownLatch(1)
         registry.register(clientWith(recordingPool(ranOn, done)))
-        val mainThread = Thread.currentThread() // Robolectric test thread owns the main looper
+        val mainThread = Thread.currentThread() 
 
         registry.evictAll()
 
@@ -133,7 +133,7 @@ class ProxyHttpConnectionRegistryTest {
         caller.start()
         caller.join(5_000)
 
-        // Inline means the pool was already evicted when evictAll returned.
+        
         assertEquals(0L, done.count)
         assertEquals(caller, ranOn.get())
     }

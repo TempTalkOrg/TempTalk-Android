@@ -4,49 +4,49 @@ import java.util.Locale
 import java.util.regex.Matcher
 import java.util.regex.Pattern
 
-/**
- * Scrub data for possibly sensitive information.
- */
+
+
+
 object Scrubber {
 
-    /**
-     * The middle group will be censored.
-     * Supposedly, the shortest international phone numbers in use contain seven digits.
-     * Handles URL encoded +, %2B
-     */
+    
+
+
+
+
     private val E164_PATTERN: Pattern = Pattern.compile("""(\+|%2B)(\d{5,13})(\d{2})""")
     private const val E164_CENSOR = "*************"
 
-    /**
-     * The second group will be censored.
-     */
+    
+
+
     private val CRUDE_EMAIL_PATTERN: Pattern = Pattern.compile("""\b([^\s/])([^\s/]*@[^\s]+)""")
     private const val EMAIL_CENSOR = "...@..."
 
-    /**
-     * The middle group will be censored.
-     */
+    
+
+
     private val GROUP_ID_V1_PATTERN: Pattern = Pattern.compile("""(__)(textsecure_group__![^\s]+)([^\s]{2})""")
     private const val GROUP_ID_V1_CENSOR = "...group..."
 
-    /**
-     * The middle group will be censored.
-     */
+    
+
+
     private val GROUP_ID_V2_PATTERN: Pattern = Pattern.compile("""(__)(signal_group__v2__![^\s]+)([^\s]{2})""")
     private const val GROUP_ID_V2_CENSOR = "...group_v2..."
 
-    /**
-     * The middle group will be censored.
-     */
+    
+
+
     private val UUID_PATTERN: Pattern = Pattern.compile(
         "(JOB::)?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{10})([0-9a-f]{2})",
         Pattern.CASE_INSENSITIVE
     )
     private const val UUID_CENSOR = "********-****-****-****-**********"
 
-    /**
-     * The entire string is censored.
-     */
+    
+
+
     private val IPV4_PATTERN: Pattern = Pattern.compile(
         "\\b" +
             "(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\." +
@@ -57,9 +57,9 @@ object Scrubber {
     )
     private const val IPV4_CENSOR = "...ipv4..."
 
-    /**
-     * The domain name except for TLD will be censored.
-     */
+    
+
+
     private val DOMAIN_PATTERN: Pattern = Pattern.compile(
         """([a-z0-9]+\.)+([a-z0-9\-]*[a-z\-][a-z0-9\-]*)""",
         Pattern.CASE_INSENSITIVE
@@ -165,7 +165,7 @@ object Scrubber {
         }
 
         return if (lastEndingPos == 0) {
-            // there were no matches, save copying all the data
+            
             input
         } else {
             output.append(input, lastEndingPos, input.length)

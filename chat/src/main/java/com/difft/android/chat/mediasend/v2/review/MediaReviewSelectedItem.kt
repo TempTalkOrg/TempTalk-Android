@@ -38,8 +38,8 @@ object MediaReviewSelectedItem {
 
         override fun bind(model: Model) {
             Glide.with(imageView)
-                // The normalized URI, not the bare realPath: a gallery path is unreadable under
-                // scoped storage, and Glide's Uri loader reaches both a provider and a sandbox file.
+                
+                
                 .load(model.media.readableUri())
                 .centerCrop()
                 .into(imageView)

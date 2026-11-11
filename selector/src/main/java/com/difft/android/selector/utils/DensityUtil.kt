@@ -1,5 +1,8 @@
 package com.difft.android.selector.utils
 
+import android.content.ContextWrapper
+import com.difft.android.base.utils.safeTopInset
+import androidx.core.view.ViewCompat
 import android.app.Activity
 import android.content.Context
 import android.content.res.Configuration
@@ -16,7 +19,7 @@ import com.difft.android.selector.immersive.RomUtils
 
 object DensityUtil {
 
-    /** Real screen width. */
+    
     @JvmStatic
     fun getRealScreenWidth(context: Context): Int {
         if (context is Activity) {
@@ -31,7 +34,7 @@ object DensityUtil {
         return point.x
     }
 
-    /** Real screen height. */
+    
     @JvmStatic
     fun getRealScreenHeight(context: Context): Int {
         if (context is Activity) {
@@ -46,7 +49,7 @@ object DensityUtil {
         return point.y
     }
 
-    /** Screen height excluding status/navigation bars. */
+    
     @JvmStatic
     fun getScreenHeight(context: Context): Int {
         return getRealScreenHeight(context) - getStatusNavigationBarHeight(context)
@@ -60,8 +63,15 @@ object DensityUtil {
         }
     }
 
+    
+
+
+
     @JvmStatic
     fun getStatusBarHeight(context: Context): Int {
+        val activity = generateSequence(context) { (it as? ContextWrapper)?.baseContext }.filterIsInstance<Activity>().firstOrNull()
+        val decor = activity?.window?.peekDecorView()
+        if (decor != null && ViewCompat.getRootWindowInsets(decor) != null) return decor.safeTopInset()
         var result = 0
         val resources = Resources.getSystem()
         val resourceId = resources.getIdentifier("status_bar_height", "dimen", "android")
@@ -91,7 +101,7 @@ object DensityUtil {
         return resources.getDimensionPixelSize(resourceId)
     }
 
-    /** Call in onWindowFocusChanged to get the right result. */
+    
     @JvmStatic
     fun isNavBarVisible(context: Context): Boolean {
         var isVisible = false
@@ -115,8 +125,8 @@ object DensityUtil {
             i++
         }
         if (isVisible) {
-            // Samsung pre-OneUI2 (< Android 10) reports the nav bar as visible when the IME is shown
-            // while the user has hidden the nav bar; fall back to the system setting there.
+            
+            
             if (RomUtils.isSamsung() && Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
                 try {
                     return Settings.Global.getInt(context.contentResolver, "navigationbar_hide_bar_enabled") == 0

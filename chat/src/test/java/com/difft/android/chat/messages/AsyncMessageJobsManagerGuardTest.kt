@@ -23,15 +23,15 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/**
- * [AsyncMessageJobsManager.runAsyncJobs] fail-soft guard: when `wcdb.isDbInaccessible` is true,
- * the one-shot `appScope.launch` must return before touching WCDB, so no network fetch is issued.
- *
- * `appScope` is replaced with a [TestScope] so the launch runs under the test clock. The relaxed
- * [WCDB] mock is only ever asked for `isDbInaccessible`; staying green is itself proof the guard
- * fired, since reaching a WCDB `Table` getter on the relaxed mock would instantiate a native
- * `CppObject` and crash on the host JVM.
- */
+
+
+
+
+
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -71,7 +71,7 @@ class AsyncMessageJobsManagerGuardTest {
         manager.runAsyncJobs()
         advanceUntilIdle()
 
-        // No group/contact fetch reached (guard returned first; green == no WCDB Table touch).
+        
         coVerify(exactly = 0) { groupUtil.getSingleGroupInfo(any(), any()) }
         coVerify(exactly = 0) { ContactorUtil.fetchContactors(any(), any()) }
     }

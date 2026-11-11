@@ -34,7 +34,7 @@ class CallFrameSizeCacheTest {
         now = 200
         cache.onMembers(members("a" to false))
         now = 300
-        // Back on with no fresh frame: nothing to send, so the card waits for one.
+        
         assertEquals(emptyList<FrameSize>(), cache.onMembers(members("a" to true)))
     }
 
@@ -43,7 +43,7 @@ class CallFrameSizeCacheTest {
         cache.onMembers(members("a" to true))
         now = 200
         cache.onMembers(members("a" to false))
-        // Seen at 150, delivered after the camera went off.
+        
         assertNull(cache.onFrameSize("a", 720, 1280, 150))
         now = 300
         assertEquals(emptyList<FrameSize>(), cache.onMembers(members("a" to true)))

@@ -22,9 +22,9 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
-/**
- * 公共的通话覆盖层组件（顶部/底部控制栏、工具栏等）
- */
+
+
+
 @Composable
 fun CommonCallOverlays(
     viewModel: LCallViewModel,
@@ -83,11 +83,10 @@ fun CommonCallOverlays(
         }
     )
 
-    // Follows the exact "state + !isInPipMode" idiom already used by ShowItemsBottomView:
-    // PiP entry force-dismisses the sheet (bottom sheets cannot render in PiP).
+    
     val isInPipModeForSheet by viewModel.callUiController.isInPipMode.collectAsState(false)
-    // Reset the underlying state on PiP entry, not just the derived `showSheet` gate below —
-    // otherwise returning from PiP with `showE2eeSheet` still true reopens the sheet unprompted.
+    
+    
     LaunchedEffect(isInPipModeForSheet) {
         if (isInPipModeForSheet) showE2eeSheet = false
     }
@@ -114,14 +113,9 @@ private fun RenderTopAndBottomOverlays(
 ) {
     val isInPipMode by viewModel.callUiController.isInPipMode.collectAsState(false)
 
-    // 屏幕分享模式下，控制栏展示后 5 秒无操作自动隐藏。
-    // 关键：这里不再通过 collectAsState 订阅 showTopStatusViewEnabled，否则父
-    // composable 会在每次 toggle 时重组，进而把参数传递给 MainPageWithTopStatusView，
-    // 即使子 composable 参数没变，未标记 @Stable 的 ViewModel/CallConfig 等复杂
-    // 类型会让 Compose 无法跳过重组，从而仍然触发子树 re-measure / re-layout。
-    // 改用 collectLatest 在 LaunchedEffect 内直接订阅 StateFlow：子 composable
-    // 内部也只在 graphicsLayer/pointerInput 的 block 里读 state.value，整条链路
-    // 上 toggle 不再触发任何 composable 重组，主线程堵塞 ≈ 0ms。
+    
+    
+    
     LaunchedEffect(isUserSharingScreen) {
         if (!isUserSharingScreen) return@LaunchedEffect
         viewModel.callUiController.showTopStatusViewEnabled.collectLatest { showTop ->
@@ -129,9 +123,9 @@ private fun RenderTopAndBottomOverlays(
             viewModel.callUiController.notifyScreenShareInteraction()
             while (isActive) {
                 delay(1_000L)
-                // A sheet (More / Emoji / end menu) or a participant mute menu lives in its own
-                // window, so browsing it never reaches the root pointer listener: treat an open
-                // panel or menu as ongoing interaction.
+                
+                
+                
                 if (viewModel.callUiController.isAnyPanelOpen() ||
                     viewModel.callUiController.participantMenuOpen.value
                 ) {

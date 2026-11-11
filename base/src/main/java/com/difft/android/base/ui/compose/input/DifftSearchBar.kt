@@ -13,14 +13,14 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import com.difft.android.base.R
 
-/**
- * Search preset of [DifftClearableTextField]: magnifier leading icon, the library
- * [DifftTextFieldStyle.Search] box, [ClearMode.WhenNotEmpty] semantics and [ImeAction.Search].
- *
- * [onSearch] defaults to null: all legacy search boxes declared `imeOptions="actionSearch"`
- * without ever attaching an editor-action listener, so the search key performing no business
- * action IS the equivalent behavior. Do not add per-page handlers during migration.
- */
+
+
+
+
+
+
+
+
 @Composable
 fun DifftSearchBar(
     query: String,
@@ -45,11 +45,11 @@ fun DifftSearchBar(
     size = size,
     clearMode = ClearMode.WhenNotEmpty,
     leadingIcon = {
-        // No tint: the field provides it through LocalContentColor so the disabled state
-        // greys the icon with the placeholder.
+        
+        
         Icon(
             painter = painterResource(R.drawable.base_ic_search),
-            contentDescription = null, // decorative — skipped by TalkBack
+            contentDescription = null, 
             modifier = Modifier.size(DifftInputDefaults.LeadingIconSize),
         )
     },

@@ -10,11 +10,11 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/**
- * Round-trip + tamper tests for [FavoriteCrypto] (AES-256-GCM blob, byte-exact JSON).
- * Robolectric provides real android.util.Base64. Covers the FavoriteCrypto row of the
- * Test Inventory (encrypt -> decrypt fidelity, wrong key fails, tampered blob fails).
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [30])
 class FavoriteCryptoTest {
@@ -71,7 +71,7 @@ class FavoriteCryptoTest {
     fun `tampered blob fails to decrypt`() {
         val key = FavoriteCrypto.generateFavKey()
         val blob = FavoriteCrypto.encrypt(key, FavoriteListPlain(listOf(record("h1", 1L))))
-        // Flip a character near the end (ciphertext/tag region).
+        
         val tampered = blob.dropLast(2) + if (blob.last() == 'A') "BB" else "AA"
         assertNull(FavoriteCrypto.decrypt(key, tampered))
     }
@@ -82,7 +82,7 @@ class FavoriteCryptoTest {
         assertNull(FavoriteCrypto.decrypt(key, "not-a-valid-blob!!!"))
     }
 
-    // ---- v2 key-wrapping (KEK = HKDF(aci identity private key)) ----
+    
 
     @Test
     fun `wrap then unwrap round-trips favKey`() {

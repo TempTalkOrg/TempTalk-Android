@@ -18,19 +18,16 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
-/**
- * Tests for [ForegroundServiceStarter] — T1..T7 per design §8.1.
- *
- * A custom `ShadowThrowingService` (shipped in :base/src/testFixtures/) lets us
- * simulate `Service.startForeground()` throwing FGSNAE — or a plain
- * IllegalStateException — without touching production code. Tests run on
- * API 30 and API 31 via `@Config(sdk=[..])`.
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(shadows = [ShadowThrowingService::class])
 class ForegroundServiceStarterTest {
 
-    /** Concrete test service used by Robolectric.buildService(...). */
+    
     open class TestForegroundService : Service() {
         override fun onBind(intent: android.content.Intent?) = null
     }
@@ -54,10 +51,10 @@ class ForegroundServiceStarterTest {
         clearFullStackLoggedOnce()
     }
 
-    /**
-     * Reset helper's per-process first-occurrence throttle so each test gets
-     * a clean state. The set is `private` — reset via reflection.
-     */
+    
+
+
+
     private fun clearFullStackLoggedOnce() {
         val field = ForegroundServiceStarter.javaClass.getDeclaredField("fullStackLoggedOnce")
         field.isAccessible = true
@@ -66,7 +63,6 @@ class ForegroundServiceStarterTest {
         set.clear()
     }
 
-    // ---------- T1 ----------
     @Test
     @Config(sdk = [31])
     fun `T1 API 31 default type success returns true and does not stopSelf`() {
@@ -84,7 +80,6 @@ class ForegroundServiceStarterTest {
         assertEquals(1, ShadowThrowingService.startForegroundCallCount)
     }
 
-    // ---------- T2 ----------
     @Test
     @Config(sdk = [31])
     fun `T2 API 31 default type FGSNAE returns false and calls stopSelf`() {
@@ -102,7 +97,6 @@ class ForegroundServiceStarterTest {
         )
     }
 
-    // ---------- T3 ----------
     @Test
     @Config(sdk = [31])
     fun `T3 API 31 non-FGSNAE IllegalStateException is re-thrown without stopSelf`() {
@@ -126,7 +120,6 @@ class ForegroundServiceStarterTest {
         )
     }
 
-    // ---------- T4 ----------
     @Test
     @Config(sdk = [30])
     fun `T4 API 30 plain IllegalStateException is re-thrown FGSNAE class not yet present`() {
@@ -147,7 +140,6 @@ class ForegroundServiceStarterTest {
         assertFalse(shadowOf(service).isStoppedBySelf)
     }
 
-    // ---------- T5 ----------
     @Test
     @Config(sdk = [30])
     fun `T5 API 30 non-zero foregroundServiceType success uses 3-arg overload`() {
@@ -164,7 +156,6 @@ class ForegroundServiceStarterTest {
         assertFalse(shadowOf(service).isStoppedBySelf)
     }
 
-    // ---------- T6 ----------
     @Test
     @Config(sdk = [31])
     fun `T6 API 31 non-zero type FGSNAE returns false and calls stopSelf`() {
@@ -181,7 +172,6 @@ class ForegroundServiceStarterTest {
         assertTrue(shadowOf(service).isStoppedBySelf)
     }
 
-    // ---------- T7 ----------
     @Test
     @Config(sdk = [31])
     fun `T7 FGSNAE class reachable on Robolectric API 31 and is subtype of IllegalStateException`() {

@@ -8,17 +8,17 @@ import com.difft.android.chat.R
 import com.difft.android.chat.message.TextChatMessage
 import difft.android.messageserialization.model.TranslateStatus
 
-/**
- * Renders the translate block under a message bubble.
- *
- * Pure view logic: it reads [TextChatMessage.translateData] and writes the views it is handed, so
- * the ViewHolder keeps only the view references and the payload entry point — the block has four
- * visual states and lives in two layouts, which is more than a 1200-line ViewHolder should carry.
- *
- * Automatic translations only ever reach the success state: a failure the user did not ask for is
- * not worth an error row under every message of a screenful. The error states below therefore only
- * appear for a manual (long-press) translation, which is what [onRetry] retries.
- */
+
+
+
+
+
+
+
+
+
+
+
 internal object TranslateBlockBinder {
 
     data class Views(
@@ -29,10 +29,10 @@ internal object TranslateBlockBinder {
         val error: AppCompatTextView,
     )
 
-    /**
-     * @param showContent binds the translated text with the long-press copy + copy-notice behaviour
-     *   the ViewHolder already owns for derived content.
-     */
+    
+
+
+
     fun bind(
         views: Views,
         message: TextChatMessage,
@@ -40,7 +40,7 @@ internal object TranslateBlockBinder {
         showContent: (AppCompatTextView, String, TextChatMessage) -> Unit,
     ) {
         val data = message.translateData
-        // A recycled holder must never carry the previous row's retry tap.
+        
         views.container.setOnClickListener(null)
         views.container.isClickable = false
 

@@ -21,10 +21,10 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/**
- * [ProxyPassphraseDialog] contract (issue #1209): confirm is gated on a non-blank passphrase and on
- * no save being in flight, and both the error and the in-flight state stay visible in the content.
- */
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34])
@@ -54,7 +54,7 @@ class ProxyPassphraseDialogTest {
         }
     }
 
-    // T25
+    
     @Test
     fun `confirm is gated on a non-blank passphrase`() {
         setDialog()
@@ -70,7 +70,7 @@ class ProxyPassphraseDialogTest {
         assertEquals(listOf("secret"), confirmed)
     }
 
-    // T26
+    
     @Test
     fun `a wrong passphrase surfaces the error text`() {
         setDialog(isError = true)
@@ -78,7 +78,7 @@ class ProxyPassphraseDialogTest {
         composeTestRule.onNodeWithText(string(R.string.proxy_passphrase_wrong)).assertIsDisplayed()
     }
 
-    // T27
+    
     @Test
     fun `an in-flight save disables confirm and shows the in-flight indicator`() {
         setDialog(isSaving = true)

@@ -8,9 +8,8 @@ import java.util.Objects
 
 @WCDBTableCoding
 class RoomModel {
-    // Int (not Long): WCDB-KSP generates `== 0` autoincrement guard which does not
-    // compile for Long primary keys. Column type stays ColumnType.Integer — no schema
-    // change. Local rowid never exceeds 2^31 and is never externally serialized. #901
+    
+    
     @WCDBField(isPrimary = true, isAutoIncrement = true)
     var databaseId: Int = 0
 
@@ -18,10 +17,10 @@ class RoomModel {
     @WCDBIndex
     var roomId: String = ""
 
-    /**
-     * 0: single chat
-     * 1: group chat
-     */
+    
+
+
+
     @WCDBField
     var roomType: Int = 0
 
@@ -43,28 +42,28 @@ class RoomModel {
     @WCDBField
     var pinnedTime: Long? = null
 
-    /**
-     * Who owns the current pin with respect to group focus: 0 = focus never touched it (also: the
-     * group was pinned before focus started), 1 = focus pinned it automatically (revoked when focus
-     * ends or moves), 2 = the user changed the pin during focus (permanent; focus leaves it alone).
-     */
+    
+
+
+
+
     @WCDBField
     @WCDBDefault(intValue = 0)
     var focusPin: Int = 0
 
-    /**
-     * MUTED(1),
-     * UNMUTED(0);
-     */
+    
+
+
+
     @WCDBField
     @WCDBDefault(intValue = 0)
     var muteStatus: Int = 0
 
-    /**
-     * Mute sub-options: what still notifies while [muteStatus] is MUTED (server-owned, synced
-     * through the conversation settings contract). null = never received from the server; read
-     * with the server defaults (@me = true, @all = false, group call = false).
-     */
+    
+
+
+
+
     @WCDBField
     var allowMentionMe: Boolean? = null
 
@@ -74,11 +73,7 @@ class RoomModel {
     @WCDBField
     var allowGroupCall: Boolean? = null
 
-    /**
-     * 屏蔽状态（仅单聊有效）
-     * 0: 未屏蔽
-     * 1: 已屏蔽
-     */
+    
     @WCDBField
     @WCDBDefault(intValue = 0)
     var blockStatus: Int = 0
@@ -89,26 +84,22 @@ class RoomModel {
     @WCDBField
     var unreadMessageNum: Int = 0
 
-    /**
-     * Manual "mark as unread / read" state, synced across devices via SyncMessage.markAsUnread.
-     * Values: [difft.android.messageserialization.model.MARK_UNREAD_FLAG_CLEAR] (0, default) /
-     * UNREAD (1) / READ (2). Display rule: `isManualUnreadActive` — the mark is superseded by
-     * any activity newer than [markUnreadAt], so [unreadMessageNum] is never touched by it.
-     */
+    
+
+
+
+
+
     @WCDBField
     @WCDBDefault(intValue = 0)
     var markUnreadFlag: Int = 0
 
-    /** Server timestamp (ms) of the sync that produced [markUnreadFlag]; 0 when never marked. */
+    
     @WCDBField
     @WCDBDefault(intValue = 0)
     var markUnreadAt: Long = 0
 
-    /**
-     * const val MENTIONS_TYPE_NONE = -1
-     * const val MENTIONS_TYPE_ALL = 1
-     * const val MENTIONS_TYPE_ME = 2
-     */
+    
     @WCDBField
     var mentionType: Int = 0
 
@@ -118,78 +109,73 @@ class RoomModel {
     @WCDBField
     var groupMembersNumber: Int = 0
 
-    /**
-     * 0: normal mode
-     * 1: confidential mode
-     */
+    
+
+
+
     @WCDBField
     @WCDBDefault(intValue = 0)
     var confidentialMode: Int = 0
 
-    /**
-     * Version of the server conversation config (`v1/conversation/get|set`, notify type 4)
-     * last applied to this row. Snapshots with an older version are ignored; see
-     * `ConversationSettingsApplier`. 0 means no versioned snapshot has been applied yet.
-     */
+    
+
+
+
+
     @WCDBField
     @WCDBDefault(intValue = 0)
     var conversationConfigVersion: Int = 0
 
-    /**
-     * Critical Alert 类型（用于会话列表显示）
-     * 0: 无未读 Critical Alert
-     * 1: 有未读 Critical Alert
-     * 预留其他值用于后续扩展
-     */
+    
     @WCDBField
     @WCDBDefault(intValue = 0)
     var criticalAlertType: Int = 0
 
-    /**
-     * Aggregate outgoing-send signal for the conversation list tag.
-     * 0: no failure (default) / 1: reserved "sending" / 2: has a failed outgoing message.
-     * Values + invariants: [difft.android.messageserialization.model.ROOM_SEND_STATUS_NONE].
-     * Derived, purely local state — never synced (a failed message never reached the server).
-     */
+    
+
+
+
+
+
     @WCDBField
     @WCDBDefault(intValue = 0)
     var sendStatus: Int = 0
 
-    /**
-     * Whether the conversation holds at least one outgoing message still in Sending state.
-     * 0: none (default) / 1: has a sending outgoing message.
-     * Deliberately a SEPARATE column from [sendStatus]: the two signals are written by
-     * different paths concurrently, and independent cells make the set-vs-clear race
-     * structurally impossible (see RoomSendStatusQueries.kt). Derived, purely local state.
-     */
+    
+
+
+
+
+
+
     @WCDBField
     @WCDBDefault(intValue = 0)
     var sendingStatus: Int = 0
 
-    /**
-     * Conversation-level save to photos setting
-     * null: Follow global setting (default)
-     * 0: Disabled (never)
-     * 1: Enabled (always)
-     */
+    
+
+
+
+
+
     @WCDBField
     var saveToPhotos: Int? = null
 
-    /**
-     * Conversation-level auto-translate target. Local only, never synced to the server
-     * (the conversation-set API has no such field).
-     * 0: off (default) / 1: Chinese / 2: English
-     */
+    
+
+
+
+
     @WCDBField
     @WCDBDefault(intValue = 0)
     var translateSetting: Int = 0
 
-    /**
-     * Timestamp (ms) when the conversation last became empty
-     * null: Conversation has content (not empty)
-     * non-null: Conversation is empty, value is the time when it became empty
-     * Used for empty room timeout cleanup without affecting lastActiveTime sorting
-     */
+    
+
+
+
+
+
     @WCDBField
     var emptyRoomSince: Long? = null
 

@@ -22,20 +22,20 @@ import org.robolectric.Robolectric
 import org.robolectric.Shadows.shadowOf
 import kotlin.concurrent.thread
 
-/**
- * The [DifftToggleView] contract, run once per concrete shell (issues #1203 / #1206). Every
- * programmatic path is silent, only a click fires a listener, the two listeners are mutually
- * exclusive modes, an in-flight request swallows taps whole, and checked state survives
- * save/restore.
- *
- * Subclasses supply the shell under test and carry the Robolectric runner annotations; only
- * shell-specific behaviour (measurement, labels) belongs in them.
- */
+
+
+
+
+
+
+
+
+
 abstract class DifftToggleViewContractTest {
 
     protected abstract fun create(context: Context, attrs: AttributeSet? = null): DifftToggleView
 
-    /** The class the shell reports to TalkBack, e.g. `android.widget.CheckBox`. */
+    
     protected abstract val expectedAccessibilityClassName: String
 
     protected fun host(): ComponentActivity = Robolectric.buildActivity(ComponentActivity::class.java).setup().get()
@@ -45,7 +45,7 @@ abstract class DifftToggleViewContractTest {
         shadowOf(Looper.getMainLooper()).idle()
     }
 
-    // ---------- Programmatic paths are silent ----------
+    
 
     @Test
     fun `programmatic set changes state without firing the listener`() {
@@ -56,7 +56,7 @@ abstract class DifftToggleViewContractTest {
         mount(view, activity)
 
         view.isChecked = true
-        view.isChecked = true // equal value: no-op
+        view.isChecked = true 
 
         assertTrue(view.isChecked)
         assertEquals(0, fired)
@@ -93,7 +93,7 @@ abstract class DifftToggleViewContractTest {
         assertTrue(view.isChecked)
     }
 
-    // ---------- The two modes ----------
+    
 
     @Test
     fun `auto mode click toggles and fires the listener once with the new value`() {
@@ -122,7 +122,7 @@ abstract class DifftToggleViewContractTest {
         view.performClick()
         view.performClick()
 
-        // Idempotent: the state never moved, so both taps request the same value.
+        
         assertEquals(listOf(true, true), received)
         assertFalse(view.isChecked)
     }
@@ -172,7 +172,7 @@ abstract class DifftToggleViewContractTest {
         assertFalse(view.isChecked)
     }
 
-    // ---------- In-flight guard ----------
+    
 
     @Test
     fun `an in-flight request swallows taps while programmatic sets still land`() {
@@ -185,7 +185,7 @@ abstract class DifftToggleViewContractTest {
         mount(view, activity)
 
         view.toggleRequestInFlight = true
-        // The tap is swallowed whole: unhandled, and nothing downstream sees it.
+        
         assertFalse(view.performClick())
         assertFalse(view.performClick())
         assertTrue(received.isEmpty())
@@ -247,8 +247,8 @@ abstract class DifftToggleViewContractTest {
         view.guardWhile(job) { released++ }
         assertTrue(view.toggleRequestInFlight)
 
-        // Unconfined: the job completes on the thread that completed the gate, so the release has
-        // to be marshalled back to the main thread before either side of it runs.
+        
+        
         thread { gate.complete(Unit) }.join()
         assertTrue(view.toggleRequestInFlight)
         assertEquals(0, released)
@@ -275,7 +275,7 @@ abstract class DifftToggleViewContractTest {
         assertFalse(view.toggleRequestInFlight)
     }
 
-    // ---------- Instance state ----------
+    
 
     @Test
     fun `checked state survives save and restore`() {
@@ -325,7 +325,7 @@ abstract class DifftToggleViewContractTest {
         assertNull(container.get(1))
     }
 
-    // ---------- Attributes and accessibility ----------
+    
 
     @Test
     fun `xml attributes land on the shell`() {

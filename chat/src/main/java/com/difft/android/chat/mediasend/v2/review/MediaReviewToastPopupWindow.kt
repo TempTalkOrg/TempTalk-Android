@@ -14,9 +14,9 @@ import android.widget.TextView
 import com.difft.android.chat.R
 import kotlin.time.Duration.Companion.seconds
 
-/**
- * Toast-style notification used in the media review flow. This exists so we can specify the location and animation of how it appears.
- */
+
+
+
 class MediaReviewToastPopupWindow private constructor(parent: ViewGroup, iconResource: Int, descriptionText: String) : android.widget.PopupWindow(
     LayoutInflater.from(parent.context).inflate(R.layout.v2_media_review_quality_popup_window, parent, false),
     ViewGroup.LayoutParams.WRAP_CONTENT,

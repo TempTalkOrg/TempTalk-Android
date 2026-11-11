@@ -39,38 +39,38 @@ import com.difft.android.migration.ui.component.formatTransferMetric
 import com.difft.android.migration.v2.transfer.send.MigrationFailureKind
 import com.difft.android.migration.v2.transfer.send.classifyFailure
 
-/**
- * The new device's receive flow: the pairing page with the QR shown to the old phone, the progress
- * page, and the failure page. Stateless, driven by [MigrationP2pReceiveState] and [onIntent]. The
- * transfer key is never rendered.
- *
- * System back is not a cancel: on the pairing page it returns to the source chooser, and once bytes
- * are moving it does nothing, since the login context behind this page would be lost. Only the
- * cancel button, through its confirmation, stops a transfer.
- */
+
+
+
+
+
+
+
+
+
 @Composable
 fun MigrationP2pReceiveScreen(
     state: MigrationP2pReceiveState,
     onIntent: (MigrationP2pReceiveIntent) -> Unit,
-    // The peer is the old app on this phone, not another device: the copy says so throughout.
+    
     sameDevice: Boolean = false,
 ) {
-    // Swallowed only once bytes are moving or landing: before that (preparing, pairing, failed)
-    // system back is a step back to the source chooser, never a dead end.
+    
+    
     val committed = state is MigrationP2pReceiveState.Receiving ||
         state == MigrationP2pReceiveState.Verifying ||
         state == MigrationP2pReceiveState.Activated ||
         state == MigrationP2pReceiveState.Promoted ||
         state == MigrationP2pReceiveState.CommittedUnconfirmed
     BackHandler(enabled = committed) {
-        // Deliberately swallowed: see the class comment.
+        
     }
     when (state) {
         MigrationP2pReceiveState.Starting -> PreparingPage(sameDevice = false, onIntent = onIntent)
         is MigrationP2pReceiveState.WaitingForPeer ->
             if (state.sameDevice) PreparingPage(sameDevice = true, onIntent = onIntent) else PairingPage(state, onIntent)
-        // Reverse pairing: the computer has to confirm, then connect back. Same shape as the
-        // preparing page — indeterminate progress and one line of what to do — with a cancel.
+        
+        
         is MigrationP2pReceiveState.AwaitingDesktopConfirm -> DesktopWaitPage(
             title = stringResource(R.string.migration_r2_desktop_confirm_title),
             hint = stringResource(R.string.migration_r2_desktop_confirm_hint),
@@ -81,8 +81,8 @@ fun MigrationP2pReceiveScreen(
             hint = stringResource(R.string.migration_r2_desktop_connect_hint),
             onIntent = onIntent,
         )
-        // The data is already this device's primary database; the Activity restarts at once so the
-        // promote tail finishes on the next cold start. Nothing to act on here.
+        
+        
         MigrationP2pReceiveState.CommittedUnconfirmed -> MigrationResultPage(
             tone = MigrationResultTone.INFO,
             title = stringResource(R.string.migration_r2_finishing_restart),
@@ -103,16 +103,16 @@ fun MigrationP2pReceiveScreen(
             )
         }
         is MigrationP2pReceiveState.Error -> FailedPage(state, sameDevice, onIntent)
-        // Terminal states are handled by the Activity (it finishes with a result code).
+        
         MigrationP2pReceiveState.Promoted, MigrationP2pReceiveState.Skipped -> Box(Modifier.fillMaxSize())
     }
 }
 
-/**
- * The "preparing" page: the server is coming up, a Desktop code is being scanned, or the old app on
- * this device is showing its own confirmation page. The relaunch button covers the old app having
- * been dismissed; otherwise cancelling stops the listener and returns to the source chooser.
- */
+
+
+
+
+
 @Composable
 private fun PreparingPage(sameDevice: Boolean, onIntent: (MigrationP2pReceiveIntent) -> Unit) {
     var confirmCancel by remember { mutableStateOf(false) }
@@ -147,10 +147,10 @@ private fun PreparingPage(sameDevice: Boolean, onIntent: (MigrationP2pReceiveInt
     }
 }
 
-/**
- * The reverse-pairing waits: the computer's user confirming, then the computer connecting back.
- * Nothing is on the wire yet, so cancelling stops the pairing and returns to the source chooser.
- */
+
+
+
+
 @Composable
 private fun DesktopWaitPage(title: String, hint: String, onIntent: (MigrationP2pReceiveIntent) -> Unit) {
     var confirmCancel by remember { mutableStateOf(false) }
@@ -179,7 +179,7 @@ private fun DesktopWaitPage(title: String, hint: String, onIntent: (MigrationP2p
     }
 }
 
-/** The QR page: the code on its own white tile, then what to do and the network it needs. */
+
 @Composable
 private fun PairingPage(state: MigrationP2pReceiveState.WaitingForPeer, onIntent: (MigrationP2pReceiveIntent) -> Unit) {
     MigrationPage(
@@ -193,9 +193,9 @@ private fun PairingPage(state: MigrationP2pReceiveState.WaitingForPeer, onIntent
         Box(
             modifier = Modifier
                 .size(QrTileSize)
-                // The code is the content: it sits on white in either theme, with no grey frame around it.
+                
                 .background(DifftTheme.colors.textOnPrimary, DifftTheme.radius.largeShape)
-                // The bitmap has no margin; this padding is the 4-module quiet zone (45–49 modules in 168dp).
+                
                 .padding(QrQuietZone),
         ) {
             state.qrBitmap?.let { bmp ->
@@ -212,7 +212,7 @@ private fun PairingPage(state: MigrationP2pReceiveState.WaitingForPeer, onIntent
             modifier = Modifier.padding(horizontal = 8.dp),
         )
         MigrationGap()
-        // A fixed slot, so the code does not jump when the notice comes and goes.
+        
         Box(Modifier.height(RefreshNoticeSlot)) {
             if (state.refreshed) {
                 MigrationBanner(
@@ -226,7 +226,7 @@ private fun PairingPage(state: MigrationP2pReceiveState.WaitingForPeer, onIntent
     }
 }
 
-/** The "transferring" page: the reading, the foreground rule, and the cancel button. */
+
 @Composable
 private fun ReceivingPage(
     state: MigrationP2pReceiveState.Receiving,
@@ -268,12 +268,12 @@ private fun ReceivingPage(
     }
 }
 
-/**
- * The failure page. Blocks that mean this path is closed — this install not empty, the switch off,
- * and on the same device an old app too old to speak the protocol — offer the other way to sign in.
- * A version block against another device instead offers this device's download page, since it is
- * this app that may need updating. Everything else offers a fresh start.
- */
+
+
+
+
+
+
 @Composable
 private fun FailedPage(
     state: MigrationP2pReceiveState.Error,
@@ -282,9 +282,9 @@ private fun FailedPage(
 ) {
     val kind = classifyFailure(state.reason)
     val legacyName = stringResource(R.string.migration_app_name_legacy)
-    // A version block across devices can be this app's: the download page serves it, so the update
-    // action stays. On the same device the peer is the old app, which only its own in-app check can
-    // update, so that case is closed and the reason card is the instruction.
+    
+    
+    
     val updatable = kind == MigrationFailureKind.UPDATE_NEEDED && !sameDevice
     val closed = kind == MigrationFailureKind.TARGET_NOT_EMPTY ||
         kind == MigrationFailureKind.HANDOFF_DISABLED ||
@@ -298,7 +298,7 @@ private fun FailedPage(
         stringResource(if (closed) R.string.migration_p3_back else R.string.migration_common_cancel),
     ) { onIntent(MigrationP2pReceiveIntent.Leave) }
     val reason = when {
-        // The receiving end of a same-device transfer names the app the data was coming from.
+        
         kind.namesApp -> stringResource(kind.reasonRes, if (sameDevice) legacyName else stringResource(R.string.migration_app_name_new))
         else -> stringResource(kind.reasonRes)
     }

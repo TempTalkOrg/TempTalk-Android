@@ -29,21 +29,21 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
-/**
- * Test double for IndexActivity (a Hilt entry point the app's Robolectric tests never boot): it
- * inflates the real `activity_index.xml`, picks the mode from the same resource gate, reports it as
- * a [DualPaneHost], and wires a real [PaneNavigator] with plain [StackPageFragment] pages.
- */
+
+
+
+
+
 class PaneNavigatorTestHost : FragmentActivity(), PaneNavigator.Owner, ListPaneLayer.Owner, DualPaneHost {
     lateinit var navigator: PaneNavigator
     override val paneNavigator: PaneNavigator get() = navigator
 
-    // The list pane's layer, as IndexActivity owns it next to the navigator.
+    
     override lateinit var listLayer: ListPaneLayer
         private set
     var layerActiveChanges = 0
 
-    // Like IndexActivity, the host reports its layout mode to the pages.
+    
     override val isDualPaneMode: Boolean get() = navigator.isDualPane
     override val homeTabBarObstructionPx: StateFlow<Int> = MutableStateFlow(0)
     override fun showDetailFragment(fragment: Fragment, tag: String?) = Unit
@@ -74,13 +74,13 @@ class PaneNavigatorTestHost : FragmentActivity(), PaneNavigator.Owner, ListPaneL
                 stateChangedCalls++
             }
 
-            // As IndexActivity: an emptied two-pane stack re-opens a collapsed list.
+            
             override fun onCurrentDetailEmptied() {
                 emptiedCalls++
                 listCollapsed = false
             }
 
-            // As IndexActivity: a requested tab switch leaves the list-pane layer like a rail tap.
+            
             override fun onSelectTabRequested(tab: Int) {
                 requestedTabs += tab
                 if (::listLayer.isInitialized) listLayer.close()
@@ -90,9 +90,9 @@ class PaneNavigatorTestHost : FragmentActivity(), PaneNavigator.Owner, ListPaneL
         navigator.attach(savedInstanceState)
         listLayer = ListPaneLayer(this, navigator.chrome, TestPages, navigator.detailCoversList) { layerActiveChanges++ }
         listLayer.attach(savedInstanceState)
-        // Two-pane: keyboard insets reach only the pane holding the focus, as in IndexActivity.
+        
         if (dualPane) paneImeRouter = PaneImeRouter(findViewById<ViewGroup>(android.R.id.content).getChildAt(0)).also { it.attach() }
-        // The same single Activity-level Back callback IndexActivity registers in onCreate.
+        
         onBackPressedDispatcher.addCallback(
             this,
             IndexBackCallback(
@@ -103,11 +103,11 @@ class PaneNavigatorTestHost : FragmentActivity(), PaneNavigator.Owner, ListPaneL
                 moveTaskToBack = { moveTaskToBackCalls++ },
             )
         )
-        // What IndexActivity's provider lookups see while fragments are still restoring.
+        
         lookupDuringCreate = navigator.currentConversationRoot()
     }
 
-    /** What ViewPager2 does for `setCurrentItem(tab, false)`: dispatches the selection at once. */
+    
     private fun onPageSelected(tab: Int) {
         navigator.selectTab(tab)
     }
@@ -124,7 +124,7 @@ class PaneNavigatorTestHost : FragmentActivity(), PaneNavigator.Owner, ListPaneL
     fun pages(tab: Int): List<StackPageFragment> = host(tab)?.pages().orEmpty().map { it as StackPageFragment }
 
     companion object {
-        /** Stands in for the persisted DualPaneCollapseUtil flag, which outlives a recreation. */
+        
         var listCollapsed = false
     }
 
@@ -132,11 +132,18 @@ class PaneNavigatorTestHost : FragmentActivity(), PaneNavigator.Owner, ListPaneL
         override fun conversationRoot(target: ConversationTarget): Fragment =
             StackPageFragment.newInstance("conv:${target.id}:${target.jumpTimestamp ?: 0}")
 
-        // Like GlobalSearchFragment, the search root registers no Back callback of its own.
-        override fun layerRoot(root: ListPaneLayerRoot): Fragment = when (root) {
+        
+        override fun layerRoot(root: ListPaneLayerRoot): Fragment = layerRoot(root, null)
+
+        override fun layerRoot(root: ListPaneLayerRoot, args: Bundle?): Fragment = when (root) {
             ListPaneLayerRoot.SEARCH -> StackPageFragment.newInstance("search", handlesBack = false)
             ListPaneLayerRoot.FOLDED_GROUPS -> FoldedStandInFragment()
+            
+            ListPaneLayerRoot.CREATE_GROUP ->
+                StackPageFragment.newInstance("create:" + args?.getStringArrayList(CREATE_IDS).orEmpty().joinToString(","), handlesBack = false)
         }
+
+        const val CREATE_IDS = "ids"
 
         override fun usesSettingsBackground(page: Fragment): Boolean = false
 
@@ -145,16 +152,16 @@ class PaneNavigatorTestHost : FragmentActivity(), PaneNavigator.Owner, ListPaneL
     }
 }
 
-/**
- * A page that registers an Activity-dispatcher back callback with [detailBackOwner] and an
- * Activity-root overlay with [dismissWhenLeavingVisibleTop], exactly as hosted pages do, and
- * counts the presses and dismissals it receives.
- */
+
+
+
+
+
 class StackPageFragment : Fragment(), ReopenableConversationPage, SearchSelectionPage, UncoverableSearchPage {
     var reopens = 0
         private set
 
-    /** Times the search layer told this page the conversation layer over it popped (D1). */
+    
     var uncovers = 0
         private set
 
@@ -162,7 +169,7 @@ class StackPageFragment : Fragment(), ReopenableConversationPage, SearchSelectio
         uncovers++
     }
 
-    /** Times the search layer told this page a conversation layer covered it (S-3). */
+    
     var covers = 0
         private set
 
@@ -174,7 +181,7 @@ class StackPageFragment : Fragment(), ReopenableConversationPage, SearchSelectio
         reopens++
     }
 
-    /** Every selection the search layer host forwarded to this page, in order. */
+    
     val selections = mutableListOf<String?>()
 
     override fun showSelection(selectedId: String?) {
@@ -196,8 +203,13 @@ class StackPageFragment : Fragment(), ReopenableConversationPage, SearchSelectio
     lateinit var backOwner: LifecycleOwner
         private set
 
+    
+    
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View =
-        FrameLayout(inflater.context)
+        FrameLayout(inflater.context).apply {
+            addView(View(context), ViewGroup.LayoutParams(40, 40))
+            addView(View(context), ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 80))
+        }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
@@ -217,19 +229,19 @@ class StackPageFragment : Fragment(), ReopenableConversationPage, SearchSelectio
         private const val ARG_LABEL = "label"
         private const val ARG_HANDLES_BACK = "handles_back"
 
-        /** [handlesBack] false: the page's callback is registered but disabled (nothing to close). */
+        
         fun newInstance(label: String, handlesBack: Boolean = true): StackPageFragment =
             StackPageFragment().apply { arguments = bundleOf(ARG_LABEL to label, ARG_HANDLES_BACK to handlesBack) }
     }
 }
 
-/**
- * Stand-in for the folded-groups root: a chat-list page ([DualPaneSelectionListener]) that pops
- * itself, from a collector started in `onCreate` that waits for STARTED, as soon as [folding] is
- * false, like FoldedGroupsFragment does when the focus stops folding.
- */
+
+
+
+
+
 class FoldedStandInFragment : Fragment(), DualPaneSelectionListener {
-    /** Every selection the layer host forwarded to this page, in order. */
+    
     val selections = mutableListOf<String?>()
 
     override fun updateDualPaneSelection(selectedId: String?) {
@@ -248,7 +260,7 @@ class FoldedStandInFragment : Fragment(), DualPaneSelectionListener {
         FrameLayout(inflater.context)
 
     companion object {
-        /** The focus folds the other groups; tests reset it to true. */
+        
         val folding = MutableStateFlow(true)
     }
 }

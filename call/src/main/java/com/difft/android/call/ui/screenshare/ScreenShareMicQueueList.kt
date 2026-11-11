@@ -23,6 +23,7 @@ import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.call.LCallManager
 import com.difft.android.call.R
 import com.difft.android.call.data.AvatarData
+import com.difft.android.call.ui.NAME_MEASURE_CAP
 import com.difft.android.call.util.StringUtil
 import dagger.hilt.android.EntryPointAccessors
 import com.difft.android.base.R as BaseR
@@ -31,8 +32,8 @@ import com.difft.android.base.R as BaseR
 internal fun MicQueueList(waitingSpeakers: List<WaitingSpeakerDisplay>) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         HorizontalDivider(
-            thickness = 1.dp,
-            color = DifftTheme.colors.backgroundTertiary,
+            thickness = DifftTheme.hairline,
+            color = DifftTheme.colors.divider,
         )
         Text(
             text = stringResource(id = R.string.call_screen_share_mic_queue),
@@ -61,8 +62,9 @@ internal fun MicQueueItem(speaker: WaitingSpeakerDisplay) {
             AvatarContent(speaker.avatarData)
         }
         Text(
+            modifier = Modifier.weight(1f, fill = false),
             text = StringUtil.truncateWithEllipsis(
-                speaker.displayName, MIC_QUEUE_NAME_MAX_LENGTH,
+                speaker.displayName, NAME_MEASURE_CAP,
             ),
             style = DifftTheme.typography.p4,
             color = DifftTheme.colors.textSecondary,
@@ -75,7 +77,7 @@ internal fun MicQueueItem(speaker: WaitingSpeakerDisplay) {
 @Composable
 internal fun AvatarContent(avatarData: AvatarData?) {
     if (avatarData == null) {
-        // Data not loaded yet — neutral disc, same footprint as the avatar it replaces.
+        
         Box(
             modifier = Modifier
                 .size(AVATAR_SIZE)

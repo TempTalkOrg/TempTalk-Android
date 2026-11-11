@@ -35,15 +35,15 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/**
- * [CallSessionStarter] writes the room id from the start/join response into the
- * OnGoingCallStateManager projection through the session's publisher (rows T5-01, T5-02).
- *
- * Drives [CallSessionStarter.handleStartCallResponse] directly: the LiveKit `ttCallResp` flow that
- * feeds it cannot be resolved on a mocked `Room`. Robolectric because the caller ringback builds an
- * `android.content.Intent` and the start-call message reaches `LCallManager`, whose object init reads
- * `ApplicationHelper`.
- */
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [33])
 class CallSessionStarterProjectionTest {
@@ -63,7 +63,7 @@ class CallSessionStarterProjectionTest {
         } just Runs
     }
 
-    /** The starter's ringback and start-call message run on Dispatchers.IO: let them finish before unmocking. */
+    
     @After
     fun tearDown() {
         runBlocking { withTimeout(TIMEOUT_MS) { scope.coroutineContext.job.children.toList().joinAll() } }

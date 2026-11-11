@@ -1,54 +1,73 @@
 package com.difft.android.chat.ui
 
 import android.content.Context
+import android.content.res.Configuration
 import android.graphics.Canvas
-import android.graphics.Matrix
 import android.graphics.Paint
-import android.graphics.Rect
+import android.graphics.PixelFormat
 import android.graphics.drawable.Drawable
 import android.view.View
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
-import com.difft.android.chat.R
+import com.difft.android.chat.ui.theme.ChatTheme
+import com.difft.android.chat.ui.theme.ChatThemeSetting
 import com.difft.android.chat.util.ViewUtil
+import java.util.Collections
+import java.util.WeakHashMap
 
 class ChatBackgroundDrawable(
     context: Context,
-    private val view: View? = null, // 改为可空，只有当drawSystemBars为true时才需要
-    private val drawSystemBars: Boolean = false, // 新增参数，控制是否绘制系统栏
-    // False for a view that starts below the status bar (the home screen's one-pane detail layer):
-    // only the navigation-bar strip is painted, as ChatActivity's window background does there.
+    private val view: View? = null, 
+    private val drawSystemBars: Boolean = false,
+    
     private val drawStatusBarStrip: Boolean = true,
 ) : Drawable() {
 
-    private val backgroundDrawable: Drawable = ContextCompat.getDrawable(context, R.drawable.chat_bg_new)!!
-    private val matrix = Matrix()
+    private val appContext = context.applicationContext
+    private val configuration = Configuration(context.resources.configuration)
+    private var wallpaper = newPainter(ChatThemeSetting.current)
+    private val backdropOwnerLocation = IntArray(2)
+    private val backdropViewportLocation = IntArray(2)
 
-    // 创建画笔用于绘制状态栏和导航栏背景
     private val paint = Paint().apply {
         color = ContextCompat.getColor(context, com.difft.android.base.R.color.bg1)
         isAntiAlias = true
     }
 
+    init {
+        live.add(this)
+    }
+
+    
+    private fun currentWallpaper(): ChatWallpaperPainter {
+        val theme = ChatThemeSetting.current
+        if (wallpaper.theme != theme) {
+            val alpha = wallpaper.alpha
+            val filter = wallpaper.colorFilter
+            wallpaper = newPainter(theme).also {
+                it.alpha = alpha
+                it.colorFilter = filter
+            }
+        }
+        return wallpaper
+    }
+
+    private fun newPainter(theme: ChatTheme) =
+        ChatWallpaperPainter(appContext.createConfigurationContext(configuration), theme).also { it.onPatternReady = ::invalidateSelf }
+
     override fun draw(canvas: Canvas) {
         val bounds = bounds
-        val drawableWidth = backgroundDrawable.intrinsicWidth
-        val drawableHeight = backgroundDrawable.intrinsicHeight
 
-        // 只有当需要绘制系统栏背景且view不为空时才获取高度
-        // The strips the root pads for (BaseActivity: system bars + cutout). In a freeform window
-        // the top one is the caption bar, not a status bar, so status-bar insets alone read 0.
+        
+        
         val barInsets = if (drawSystemBars && view != null) systemBarInsets(view) else null
         val statusBarHeight = if (drawStatusBarStrip) barInsets?.top ?: 0 else 0
         val navigationBarHeight = barInsets?.bottom ?: 0
 
-        // 根据参数决定是否绘制系统栏背景
         if (drawSystemBars && view != null) {
-            // 1. 绘制状态栏背景（bg1颜色）
             canvas.drawRect(0f, 0f, bounds.width().toFloat(), statusBarHeight.toFloat(), paint)
 
-            // 2. 绘制导航栏背景（bg1颜色）
             canvas.drawRect(
                 0f,
                 (bounds.height() - navigationBarHeight).toFloat(),
@@ -58,29 +77,9 @@ class ChatBackgroundDrawable(
             )
         }
 
-        // 3. 绘制聊天背景图（只在内容区域）
-        // 计算缩放比例，保持宽高比
-        val scaleX = bounds.width().toFloat() / drawableWidth
-        val scaleY = bounds.height().toFloat() / drawableHeight
-        val scale = maxOf(scaleX, scaleY)
-
-        // 计算居中偏移
-        val scaledWidth = drawableWidth * scale
-        val scaledHeight = drawableHeight * scale
-        val translateX = (bounds.width() - scaledWidth) / 2
-        val translateY = (bounds.height() - scaledHeight) / 2
-
-        // 设置变换矩阵
-        matrix.reset()
-        matrix.setScale(scale, scale)
-        matrix.postTranslate(translateX, translateY)
-
-        // 保存画布状态
         canvas.save()
-
-        // 根据参数决定是否裁剪系统栏区域
+        canvas.clipRect(bounds)
         if (drawSystemBars) {
-            // 裁剪掉状态栏和导航栏区域，只在内容区域绘制背景图
             canvas.clipRect(
                 0,
                 statusBarHeight,
@@ -88,16 +87,18 @@ class ChatBackgroundDrawable(
                 bounds.height() - navigationBarHeight
             )
         }
-
-        // 绘制聊天背景图
-        backgroundDrawable.bounds = Rect(0, 0, drawableWidth, drawableHeight)
-        canvas.save()
-        canvas.concat(matrix)
-        backgroundDrawable.draw(canvas)
+        currentWallpaper().draw(canvas, bounds.left.toFloat(), bounds.top.toFloat(), bounds.right.toFloat(), bounds.bottom.toFloat())
         canvas.restore()
+    }
 
-        // 恢复画布状态
-        canvas.restore()
+    
+    internal fun drawWallpaperFor(canvas: Canvas, viewport: View) {
+        
+        view?.getLocationInWindow(backdropOwnerLocation)
+        viewport.getLocationInWindow(backdropViewportLocation)
+        val left = (backdropOwnerLocation[0] - backdropViewportLocation[0]).toFloat()
+        val top = (backdropOwnerLocation[1] - backdropViewportLocation[1]).toFloat()
+        currentWallpaper().draw(canvas, left + bounds.left, top + bounds.top, left + bounds.right, top + bounds.bottom)
     }
 
     private fun systemBarInsets(view: View): androidx.core.graphics.Insets {
@@ -107,26 +108,35 @@ class ChatBackgroundDrawable(
     }
 
     override fun setAlpha(alpha: Int) {
-        backgroundDrawable.alpha = alpha
+        wallpaper.alpha = alpha
         paint.alpha = alpha
     }
 
     override fun setColorFilter(colorFilter: android.graphics.ColorFilter?) {
-        backgroundDrawable.colorFilter = colorFilter
+        wallpaper.colorFilter = colorFilter
         paint.colorFilter = colorFilter
     }
 
     override fun getAlpha(): Int {
-        return backgroundDrawable.alpha
+        return wallpaper.alpha
     }
 
     override fun isStateful(): Boolean {
-        return backgroundDrawable.isStateful
+        return wallpaper.isStateful
     }
 
     @Deprecated("Deprecated in Java")
     @Suppress("DEPRECATION")
     override fun getOpacity(): Int {
-        return backgroundDrawable.opacity
+        return wallpaper.opacity
     }
-} 
+
+    internal companion object {
+        private val live: MutableSet<ChatBackgroundDrawable> = Collections.newSetFromMap(WeakHashMap())
+
+        
+        fun themeChanged() {
+            live.toList().forEach { it.invalidateSelf() }
+        }
+    }
+}

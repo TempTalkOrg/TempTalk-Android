@@ -54,27 +54,27 @@ import org.junit.Before
 import org.junit.Test
 import java.util.Collections
 
-/**
- * Shared fixture for the [AutoTranslateCoordinator] suites.
- *
- * The queue is a MockK whose `completions` is a real SharedFlow, so these tests drive exactly the
- * delivery channel production uses: a result reaches the page through the ONE long-lived collector,
- * never through whoever happened to await a handle.
- *
- * Everything runs on real dispatchers. The coordinator mixes its own scope with explicit
- * `Dispatchers.IO` hops (the stored-setting read, hydration, every DB write), so a virtual clock
- * would only cover half the work and make the ordering of the rest thread-dependent; assertions
- * therefore use bounded polling (`awaitOverlay`) and MockK's `timeout =` instead.
- *
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
 abstract class AutoTranslateCoordinatorTestBase {
 
     protected lateinit var scope: CoroutineScope
 
-    /**
-     * Stands in for the global `appScope`. It outlives [scope] on purpose: `close()` hands its final
-     * write to the global scope precisely because the page's own scope is about to be cancelled.
-     */
+    
+
+
+
     protected lateinit var globalScope: CoroutineScope
     protected lateinit var queue: TranslateQueue
     protected lateinit var engine: TranslateEngine
@@ -110,7 +110,7 @@ abstract class AutoTranslateCoordinatorTestBase {
 
         queue = mockk(relaxed = true)
         every { queue.completions } returns completions
-        // The epoch the coordinator captures at construction. A test simulates logout by moving it.
+        
         every { queue.generation } returns 0L
         neverAnsweringSubmit()
 
@@ -145,9 +145,9 @@ abstract class AutoTranslateCoordinatorTestBase {
             conversationSettingsManager = settingsManager,
             messageHydrator = hydrator,
         )
-        // Recorded inline with the update (Unconfined): the initial value lands before any test
-        // body runs, and every set is appended before `update` returns, so consecutive updates
-        // are never conflated away. The coordinator itself never runs on Unconfined.
+        
+        
+        
         coordinator.overlay.onEach { overlayEmissions += it }.launchIn(scope + Dispatchers.Unconfined)
     }
 
@@ -158,16 +158,16 @@ abstract class AutoTranslateCoordinatorTestBase {
         unmockkAll()
     }
 
-    /** Real dispatcher + real clock; see the class comment. */
+    
     protected fun coordinatorTest(body: suspend CoroutineScope.() -> Unit) = runTest {
         withContext(Dispatchers.Default) { body() }
     }
 
-    /**
-     * Starts the coordinator and returns once the stored setting has been applied. `start()` reads
-     * it on `Dispatchers.IO`, so a barrier is needed: `ensureDownloaded` (non-zero setting) and
-     * `cancelOwner` (any setting) are both inside `applySetting`.
-     */
+    
+
+
+
+
     protected fun startApplied(setting: Int = 1) {
         every { dbRoomStore.getTranslateSetting(ROOM) } returns setting
         coordinator.start()
@@ -180,7 +180,7 @@ abstract class AutoTranslateCoordinatorTestBase {
         }
     }
 
-    // --- helpers ------------------------------------------------------------
+    
 
     protected fun message(id: String, data: TranslateData? = null) = TextChatMessage().apply {
         this.id = id
@@ -189,7 +189,7 @@ abstract class AutoTranslateCoordinatorTestBase {
         translateData = data
     }
 
-    /** Window of [count] incoming text messages, hydrated with no child rows. */
+    
     protected fun behaviorOf(count: Int): ChatMessageListBehavior =
         ChatMessageListBehavior(
             messageList = buildMessageSequence(count = count, roomId = ROOM, fromWho = PEER_ID)
@@ -220,7 +220,7 @@ abstract class AutoTranslateCoordinatorTestBase {
             )
         )
 
-    /** Records the submission and hands back a handle that never completes. */
+    
     protected fun neverAnsweringSubmit() {
         every { queue.submit(any(), any(), any(), any(), any(), any(), any()) } answers {
             submissions += Submission(arg(0), arg(1), arg(2), arg(4))
@@ -228,7 +228,7 @@ abstract class AutoTranslateCoordinatorTestBase {
         }
     }
 
-    /** Answers immediately AND broadcasts on `completions`, exactly as the real worker does. */
+    
     protected fun answeringSubmit() {
         every { queue.submit(any(), any(), any(), any(), any(), any(), any()) } answers {
             val owner = arg<String>(0)
@@ -262,7 +262,7 @@ abstract class AutoTranslateCoordinatorTestBase {
         const val BARRIER_MS = 5_000L
         const val POLL_MS = 10L
 
-        /** Long enough for the 800 ms batch timer, used by the "nothing happens" assertions. */
+        
         const val SETTLE_MS = 1_200L
     }
 }

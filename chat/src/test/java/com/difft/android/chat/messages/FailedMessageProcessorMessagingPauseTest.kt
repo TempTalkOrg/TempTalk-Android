@@ -7,7 +7,7 @@ import kotlinx.coroutines.runBlocking
 import org.difft.app.database.WCDB
 import org.junit.Test
 
-/** G-R8 (#1382): a local drain tick runs under one ticket and is skipped while messaging is closed. */
+
 class FailedMessageProcessorMessagingPauseTest {
 
     private val messaging = TestMessagingPause().open()

@@ -25,39 +25,39 @@ import difft.android.messageserialization.model.CombinedForwardMode
 import difft.android.messageserialization.model.ForwardNoticeData
 import java.io.File
 
-/**
- * Helper class for message copy and forward operations
- * Encapsulates common logic used by ChatMessageListFragment and ChatForwardMessageActivity
- *
- * @param activity Android activity (needed for forward dialog)
- * @param lifecycleScope Lifecycle coroutine scope for async operations
- * @param selectChatsUtils Optional SelectChatsUtils for forward operations (only needed for forward)
- */
+
+
+
+
+
+
+
+
 class MessageActionHelper(
     private val activity: Activity,
     private val lifecycleScope: LifecycleCoroutineScope,
     private val selectChatsUtils: SelectChatsUtils? = null
 ) {
 
-    /** Returns true iff the clipboard write succeeded; PRD §4.1 gates the trace notice on this. */
+    
     suspend fun copyMessageContent(data: TextChatMessage): Boolean {
         if (data.isLongTextAttachment()) return copyLongTextContent(data)
         if (data.canDownloadFile()) return copyFileToClipboard(data)
-        // Copy-only normalize so the clipboard matches the displayed text (nested Forward.text is raw).
+        
         val text = data.getCopyableTextContent()?.normalizeNewlines() ?: return false
         Util.copyToClipboard(activity, text)
         return true
     }
 
-    /** Reads the backing file off-main-thread; falls back to data.message on read failure. */
+    
     private suspend fun copyLongTextContent(data: TextChatMessage): Boolean {
         val content = withContext(Dispatchers.IO) {
-            // Resolved HERE rather than on the caller's thread: getLongTextFileInfo does a migrating
-            // read, which is blocking IO. An unresolvable attachment falls through to the same body
-            // preview an unreadable file does.
+            
+            
+            
             val fileInfo = data.getLongTextFileInfo() ?: return@withContext ""
             try {
-                // Plaintext-first, otherwise stream-decrypt via provider (no plaintext on disk).
+                
                 EncryptedAttachmentAccess.readDecryptedText(activity, fileInfo.filePath) ?: ""
             } catch (e: Exception) {
                 L.e { "Failed to read long text file: ${e.message}" }
@@ -74,36 +74,31 @@ class MessageActionHelper(
         return true
     }
 
-    /** Returns false if the underlying attachment is not readable (neither plaintext nor ciphertext). */
+    
     private suspend fun copyFileToClipboard(data: TextChatMessage): Boolean {
-        // Attachments are now stored encrypted-at-rest: on disk usually only "<basePath>.encrypt"
-        // exists. Mirror saveAttachment/shareFile — gate on isReadable (plaintext OR ciphertext) and
-        // hand out the decrypting content:// uri when only the ciphertext is present, instead of the
-        // old plaintext-only file.exists() check that silently failed for encrypted images.
-        // Both the migrating resolve and the probe run on IO; the clipboard write stays on the
-        // caller's thread.
+        
         val fileInfo = withContext(Dispatchers.IO) {
             data.getFileInfoForCopy()?.takeIf { EncryptedAttachmentAccess.isReadable(it.filePath) }
         } ?: return false
         val basePath = fileInfo.filePath
 
-        // Prefer the durable ciphertext (content uri): a self-sent attachment's plaintext is deleted
-        // right after upload, so a FileProvider uri to it can ENOENT by the time the receiver reads
-        // the clipboard. The .encrypt copy decrypts on demand and never goes missing (mirrors share).
+        
+        
+        
         val uri: Uri = EncryptedAttachmentAccess.exportContentUriIfEncrypted(fileInfo.messageId, basePath)
             ?: FileProvider.getUriForFile(
                 activity,
                 "${activity.packageName}.provider",
                 File(basePath)
             )
-        // Copy file to clipboard with special label for identification
+        
         val clipboard = ServiceUtil.getClipboardManager(activity)
         val clipData = ClipData.newUri(
             activity.contentResolver,
             ClearClipboardAlarmReceiver.CLIPBOARD_LABEL,
             uri
         )
-        // Mark as sensitive to prevent clipboard preview and cross-device sync (Android 13+)
+        
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             clipData.description.extras = PersistableBundle().apply {
                 putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true)
@@ -111,33 +106,31 @@ class MessageActionHelper(
         }
         clipboard.setPrimaryClip(clipData)
         ToastUtil.show(activity.getString(R.string.chat_message_action_copied))
-        // Schedule clipboard clear after 5 minutes
+        
         Util.scheduleClipboardClear(activity, 5 * 60)
         return true
     }
 
-    /**
-     * Forward message to other chats
-     * Requires selectChatsUtils to be provided in constructor
-     *
-     * @param data The message to forward.
-     * @param sourceConversation Source conversation of the forwarded message (optional). The
-     *                            forwardNotice is posted here to tell original participants that
-     *                            their messages were forwarded away. Callers that can't determine
-     *                            the source conversation (e.g. ChatForwardMessageFragment) pass
-     *                            null; the notice is skipped in that case.
-     */
+    
+
+
+
+
+
+
+
+
+
+
     fun forwardMessage(
         data: TextChatMessage,
         sourceConversation: For? = null,
-        /** Override authors when the source attribution differs from data.authorId
-         *  (e.g. forwarding from inside a combined-forward preview → outer sender). */
+        
+
         sourceAuthorIdsOverride: List<String>? = null,
-        /** PRD v1.0 §5.3 combined-forward mode. Default UNKNOWN; pass SUB_COMBINED_FORWARD when
-         *  forwarding from inside a CF detail view (caller decides). */
+        
         combinedForwardMode: CombinedForwardMode = CombinedForwardMode.UNKNOWN,
-        /** PRD v2.0 §改动1/§改动2 条件①④: whether the forwarded message belongs to someone else
-         *  (real author). Default true keeps legacy callers tracing. */
+        
         carriesForeignContent: Boolean = true,
     ) {
         val utils = selectChatsUtils ?: run {

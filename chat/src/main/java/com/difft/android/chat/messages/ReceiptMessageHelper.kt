@@ -30,12 +30,11 @@ import javax.inject.Singleton
 private const val ROOM_TYPE_ONE_TO_ONE = 0
 private const val ROOM_TYPE_GROUP = 1
 
-/**
- * The message a confidential receipt from [senderId] may burn, among the stored messages that share
- * the receipt timestamp: one I sent, sent as confidential, in the 1:1 conversation with the sender
- * or in a group the sender belongs to (locally known membership). Same rule as Mac
- * `read_receipts.js` and the iOS confidential check. Null when nothing qualifies.
- */
+
+
+
+
+
 internal fun pickConfidentialReceiptTarget(
     candidates: List<MessageModel>,
     myId: String,
@@ -51,7 +50,7 @@ internal fun pickConfidentialReceiptTarget(
         }
 }
 
-// All wcdb calls in this class run on Dispatchers.IO.
+
 @Suppress("BlockingWcdbInSuspend")
 @Singleton
 class ReceiptMessageHelper @Inject constructor(
@@ -60,7 +59,7 @@ class ReceiptMessageHelper @Inject constructor(
     private data class PendingReceiptMessage(
         val message: SignalServiceProtos.ReceiptMessage,
         val signalService: SignalServiceDataClass,
-        // Retained from the envelope's receive ticket; closed once the receipt is applied (#1382).
+        
         val held: MessagingTicket?,
     )
 
@@ -87,10 +86,10 @@ class ReceiptMessageHelper @Inject constructor(
         }
     }
 
-    /**
-     * Queues the receipt for the consumer, handing it a ticket retained from [admission] so the
-     * migration pause waits until the receipt is applied (#1382).
-     */
+    
+
+
+
     suspend fun handleReceiptMessage(
         message: SignalServiceProtos.ReceiptMessage,
         signalService: SignalServiceDataClass,
@@ -127,7 +126,7 @@ class ReceiptMessageHelper @Inject constructor(
         if (signalService.conversation is For.Group) {
             val groupId = signalService.conversation.id
 
-            // 如果是大群（群人数大于阈值），不处理已读回执（机密消息除外）
+            
             val threshold = globalServices.globalConfigsManager.getNewGlobalConfigs()?.data?.group?.chatWithoutReceiptThreshold ?: Double.MAX_VALUE
             val memberCount = wcdb.getGroupMemberCount(groupId)
             if (memberCount > threshold && mode != SignalServiceProtos.Mode.CONFIDENTIAL_VALUE) {
@@ -151,11 +150,11 @@ class ReceiptMessageHelper @Inject constructor(
         }
     }
 
-    /**
-     * A confidential receipt burns my sent copy into a placeholder. Only a message that was sent
-     * as confidential, in a conversation the receipt sender belongs to, qualifies (see
-     * [pickConfidentialReceiptTarget]); a receipt can never wipe a normal message.
-     */
+    
+
+
+
+
     private fun convertConfidentialTargets(
         receiptMessage: SignalServiceProtos.ReceiptMessage,
         signalService: SignalServiceDataClass,

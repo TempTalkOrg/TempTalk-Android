@@ -6,11 +6,11 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/**
- * [RefreshGate]: due on the first check, then once the interval has elapsed on its monotonic
- * clock. A wall-clock step back (the old `System.currentTimeMillis()` throttle stalled until the
- * wall clock caught up) cannot delay it, because the gate never reads the wall clock (#1395).
- */
+
+
+
+
+
 class RefreshGateTest {
 
     private var monoNow = 50_000L

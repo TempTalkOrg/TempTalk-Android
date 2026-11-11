@@ -16,24 +16,15 @@ import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
 
-/**
- * Case #29 — the main equivalence assertion for the whole hydration change: for every message in a
- * corpus that covers all eight child-row families and all three second-level paths, the
- * `ChatMessage` built from BATCH-hydrated sub-data is field-for-field equal to the one built from
- * sub-data resolved the way the per-message point queries resolve it.
- *
- * Two independent implementations meet here. `ChildRowCorpus.referenceSubDataFor` is a literal
- * re-statement of `WCDBExtensions.kt`'s point-query path (same predicate, `sortedBy { databaseId }`,
- * naive unbounded forward recursion); `MessageHydrator` is the batched one. `TextChatMessage.equals`
- * compares all eight sub-data fields, so `assertEquals` on the produced messages is a real
- * field-for-field check rather than an id comparison — and the per-field assertions below make the
- * failure message say WHICH family diverged.
- *
- * `WCDBExtensionsKt` is deliberately NOT mocked here: the corpus messages carry no `screenShotJson`,
- * so `screenShot()` short-circuits before touching anything, and `AttachmentModel.toAttachment()`
- * (which lives in that facade and IS used by both paths) has to be the real mapper for the
- * comparison to mean anything.
- */
+
+
+
+
+
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class GenerateMessageTwoHydrationEquivalenceTest {
 
@@ -90,13 +81,13 @@ class GenerateMessageTwoHydrationEquivalenceTest {
                 fromPointQueries.speechToTextData,
                 fromHydration.speechToTextData,
             )
-            // The DiffUtil-visible verdict: equal by the equals() the adapter actually uses.
+            
             assertEquals("whole message ${record.id}", fromPointQueries, fromHydration)
         }
     }
 
-    // Guard on the guard: a corpus that produced empty sub-data for everything would make the case
-    // above pass vacuously.
+    
+    
     @Test
     fun `the corpus really exercises every child-row family`() = runTest {
         val hydration = MessageHydrator(FakeMessageChildRowLoader(corpus)).hydrate(corpus.messages)
@@ -115,7 +106,7 @@ class GenerateMessageTwoHydrationEquivalenceTest {
         assertEquals("cn-5", messages.getValue("m-derived").translateData?.translatedContentCN)
         assertEquals("stt-6", messages.getValue("m-derived").speechToTextData?.speechToTextContent)
         assertEquals(3, messages.getValue("m-forward-flat").forwardContext?.forwards?.size)
-        // Nested forward: the combined-forward branch also blanks the text.
+        
         assertEquals("", messages.getValue("m-forward-nested").message)
     }
 

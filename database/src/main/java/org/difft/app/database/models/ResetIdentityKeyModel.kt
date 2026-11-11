@@ -15,7 +15,7 @@ class ResetIdentityKeyModel {
     var resetTime: Long? = null
 
     @WCDBField
-    var status: Int = 0 // 消息清理状态 0: not cleared, 1: cleared
+    var status: Int = 0 
 
     override fun equals(other: Any?): Boolean {
         if (other !is ResetIdentityKeyModel) return false

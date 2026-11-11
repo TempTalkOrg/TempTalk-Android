@@ -15,10 +15,10 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Test
 import kotlin.test.assertEquals
 
-/**
- * The handoff id is the only key a handoff's message pause can be settled by (#1382), so a peer that
- * adopted nothing clears it only once the settlement actually resolved.
- */
+
+
+
+
 class MigrationHandoffReconcilerTest {
 
     private var userData = UserData(baseAuth = "auth", migrationHandoffId = HANDOFF_ID)

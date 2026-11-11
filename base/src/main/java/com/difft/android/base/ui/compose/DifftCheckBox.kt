@@ -26,42 +26,42 @@ import androidx.compose.ui.unit.dp
 import com.difft.android.base.R
 import com.difft.android.base.ui.theme.DifftTheme
 
-/** Figma multi-select checkbox geometry. The View shell [com.difft.android.base.widget.DifftCheckBoxView] reuses it. */
+
 object DifftCheckBoxDefaults {
-    /** Library "Size 24 for Mobile": a 20dp box, radius box/8, unchecked border box/16. */
+    
     val Size: Dp = 20.dp
     val CornerRadius: Dp = 2.5.dp
     val BorderWidth: Dp = 1.25.dp
     val BoxShape: Shape = RoundedCornerShape(CornerRadius)
 
-    /** Wrap size of the AppCompat checkbox this replaces; keeps existing layouts from shifting. */
+    
     val TouchTarget: Dp = 32.dp
 
-    /** Labelled row: box, [LabelGap], label, [HelpGap], [HelpIconSize] help icon. */
+    
     val LabelGap: Dp = 8.dp
     val HelpGap: Dp = 4.dp
     val HelpIconSize: Dp = 14.dp
 }
 
-/**
- * The app's multi-select checkbox at the library's mobile size: a 20dp box with 2.5dp corners, a
- * 1.25dp `textDisabled` border and no fill when unchecked, a `primary` fill with the library's
- * white check glyph when checked.
- *
- * Mirrors the Material3 `Checkbox` parameter shape so call sites migrate by renaming. A non-null
- * [onCheckedChange] makes the box toggleable in its own right with a 48dp touch target and
- * checkbox semantics; `null` renders the visual only, for rows that toggle on the row click and
- * carry the semantics themselves.
- *
- * Disabled states are solid colour swaps, never alpha: unchecked becomes a `backgroundDisabled`
- * fill with no border, checked keeps that fill and tints the glyph `textDisabled`. The library
- * pins its dark disabled-checked pair to the light hexes; both modes use the tokens here.
- *
- * A non-null [label] switches to the library's labelled row - box, 8dp, `p3` label, plus a 14dp
- * help icon 4dp after the label when [onHelpClick] is set - and moves the toggle to the whole
- * row. That row is content-height, with no 48dp minimum: it is already far wider than the touch
- * minimum, and forcing the height would overflow the fixed-height hosts that list such rows.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 @Composable
 fun DifftCheckBox(
     checked: Boolean,
@@ -106,7 +106,7 @@ fun DifftCheckBox(
     }
 }
 
-/** The box itself; the glyph resource already places the check inside its 20dp viewport. */
+
 @Composable
 private fun CheckBoxGlyph(checked: Boolean, enabled: Boolean) {
     val fill = when {
@@ -131,14 +131,14 @@ private fun CheckBoxGlyph(checked: Boolean, enabled: Boolean) {
             Icon(
                 painter = painterResource(R.drawable.base_ic_checkbox_check),
                 contentDescription = null,
-                tint = if (enabled) DifftTheme.colors.iconOnPrimary else DifftTheme.colors.textDisabled,
+                tint = if (enabled) DifftTheme.colors.onPrimary else DifftTheme.colors.textDisabled,
                 modifier = Modifier.size(DifftCheckBoxDefaults.Size),
             )
         }
     }
 }
 
-/** Builds a fresh chain, never the caller's, so `modifier.then(...)` cannot duplicate it. */
+
 @Composable
 private fun toggleModifier(
     checked: Boolean,

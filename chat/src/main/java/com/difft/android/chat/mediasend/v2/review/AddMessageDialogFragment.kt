@@ -3,12 +3,16 @@ package com.difft.android.chat.mediasend.v2.review
 import android.content.DialogInterface
 import android.os.Bundle
 import android.view.View
+import android.view.LayoutInflater
+import android.view.ViewGroup
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.viewModels
 import com.difft.android.base.utils.utf8Substring
+import com.difft.android.base.widget.applyFloatingSurface
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.chat.R
+import com.difft.android.chat.ui.setConfidentialInputBorder
 import com.difft.android.chat.common.MAX_TEXT_FILE_SIZE
 import com.difft.android.chat.databinding.V2MediaAddMessageDialogFragmentBinding
 import com.difft.android.chat.components.KeyboardEntryDialogFragment
@@ -24,13 +28,16 @@ class AddMessageDialogFragment : KeyboardEntryDialogFragment(R.layout.v2_media_a
     private val binding by ViewBinderDelegate(com.difft.android.chat.databinding.V2MediaAddMessageDialogFragmentBinding::bind)
 
 
+    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View =
+        super.onCreateView(MediaReviewInputChrome.darkInflater(inflater), container, savedInstanceState)
+
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
 
         val input = binding.content.addAMessageInput
         input.onQueryChanged = ::onMessageEdited
         input.onClear = { viewModel.setMessage("") }
-        // Seed only on first creation: after a recreation the field restores the typed caption and
-        // the activity-scoped view model already holds it, so the launch-time text must not overwrite it.
+        
+        
         if (savedInstanceState == null) {
             onMessageEdited(requireArguments().getCharSequence(ARG_INITIAL_TEXT)?.toString().orEmpty())
         }
@@ -43,7 +50,7 @@ class AddMessageDialogFragment : KeyboardEntryDialogFragment(R.layout.v2_media_a
         applyConfidentialStyle()
     }
 
-    /** Caps the caption at the text-file size limit, keeping the field and the view model in step. */
+    
     private fun onMessageEdited(text: String) {
         val capped = if (text.toByteArray(Charsets.UTF_8).size > MAX_TEXT_FILE_SIZE) {
             ToastUtil.show(getString(R.string.text_file_exceeds_10mb_limit))
@@ -58,16 +65,10 @@ class AddMessageDialogFragment : KeyboardEntryDialogFragment(R.layout.v2_media_a
     private fun applyConfidentialStyle() {
         val isConfidential = viewModel.state.value?.confidentialMode == 1
         val input = binding.content.addAMessageInput
-        val inputAreaContainer = input.parent as View
-        val (areaColor, boxDrawable) = if (isConfidential) {
-            com.difft.android.base.R.color.bg_confidential_area to R.drawable.chat_msg_input_bg_confidential
-        } else {
-            com.difft.android.base.R.color.bg1 to R.drawable.chat_msg_input_field_bg
-        }
-        inputAreaContainer.setBackgroundColor(ContextCompat.getColor(requireContext(), areaColor))
-        // The box is the same bordered drawable the media review bar uses (fill + 0.5dp line, radius 8);
-        // the field paints no box of its own over it.
-        input.setBackgroundResource(boxDrawable)
+        
+        (input.parent as View).setBackgroundColor(ContextCompat.getColor(input.context, com.difft.android.base.R.color.bg1))
+        input.applyFloatingSurface(cornerRadiusPx = resources.getDimension(R.dimen.chat_input_field_radius))
+        input.setConfidentialInputBorder(isConfidential, resources.getDimension(R.dimen.chat_input_field_radius))
         input.containerColor = android.graphics.Color.TRANSPARENT
     }
 

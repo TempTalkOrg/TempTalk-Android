@@ -9,30 +9,25 @@ import androidx.recyclerview.widget.RecyclerView
 
 fun RecyclerView.noSmoothScrollToBottom() {
     val recyclerView = this
-    // Get the position of the last item
     val lastPosition = recyclerView.adapter?.itemCount?.minus(1) ?: 0
 
-// Scroll to the last position without animation
     recyclerView.scrollToPosition(lastPosition)
 
-// doOnNextLayout (not post) so the offset uses post-layout dimensions.
+    
     recyclerView.doOnNextLayout {
-        // Ensure the LayoutManager is a LinearLayoutManager
         val layoutManager = recyclerView.layoutManager as? LinearLayoutManager
 
         layoutManager?.let { lm ->
-            // Find the last item's View
             val lastChild = lm.findViewByPosition(lastPosition)
 
             if (lastChild != null) {
                 val itemBottom = lastChild.bottom
                 val recyclerViewHeight = recyclerView.height - recyclerView.paddingBottom
 
-                // Calculate the offset needed to bring the bottom of the last item into view
                 val offset = itemBottom - recyclerViewHeight
 
                 if (offset > 0) {
-                    // scrollBy is posted because doOnNextLayout runs inside the layout pass. See issue 32a90db4.
+                    
                     recyclerView.post { recyclerView.scrollBy(0, offset) }
                 }
             }
@@ -52,25 +47,24 @@ fun RecyclerView.smoothScrollToPositionWithHelper(context: Context, position: In
 
     val smoothScroller = object : LinearSmoothScroller(context) {
         override fun getVerticalSnapPreference(): Int {
-            return SNAP_TO_START // 滚动到顶部对齐
+            return SNAP_TO_START
         }
 
-        // 调整滚动速度
         override fun calculateSpeedPerPixel(displayMetrics: android.util.DisplayMetrics): Float {
-            return speed / displayMetrics.densityDpi // 每像素滚动的时间，值越大滚动越慢
+            return speed / displayMetrics.densityDpi 
         }
 
-        // 限制最大滚动时间（防止过长距离耗时太久）
+        
         override fun calculateTimeForScrolling(dx: Int): Int {
             val base = super.calculateTimeForScrolling(dx)
-            return base.coerceAtMost(1000) // 最多滚动 1000 毫秒
+            return base.coerceAtMost(1000)
         }
     }
     smoothScroller.targetPosition = position
     layoutManager.startSmoothScroll(smoothScroller)
 }
 
-//最后一个item过长时，scrollToPosition只会滚动到顶部对齐，利用此方法可以滚动到底部
+
 fun RecyclerView.fastSmoothScrollToBottom() {
     val layoutManager = layoutManager as? LinearLayoutManager ?: return
     val lastPosition = adapter?.itemCount?.minus(1) ?: return
@@ -78,7 +72,6 @@ fun RecyclerView.fastSmoothScrollToBottom() {
     val smoothScroller = object : LinearSmoothScroller(context) {
         override fun getVerticalSnapPreference(): Int = SNAP_TO_END
 
-        // 控制滚动速度（值越小越快）
         override fun calculateSpeedPerPixel(displayMetrics: DisplayMetrics): Float {
             return 5f / displayMetrics.densityDpi
         }

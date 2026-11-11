@@ -24,22 +24,22 @@ import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Detects the end of the old login while a migration pause past the commit marker waits for it
- * (#1382): committing, awaiting the old login, awaiting a decision, or a corrupt record. The socket
- * is closed while paused, so the usual kick-out signals never arrive; instead the device list is
- * asked every [INTERVAL_MS] while the app is in the foreground, once on every foreground.
- *
- * Only a 401 the probe itself received ends the pause, through the ordinary passive logout. Each
- * probe is sent with the credential it read and on a path that does not report to
- * `AuthFailureSink`, so its own 403 changes nothing (#1382 A09, server question S06); a 401 that
- * arrives after the credential or the pause changed is ignored. Other answers keep waiting.
- */
+
+
+
+
+
+
+
+
+
+
+
 @Singleton
 class MigrationPauseAuthProbe @Inject constructor(
     private val gate: MessagingGate,
     private val deviceRepository: DeviceRepository,
-    // Lazy: the logout manager is only needed once a kick-out is confirmed (same cycle as SessionAuthGuard).
+    
     private val logoutManager: dagger.Lazy<LogoutManager>,
     private val userManager: UserManager,
     @param:AppCoroutineScope private val scope: CoroutineScope,
@@ -55,7 +55,7 @@ class MigrationPauseAuthProbe @Inject constructor(
         scope.launch { run(foregroundStates()) }
     }
 
-    /** Probes while [foreground] is true and the pause waits for the old login. */
+    
     internal suspend fun run(foreground: Flow<Boolean>, intervalMs: Long = INTERVAL_MS) {
         combine(gate.onChanged, foreground) { state, inForeground -> inForeground && state.awaitsOldLogin() }
             .distinctUntilChanged()
@@ -65,7 +65,7 @@ class MigrationPauseAuthProbe @Inject constructor(
             }
     }
 
-    /** One device-list call; true once the old login is confirmed gone and the logout has started. */
+    
     internal suspend fun probeOnce(): Boolean {
         if (kicked.get()) return true
         val credential = currentCredential() ?: return false
@@ -84,7 +84,7 @@ class MigrationPauseAuthProbe @Inject constructor(
         }
     }
 
-    /** Acts only on this probe's own 401, and only while the login and the pause it asked about still hold. */
+    
     private fun onRejected(code: Int, credential: String, pauseOwner: String?): Boolean {
         if (code != HTTP_UNAUTHORIZED) {
             logOnce("code_$code") { "[MigrationPause] event=auth_probe_result result=ignored code=$code" }
@@ -105,14 +105,14 @@ class MigrationPauseAuthProbe @Inject constructor(
 
     private fun pauseOwner(): String? = (gate.state as? MessagingPauseState.Paused)?.record?.owner
 
-    /** Logged once per distinct failure, so an offline foreground does not log every interval. */
+    
     private fun logOnce(failure: String, message: (String) -> String) {
         if (failure == lastFailure) return
         lastFailure = failure
         L.w { message(failure) }
     }
 
-    /** A record past the commit marker, or a corrupt one whose phase is unknown (#1382 A08). */
+    
     private fun MessagingPauseState.awaitsOldLogin(): Boolean {
         if (this !is MessagingPauseState.Paused) return false
         return record?.phase?.let { it in AWAITING_PHASES } ?: true
@@ -137,7 +137,7 @@ class MigrationPauseAuthProbe @Inject constructor(
         const val INTERVAL_MS = 10_000L
         private const val HTTP_UNAUTHORIZED = 401
 
-        /** Paused past the commit marker, where the receiver may have taken over the account. */
+        
         val AWAITING_PHASES = setOf(
             MigrationPausePhase.COMMITTING,
             MigrationPausePhase.AWAITING_LOGIN,

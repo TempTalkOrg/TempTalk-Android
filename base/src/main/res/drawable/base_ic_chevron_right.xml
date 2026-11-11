@@ -1,8 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Figma ic/chevron-right-f (16dp), the one trailing arrow for every settings row. The export is
-     an up-caret used at 90 degrees; the rotation stays a group so the path is byte-identical to
-     the SVG. autoMirrored flips it in RTL for XML and Compose consumers alike, so no call site
-     mirrors by hand. Compose call sites override the tint. -->
+
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="16dp"
     android:height="16dp"

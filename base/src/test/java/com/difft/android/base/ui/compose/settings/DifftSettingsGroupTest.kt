@@ -10,6 +10,7 @@ import androidx.compose.ui.test.assertHeightIsEqualTo
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -24,10 +25,10 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import kotlin.math.abs
 
-/**
- * [DifftSettingsGroup] contract (issue #1209): the 1dp divider hairlines are produced by the
- * group's own spacing, so a caller inserts no dividers and a single-row group has none.
- */
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34])
@@ -38,17 +39,20 @@ class DifftSettingsGroupTest {
 
     private fun rowTag(index: Int) = "row_$index"
 
+    
+    private val hairline: Dp get() = with(composeTestRule.density) { 1f.toDp() }
+
     private fun assertGap(topTag: String, bottomTag: String) {
         val top = composeTestRule.onNodeWithTag(topTag).getBoundsInRoot()
         val bottom = composeTestRule.onNodeWithTag(bottomTag).getBoundsInRoot()
         val gap = bottom.top.value - top.bottom.value
         assertTrue(
-            "expected a ${DifftSettingsDefaults.SeparatorThickness} hairline, measured ${gap}dp",
-            abs(gap - DifftSettingsDefaults.SeparatorThickness.value) <= 0.5f,
+            "expected a $hairline hairline, measured ${gap}dp",
+            abs(gap - hairline.value) <= 0.5f,
         )
     }
 
-    // T8
+    
     @Test
     fun `three rows are separated by two 1dp hairlines`() {
         composeTestRule.setContent {
@@ -65,7 +69,7 @@ class DifftSettingsGroupTest {
         assertGap(rowTag(1), rowTag(2))
     }
 
-    // T9
+    
     @Test
     fun `a single-row group adds no hairline`() {
         composeTestRule.setContent {
@@ -79,7 +83,7 @@ class DifftSettingsGroupTest {
         composeTestRule.onNodeWithTag(GROUP).assertHeightIsEqualTo(DifftSettingsDefaults.RowMinHeight)
     }
 
-    // T10
+    
     @Test
     fun `title and footer render and the title sits 8dp above the card`() {
         composeTestRule.setContent {
@@ -106,7 +110,7 @@ class DifftSettingsGroupTest {
         )
     }
 
-    // T11
+    
     @Test
     fun `without title or footer the group is exactly its rows plus hairlines`() {
         composeTestRule.setContent {
@@ -120,11 +124,11 @@ class DifftSettingsGroupTest {
         }
 
         composeTestRule.onNodeWithTag(GROUP).assertHeightIsEqualTo(
-            DifftSettingsDefaults.RowMinHeight * 2 + DifftSettingsDefaults.SeparatorThickness,
+            DifftSettingsDefaults.RowMinHeight * 2 + hairline,
         )
     }
 
-    // T12
+    
     @Test
     fun `titleTrailing is clickable and ends at the caption inset`() {
         var clicks = 0
@@ -157,7 +161,7 @@ class DifftSettingsGroupTest {
         )
     }
 
-    // T14
+    
     @Test
     fun `switch rows in a group keep the settings row geometry`() {
         composeTestRule.setContent {

@@ -34,16 +34,16 @@ import org.robolectric.annotation.Config
 import difft.android.messageserialization.model.Quote
 import java.util.concurrent.atomic.AtomicBoolean
 
-/**
- * T2-20..T2-24 — [ChatMessageAdapter.VIEW_TYPE_E2EE_HEADER] plumbing
- * (`getItemViewType`/`onCreateViewHolder`/click wiring) and [EncryptionHeaderChatMessage.equals]
- * against the REAL production [ChatMessageAdapter] / [ChatMessageViewHolder.Notify].
- *
- * Only [EncryptionHeaderChatMessage] / [NotifyChatMessage] rows are submitted (never
- * [com.difft.android.chat.message.TextChatMessage]) — both reuse the `Notify` ViewHolder shell,
- * which has no Hilt-global dependency, unlike `ChatMessageViewHolder.Message` (reads
- * `globalServices.myId`). This mirrors `RecentChatAdapterFooterTest`'s scoping rationale.
- */
+
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [28])
 class ChatMessageAdapterE2eeHeaderTest {
@@ -110,7 +110,7 @@ class ChatMessageAdapterE2eeHeaderTest {
         shadowOf(Looper.getMainLooper()).idle()
     }
 
-    // T2-20 — getItemViewType returns VIEW_TYPE_E2EE_HEADER (203), fires before Confidential/Notify branches
+    
     @Test
     fun `T2-20 getItemViewType returns header type for EncryptionHeaderChatMessage`() {
         submitAndAwait(listOf(header(), notify("n1")))
@@ -119,7 +119,7 @@ class ChatMessageAdapterE2eeHeaderTest {
         assertEquals(ChatMessageAdapter.VIEW_TYPE_NOTIFY, adapter.getItemViewType(1))
     }
 
-    // T2-21 — onCreateViewHolder(VIEW_TYPE_E2EE_HEADER) returns a Notify holder with tv_e2ee_header_content
+    
     @Test
     fun `T2-21 header view type creates Notify holder with header content textview present`() {
         submitAndAwait(listOf(header()))
@@ -131,7 +131,7 @@ class ChatMessageAdapterE2eeHeaderTest {
         assertNotNull(holder!!.itemView.findViewById<View>(R.id.tv_e2ee_header_content))
     }
 
-    // T2-22 — tapping the bound header row invokes onE2eeHeaderClick exactly once
+    
     @Test
     fun `T2-22 clicking the bound header row invokes onE2eeHeaderClick once`() {
         submitAndAwait(listOf(header()))
@@ -143,7 +143,7 @@ class ChatMessageAdapterE2eeHeaderTest {
         assertEquals(1, headerClickCount)
     }
 
-    // T2-23 — a plain NotifyChatMessage row stays non-clickable (no cross-viewType leakage)
+    
     @Test
     fun `T2-23 plain notify row is not clickable and never invokes onE2eeHeaderClick`() {
         submitAndAwait(listOf(notify("n1")))
@@ -156,7 +156,7 @@ class ChatMessageAdapterE2eeHeaderTest {
         assertEquals(0, headerClickCount)
     }
 
-    // T2-24 — equals() distinguishes isNonFriendVariant so DiffUtil rebinds on a variant flip
+    
     @Test
     fun `T2-24 EncryptionHeaderChatMessage equals is false across variant flip with same id`() {
         val friendVariant = header(isNonFriendVariant = false)
@@ -167,9 +167,9 @@ class ChatMessageAdapterE2eeHeaderTest {
         assertFalse(friendVariant.hashCode() == nonFriendVariant.hashCode())
     }
 
-    // T2-25 — friend-variant header content embeds the lock icon as a leading ImageSpan
-    // (emoji-style), not a compound drawable — compound drawables vertical-center
-    // across the whole (possibly multi-line) TextView instead of pinning to the first line.
+    
+    
+    
     @Test
     fun `T2-25 friend variant header content embeds lock icon as leading ImageSpan not compound drawable`() {
         submitAndAwait(listOf(header()))
@@ -186,7 +186,7 @@ class ChatMessageAdapterE2eeHeaderTest {
         assertTrue("must not use compound drawables — ImageSpan replaces them", compoundDrawables.all { it == null })
     }
 
-    // T2-26 — non-friend-variant header content also embeds the lock icon as a leading ImageSpan
+    
     @Test
     fun `T2-26 non-friend variant header content embeds lock icon as leading ImageSpan`() {
         submitAndAwait(listOf(header(isNonFriendVariant = true)))
@@ -200,7 +200,7 @@ class ChatMessageAdapterE2eeHeaderTest {
         assertTrue("expected a leading ImageSpan for the lock icon", imageSpans.isNotEmpty())
     }
 
-    // T2-27 — both variants end with the blue+bold "Learn more" suffix; only the base copy differs
+    
     @Test
     fun `T2-27 non-friend variant also appends blue bold learn-more suffix`() {
         submitAndAwait(listOf(header(isNonFriendVariant = true)))

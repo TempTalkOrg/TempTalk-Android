@@ -42,13 +42,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
-/**
- * "Folded Groups" (PRD 7.4.2) as the root of the home screen's list-pane layer: the groups the
- * focus folds, pinned first (with their pinned background) and then by time, on the chat list's
- * own adapter and row actions. Groups with an ongoing call are not here (the main list shows
- * them). A group opens in the current tab's detail stack and its row shows the two-pane selection.
- * The page closes the layer on its own when focus ends or folding is turned off.
- */
+
+
+
+
+
+
+
 @AndroidEntryPoint
 class FoldedGroupsFragment : Fragment(), DualPaneSelectionListener {
 
@@ -64,8 +64,8 @@ class FoldedGroupsFragment : Fragment(), DualPaneSelectionListener {
     @Inject
     lateinit var chatListSourceProvider: ChatListSourceProvider
 
-    // The home screen's instance, shared with the chat list: the same Activity-scoped ViewModel the
-    // rows come from through chatListSourceProvider, so row actions and rows never disagree.
+    
+    
     private val viewModel: RecentChatViewModel by viewModels(ownerProducer = { requireActivity() })
 
     private val rowActionsDelegate = lazy { ChatListRowActions(requireActivity(), viewModel, focusActionLauncher, globalServices.myId) }
@@ -99,20 +99,20 @@ class FoldedGroupsFragment : Fragment(), DualPaneSelectionListener {
         closeWhenFoldingEnds()
     }
 
-    /**
-     * Pops this page (the layer's root, so the layer closes) once focus is not active with folding.
-     * Starts after STARTED: a restored page is created inside the Activity's onCreate, before the
-     * layer it closes exists. Judges the loaded focus only: before the cache loads, `effective` is
-     * INACTIVE. Then collects without a lifecycle gate, so the page also closes under a one-pane
-     * conversation layer. The page pushes nothing, so it is always its host's top page.
-     */
+    
+
+
+
+
+
+
     private fun closeWhenFoldingEnds() {
         lifecycleScope.launch {
             lifecycle.withStarted {}
             focusRepository.ensureLoaded()
             var popped = false
             focusRepository.effective.collect { focus ->
-                // One pop: the layer removes this page on its queue, later emissions must not repeat it.
+                
                 if (popped || (focus.active && focus.foldOthers) || !isAdded) return@collect
                 popped = true
                 L.i { "[ChatList] folded_layer_close active=${focus.active} fold=${focus.foldOthers}" }
@@ -129,7 +129,7 @@ class FoldedGroupsFragment : Fragment(), DualPaneSelectionListener {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         val title = getString(R.string.focus_list_folded_screen_title)
-        // TalkBack announces the page when the layer opens, as it did for the window of a new screen.
+        
         ViewCompat.setAccessibilityPaneTitle(view, title)
         (view as ComposeView).setContent {
             DifftTheme(applyWindowBackground = false) {
@@ -146,7 +146,7 @@ class FoldedGroupsFragment : Fragment(), DualPaneSelectionListener {
                                 layoutManager = LinearLayoutManager(context)
                                 itemAnimator = null
                                 adapter = this@FoldedGroupsFragment.adapter
-                                // Same rows as the chat list, same hairline between them.
+                                
                                 addItemDecoration(ChatListDividerDecoration(context))
                             }
                         },
@@ -183,12 +183,12 @@ class FoldedGroupsFragment : Fragment(), DualPaneSelectionListener {
 
     override fun updateDualPaneSelection(selectedId: String?) {
         this.selectedId = selectedId
-        // Before the view exists the adapter is not built yet; it picks the stored id up when it is.
+        
         if (view != null) adapter.selectedId = selectedId
     }
 
     override fun onDestroyView() {
-        // The row popup is an Activity-window object and would outlive a page the layer removed.
+        
         if (rowActionsDelegate.isInitialized()) rowActions.dismissPopup()
         super.onDestroyView()
     }

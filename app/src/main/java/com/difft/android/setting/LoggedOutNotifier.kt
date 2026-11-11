@@ -17,14 +17,14 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * "This device has been logged out" notification, posted only when a passive logout fires with no
- * resumed Activity — the user would otherwise get an unexplained process death and no explanation
- * until the next launch.
- *
- * Tapping it opens the launcher intent, which routes to the login screen because the credential is
- * already cleared by then.
- */
+
+
+
+
+
+
+
+
 @Singleton
 class LoggedOutNotifier @Inject constructor(
     @param:ApplicationContext private val context: Context,
@@ -33,11 +33,11 @@ class LoggedOutNotifier @Inject constructor(
         NotificationManagerCompat.from(context)
     }
 
-    /**
-     * Posts the notice. Ensures the channel first: the logout can fire on a sticky-service revival
-     * path where the startup channel step is not guaranteed to have run. Dropped when the channel
-     * cannot be verified (#1354).
-     */
+    
+
+
+
+
     fun post() {
         if (!NotificationChannelSpecs.ensure(context, CHANNEL_ID)) {
             L.w { "[Logout] logged-out notice skipped: channel missing id=$CHANNEL_ID" }
@@ -66,9 +66,9 @@ class LoggedOutNotifier @Inject constructor(
             .setAutoCancel(true)
             .setContentIntent(contentIntent)
             .build()
-        // The permission check must sit in this method: lint's MissingPermission does not follow
-        // the guard into a helper, and areNotificationsEnabled() alone does not satisfy it.
-        // Below API 33 the permission does not exist and would read as denied, hence the SDK gate.
+        
+        
+        
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
             PackageManager.PERMISSION_GRANTED
@@ -83,7 +83,7 @@ class LoggedOutNotifier @Inject constructor(
         try {
             notificationManager.notify(NOTIFICATION_ID, notification)
         } catch (e: Exception) {
-            // Never let a notification failure block the exit that follows it.
+            
             L.w { "[Logout] posting logged-out notification failed: ${e.message}" }
         }
     }
@@ -91,8 +91,8 @@ class LoggedOutNotifier @Inject constructor(
     private companion object {
         const val CHANNEL_ID = NotificationChannelIds.OTHER_ALERTS
 
-        // Distinct from every other notification id in the repo (10000 message summary,
-        // 0x5057 upgrade, 313399 message FGS, 3456 call FGS).
+        
+        
         const val NOTIFICATION_ID = 10001
     }
 }

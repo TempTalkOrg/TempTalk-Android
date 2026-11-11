@@ -64,12 +64,12 @@ class CallCleanupStepsTest {
         assertTrue(cancelDispatcherIndex < disconnectAndReleaseIndex)
         assertTrue(cancelDispatcherIndex < stopTimersIndex)
 
-        // The weak-network tick reads the room's quality providers, so it has to be stopped before
-        // the room is released.
+        
+        
         val resetNetworkQualityIndex = requiredStepIndex("resetNetworkQuality")
         assertTrue(resetNetworkQualityIndex < disconnectAndReleaseIndex)
 
-        // The ongoing-call service belongs to the session's own end, keyed by its id.
+        
         assertTrue("no service step", stepNames.none { it.contains("Service") })
     }
 

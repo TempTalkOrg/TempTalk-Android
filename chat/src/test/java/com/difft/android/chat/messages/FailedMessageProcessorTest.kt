@@ -10,15 +10,15 @@ import org.junit.Before
 import org.junit.Test
 import java.util.concurrent.TimeUnit
 
-/**
- * Pure-function tests for [FailedMessageProcessor].
- *
- * Covers the parts that DON'T need WCDB native libs (constants + backoff
- * jitter). The state-machine paths (`saveTransient` / `processOne` /
- * `loadDueMessages` / TTL cleanup) require a live WCDB and are deferred to
- * instrumentation tests when a device harness is available — same blocker
- * as the existing `GroupCryptoRepoTest`.
- */
+
+
+
+
+
+
+
+
+
 class FailedMessageProcessorTest {
 
     private lateinit var processor: FailedMessageProcessor
@@ -32,7 +32,7 @@ class FailedMessageProcessorTest {
         )
     }
 
-    // -- Constants ------------------------------------------------------------
+    
 
     @Test
     fun `MAX_RETRIES equals 5`() {
@@ -64,7 +64,7 @@ class FailedMessageProcessorTest {
         }
     }
 
-    // -- backoffMillis ---------------------------------------------------------
+    
 
     @Test
     fun `backoffMillis(0) is 1s plus or minus 20 percent jitter`() {
@@ -94,8 +94,8 @@ class FailedMessageProcessorTest {
 
     @Test
     fun `backoffMillis clamps retryCount above MAX to last bucket (defensive)`() {
-        // retryCount > MAX_RETRIES shouldn't happen in practice — row is
-        // deleted at give-up — but the clamp guards against caller bugs.
+        
+        
         val v = processor.backoffMillis(99)
         val base = TimeUnit.MINUTES.toMillis(30)
         val tolerance = base / 5L
@@ -104,9 +104,9 @@ class FailedMessageProcessorTest {
 
     @Test
     fun `backoffMillis jitter is actually random (not constant)`() {
-        // Sanity check: ±20% jitter should produce different values across
-        // many calls. If two consecutive calls always return the same value,
-        // jitter is broken.
+        
+        
+        
         val samples = (0..50).map { processor.backoffMillis(2) }.toSet()
         assertNotEquals("Expected jitter variance across samples", 1, samples.size)
     }

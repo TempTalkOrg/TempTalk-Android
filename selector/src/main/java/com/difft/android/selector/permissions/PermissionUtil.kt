@@ -14,24 +14,15 @@ import com.difft.android.base.log.lumberjack.L
 import com.difft.android.selector.utils.SpUtils
 
 object PermissionUtil {
-    /**
-     * 默认未请求授权状态
-     */
+    
     const val DEFAULT = 0
 
-    /**
-     * 获取权限成功
-     */
     const val SUCCESS = 1
 
-    /**
-     * 申请权限拒绝, 但是下次申请权限还会弹窗
-     */
+    
     const val REFUSE = 2
 
-    /**
-     * 申请权限拒绝，并且是永久，不会再弹窗
-     */
+    
     const val REFUSE_PERMANENT = 3
 
     @JvmStatic
@@ -80,9 +71,6 @@ object PermissionUtil {
         return isAllGranted
     }
 
-    /**
-     * 跳转到系统设置页面
-     */
     @JvmStatic
     fun goIntentSetting(fragment: Fragment, requestCode: Int) {
         try {

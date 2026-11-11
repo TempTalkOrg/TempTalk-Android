@@ -59,7 +59,7 @@ class StrictUserCommitTest {
         manager.update { email = "masked" }
         gate.release.complete(Unit)
         strict.await()
-        // A barrier behind both queued jobs, without changing the accepted fields.
+        
         manager.commitStrict("a") { }
         assertEquals("accepted", auth.value.value.customUid)
         assertEquals("masked", auth.value.value.email)

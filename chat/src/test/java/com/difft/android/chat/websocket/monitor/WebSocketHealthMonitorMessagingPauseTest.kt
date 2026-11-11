@@ -25,11 +25,11 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
-/**
- * G-R1 second line (#1382): whatever started the monitor, it does not connect while messaging is
- * closed and connects once messaging opens. Real monitor on the real `appScope`, so assertions
- * use a settle delay and verify timeouts.
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [31])
 class WebSocketHealthMonitorMessagingPauseTest {

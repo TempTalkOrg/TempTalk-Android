@@ -25,10 +25,10 @@ import org.robolectric.annotation.GraphicsMode
 import java.util.Locale
 import java.util.TimeZone
 
-/**
- * Compose interaction tests for [LinkedDevicesScreen]: real screen + real ViewModel with a mocked
- * [DeviceRepository] (the project ships no Hilt test harness, so the VM is built directly).
- */
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [33])
@@ -53,7 +53,7 @@ class LinkedDevicesScreenTest {
         }
     }
 
-    // I1
+    
     @Test
     fun `renders device rows and link new row`() {
         coEvery { repo.getDevices() } returns listOf(
@@ -67,7 +67,7 @@ class LinkedDevicesScreenTest {
         composeTestRule.onNodeWithText("Link New Device").assertIsDisplayed()
     }
 
-    // Empty list renders only the Link New Device card, no caption, no device rows.
+    
     @Test
     fun `renders no device rows and only link new row when empty`() {
         coEvery { repo.getDevices() } returns emptyList()
@@ -79,7 +79,7 @@ class LinkedDevicesScreenTest {
         composeTestRule.onNodeWithText("Link New Device").assertIsDisplayed()
     }
 
-    // I3
+    
     @Test
     fun `long press opens unlink menu`() {
         coEvery { repo.getDevices() } returns listOf(
@@ -94,8 +94,8 @@ class LinkedDevicesScreenTest {
         composeTestRule.onNodeWithText("Unlink").assertIsDisplayed()
     }
 
-    // An unlink failure toasts (via the event collector) and leaves the list intact — no optimistic
-    // delete. ToastUtil is mocked because its Application-context toast can't render under Robolectric.
+    
+    
     @Test
     fun `unlink failure shows toast and leaves list unchanged`() {
         coEvery { repo.getDevices() } returns listOf(
@@ -110,8 +110,8 @@ class LinkedDevicesScreenTest {
 
         mockkObject(ToastUtil)
         try {
-            // The confirm dialog is a View-world ComposeView (out of this screen's composition); its
-            // onConfirm delegates straight to vm.unlink(id), driven here directly.
+            
+            
             vm.unlink(2)
             composeTestRule.waitForIdle()
             verify(exactly = 1) { ToastUtil.show(R.string.linked_devices_unlink_failed) }
@@ -121,7 +121,7 @@ class LinkedDevicesScreenTest {
         }
     }
 
-    // A fetch failure never hides the Link New Device entry; it surfaces a one-shot toast instead.
+    
     @Test
     fun `fetch failure keeps link new row and shows toast`() {
         coEvery { repo.getDevices() } throws RuntimeException("boom")

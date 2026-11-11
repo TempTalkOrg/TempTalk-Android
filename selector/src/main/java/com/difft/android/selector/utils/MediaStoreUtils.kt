@@ -13,9 +13,6 @@ import java.io.File
 
 object MediaStoreUtils {
 
-    /**
-     * 拍摄图片地址
-     */
     @JvmStatic
     fun createCameraOutImageUri(context: Context, config: SelectorConfig): Uri? {
         val imageUri: Uri?
@@ -40,9 +37,6 @@ object MediaStoreUtils {
         return imageUri
     }
 
-    /**
-     * 拍摄视频地址
-     */
     @JvmStatic
     fun createCameraOutVideoUri(context: Context, config: SelectorConfig): Uri? {
         val videoUri: Uri?
@@ -67,16 +61,13 @@ object MediaStoreUtils {
         return videoUri
     }
 
-    /**
-     * 创建一条图片地址uri,用于保存拍照后的照片
-     */
     @JvmStatic
     fun createImageUri(ctx: Context, cameraFileName: String?, mimeType: String?): Uri? {
         val context = ctx.applicationContext
         val imageFilePath = arrayOfNulls<Uri>(1)
         val status = Environment.getExternalStorageState()
         val contentValues = buildImageContentValues(cameraFileName, mimeType)
-        // 判断是否有SD卡,优先使用SD卡存储,当没有SD卡时使用手机存储
+        
         if (status == Environment.MEDIA_MOUNTED) {
             imageFilePath[0] = context.contentResolver
                 .insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
@@ -87,13 +78,9 @@ object MediaStoreUtils {
         return imageFilePath[0]
     }
 
-    /**
-     * 构建图片的ContentValues,用于保存拍照后的照片
-     */
     @JvmStatic
     fun buildImageContentValues(customFileName: String?, mimeType: String?): ContentValues {
         val time = ValueOf.toString(System.currentTimeMillis())
-        // ContentValues是我们希望这条记录被创建时包含的数据信息
         val values = ContentValues(3)
         if (TextUtils.isEmpty(customFileName)) {
             values.put(MediaStore.Images.Media.DISPLAY_NAME, DateUtils.getCreateFileName("IMG_"))
@@ -117,17 +104,13 @@ object MediaStoreUtils {
         return values
     }
 
-    /**
-     * 创建一条视频地址uri,用于保存录制的视频
-     */
     @JvmStatic
     fun createVideoUri(ctx: Context, cameraFileName: String?, mimeType: String?): Uri? {
         val context = ctx.applicationContext
         val imageFilePath = arrayOfNulls<Uri>(1)
         val status = Environment.getExternalStorageState()
-        // ContentValues是我们希望这条记录被创建时包含的数据信息
         val contentValues = buildVideoContentValues(cameraFileName, mimeType)
-        // 判断是否有SD卡,优先使用SD卡存储,当没有SD卡时使用手机存储
+        
         if (status == Environment.MEDIA_MOUNTED) {
             imageFilePath[0] = context.contentResolver
                 .insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, contentValues)
@@ -138,13 +121,9 @@ object MediaStoreUtils {
         return imageFilePath[0]
     }
 
-    /**
-     * 构建视频的ContentValues,用于保存拍照后的照片
-     */
     @JvmStatic
     fun buildVideoContentValues(customFileName: String?, mimeType: String?): ContentValues {
         val time = ValueOf.toString(System.currentTimeMillis())
-        // ContentValues是我们希望这条记录被创建时包含的数据信息
         val values = ContentValues(3)
         if (TextUtils.isEmpty(customFileName)) {
             values.put(MediaStore.Video.Media.DISPLAY_NAME, DateUtils.getCreateFileName("VID_"))

@@ -5,7 +5,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** The rationale before/after mapping of the system POST_NOTIFICATIONS result (#1355 §4.2). */
+
 class NotificationRequestOutcomeTest {
 
     private fun map(granted: Boolean = false, rb: Boolean, ra: Boolean) = NotificationRequestOutcome.map(granted, rb, ra)
@@ -32,7 +32,7 @@ class NotificationRequestOutcomeTest {
 
     @Test
     fun `silent result means the system route is exhausted and the app dialog takes the slot`() {
-        // Includes a permanent denial from before the upgrade, which no counter has seen.
+        
         assertEquals(NotificationRequestOutcome.ShowAppDialog, map(rb = false, ra = false))
     }
 

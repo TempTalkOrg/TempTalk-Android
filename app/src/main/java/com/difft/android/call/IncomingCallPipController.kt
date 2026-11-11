@@ -16,18 +16,18 @@ import com.difft.android.base.log.lumberjack.L
 import com.difft.android.databinding.CallActivityIncomingCallBinding
 import kotlinx.coroutines.launch
 
-/**
- * Manages Picture-in-Picture mode for [LIncomingCallActivity].
- *
- * Extracted to keep the Activity within the project's 500-line limit.
- */
+
+
+
+
+
 internal class IncomingCallPipController(
     private val activity: AppCompatActivity,
     private val binding: CallActivityIncomingCallBinding,
     private val onPipDismissed: () -> Unit,
 ) {
     private lateinit var pipParams: PictureInPictureParams.Builder
-    // Reused scratch Rect to avoid per-call allocation in getGlobalVisibleRect().
+    
     private val sourceRectScratch = Rect()
     var isInPipMode = false
         private set
@@ -57,7 +57,7 @@ internal class IncomingCallPipController(
     fun enterIfPossible(tag: String? = null): Boolean {
         L.i { "[Call] LCallActivity enterPipModeIfPossible tag:$tag" }
         if (!isPipAvailable) return false
-        // Refresh source rect at entry so the transition crops from the latest layout.
+        
         updateSourceRectHint()
         return try {
             activity.enterPictureInPictureMode(pipParams.build())
@@ -76,27 +76,27 @@ internal class IncomingCallPipController(
         }
 
         binding.windowZoomOut.isVisible = !isInPictureInPictureMode
-        // INVISIBLE, not GONE, for whichever row the answer mode shows: it keeps its layout slot and
-        // the mode chosen at onCreate survives the PiP round trip; the other row stays GONE.
+        
+        
         val controlsVisibility = if (isInPictureInPictureMode) View.INVISIBLE else View.VISIBLE
         if (binding.answerControls.visibility != View.GONE) binding.answerControls.visibility = controlsVisibility
         if (binding.answerSlider.visibility != View.GONE) binding.answerSlider.visibility = controlsVisibility
     }
 
-    /**
-     * Updates [pipParams] with the source rect hint for a smooth PIP transition.
-     * Without this hint, Android falls back to a jarring corner-zoom animation;
-     * with it, the system crops from the source view's screen-space bounds.
-     *
-     * Note: there's no video surface on this ringer screen — the content root is the
-     * natural source. If the view isn't laid out yet (rect is empty), we skip the hint
-     * and Android falls back to its default animation, which is still acceptable.
-     */
+    
+
+
+
+
+
+
+
+
     private fun updateSourceRectHint() {
         val root = binding.root
         if (!root.isLaidOut) {
-            // First-layout retry: schedule a one-shot applyParams after the view lays out.
-            // doOnLayout auto-removes the listener after firing, no leak / loop risk.
+            
+            
             root.doOnLayout { applyParams() }
             return
         }

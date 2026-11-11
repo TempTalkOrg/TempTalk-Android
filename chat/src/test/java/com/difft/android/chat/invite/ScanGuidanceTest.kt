@@ -13,7 +13,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/** The scanner's bottom block: the caller's guidance card and the declined-code banner. */
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34])
@@ -38,7 +38,7 @@ class ScanGuidanceTest {
         assertEquals("Do this. On one network.", scanNote("Do this.", "On one network."))
         assertEquals("Do this.", scanNote("Do this.", null))
         assertNull(scanNote(null, ""))
-        // Chinese sentences run together after a full-width stop.
+        
         assertEquals("在电脑上打开 Quicall。请连接同一 Wi-Fi。", scanNote("在电脑上打开 Quicall。", "请连接同一 Wi-Fi。"))
     }
 }

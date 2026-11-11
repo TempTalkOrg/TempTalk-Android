@@ -18,15 +18,15 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/**
- * [FeatureGrayManager.checkUpdateConfigFromServer] throttles on its own monotonic timestamp of the
- * last successful check, and a failed check is not stamped (#1395).
- */
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [33])
 class FeatureGrayManagerThrottleTest {
 
-    // lastUseTime stays 0, as for a user without a screen lock.
+    
     private val userManager = FakeUserManager(UserData(account = "acc", microToken = "jwt", lastUseTime = 0L))
     private var status = 0
     private val service = mockk<HttpService> {

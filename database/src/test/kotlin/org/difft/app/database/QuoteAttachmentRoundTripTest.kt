@@ -21,30 +21,15 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/**
- * D7-D9 — Integration round-trip for the quote-media data layer (③ write ↔ ④ read ↔ delete).
- *
- * Persists a [TextMessage] whose `quote.attachments` carry inline thumbnails via the REAL
- * [WCDB.insertChildrenAndBuildMessageModel] (③), then reconstructs the [QuotedAttachment] list by the same
- * FK query the REAL [MessageModel.quote] (④) uses, asserting render-relevant fields survive
- * the write→read round-trip (§7 of the design). Also guards the pre-existing delete path
- * (`:885-888`, D8) and the text-only no-regression case (D9).
- *
- * **Currently @Ignore-d** — same constraint documented on [WCDBPagedMessageAccessTest] /
- * `JobModelRoundTripTest`: WCDB (Tencent SQLite wrapper) loads native libraries via
- * `System.loadLibrary`, which are not available to host JVM unit tests. Additionally,
- * [MessageModel.quote] resolves the top-level `wcdb` global ([org.difft.app.database.wcdb]) via
- * `EntryPointAccessors.fromApplication`, requiring a fully-wired Hilt application, so the ④
- * reader cannot be redirected to the in-memory instance built here. The ④ read is therefore
- * exercised against the same in-memory instance using the identical FK query
- * (`DBAttachmentModel.quoteModelDatabaseId.eq(qId)`) — byte-for-byte the column mapping ④ uses.
- *
- * To run reliably: (a) an instrumentation test (androidTest + emulator) parameterizing the
- * helpers on a `WCDB`, or (b) a JVM-compatible SQLite shim. Both are out of scope here; the
- * test remains a compilation + expected-behavior guard for the ③↔④↔delete symmetry (§4).
- *
- * Verify (instrumentation): :database:connectedDebugAndroidTest
- */
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33])
 @Ignore("WCDB native library not loadable in JVM unit tests; quote() also binds the wcdb global via Hilt. Run via instrumentation test instead.")
@@ -83,7 +68,7 @@ class QuoteAttachmentRoundTripTest {
         flags = 0, width = 100, height = 200, path = null, status = AttachmentStatus.SUCCESS.code
     )
 
-    /** Reconstructs the QuotedAttachment list exactly as [MessageModel.quote] (④) does. */
+    
     private fun readQuoteAttachments(qId: Long): List<QuotedAttachment> =
         wcdb.attachment.getAllObjects(DBAttachmentModel.quoteModelDatabaseId.eq(qId)).map { am ->
             QuotedAttachment(
@@ -100,7 +85,7 @@ class QuoteAttachmentRoundTripTest {
             )
         }
 
-    // D7 — write (③) then read (④ FK query) round-trip + FK isolation across two quotes.
+    
     @Test
     fun `D7 persists and reads back quote attachments preserving render fields`() {
         val imgBytes = byteArrayOf(1, 2, 3, 4)
@@ -129,30 +114,30 @@ class QuoteAttachmentRoundTripTest {
 
         val read = readQuoteAttachments(qId)
         assertEquals(3, read.size)
-        // image: bytes + width/height/status preserved
+        
         assertTrue(imgBytes.contentEquals(read[0].thumbnail?.thumbnail))
         assertEquals(100, read[0].thumbnail?.width)
         assertEquals(200, read[0].thumbnail?.height)
         assertEquals(AttachmentStatus.SUCCESS.code, read[0].thumbnail?.status)
-        // audio: flags preserved, thumbnail null (no inline bytes → "null = no bytes" convention)
+        
         assertEquals(1, read[1].flags)
         assertNull(read[1].thumbnail?.thumbnail)
         assertEquals(0, read[1].thumbnail?.size)
-        // file: contentType preserved
+        
         assertEquals("application/pdf", read[2].contentType)
 
-        // FK isolation — a second quote's attachments must NOT leak into the first.
+        
         val quote2 = Quote(
             id = 2000L, author = "bob", text = "yo",
             attachments = listOf(QuotedAttachment("image/png", "x.png", imageAttachment(byteArrayOf(9)), 0))
         )
         val model2 = wcdb.insertChildrenAndBuildMessageModel(textMessage("m2", 2000L, quote2))
         wcdb.message.insertObject(model2)
-        assertEquals(3, readQuoteAttachments(qId).size) // first quote still exactly 3
+        assertEquals(3, readQuoteAttachments(qId).size) 
         assertEquals(1, readQuoteAttachments(model2.quoteDatabaseId!!).size)
     }
 
-    // D8 — delete-path closure (the pre-existing `:885-888` delete loop).
+    
     @Test
     fun `D8 deleting message removes quote and its attachment rows`() {
         val quote = Quote(
@@ -164,7 +149,7 @@ class QuoteAttachmentRoundTripTest {
         val qId = model.quoteDatabaseId!!
         assertEquals(1, readQuoteAttachments(qId).size)
 
-        // Mirror the production delete path (:885-888).
+        
         wcdb.attachment.deleteObjects(DBAttachmentModel.quoteModelDatabaseId.eq(qId))
         wcdb.quote.deleteObjects(DBQuoteModel.databaseId.eq(qId))
 
@@ -172,7 +157,7 @@ class QuoteAttachmentRoundTripTest {
         assertNull(wcdb.quote.getFirstObject(DBQuoteModel.databaseId.eq(qId)))
     }
 
-    // D9 — text-only quote (no attachments) — no regression.
+    
     @Test
     fun `D9 text-only quote persists no attachment rows`() {
         val quote = Quote(id = 4000L, author = "a", text = "just text", attachments = null)

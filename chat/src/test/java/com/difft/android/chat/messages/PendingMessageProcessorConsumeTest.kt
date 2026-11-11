@@ -13,17 +13,17 @@ import org.whispersystems.signalservice.internal.push.SignalServiceProtos.Envelo
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/**
- * Pending rows are consumed one by one by their opaque messageId (#1382): an `ios:` id from an
- * imported container and a live Android id behave alike, and a row that is not consumed survives
- * even when a sibling on the same target is.
- *
- * The fake store deletes exactly as `WcdbPendingMessageStore` does (by id plus loaded target, or
- * every row on a timestamp), so a processor that consumes by target timestamp again fails the
- * sibling cases, and one that consumes by id alone fails the re-saved-row case. The
- * WCDB predicates themselves are covered on a device by the microbenchmark module's
- * `PendingMessageStoreTest`.
- */
+
+
+
+
+
+
+
+
+
+
+
 class PendingMessageProcessorConsumeTest {
 
     private val now = 1_800_000_000_000L
@@ -34,10 +34,10 @@ class PendingMessageProcessorConsumeTest {
     private val store = FakePendingMessageStore()
     private val messaging = TestMessagingPause().open()
 
-    /** Each envelope timestamp maps to the result its processing returns. */
+    
     private val results = mutableMapOf<Long, EnvelopeProcessResult>()
 
-    /** What processing an envelope timestamp does to the store before it returns, e.g. re-saving its row. */
+    
     private val sideEffects = mutableMapOf<Long, () -> Unit>()
     private val envelopes = mockk<EnvelopToMessageProcessor>().also { processor ->
         coEvery { processor.process(any(), any(), any()) } answers {
@@ -62,7 +62,7 @@ class PendingMessageProcessorConsumeTest {
     @Test
     fun `a row whose target is present is applied and exactly that row is deleted`() = runBlocking {
         store.put(row(iosId, envelopeTs = 1L))
-        store.put(row(androidId, envelopeTs = 2L, targetTs = target + 1)) // target not stored yet
+        store.put(row(androidId, envelopeTs = 2L, targetTs = target + 1)) 
         store.targets += target
         results[1L] = success
 
@@ -109,9 +109,9 @@ class PendingMessageProcessorConsumeTest {
 
     @Test
     fun `a row the replay re-saves under the same id for another target survives the tick`() = runBlocking {
-        // A confidential sync-read envelope M covers [A, B]; both were missing, so M was saved twice
-        // and the replace left M waiting on B. B arrives, A is still missing: replaying M re-saves it
-        // for A (same messageId, new target) and handles B, returning Success.
+        
+        
+        
         val readId = "+10004:${now - 3_000L}:1"
         val targetA = target - 5_000L
         store.put(row(readId, envelopeTs = 1L, targetTs = target))
@@ -178,7 +178,7 @@ class PendingMessageProcessorConsumeTest {
 
         results[1L] = success
         results[2L] = success
-        processor().runAdmittedTick() // a new process over the same table
+        processor().runAdmittedTick() 
 
         assertEquals(emptySet(), store.ids())
     }
@@ -216,7 +216,7 @@ class PendingMessageProcessorConsumeTest {
         assertEquals(false, PendingMessageProcessor.isConsumed(EnvelopeProcessResult.Paused))
     }
 
-    /** Deletes as `WcdbPendingMessageStore` does: by messageId, or every row on a target timestamp. */
+    
     private class FakePendingMessageStore : PendingMessageStore {
         private val rows = linkedMapOf<String, PendingMessageModelNew>()
         val targets = mutableSetOf<Long>()

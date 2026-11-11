@@ -1,14 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!--
-  Module-level lint config for :selector (vendored PictureSelector fork).
 
-  Rules disabled here are stylistic / vendored-irrelevant — see #854 PR A.
-  Real-bug-suspect rules (MissingPermission, PrivateApi, etc.) remain enforced
-  via lint-baseline.xml and will be addressed in PR B.
-
-  Note: ContentDescription was fixed inline via `android:contentDescription="@null"`.
-  DefaultLocale was fixed inline via `Locale.ROOT`. Those rules remain enabled here.
--->
 <lint>
     <issue id="RtlSymmetry" severity="ignore" />
     <issue id="RtlHardcoded" severity="ignore" />
@@ -28,11 +19,7 @@
     <issue id="AppBundleLocaleChanges" severity="ignore" />
     <issue id="Aligned16KB" severity="ignore" />
 
-    <!-- VIBRATE permission declared by consumer modules (:chat, :call) and merged
-         at APK level. Vendored PictureSelector calls Vibrator at
-         PictureSelectorFragment.java:870 + PictureSelectorPreviewFragment.java:1025
-         for drag-to-reorder long-press feedback. Path-scoped to keep the rule
-         enforced for any new selector code. -->
+    
     <issue id="MissingPermission">
         <ignore path="src/main/java/com/difft/android/selector/PictureSelectorFragment.kt" />
         <ignore path="src/main/java/com/difft/android/selector/PictureSelectorPreviewFragment.kt" />

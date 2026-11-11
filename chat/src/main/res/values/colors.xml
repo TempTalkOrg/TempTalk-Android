@@ -1,10 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="core_white">#ffffff</color>
-    <color name="accent_primary">#2c6bed</color>
     <color name="icon_tint_primary">#1B1B1D</color>
-
-    <color name="reactions_item_bg_color">@color/transparent_white_70</color>
     <color name="reactions_item_selected_bg_color">@color/transparent_black_10</color>
 
     <color name="transparent_black_10">#18000000</color>
@@ -19,20 +16,36 @@
     <color name="transparent_white_70">#b2ffffff</color>
 
     <color name="red_500">#F44336</color>
-    <color name="audio_progress_bg">#1A1E2329</color>
     
-    <!-- Text selection highlight color (30% opacity of t.info) -->
+    
     <color name="selection_highlight">#4D056FFA</color>
 
-    <!-- Special colors for chat UI -->
+    
     <color name="transparent_white_0">#00FFFFFF</color>
     <color name="scan_mask_color">#33FFFFFF</color>
     <color name="progress_bg_white_25">#40FFFFFF</color>
-    <color name="live_tag_border">#CC5E6673</color>
-    <color name="live_tag_gradient_end">#FFFE7566</color>
     <color name="progress_tint_blue">#056FFA</color>
     <color name="scribble_toast_bg">#1b1b1b</color>
-    <color name="floating_bar_bg">#CC181A20</color>
-    <color name="message_time_bg">#66181A20</color>
     <color name="caution_40">#66FF8800</color>
+    
+    <color name="chat_swipe_read">#056FFA</color>
+    <color name="chat_swipe_focus">@color/bg.space</color>
+    <color name="chat_swipe_focus_ring">@android:color/transparent</color>
+
+    
+    <color name="chat_wallpaper_base">#FFFFFF</color>
+    <color name="chat_wallpaper_ink_purple">#8B76F2</color>
+    <color name="chat_wallpaper_ink_blue">#4E8EF7</color>
+    <color name="chat_wallpaper_ink_teal">#2DB39C</color>
+    <color name="chat_wallpaper_lagoon_base">#EBF2FB</color>
+    <color name="chat_wallpaper_lagoon_top_start">#EFFBFC</color>
+    <color name="chat_wallpaper_lagoon_top_end">#DFF0FC</color>
+    <color name="chat_wallpaper_lagoon_bottom_end">#EDEEFB</color>
+    <color name="chat_wallpaper_lagoon_bottom_start">#E2ECFA</color>
+    <color name="chat_wallpaper_lagoon_ink">#2F5FB8</color>
+    <color name="chat_bubble_gradient_top">#8040D4</color>
+    <color name="chat_bubble_gradient_bottom">#1E5FCC</color>
+    <color name="chat_bubble_gradient_recv">#FFFFFF</color>
+    <color name="chat_bubble_gradient_recv_veil">#E6FFFFFF</color>
+    <color name="chat_bubble_gradient_recv_shadow">#14101828</color>
 </resources>

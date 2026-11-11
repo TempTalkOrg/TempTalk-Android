@@ -1,5 +1,5 @@
-@file:Suppress("DEPRECATION") // Reads legacy secure_prefs EncryptedSharedPreferences
-                              // for R3 corruption recovery (issue #725).
+@file:Suppress("DEPRECATION") 
+                              
 
 package com.difft.android.base.storage.user
 
@@ -32,14 +32,14 @@ import kotlinx.coroutines.runBlocking
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * UserManager facade over encrypted auth and plain app-state stores (issue #725).
- * Memory publication and OrderedUserWrites enqueue occur under memLock. Each disk job awaits
- * its predecessor across suspension; limitedParallelism alone does not provide FIFO completion.
- * Legacy bodies retain best-effort writes; commitStrict reports storage failures without rollback.
- * The standalone appScope avoids accessing ApplicationHelper during eager singleton construction.
- * Recovery and clear operations share this queue to prevent late credential resurrection.
- */
+
+
+
+
+
+
+
+
 @Singleton
 class StorageBoundUserManagerImpl @Inject constructor(
     @param:SecureUserDataStore
@@ -54,7 +54,7 @@ class StorageBoundUserManagerImpl @Inject constructor(
 
     private var sessionEpoch = 0L
 
-    /** Every write goes through this setter, so the credential signal sees every change (#1382). */
+    
     @Volatile
     private var inMemorySnapshot: UserData? = null
         set(value) {
@@ -63,19 +63,19 @@ class StorageBoundUserManagerImpl @Inject constructor(
             credentialSignal.publish(value?.baseAuth, loaded = value != null)
         }
 
-    /**
-     * Lock for in-memory snapshot mutation. Held only for the duration of
-     * a copy-on-write assignment — nanoseconds, never holds during I/O.
-     * Reentrant (JVM `synchronized`) so nested calls on the same thread
-     * cannot deadlock.
-     */
+    
+
+
+
+
+
     private val memLock = Any()
 
-    /**
-     * Single-threaded view of [Dispatchers.IO] used to dispatch all disk
-     * writes. OrderedUserWrites supplies FIFO completion across suspension;
-     * dispatcher parallelism by itself does not serialize the transactions.
-     */
+    
+
+
+
+
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     private val writeDispatcher: CoroutineDispatcher = Dispatchers.IO.limitedParallelism(1)
 
@@ -96,23 +96,23 @@ class StorageBoundUserManagerImpl @Inject constructor(
         completion.await()
     }
 
-    // region UserManager surface (legacy, non-suspend)
+    
 
-    /**
-     * Snapshot-first read: returns the warmed snapshot if present, else null.
-     * Once [warmUp] has run, all reads hit memory. Pre-warm-up callers get
-     * null and should not assume any persisted data is loaded.
-     */
+    
+
+
+
+
     override fun getUserData(): UserData? = inMemorySnapshot
 
-    /**
-     * Non-suspend full-blob setter. Memory updated synchronously; disk
-     * write is async (`commit = false`) or sync (`commit = true`).
-     */
+    
+
+
+
     override fun setUserData(userData: UserData, commit: Boolean) {
-        // memLock covers BOTH the memory swap and the launch enqueue so the
-        // disk write enters writeDispatcher's queue in the same order memory
-        // updates land (see class KDoc).
+        
+        
+        
         val job: Job = synchronized(memLock) {
             val previous = inMemorySnapshot
             inMemorySnapshot = userData
@@ -121,62 +121,62 @@ class StorageBoundUserManagerImpl @Inject constructor(
             }
         }
         if (commit) {
-            // Non-suspend bridge: await the async write enqueued above. Only
-            // invoked when `commit = true` (logout / login-critical paths).
-            // See class KDoc.
+            
+            
+            
             @Suppress("BanRunBlockingOutsideTests")
             runBlocking { job.join() }
         }
     }
 
-    /**
-     * Non-suspend incremental update. Memory updated synchronously under
-     * [memLock]; disk write fires on [appScope]. `commit = true`
-     * blocks the caller until persistence completes (logout / login-critical
-     * paths); `commit = false` (default) returns immediately, matching the
-     * old SP `apply()` semantics — no main-thread stall on disk IO.
-     */
+    
+
+
+
+
+
+
     override fun update(commit: Boolean, config: UserData.() -> Unit) {
-        // memLock covers BOTH the memory update and the launch enqueue —
-        // see class KDoc. No-op writes (copied == current) skip both.
+        
+        
         val job: Job = synchronized(memLock) {
             val current = inMemorySnapshot ?: UserData()
             val copied = current.copy().apply(config)
-            if (copied == current) return  // no-op write — skip disk
+            if (copied == current) return  
             inMemorySnapshot = copied
             writes.enqueue {
                 writeAll(current, copied)
             }
         }
         if (commit) {
-            // Same rationale as setUserData(commit = true) above.
+            
             @Suppress("BanRunBlockingOutsideTests")
             runBlocking { job.join() }
         }
     }
 
-    // endregion
+    
 
-    // region StorageBoundUserManager surface (suspend)
+    
 
     override suspend fun updateAuth(block: UserAuthData.() -> UserAuthData) {
-        // memLock covers BOTH the memory update and the launch enqueue — see class KDoc
-        // for the credential-resurrection race this closes vs. concurrent clearAll.
-        // The suspend caller awaits via .join() outside the lock; an orphan write on
-        // cancellation is benign because memory was already committed atomically and
-        // disk will converge to it.
+        
+        
+        
+        
+        
         val job: Job = synchronized(memLock) {
             val previous = inMemorySnapshot ?: UserData()
             val authView = UserAuthDataMapper.fromUserData(previous)
             val updated = authView.block()
-            if (updated == authView) return  // no-op write — skip disk
+            if (updated == authView) return  
             inMemorySnapshot = UserAuthDataMapper.toUserData(updated, previous)
             writes.enqueue {
                 runCatching {
-                    // Preserve `migrationV1Completed` from the on-disk record —
-                    // UserAuthDataMapper.fromUserData() always returns false for this marker,
-                    // so a naive `updateData { newAuth }` would reset it on every auth write
-                    // and re-trigger SecureUserSpMigration on the next cold start.
+                    
+                    
+                    
+                    
                     secureUserStore.updateData { current ->
                         updated.copy(migrationV1Completed = current.migrationV1Completed)
                     }
@@ -192,7 +192,7 @@ class StorageBoundUserManagerImpl @Inject constructor(
     }
 
     override suspend fun <T> updateAppState(key: Preferences.Key<T>, value: T) {
-        // memLock covers BOTH the memory update and the launch enqueue — see updateAuth.
+        
         val job: Job = synchronized(memLock) {
             val previous = inMemorySnapshot ?: UserData()
             val updated = UserDataFieldRouter.applyAppStateChangeToSnapshot(previous, key, value)
@@ -218,19 +218,12 @@ class StorageBoundUserManagerImpl @Inject constructor(
         val appState = readAppStateOrRecover()
         val combined = UserDataFieldRouter.compose(auth, appState, fallback = null)
 
-        // memLock covers BOTH the snapshot population and the R3 write-back launch
-        // enqueue. This is the CREDENTIAL-RESURRECTION FIX: previously the launch
-        // happened outside the lock, so a concurrent clearAll could (1) acquire
-        // memLock, see snapshot already populated, (2) wipe the snapshot, (3)
-        // enqueue its wipe write — all BEFORE warmUp got a chance to enqueue
-        // its R3 recovery write. The recovery write would then land AFTER the wipe
-        // on writeDispatcher's single-threaded queue and resurrect cleared
-        // credentials. Holding the lock across the enqueue makes the ordering
-        // memory-update == queue-position, closing the race.
+        
+        
         val writeBackJob: Job? = synchronized(memLock) {
-            // Skip if a concurrent write (clearAll/update/setUserData) has already populated
-            // the snapshot — those writes already reflect the latest state and must not be
-            // overwritten by stale disk reads taken before this lock was acquired.
+            
+            
+            
             if (inMemorySnapshot != null) return@synchronized null
             inMemorySnapshot = combined
             if (!needsWriteBack) return@synchronized null
@@ -254,17 +247,17 @@ class StorageBoundUserManagerImpl @Inject constructor(
         }
     }
 
-    // endregion
+    
 
-    // region Logout islands
+    
 
     override suspend fun clearAuthOnly() {
-        // memLock covers BOTH the snapshot clear and the launch enqueue —
-        // see class KDoc + warmUp for the credential-resurrection rationale.
+        
+        
         val job: Job = synchronized(memLock) {
             val previous = inMemorySnapshot ?: UserData()
             inMemorySnapshot = previous.copy(
-                // Session credentials — CLEARED.
+                
                 baseAuth = null,
                 microToken = null,
                 passcode = null,
@@ -279,21 +272,21 @@ class StorageBoundUserManagerImpl @Inject constructor(
                 aciIdentityOldPublicKey = null,
                 aciIdentityOldPrivateKey = null,
                 aciIdentityKeyGenTime = 0L,
-                // Self-hosted proxy state — CLEARED. The share-link embeds the TURN
-                // `static-auth-secret` (when present); that's user-bound credential
-                // material and must not survive passive logout on shared devices.
+                
+                
+                
                 proxyShareLink = null,
                 proxyEnabled = false,
                 proxyProtectCallIp = false,
-                // Identity fields (`account`, `customUid`, `email`, `phoneNumber`) deliberately
-                // preserved so the re-login screen can display "logged out as <account>".
+                
+                
             )
             writes.enqueue {
                 runCatching {
                     secureUserStore.updateData { current ->
-                        // UserAuthData uses non-nullable Strings (proto wire format requires this);
-                        // empty string is the "absent" sentinel — converted back to `null` by
-                        // UserAuthDataMapper.toUserData when reassembling the UserData view.
+                        
+                        
+                        
                         current.copy(
                             baseAuth = "",
                             microToken = "",
@@ -306,8 +299,8 @@ class StorageBoundUserManagerImpl @Inject constructor(
                             aciIdentityOldPublicKey = "",
                             aciIdentityOldPrivateKey = "",
                             aciIdentityKeyGenTime = 0L,
-                            // Self-hosted proxy state — cleared on passive logout for
-                            // the same reason: the share-link embeds a TURN secret.
+                            
+                            
                             proxyShareLink = "",
                             proxyEnabled = false,
                             proxyProtectCallIp = false,
@@ -319,27 +312,27 @@ class StorageBoundUserManagerImpl @Inject constructor(
             }
         }
 
-        // Logout must guarantee on-disk wipe before returning — await the job.
+        
         job.join()
 
         L.i { "[Logout][Island1A] clearAuthOnly complete" }
     }
 
     override suspend fun clearAll() {
-        // memLock covers BOTH the snapshot wipe and the launch enqueue —
-        // see class KDoc + warmUp for the credential-resurrection rationale.
+        
+        
         val job: Job = synchronized(memLock) {
             inMemorySnapshot = UserData()
-            // Both stores cleared in parallel inside a single launch.
-            // Note: the inner launches inherit writeDispatcher (single-threaded),
-            // so they execute sequentially on the dispatcher thread instead of
-            // in true parallel. Acceptable overhead for the ordering guarantee.
+            
+            
+            
+            
             writes.enqueue {
                 coroutineScope {
                     launch {
                         runCatching {
-                            // Stamp marker=true so the next cold start treats this empty payload as
-                            // already-migrated and skips SecureUserSpMigration.
+                            
+                            
                             secureUserStore.updateData { UserAuthData(migrationV1Completed = true) }
                         }.onFailure {
                             L.e { "[Logout][Island1B] secureUser clear failed: ${it.stackTraceToString()}" }
@@ -348,8 +341,8 @@ class StorageBoundUserManagerImpl @Inject constructor(
                     launch {
                         runCatching {
                             appStateStore.edit { mut ->
-                                // Preserve MIGRATION_VERSION across the clear — avoids a no-op
-                                // re-run of AppStateMigrations on next cold start.
+                                
+                                
                                 val version = mut[AppStateKeys.MIGRATION_VERSION]
                                 mut.clear()
                                 if (version != null) mut[AppStateKeys.MIGRATION_VERSION] = version
@@ -362,27 +355,27 @@ class StorageBoundUserManagerImpl @Inject constructor(
             }
         }
 
-        // Logout must guarantee on-disk wipe before returning.
+        
         job.join()
 
         L.i { "[Logout][Island1B] clearAll complete" }
     }
 
-    // endregion
+    
 
-    // region Internal write/read helpers
+    
 
-    /**
-     * Persist [updated] across both DataStores. Called from a coroutine
-     * launched on [appScope]; memory snapshot is already set by
-     * the caller before this runs.
-     */
+    
+
+
+
+
     private suspend fun writeAll(previous: UserData?, updated: UserData) {
         val diff = UserDataFieldRouter.diff(previous, updated)
 
         diff.newAuth?.let { newAuth ->
-            // Same marker-preservation rationale as updateAuth() above — the diff payload
-            // always carries `migrationV1Completed = false` from UserAuthDataMapper.fromUserData().
+            
+            
             runCatching {
                 secureUserStore.updateData { current ->
                     newAuth.copy(migrationV1Completed = current.migrationV1Completed)
@@ -409,11 +402,11 @@ class StorageBoundUserManagerImpl @Inject constructor(
         }
     }
 
-    /**
-     * One-shot read of the legacy `secure_prefs` EncryptedSharedPreferences blob.
-     * Used by the R3 corruption-recovery path when DataStore reads fail.
-     * Returns null on any failure (fresh install, Keystore reset, decrypt fail).
-     */
+    
+
+
+
+
     private fun readLegacyUserDataBlob(): UserData? {
         return try {
             val masterKey = MasterKey.Builder(context)
@@ -435,11 +428,11 @@ class StorageBoundUserManagerImpl @Inject constructor(
         }
     }
 
-    /**
-     * R3 recovery for `secure_user`: on [CorruptionException], resets the DataStore,
-     * falls back to legacy SP. Returns the recovered [UserAuthData] AND a flag
-     * indicating whether the caller should persist it back under [memLock].
-     */
+    
+
+
+
+
     private suspend fun readAuthDataOrRecover(): Pair<UserAuthData, Boolean> {
         return try {
             secureUserStore.data.first() to false
@@ -448,8 +441,8 @@ class StorageBoundUserManagerImpl @Inject constructor(
                 "[Storage][UserManager][R3] secure_user CorruptionException: " +
                     e.stackTraceToString()
             }
-            // Stamp migrationV1Completed=true so the next cold start does NOT treat this empty
-            // value as "needs migration" and re-project from the retained legacy SP.
+            
+            
             runCatching {
                 secureUserStore.updateData { UserAuthData(migrationV1Completed = true) }
             }
@@ -474,7 +467,7 @@ class StorageBoundUserManagerImpl @Inject constructor(
         }
     }
 
-    /** R3 recovery for app_state — corruption here is non-fatal; UI defaults apply. */
+    
     private suspend fun readAppStateOrRecover(): Preferences {
         return try {
             appStateStore.data.first()
@@ -494,5 +487,5 @@ class StorageBoundUserManagerImpl @Inject constructor(
         }
     }
 
-    // endregion
+    
 }

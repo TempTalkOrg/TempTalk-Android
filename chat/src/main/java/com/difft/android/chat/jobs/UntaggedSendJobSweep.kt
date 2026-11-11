@@ -13,16 +13,16 @@ import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Fails, once, every stored send job that carries no creator login (#1382 A04): jobs stored by a
- * version that did not tag them. Their login cannot be told apart, so tagging them now could send
- * an earlier login's job under the current one; failing them marks their messages failed, and the
- * user resends by hand. Messages still unsent at the upgrade therefore show as failed.
- *
- * Runs before the job manager dispatches anything. The completion flag is written only after the
- * sweep, so a sweep cut short reruns at the next start; failing an already failed job is a no-op.
- * The send-time check ([SendLogin]) refuses an untagged job on its own, whether or not this ran.
- */
+
+
+
+
+
+
+
+
+
+
 @Singleton
 class UntaggedSendJobSweep @Inject constructor(
     @param:AppStateDataStore private val appState: DataStore<Preferences>,

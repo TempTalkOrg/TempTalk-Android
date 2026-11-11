@@ -15,6 +15,6 @@ object CustomIntentKey {
 
     const val EXTRA_ASPECT_RATIO = "aspectRatio"
 
-    /** uCrop output-path key. */
+    
     const val EXTRA_OUTPUT_URI = "com.yalantis.ucrop.OutputUri"
 }

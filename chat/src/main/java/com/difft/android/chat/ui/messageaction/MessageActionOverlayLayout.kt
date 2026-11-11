@@ -10,34 +10,35 @@ import android.widget.FrameLayout
 import androidx.recyclerview.widget.RecyclerView
 import kotlin.math.hypot
 
-/**
- * Z of the message action menu inside [MessageActionOverlayLayout]: one step above the selection
- * handles, so the menu draws above the highlight and handles (#1294).
- *
- * Draw order is controlled by Z, not by child index: software `dispatchDraw` sorts children by Z,
- * and the hardware pipeline reorders RenderNodes by Z. Reordering children or `bringToFront()`
- * does not change it.
- */
-internal const val MENU_TRANSLATION_Z_PX = SELECTION_HANDLE_ELEVATION_PX + 1f
 
-/**
- * Full-window overlay hosting the message action menu (child 0) and the text-selection
- * highlight/handles added by `TextSelectionManager`.
- *
- * Touch routing is decided once per ACTION_DOWN (#1294):
- * - DOWN inside the laid-out [menuBounds] of a visible menu goes to the menu before any child, so a
- *   selection handle under the menu cannot steal it;
- * - otherwise the children are asked (handles); a child-consumed DOWN (normally a handle) stops a running
- *   list fling;
- * - otherwise, with a [recyclerView], the gesture scrolls the list: copies of every event go to
- *   `onTouchEvent` only (the DOWN also through `onInterceptTouchEvent`, so item-touch listeners and
- *   a running fling see a fresh DOWN), never to `dispatchTouchEvent`, so no item click, link or
- *   long-press fires. A tap (movement within touch slop, no list scroll) dismisses on ACTION_UP;
- * - without a [recyclerView], the popup is dismissed on ACTION_UP.
- *
- * The menu ComposeView is also the highest-Z child on the child route, so it is offered every DOWN
- * first there; it only lets DOWNs through because its outer full-size Box has no pointer input.
- */
+
+
+
+
+
+
+
+internal const val MENU_TRANSLATION_Z_PX = SELECTION_HANDLE_ELEVATION_PX + 1f
+private const val MENU_FADE_IN_MS = 150L
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 @SuppressLint("ViewConstructor", "ClickableViewAccessibility")
 internal class MessageActionOverlayLayout(
     context: Context,
@@ -47,20 +48,20 @@ internal class MessageActionOverlayLayout(
 
     private enum class Route { MENU, CHILD, LIST, DISMISS_ON_UP }
 
-    /** Laid-out menu bounds in overlay coordinates; null until placed and during a re-measure. */
+    
     var menuBounds: Rect? = null
 
-    /** The list scrolled by touches outside the menu and handles; null dismisses on any tap instead. */
+    
     var recyclerView: RecyclerView? = null
 
-    /** Called after the UP or CANCEL that ends any routed gesture. */
+    
     var onGestureEnd: (() -> Unit)? = null
 
-    /** True between a routed DOWN and its UP/CANCEL. */
+    
     var isGestureActive = false
         private set
 
-    // Swallow the continuation of the long-press that opened the popup.
+    
     private var waitingForNewTouchSequence = true
     private var route = Route.DISMISS_ON_UP
 
@@ -83,7 +84,7 @@ internal class MessageActionOverlayLayout(
     }
 
     init {
-        // One gesture goes to the child that took the DOWN, so a second finger cannot start a second handle drag (#1294).
+        
         isMotionEventSplittingEnabled = false
         addView(menuView, LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
         menuView.translationZ = MENU_TRANSLATION_Z_PX
@@ -92,12 +93,20 @@ internal class MessageActionOverlayLayout(
     val isMenuVisible: Boolean
         get() = menuView.visibility == View.VISIBLE
 
-    /** INVISIBLE keeps the composition; a hidden menu neither draws nor receives touches. */
+    
     fun setMenuVisible(visible: Boolean) {
+        if (visible && menuView.visibility != View.VISIBLE) {
+            
+            menuView.alpha = 0f
+            menuView.animate().alpha(1f).setDuration(MENU_FADE_IN_MS).start()
+        } else if (!visible) {
+            menuView.animate().cancel()
+            menuView.alpha = 1f
+        }
         menuView.visibility = if (visible) View.VISIBLE else View.INVISIBLE
     }
 
-    /** Hides the menu, highlight and handles at once, ahead of a deferred dismiss. */
+    
     fun hideAllChildren() {
         for (i in 0 until childCount) getChildAt(i).visibility = View.INVISIBLE
     }
@@ -133,12 +142,12 @@ internal class MessageActionOverlayLayout(
     private fun routeAndDeliverDown(ev: MotionEvent): Route {
         val bounds = menuBounds
         if (isMenuVisible && bounds != null && bounds.contains(ev.x.toInt(), ev.y.toInt())) {
-            // The menu owns the whole sequence, even where Compose does not consume (gaps, padding).
+            
             menuView.dispatchTouchEvent(ev)
             return Route.MENU
         }
         if (super.dispatchTouchEvent(ev)) {
-            // A handle drag during a fling would chase moving text.
+            
             recyclerView?.stopScroll()
             return Route.CHILD
         }
@@ -153,7 +162,7 @@ internal class MessageActionOverlayLayout(
         downY = ev.y
         movedBeyondSlop = false
         forwardToList = rv.isAttachedToWindow && isInsideList(rv, ev)
-        // A tap that only stops a running fling is not a dismiss tap.
+        
         listScrolled = forwardToList && rv.scrollState != RecyclerView.SCROLL_STATE_IDLE
         if (!forwardToList) return
         getLocationInWindow(tmpLocation)
@@ -167,9 +176,9 @@ internal class MessageActionOverlayLayout(
         forward(rv, ev, isDown = true)
     }
 
-    /** DOWN inside the list's visible window rect; the toolbar or input bar area forwards nothing. */
+    
     private fun isInsideList(rv: RecyclerView, ev: MotionEvent): Boolean {
-        if (!rv.getGlobalVisibleRect(tmpRect)) return false
+        if (!ChatContentBand.onScreen(rv, tmpRect)) return false
         getLocationInWindow(tmpLocation)
         return tmpRect.contains((tmpLocation[0] + ev.x).toInt(), (tmpLocation[1] + ev.y).toInt())
     }
@@ -183,7 +192,7 @@ internal class MessageActionOverlayLayout(
 
     private fun trackTap(ev: MotionEvent) {
         if (movedBeyondSlop) return
-        // The first finger lifting while another stays down ends the tap; the later UP must not dismiss.
+        
         if (ev.actionMasked == MotionEvent.ACTION_POINTER_UP && ev.getPointerId(ev.actionIndex) == downPointerId) {
             movedBeyondSlop = true
             return

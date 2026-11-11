@@ -8,14 +8,15 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import com.difft.android.base.ui.compose.floatingMenuEntrance
+import com.difft.android.base.ui.compose.floatingSurface
+import com.difft.android.base.ui.theme.DifftRadius
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -26,6 +27,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalDensity
@@ -40,20 +42,20 @@ import com.difft.android.base.ui.theme.DifftThemePreview
 import com.difft.android.base.utils.dp as dpToPx
 import com.difft.android.chat.R
 
-/**
- * Text selection menu popup
- * Shows Copy, Forward, Translate, Select All options when text is selected
- * Adds ComposeView to Activity's content view for proper lifecycle support
- */
+
+
+
+
+
 class TextSelectionMenuPopup(
     private val activity: FragmentActivity,
-    /** False on a build that ships no translate backend; the Translate item is then omitted. */
+    
     private val translateSupported: Boolean,
 ) {
     
-    /**
-     * Actions available for text selection
-     */
+    
+
+
     enum class Action {
         COPY,
         FORWARD,
@@ -61,9 +63,9 @@ class TextSelectionMenuPopup(
         SELECT_ALL
     }
     
-    /**
-     * Callbacks for menu interactions
-     */
+    
+
+
     interface Callbacks {
         fun onCopy(selectedText: String)
         fun onForward(selectedText: String)
@@ -80,15 +82,15 @@ class TextSelectionMenuPopup(
     private var lastTouchX: Int = 0
     private var lastTouchY: Int = 0
     
-    /**
-     * Show the text selection menu
-     * 
-     * @param anchorView The view to anchor the popup to
-     * @param selectedText The currently selected text
-     * @param touchX X position to show the menu at (screen coordinates)
-     * @param touchY Y position to show the menu at (screen coordinates)
-     * @param callbacks Callbacks for user interactions
-     */
+    
+
+
+
+
+
+
+
+
     fun show(
         anchorView: View,
         selectedText: String,
@@ -113,7 +115,7 @@ class TextSelectionMenuPopup(
                     var offsetX by remember { mutableIntStateOf(0) }
                     var offsetY by remember { mutableIntStateOf(0) }
                     
-                    // Transparent overlay that doesn't block touches (for text selection to continue)
+                    
                     Box(
                         modifier = Modifier.fillMaxSize()
                     ) {
@@ -131,6 +133,7 @@ class TextSelectionMenuPopup(
                                     offsetX = x
                                     offsetY = y
                                 }
+                                .floatingMenuEntrance(TransformOrigin.Center)
                         ) {
                             TextSelectionMenuContent(
                                 translateSupported = translateSupported,
@@ -161,7 +164,7 @@ class TextSelectionMenuPopup(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
-            // Don't intercept touches - allow text selection to continue
+            
             isClickable = false
             isFocusable = false
             addView(newComposeView)
@@ -173,16 +176,16 @@ class TextSelectionMenuPopup(
         this.containerView = container
     }
     
-    /**
-     * Update the selected text (when selection changes)
-     */
+    
+
+
     fun updateSelectedText(selectedText: String) {
         this.currentSelectedText = selectedText
     }
     
-    /**
-     * Dismiss the popup
-     */
+    
+
+
     fun dismiss() {
         containerView?.let { container ->
             val rootView = activity.findViewById<ViewGroup>(android.R.id.content)
@@ -198,9 +201,9 @@ class TextSelectionMenuPopup(
         cleanup()
     }
     
-    /**
-     * Check if popup is currently showing
-     */
+    
+
+
     val isShowing: Boolean
         get() = _isShowing
     
@@ -213,23 +216,23 @@ class TextSelectionMenuPopup(
         val screenWidth = com.difft.android.base.utils.WindowSizeClassUtil.getWindowWidthPx(activity)
         val screenHeight = com.difft.android.base.utils.WindowSizeClassUtil.getWindowHeightPx(activity)
         val padding = 16.dpToPx
-        val verticalOffset = 20.dpToPx  // Space between selection and menu
+        val verticalOffset = 20.dpToPx  
         
-        // Horizontal: center on touch point
+        
         var x = touchX - popupWidth / 2
         val minX = padding
         val maxX = (screenWidth - popupWidth - padding).coerceAtLeast(minX)
         x = x.coerceIn(minX, maxX)
         
-        // Vertical: above touch point
+        
         var y = touchY - popupHeight - verticalOffset
         
-        // If not enough space above, show below
+        
         if (y < padding) {
             y = touchY + verticalOffset
         }
         
-        // Ensure Y is within screen bounds
+        
         val minY = padding
         val maxY = (screenHeight - popupHeight - padding).coerceAtLeast(minY)
         y = y.coerceIn(minY, maxY)
@@ -243,9 +246,9 @@ class TextSelectionMenuPopup(
     }
 }
 
-/**
- * Content composable for text selection menu
- */
+
+
+
 @Composable
 fun TextSelectionMenuContent(
     translateSupported: Boolean,
@@ -255,16 +258,7 @@ fun TextSelectionMenuContent(
     onSelectAll: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Card(
-        modifier = modifier,
-        shape = DifftTheme.radius.largeShape,
-        colors = CardDefaults.cardColors(
-            containerColor = MessageActionMenuColors.panel
-        ),
-        elevation = CardDefaults.elevatedCardElevation(
-            defaultElevation = 4.dp
-        )
-    ) {
+    Box(modifier = modifier.floatingSurface(SELECTION_MENU_CORNER)) {
         Row(
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -296,6 +290,8 @@ fun TextSelectionMenuContent(
     }
 }
 
+private val SELECTION_MENU_CORNER = DifftRadius.floating
+
 @Composable
 private fun SelectionActionButton(
     iconRes: Int,
@@ -325,7 +321,7 @@ private fun SelectionActionButton(
     }
 }
 
-// ============== Previews ==============
+
 
 @Preview(showBackground = true)
 @Composable

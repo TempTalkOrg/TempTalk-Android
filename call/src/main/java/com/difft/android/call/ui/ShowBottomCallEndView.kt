@@ -61,8 +61,8 @@ fun ShowBottomCallEndView(viewModel: LCallViewModel, onDismiss: () -> Unit, onCl
         }
     }
 
-    // Beside the side rail (#1451) or on the tabletop dock an open menu leaves the chrome shown,
-    // so the bar is hidden only in bar mode.
+    
+    
     val onRail = rememberKeepsChromeUnderPanels()
     LaunchedEffect(showBottomCallEndViewEnable) {
         if (showBottomCallEndViewEnable) {
@@ -106,8 +106,8 @@ fun ShowBottomCallEndView(viewModel: LCallViewModel, onDismiss: () -> Unit, onCl
 
 @Composable
 fun HorizontalScreenButtonView(onClickItem: (BottomCallEndAction) -> Unit, onCancelClick: () -> Unit = { onClickItem(BottomCallEndAction.CANCEL) }) {
-    // Buttons share the sheet width by ratio (238 : 238 : 212 in the design) so the row always
-    // fits inside the 640dp sheet cap instead of overflowing with fixed widths.
+    
+    
     Row(
         modifier = Modifier
             .fillMaxWidth()

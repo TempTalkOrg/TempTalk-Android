@@ -35,11 +35,11 @@ import util.AppForegroundObserver
 import java.time.Duration
 import java.time.LocalTime
 
-/**
- * [MessageServiceManager.scheduleAlarmCheck] with [NightAlarmClockWake]: only a Xiaomi device inside
- * the night window arms the keep-alive chain as an alarm clock; every other case keeps the existing
- * exact / inexact alarm.
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [31])
 class NightAlarmClockWakeTest {
@@ -67,7 +67,7 @@ class NightAlarmClockWakeTest {
         every { userManager.getUserData() } returns userData
         val monitor = mockk<WebSocketHealthMonitor>(relaxed = true)
         every { monitor.monitorWakeTicks } returns MutableSharedFlow()
-        manager = MessageServiceManager(context, userManager, monitor, mockk(relaxed = true), mockk(relaxed = true))
+        manager = MessageServiceManager(context, userManager, monitor, mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true))
     }
 
     @After
@@ -170,7 +170,7 @@ class NightAlarmClockWakeTest {
         every { userManager.getUserData() } returns userData
         val monitor = mockk<WebSocketHealthMonitor>(relaxed = true)
         every { monitor.monitorWakeTicks } returns MutableSharedFlow()
-        return MessageServiceManager(spied, userManager, monitor, mockk(relaxed = true), mockk(relaxed = true))
+        return MessageServiceManager(spied, userManager, monitor, mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true))
     }
 
     @Test

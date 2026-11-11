@@ -29,7 +29,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** The two "still notify" sub-pages and the group picker: immediate writes with rollback, search and selection. */
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class StillNotifyViewModelsTest {
 
@@ -43,7 +43,7 @@ class StillNotifyViewModelsTest {
         Dispatchers.resetMain()
     }
 
-    // ---------------------------------------------------------------- other groups (focus options)
+    
 
     private val effective = MutableStateFlow(EffectiveFocus(featureEnabled = true, othersAllowMentionMe = true))
     private val repository: GroupFocusRepository = mockk()
@@ -71,7 +71,7 @@ class StillNotifyViewModelsTest {
         vm.dispatch(FocusOthersNotifyContract.Intent.Toggle(StillNotifyItem.MENTION_ALL, true))
         assertTrue(vm.state.value.items.mentionAll)
 
-        // The repository applies the snapshot before the write returns.
+        
         effective.value = effective.value.copy(othersAllowMentionAll = true)
         gate.complete(FocusResult.Success(FocusSnapshot()))
         assertTrue(vm.state.value.items.mentionAll)
@@ -90,7 +90,7 @@ class StillNotifyViewModelsTest {
         assertFalse(vm.state.value.items.groupCall)
     }
 
-    // ---------------------------------------------------------------- muted group exceptions
+    
 
     @Test
     fun `mute exceptions default and follow the stored options`() = runTest {
@@ -111,15 +111,15 @@ class StillNotifyViewModelsTest {
             assertEquals(MuteExceptionsContract.Effect.Write(StillNotifyItem.MENTION_ALL, true), awaitItem())
             assertTrue(vm.state.value.items.mentionAll)
 
-            // A second tap on the same item is ignored while its write is in flight.
+            
             vm.dispatch(MuteExceptionsContract.Intent.Toggle(StillNotifyItem.MENTION_ALL, false))
             expectNoEvents()
 
-            // Write failed: the stored value is unchanged, so the switch returns to it.
+            
             vm.dispatch(MuteExceptionsContract.Intent.WriteFinished(StillNotifyItem.MENTION_ALL))
             assertFalse(vm.state.value.items.mentionAll)
 
-            // Write succeeded: the stored value arrives before the write is reported finished.
+            
             vm.dispatch(MuteExceptionsContract.Intent.Toggle(StillNotifyItem.GROUP_CALL, true))
             assertEquals(MuteExceptionsContract.Effect.Write(StillNotifyItem.GROUP_CALL, true), awaitItem())
             vm.dispatch(MuteExceptionsContract.Intent.ConversationChanged(MuteOptions(true, false, true)))
@@ -128,7 +128,7 @@ class StillNotifyViewModelsTest {
         }
     }
 
-    // ---------------------------------------------------------------- picker
+    
 
     private val directory: FocusGroupDirectory = mockk()
 
@@ -150,7 +150,7 @@ class StillNotifyViewModelsTest {
         assertEquals(listOf("2"), vm.state.value.groups.map { it.gid })
 
         vm.effect.test {
-            // Done without a selection does nothing.
+            
             vm.dispatch(FocusGroupPickerContract.Intent.Done)
             expectNoEvents()
 

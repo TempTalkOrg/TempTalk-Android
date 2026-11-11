@@ -38,10 +38,10 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 
-/**
- * The archive-time update shows no wait itself (design §3.10 W3): it exposes [ChatSettingViewModel.archiveBusy]
- * for the page's wait and one error message per failure, and runs one update at a time.
- */
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])

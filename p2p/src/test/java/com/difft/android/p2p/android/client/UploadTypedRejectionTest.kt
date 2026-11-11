@@ -5,7 +5,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
-/** Which non-200 upload answers are the receiver's own refusal, a definite failure for the sender (#1382 A06). */
+
 class UploadTypedRejectionTest {
 
     @Test

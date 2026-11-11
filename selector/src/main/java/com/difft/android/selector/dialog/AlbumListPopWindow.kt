@@ -48,9 +48,9 @@ class AlbumListPopWindow(context: Context, config: SelectorConfig) : PopupWindow
         mAdapter = PictureAlbumAdapter(selectorConfig)
         mRecyclerView.adapter = mAdapter
         windMask.setOnClickListener { dismiss() }
-        // rootView click-to-dismiss was a pre-M vestige (guarded by SDK_INT < M,
-        // unreachable at minSdk 26). Dismiss is handled by setOutsideTouchable(true)
-        // + the windMask click listener above.
+        
+        
+        
     }
 
     @SuppressLint("NotifyDataSetChanged")
@@ -83,8 +83,8 @@ class AlbumListPopWindow(context: Context, config: SelectorConfig) : PopupWindow
         if (getAlbumList().isEmpty()) {
             return
         }
-        // isN() (SDK_INT == N/24) is always false at minSdk 26 — the showAtLocation
-        // workaround branch was dead; always use the standard showAsDropDown.
+        
+        
         super.showAsDropDown(anchor)
         isDismiss = false
         windowStatusListener?.onShowPopupWindow()

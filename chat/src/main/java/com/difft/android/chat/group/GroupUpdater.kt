@@ -37,26 +37,11 @@ import com.difft.android.websocket.api.messages.SignalServiceDataClass
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Updates group information and member details upon receiving a group message from the signal server.
- * The update process involves saving the updated data to the database.
- *
- * Note: The following notification types do not require checking the group version value:
- * - DTGroupNotifyTypeCallEndFeedback: Indicates a call end feedback notification.
- * - DTGroupNotifyTypeGroupCycleReminder: Indicates a group cycle reminder notification.
- * - DTGroupNotifyTypeMeetingReminder: Indicates a meeting reminder notification.
- * - DTGroupNotifyDetailTypeGroupInactive: Indicates the group is inactive and will be automatically destroyed.
- * - DTGroupNotifyDetailTypeArchive: Indicates the group will be automatically archived and synced to the mobile client.
- *
- * For other notification types, it is necessary to check the group version.
- * If the group version is continuously increasing without interruption (e.g., 1, 2, 3, 4),
- * handle the data accordingly. If there is a discrepancy in the version sequence,
- * perform a network request to update the group information.
- *
- * The update is based on the specific group notification and group detail notification types received.
- */
 
-// All wcdb calls in this class run on Dispatchers.IO.
+
+
+
+
 @Suppress("BlockingWcdbInSuspend")
 @Singleton
 class GroupUpdater @Inject constructor(
@@ -78,7 +63,7 @@ class GroupUpdater @Inject constructor(
         val message: TTNotifyMessage,
         val wrapperData: SignalServiceDataClass,
         val groupVersion: Int,
-        // Retained from the envelope's receive ticket; closed once the batch is handled (#1382).
+        
         val held: MessagingTicket?,
     )
 
@@ -94,17 +79,17 @@ class GroupUpdater @Inject constructor(
     @OptIn(ExperimentalCoroutinesApi::class)
     private suspend fun processNotifyMessages() {
         while (true) {
-            delay(3000) // Wait for 3 seconds before processing the next batch
+            delay(3000)
 
-            // Fail-soft: the cipher key is unavailable (one-way flag that never clears in-process),
-            // so no batch can ever be processed again this process. Log once and BREAK to stop the
-            // 3s poll entirely (rather than re-logging every 3s forever). Incoming notifies are
-            // dropped by the producer guard in handleGroupNotifyMessage so nothing strands in the
-            // buffered channel; group state is re-fetched from the server on the next cold start.
+            
+            
+            
+            
+            
             if (wcdb.isDbInaccessible) {
                 L.w { "[GroupUpdater] DB inaccessible, stopping notify poll for this process" }
-                // Nothing will process the queued items; release their tickets so a migration pause
-                // does not wait for them.
+                
+                
                 while (true) {
                     val dropped = notifyMessageChannel.tryReceive().getOrNull() ?: break
                     dropped.held?.close()
@@ -113,7 +98,6 @@ class GroupUpdater @Inject constructor(
             }
 
             val batch = mutableListOf<PendingGroupMessage>()
-            // Drain the channel and collect messages into the batch
             while (!notifyMessageChannel.isEmpty) {
                 val message = notifyMessageChannel.receive()
                 batch.add(message)
@@ -130,14 +114,11 @@ class GroupUpdater @Inject constructor(
     }
 
     private suspend fun processBatch(batch: List<PendingGroupMessage>) {
-        // Group messages by group ID
         val messagesByGroup = batch.groupBy { it.wrapperData.conversation.id }
 
         messagesByGroup.forEach { (groupId, messages) ->
-            // Sort messages by group version
             val sortedMessages = messages.sortedBy { it.groupVersion }
 
-            // Get current version from cache or database
             var currentVersion = groupVersionCache[groupId] ?: -1
             if (currentVersion == -1) {
                 val currentGroup = wcdb.group.getFirstObject(DBGroupModel.gid.eq(groupId))
@@ -145,30 +126,25 @@ class GroupUpdater @Inject constructor(
                 groupVersionCache[groupId] = currentVersion
             }
 
-            // Process messages in order
             for (pendingMessage in sortedMessages) {
                 try {
                     val messageVersion = pendingMessage.groupVersion
 
-                    // Skip messages with older versions
                     if (messageVersion < currentVersion) {
                         L.i { "[GroupUpdater] Skipping older/equal version message for group $groupId. Current: $currentVersion, Message: $messageVersion" }
                         continue
                     }
 
-                    // Check if version is consecutive
                     if (messageVersion == currentVersion + 1) {
                         L.i { "[GroupUpdater] Version has grown by 1 for group $groupId. Current: $currentVersion, Message: $messageVersion" }
                         processGroupNotifyMessage(pendingMessage.message, pendingMessage.wrapperData, pendingMessage.held)
-                        // Update version only after successful processing
+                        
                         currentVersion = messageVersion
                         groupVersionCache[groupId] = currentVersion
                     } else {
-                        // Version gap detected, force update and recheck
                         L.i { "[GroupUpdater] Version gap detected for group $groupId. Current: $currentVersion, Message: $messageVersion" }
                         processGroupNotifyMessage(pendingMessage.message, pendingMessage.wrapperData, pendingMessage.held)
                         forceUpdateGroup(groupId)
-                        // Recheck version after force update
                         val updatedGroup = wcdb.group.getFirstObject(DBGroupModel.gid.eq(groupId))
                         val newCurrentVersion = updatedGroup?.version ?: -1
                         currentVersion = newCurrentVersion
@@ -182,20 +158,24 @@ class GroupUpdater @Inject constructor(
         }
     }
 
-    /**
-     * Queues the notify for the batched consumer, handing it a ticket retained from [admission] so
-     * the migration pause waits until the group change and its notify message are stored (#1382).
-     */
+    
+
+
+
     suspend fun handleGroupNotifyMessage(
         message: TTNotifyMessage,
         wrapperData: SignalServiceDataClass,
         admission: MessagingTicket,
     ) {
-        // Fail-soft: the consumer loop breaks once DB is inaccessible, so drop the enqueue to avoid
-        // filling the buffered channel with messages nothing will ever drain (back-pressure guard).
+        
+        
         if (wcdb.isDbInaccessible) {
             L.w { "[GroupUpdater] skip enqueue, DB inaccessible" }
             return
+        }
+        val type = message.data?.groupNotifyDetailedType ?: -1
+        if (shouldClearGroupExpiryOnNotify(type)) {
+            groupUtil.clearExpiry(wrapperData.conversation.id, "notify:$type")
         }
         val groupVersion = message.data?.groupVersion ?: 0
         val held = admission.retain("group-notify")
@@ -231,9 +211,7 @@ class GroupUpdater @Inject constructor(
 
         when (groupDetailType) {
             GroupNotifyDetailType.CreateGroup.value -> {
-                // Create notification content first
                 notifyContent = context.getString(R.string.group_create_a_group, operatorName)
-                // Then create group in parallel
                 val createHeld = held?.retain("group-create")
                 appScope.launch {
                     if (wcdb.isDbInaccessible) {
@@ -304,20 +282,16 @@ class GroupUpdater @Inject constructor(
             }
 
             GroupNotifyDetailType.LeaveGroup.value -> {
-                // Server broadcasts LeaveGroup to every remaining member, not just the
-                // departing user — confirmed by the "X left the group" message rendered
-                // below for non-self operators. Only disable the group locally when it
-                // is actually me leaving; otherwise just refresh members so the leaver
-                // is removed from the local list (matches the KickoutGroup pattern).
+                
                 val members = message.data?.members
                 if (members == null) {
-                    // Unexpected payload — cannot tell self-leave from peer-leave from
-                    // the notify alone. Trigger a single fetch to let the server's
-                    // status decide: if I am out, fetchAndSaveSingleGroupInfo's
-                    // invalid-status branch routes through cleanupGroupLocally
-                    // eagerly (no waiting for the next chat-entry). If the fetch
-                    // itself fails (weak network) we stay conservative and the next
-                    // chat-entry forceUpdate still acts as fallback.
+                    
+                    
+                    
+                    
+                    
+                    
+                    
                     L.w { "[GroupUpdater] LeaveGroup notify gid=$groupID has null members — falling back to fetch" }
                     groupUtil.fetchAndSaveSingleGroupInfo(groupID, true)
                 } else {
@@ -469,16 +443,15 @@ class GroupUpdater @Inject constructor(
             }
         }
 
-        // Create and save notify message if needed.
-        // Fail-closed `display` gate (aligned with iOS BOOL): persist visible
-        // system message ONLY when server explicitly sends display=1. Anything
-        // else — display=0, null, or missing field — drops silently. Note:
-        // Gson uses UnsafeAllocator and bypasses Kotlin constructors, so the
-        // `Int? = 0` default in TTNotifyMessage is never applied; missing JSON
-        // decodes to null. The `!= 1` check intentionally treats null as
-        // "do not display", matching iOS missing-key → boolValue=NO behavior.
-        // Data updates above (group name/avatar/members/...) already happened
-        // regardless of display.
+        
+        
+        
+        
+        
+        
+        
+        
+        
         if (notifyContent.isNullOrEmpty()) {
             return
         }
@@ -534,11 +507,11 @@ class GroupUpdater @Inject constructor(
         if (group != null) {
             group.encryptedName = newEncryptedName
             group.version = version
-            // Let decrypt decide the final name. If key is available, it overwrites
-            // group.name with the decrypted value. If not, group.name stays untouched
-            // (preserving the previously decrypted name from DB).
+            
+            
+            
             groupUtil.decryptGroupFieldsIfNeeded(group)
-            // For plain groups, decrypt returns early — apply the notify value directly.
+            
             if ((group.groupCryptoMode ?: 0) == 0) {
                 group.name = newGroupName
             }
@@ -593,7 +566,6 @@ class GroupUpdater @Inject constructor(
             group.version = version
             wcdb.group.updateObject(group, arrayOf(DBGroupModel.messageExpiry, DBGroupModel.version), DBGroupModel.gid.eq(groupID))
             messageArchiveManager.updateLocalArchiveTime(For.Group(groupID), messageExpireValue.toLong(), messageClearAnchor, held)
-            // 通知 ViewModel 更新
             conversationSettingsManager.emitConversationSettingUpdate(
                 conversationId = groupID,
                 messageExpiry = messageExpireValue.toLong(),
@@ -639,14 +611,12 @@ class GroupUpdater @Inject constructor(
                 L.i { "[GroupUpdater] Group not exist, create new group $groupID" }
                 createNewGroupIfNotExist(groupID)
             } else {
-                // Update group's members info from members and make up members' info from contactors
                 val currentMembers = wcdb.groupMemberContactor.getAllObjects(DBGroupMemberContactorModel.gid.eq(group.gid))
 
                 val newlyAddedMembers = mutableListOf<GroupMemberContactorModel>()
                 members.forEach { member ->
                     when (member.action) {
-                        0 -> { // Add
-                            // Query contactor information for the new member
+                        0 -> {
                             val newMember = GroupMemberContactorModel().apply {
                                 gid = groupID
                                 id = member.uid ?: ""
@@ -660,7 +630,7 @@ class GroupUpdater @Inject constructor(
                             newlyAddedMembers.add(newMember)
                         }
 
-                        1 -> { // Update
+                        1 -> {
                             val existingMember = currentMembers.find { it.id == member.uid }
                             existingMember?.let {
                                 it.displayName = member.displayName
@@ -670,26 +640,24 @@ class GroupUpdater @Inject constructor(
                             L.i { "[GroupUpdater] Update existing member $existingMember" }
                         }
 
-                        2, 3 -> { // Delete or Permanent Delete
+                        2, 3 -> {
                             currentMembers.removeAll { it.id == member.uid }
                             L.i { "[GroupUpdater] Delete member ${member.uid}" }
                         }
                     }
                 }
 
-                // Set the updated members list to the group
                 group.version = version
                 wcdb.group.updateObject(group, DBGroupModel.version, DBGroupModel.gid.eq(groupID))
                 val distinctMembers = currentMembers.distinctBy { it.id }
                 L.d { "[GroupUpdater] Update group members, new members are [${distinctMembers.mapNotNull { it.displayName }.joinToString(",")}]" }
-                // Save the updated group back to the database
                 groupMemberWriter.replaceAllForGroup(groupID, distinctMembers)
                 groupUtil.emitSingleGroupUpdate(group)
 
-                // Verify signatures of newly added members in background. This is a best-effort
-                // "herd immunity" check — only needs one member with R_group to catch invalid adds
-                // and call cryptoDispose; server-side removal then re-broadcasts to everyone. No-op
-                // when R_group is unavailable locally or signatures are missing.
+                
+                
+                
+                
                 if (newlyAddedMembers.isNotEmpty()) {
                     appScope.launch {
                         runCatching {
@@ -709,26 +677,26 @@ class GroupUpdater @Inject constructor(
         }
     }
 
-    /**
-     * Wipes all local state for a group (members, room, messages, group row,
-     * crypto keys) without consulting the server. ONLY call this when the
-     * caller has independently confirmed that the local user is no longer a
-     * member of [groupID].
-     *
-     * Caller responsibility — there is NO server round-trip here, so a misuse
-     * silently destroys data the user still cares about (incl. R_group keys
-     * that cannot be re-derived from anywhere else).
-     *
-     * Current safe call sites:
-     * - DismissGroup notify   — group is gone for everyone
-     * - Destroy notify        — group is gone for everyone
-     * - KickoutGroup notify   — guarded by `isKickoutMe`
-     * - LeaveGroup notify     — guarded by `isLeaveMe`
-     *
-     * Adding a new "user-no-longer-member" notify? Mirror the kickout/leave
-     * pattern: branch on `members.any { myId == it.uid }` and call disableGroup
-     * only when the answer is yes. A peer-only departure must NOT reach here.
-     */
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     private suspend fun disableGroup(groupID: String) {
         L.i { "[GroupUpdater] Group disable: $groupID" }
         groupUtil.cleanupGroupLocally(groupID)
@@ -738,7 +706,6 @@ class GroupUpdater @Inject constructor(
     private suspend fun forceUpdateGroup(groupID: String) {
         L.i { "[GroupUpdater] force Update Group $groupID" }
         groupUtil.fetchAndSaveSingleGroupInfo(groupID, true)
-        // Update cache after force update
         val updatedGroup = wcdb.group.getFirstObject(DBGroupModel.gid.eq(groupID))
         groupVersionCache[groupID] = updatedGroup?.version ?: -1
     }

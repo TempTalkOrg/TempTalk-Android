@@ -22,12 +22,12 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 
-/**
- * Pins the notification produced by [CriticalAlertNotificationBuilder]: FULL_SCREEN must stay
- * identical to the pre-extraction inline builder, and SILENT_COMPANION must carry the androidx
- * `setSilent` output (silent group + GROUP_ALERT_SUMMARY) that the system's mute and heads-up
- * suppression key on.
- */
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 class CriticalAlertNotificationBuilderTest {
 
@@ -52,7 +52,7 @@ class CriticalAlertNotificationBuilderTest {
         builder = CriticalAlertNotificationBuilder(context, activityProvider)
     }
 
-    // N10
+    
     @Suppress("DEPRECATION")
     @Test
     fun `silent companion has no alerting, no full screen or delete intent, and times out`() {
@@ -70,7 +70,7 @@ class CriticalAlertNotificationBuilderTest {
         assertTrue(n.flags and Notification.FLAG_AUTO_CANCEL != 0)
         assertTrue(n.flags and Notification.FLAG_ONGOING_EVENT == 0)
 
-        // Tap re-surfaces the alert page: no CLICKED action, so no auto-join.
+        
         val click = shadowOf(n.contentIntent).savedIntent
         assertTrue(shadowOf(n.contentIntent).isActivityIntent)
         assertEquals(payload.notificationId, shadowOf(n.contentIntent).requestCode)
@@ -78,7 +78,7 @@ class CriticalAlertNotificationBuilderTest {
         assertActivityExtras(click)
     }
 
-    // N11
+    
     @Suppress("DEPRECATION")
     @Test
     fun `full screen matches the pre-extraction notification`() {
@@ -104,7 +104,7 @@ class CriticalAlertNotificationBuilderTest {
         assertEquals(Notification.BADGE_ICON_NONE, n.badgeIconType)
     }
 
-    // N12
+    
     @Test
     fun `full screen intents carry the critical alert extras`() {
         val n = builder.build(payload, channelId, CriticalAlertPresentation.FULL_SCREEN)

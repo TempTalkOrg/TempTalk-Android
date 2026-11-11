@@ -13,11 +13,11 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * [resolveTabletop] only says whether a half-open fold crosses the call root and where (design
- * §4.5): no size, orientation or picture-in-picture rule any more, those are the layout's. Numbers
- * follow the Xiaomi 18 Fold field logs (density 2.75, inner window 1672x2364 px, fold at y=1182 px).
- */
+
+
+
+
+
 class CallTabletopResolverTest {
 
     private fun fold(
@@ -46,9 +46,9 @@ class CallTabletopResolverTest {
 
     @Test
     fun `a fold the old rules rejected is accepted, the layout decides`() {
-        // The outer window's opening pseudo fold, too short for the old dock.
+        
         accepted(resolve(fold(0, 1182, 1168, 1182), width = 1168, height = 1712, density = 2.75f))
-        // A fold spanning only part of the width.
+        
         accepted(resolve(fold(0, 500, 600, 500), width = 1000, height = 1000))
     }
 

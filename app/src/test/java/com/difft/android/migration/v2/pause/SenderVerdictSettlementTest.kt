@@ -24,7 +24,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
-/** [SenderVerdictSettlement]: the outcome table and the in-write checks of #1382 (A01, A06, A11). */
+
 class SenderVerdictSettlementTest {
 
     private val messaging = TestMessagingPause().open()
@@ -33,7 +33,7 @@ class SenderVerdictSettlementTest {
 
     private fun exporting() = messaging.pauseMessaging(OWNER)
 
-    /** The commit marker with this export's receipt, in one write. */
+    
     private fun committing(session: String = SESSION) = runBlocking<Unit> {
         exporting()
         messaging.pause.committing(OWNER, session, pending.saveEdit(receipt(session)))
@@ -128,8 +128,8 @@ class SenderVerdictSettlementTest {
     @Test
     fun `a settlement whose record was cleared under it is skipped and cleans nothing`() {
         committing()
-        // A logout or scope check removed the record between the caller's read and its write; a
-        // newer receipt (another send's) is in place meanwhile.
+        
+        
         runBlocking {
             messaging.pause.clear(OWNER, "test")
             pending.save(receipt("next-session"))

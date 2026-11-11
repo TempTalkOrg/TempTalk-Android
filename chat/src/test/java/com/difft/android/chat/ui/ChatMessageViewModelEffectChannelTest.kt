@@ -25,15 +25,15 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/**
- * Multi-forward / save-to-notes / confidential view receipt are one-off effects (#1440): a view
- * recreated after a configuration change must not receive the last one again, identical effects
- * must not be conflated, and an effect sent from IO must not be lost when the STARTED-scoped
- * collector is cancelled right after the send.
- *
- * Main is an [UnconfinedTestDispatcher] so `Dispatchers.Main.immediate` resumes a waiting
- * collector undispatched, as it does on the real main thread.
- */
+
+
+
+
+
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28])

@@ -16,7 +16,7 @@ import org.junit.After
 import org.junit.Before
 import org.junit.Test
 
-/** #1328: only FCM-triggered pulls feed pull_ok / pull_fail; re-entrant skips are not counted. */
+
 class PendingMessageHelperPullCountingTest {
 
     private val counters = mockk<KeepAliveHealthCounters>(relaxed = true)
@@ -71,7 +71,7 @@ class PendingMessageHelperPullCountingTest {
         val gate = CompletableDeferred<Unit>()
         coEvery { helper.obtainPendingMessageAndSave() } coAnswers { gate.await(); true }
         helper.schedulePendingMessageWork(PullTrigger.FCM, scope)
-        helper.schedulePendingMessageWork(PullTrigger.FCM, scope) // skipped: the first is still running
+        helper.schedulePendingMessageWork(PullTrigger.FCM, scope) 
         gate.complete(Unit)
         awaitPulls()
         verify(exactly = 1) { counters.onPullResult(any()) }
@@ -79,7 +79,7 @@ class PendingMessageHelperPullCountingTest {
 
     @Test
     fun `a cancelled FCM pull is not counted as a failure and frees the guard`() {
-        // obtainPendingMessageAndSave maps scope cancellation to `false`; that must not become pull_fail.
+        
         coEvery { helper.obtainPendingMessageAndSave() } coAnswers { job.cancel(); false }
         helper.schedulePendingMessageWork(PullTrigger.FCM, scope)
         awaitPulls()
@@ -91,7 +91,7 @@ class PendingMessageHelperPullCountingTest {
         runBlocking { job2.children.toList().forEach { it.join() } }
         verify(exactly = 0) { counters.onPullResult(any()) }
 
-        // The re-entrancy guard was released both times, so the next pull runs and counts.
+        
         coEvery { helper.obtainPendingMessageAndSave() } returns true
         val job3 = Job()
         helper.schedulePendingMessageWork(PullTrigger.FCM, CoroutineScope(job3))

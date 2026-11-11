@@ -14,16 +14,10 @@ import org.junit.Before
 import org.junit.Test
 import kotlin.test.assertEquals
 
-/**
- * Non-proxy service routing on [UrlManager]. Paths now come from the `services`
- * + `domains` model via [ServiceUrlResolver]; when services are absent the path
- * falls back to the end default. Host selection is mocked at the coordinator, so
- * these tests isolate the path-resolution + URL-shape logic.
- *
- * Also asserts the path follows a live config refresh (the old `by lazy` freeze
- * is gone): swapping the mocked config between getter calls must change the
- * emitted path.
- */
+
+
+
+
 class UrlManagerServiceRoutingTest {
 
     private val environmentHelper = mockk<EnvironmentHelper>(relaxed = true)
@@ -55,7 +49,7 @@ class UrlManagerServiceRoutingTest {
         every { environmentHelper.isThatEnvironment("online") } returns true
         every { environmentHelper.isThatEnvironment("dev") } returns false
 
-        // Non-proxy path; pin a deterministic host so we assert on the PATH shape.
+        
         every { proxyProvider.isEnabled } returns false
         every { coordinator.getBestHostSync() } returns "best.host"
 
@@ -67,7 +61,7 @@ class UrlManagerServiceRoutingTest {
         )
     }
 
-    // -- services present: path comes from the resolver --
+    
 
     @Test
     fun `chat call fileSharing default use resolver paths when services present`() {
@@ -88,7 +82,7 @@ class UrlManagerServiceRoutingTest {
         assertEquals("wss://best.host/chat/v1/websocket/", urlManager.getChatWebsocketUrl())
     }
 
-    // -- services absent: path falls back to end default; host falls back to defaultHost --
+    
 
     @Test
     fun `paths fall back to end defaults when services absent`() {
@@ -104,7 +98,7 @@ class UrlManagerServiceRoutingTest {
         every { globalConfigsManager.getNewGlobalConfigs() } returns null
         every { coordinator.getBestHostSync() } returns null
 
-        // Online protocol defaultHost is chat.chative.im.
+        
         assertEquals("https://chat.chative.im/chat/", urlManager.chat)
         assertEquals("https://chat.chative.im/", urlManager.default)
         assertEquals("wss://chat.chative.im/chat/v1/websocket/", urlManager.getChatWebsocketUrl())
@@ -117,7 +111,7 @@ class UrlManagerServiceRoutingTest {
         assertEquals("wss://best.host/chat/v1/websocket/", urlManager.getChatWebsocketUrl())
     }
 
-    // -- servicePathFor: the live path the routing interceptor swaps in per request --
+    
 
     @Test
     fun `servicePathFor returns the live resolver path per service`() {
@@ -154,16 +148,16 @@ class UrlManagerServiceRoutingTest {
         ChatService.entries.forEach { assertEquals("ranked.host", urlManager.currentHostFor(it)) }
     }
 
-    // -- live refresh: path follows config swap (by lazy freeze removed) --
+    
 
     @Test
     fun `path follows a live config refresh between getter calls`() {
-        // First read: services present → resolver path "/chat".
+        
         every { globalConfigsManager.getNewGlobalConfigs() } returns
             config(Data(domains = prodDomains, services = prodServices))
         assertEquals("https://best.host/chat/", urlManager.chat)
 
-        // Server pushes a config with a different chat path → next read must follow.
+        
         every { globalConfigsManager.getNewGlobalConfigs() } returns
             config(
                 Data(

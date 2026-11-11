@@ -7,10 +7,10 @@ import androidx.fragment.app.Fragment
 import com.difft.android.base.utils.pane.DetailShellActivity
 import dagger.hilt.android.AndroidEntryPoint
 
-/**
- * Full-window shell for [GroupGlobalNotificationSettingsFragment]. No result: pages showing the
- * value re-read it on resume.
- */
+
+
+
+
 @AndroidEntryPoint
 class GroupGlobalNotificationSettingsActivity : DetailShellActivity() {
 

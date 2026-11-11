@@ -10,14 +10,14 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.test.assertTrue
 
-/**
- * Regression coverage for issue #863: a blocking task throwing must NOT abort the
- * rest of the chain. Robolectric provides an Android Looper so [AppStartup]'s
- * coroutine scope can dispatch normally. `FirebaseCrashlytics.getInstance()` is
- * NOT initialized under Robolectric — the `runCatching` wrappers in
- * `reportTaskFailure` absorb its failure silently, which is the intended
- * production behaviour when Crashlytics is unhealthy.
- */
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(manifest = Config.NONE)
 class AppStartupTest {
@@ -51,7 +51,7 @@ class AppStartupTest {
             .execute()
 
         assertTrue(ran.get(), "throwing task must have actually been invoked")
-        // Passing the call to execute() above means no exception escaped.
+        
     }
 
     @Test
@@ -84,8 +84,8 @@ class AppStartupTest {
 
     @Test
     fun `Error subclass — caught and chain continues`() {
-        // E.g. NoClassDefFoundError can surface from missing transitive deps at startup.
-        // Catch must be Throwable, not Exception.
+        
+        
         val second = AtomicBoolean(false)
 
         AppStartup

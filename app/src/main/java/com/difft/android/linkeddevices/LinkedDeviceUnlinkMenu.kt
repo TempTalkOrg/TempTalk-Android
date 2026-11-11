@@ -23,11 +23,11 @@ import com.difft.android.base.ui.compose.menu.DifftDropdownMenuItemTone
 import com.difft.android.base.ui.compose.menu.DifftDropdownMenuPanel
 import kotlin.math.roundToInt
 
-/**
- * Single-row destructive floating menu shown on long-press of a device row. In-composition overlay
- * (not a system Popup) so it lands at the finger with no window drift. [position] is the press point
- * in the root box's local pixels; [rootSize] clamps the menu inside the visible area.
- */
+
+
+
+
+
 @Composable
 fun BoxScope.LinkedDeviceUnlinkMenu(
     position: Offset,
@@ -35,7 +35,7 @@ fun BoxScope.LinkedDeviceUnlinkMenu(
     onDismiss: () -> Unit,
     onUnlink: () -> Unit,
 ) {
-    // Transparent scrim: a tap outside dismisses and blocks stray taps beneath.
+    
     Box(
         modifier = Modifier
             .matchParentSize()

@@ -6,7 +6,7 @@ import com.difft.android.selector.R
 import com.difft.android.selector.utils.ActivityCompatHelper
 
 object FragmentInjectManager {
-    /** inject fragment */
+    
     @JvmStatic
     fun injectFragment(activity: FragmentActivity, targetFragmentTag: String, targetFragment: Fragment) {
         if (ActivityCompatHelper.checkFragmentNonExits(activity, targetFragmentTag)) {

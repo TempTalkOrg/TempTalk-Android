@@ -10,56 +10,56 @@ data class RoomViewData(
     val roomId: String,
     val type: Type = Type.OneOnOne,
     var roomName: CharSequence? = null,
-    val roomAvatarJson: String? = null, //currently it only use for group
-    /** Remark avatar JSON for OneOnOne rooms; null for groups. */
+    val roomAvatarJson: String? = null, 
+    
     val remarkAvatarJson: String? = null,
     val lastDisplayContent: CharSequence? = null,
     var lastActiveTime: Long? = 0L,
     val lastActiveTimeText: String = "",
     val unreadMessageNum: Int = 0,
-    val muteStatus: Int = 0, //   MUTED(1), UNMUTED(0);
+    val muteStatus: Int = 0, 
     val pinnedTime: Long? = 0L,
     val mentionType: Int = MENTIONS_TYPE_NONE,
-    val criticalAlertType: Int = CRITICAL_ALERT_TYPE_NONE, // Critical Alert 类型
-    /**
-     * Room-level aggregate of outgoing send failures, mirrored from `RoomModel.sendStatus`.
-     *
-     * This class is a PARALLEL form of `RoomModel` with no compile-time link, so a construction
-     * site that forgets to pass it simply renders no tag — silently, with no build error. Every
-     * site fed by a `RoomModel` must map it explicitly; the default only covers synthesized rooms
-     * that have no DB row (and therefore cannot hold a local failure).
-     */
+    val criticalAlertType: Int = CRITICAL_ALERT_TYPE_NONE,
+    
+
+
+
+
+
+
+
     val sendStatus: Int = ROOM_SEND_STATUS_NONE,
-    /**
-     * Whether the room holds an outgoing message still in flight, mirrored from
-     * `RoomModel.sendingStatus`. Independent of [sendStatus] — both may render at once.
-     * Same mapping caveat as [sendStatus]: sites fed by a `RoomModel` must map it explicitly.
-     */
+    
+
+
+
+
     val sendingStatus: Int = ROOM_SENDING_STATUS_NONE,
-    val messageExpiry: Long? = null, //消息过期时间
+    val messageExpiry: Long? = null,
     var isInstantCall: Boolean = false,
     var isLiveStream: Boolean = false,
     var callData: CallData? = null,
     val draftPreview: String? = null,
     val sortTime: Long = 0L,
-    val groupMembersNumber: Int = 0, //群成员数量
-    /**
-     * The user marked this room unread and nothing newer has happened since (see
-     * `isManualUnreadActive`). Never stored in [unreadMessageNum]: the real count stays 0, the
-     * row shows a dot, and the tab / launcher badges do not count it (#1332; they show a tab dot
-     * when no real unread exists).
-     */
+    val groupMembersNumber: Int = 0,
+    
+
+
+
+
+
     val isManualUnread: Boolean = false,
-    /**
-     * Focus-aware mute set by RecentChatViewModel while group focus is on (focus group: not muted,
-     * every other group: muted). Null leaves [muteStatus] in charge (focus off, private chats, search).
-     */
+    
+
+
+
     val effectiveMuted: Boolean? = null,
-    /** Focus entry of this row's long-press menu and swipe actions; set by [ChatListAssembler]. */
+    
     val focusAction: FocusRowAction = FocusRowAction.NONE,
-    /** The focus group's latest previews (`sender: content`), oldest first; prefetched on IO. */
+    
     val focusPreviewLines: List<String> = emptyList(),
-    /** Built from the group row: the focus group has no visible room row yet (never written). */
+    
     val isSynthesized: Boolean = false,
 ) {
     sealed class Type {
@@ -67,32 +67,32 @@ data class RoomViewData(
         data object Group : Type()
     }
 
-    /**
-     * Row-level "has something unread" value for the list and its gestures: the real unread
-     * count, or 1 for a manual-unread mark. Not a tab or launcher count — those sum
-     * [unreadMessageNum] only.
-     */
+    
+
+
+
+
     val displayUnreadNum: Int
         get() = if (unreadMessageNum > 0) unreadMessageNum else if (isManualUnread) 1 else 0
 
     val isMuted: Boolean
         get() = effectiveMuted ?: (muteStatus == MuteStatus.MUTED.value)
 
-    /** The stored pin; [isPinned] is what the list shows. */
+    
     val isRealPinned: Boolean
         get() = pinnedTime != null && pinnedTime > 0
 
-    /**
-     * The stored pin, plus the focus group's stand-in row ([isSynthesized]): it sits in the pinned
-     * area until its real, pinned room row is written (`FocusPinCoordinator`).
-     */
+    
+
+
+
     val isPinned: Boolean
         get() = isRealPinned || isSynthesized
 
 }
 
 
-/** The focus entry a row offers: none (private chats, feature off), "focus this group", or "end focus". */
+
 enum class FocusRowAction { NONE, START, END }
 
 enum class MuteStatus(val value: Int) {
@@ -100,11 +100,6 @@ enum class MuteStatus(val value: Int) {
     UNMUTED(0);
 }
 
-//val RoomViewData.group: GroupModel?
-//    get() = wcdb.group.getFirstObject(DBGroupModel.gid.eq(roomId))
-
-//val RoomViewData.contactor: ContactorModel?
-//    get() = wcdb.contactor.getFirstObject(DBContactorModel.id.eq(roomId))
 
 data class CallInfo(
     var isJoinEnable: Boolean = false,

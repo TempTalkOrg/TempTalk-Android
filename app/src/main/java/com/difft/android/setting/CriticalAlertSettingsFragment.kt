@@ -41,11 +41,11 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/**
- * The Critical Alerts page under notification settings. Do Not Disturb access pages are launched for
- * a result so the page refreshes on return; right after access is granted it offers the background
- * connection.
- */
+
+
+
+
+
 @AndroidEntryPoint
 class CriticalAlertSettingsFragment : Fragment(), SettingsIdiomPage {
 
@@ -62,7 +62,7 @@ class CriticalAlertSettingsFragment : Fragment(), SettingsIdiomPage {
     private var refreshJob: Job? = null
     private var uiState by mutableStateOf<NotificationSettingsUiState?>(null)
 
-    /** Set when the access page was opened to grant (not to review or revoke) Do Not Disturb access; survives recreation. */
+    
     private var awaitingDndGrant = false
 
     private val dndPermissionLauncher = registerForActivityResult(
@@ -148,10 +148,10 @@ class CriticalAlertSettingsFragment : Fragment(), SettingsIdiomPage {
         }
     }
 
-    /**
-     * Critical alerts rely on the background connection: right after access is granted, offer to turn it
-     * on instead of leaving the user to find the row.
-     */
+    
+
+
+
     private fun offerBackgroundConnectionAfterGrant() {
         viewLifecycleOwner.lifecycleScope.launch {
             val granted = withContext(Dispatchers.IO) { messageNotificationUtil.isNotificationPolicyAccessGranted() }

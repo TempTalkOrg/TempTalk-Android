@@ -11,13 +11,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos
 
-/**
- * Action-message processing extensions for [CallMessageHandler].
- *
- * Handles the `Joined` / `Cancel` / `Reject` / `Hangup` flows plus their
- * small cleanup helpers. Logic is unchanged from the pre-refactor
- * implementation.
- */
+
 internal fun CallMessageHandler.handleJoinedMessage(
     content: SignalServiceProtos.CallMessage,
     roomId: String,
@@ -32,8 +26,8 @@ internal fun CallMessageHandler.handleJoinedMessage(
         callDataManager.updateCallingListData(callingData)
     }
 
-    // Clear the conversation-list critical-alert highlight asynchronously; the room write is held
-    // inside the envelope's receive admission so a migration pause waits for it (#1382).
+    
+    
     val held = admission.retain("call-joined")
     appScope.launch(Dispatchers.IO) {
         try {
@@ -50,7 +44,7 @@ internal fun CallMessageHandler.handleCancelMessage(
 ) {
     L.i { "[Call] handleCallMessage, hasCancel Message:${content.cancel.roomId}" }
 
-    // #1387: the caller gave up, so the critical alerts of this call stop presenting.
+    
     criticalAlertManager.dismissForRoom(roomId)
 
     cancelNotificationAndHandleService(roomId, CallActionType.CANCEL, "cancel: caller cancel the call")
@@ -63,28 +57,28 @@ internal fun CallMessageHandler.handleRejectMessage(
 ) {
     L.i { "[Call] handleCallMessage, hasRejected Message:${content.reject.roomId}" }
 
-    // If another device of the current user rejected while this device is
-    // already in the call, ignore that self-reject.
+    
+    
     if (shouldIgnoreSelfReject(message, roomId)) {
         L.i { "[Call] handleCallMessage reject, remote myself device reject, but local has in meeting." }
         return
     }
 
-    // Cancel the incoming-call notification first.
+    
     callToChatController.cancelNotificationById(roomId.hashCode())
 
-    // Clean cached call data; keep group-call entries intact.
+    
     removeCallDataIfOneOnOne(roomId)
 
-    // Case A: this device is the caller and a remote callee rejected the call.
+    
     if (onGoingCallStateManager.isInCalling() &&
         onGoingCallStateManager.getCurrentRoomId() == roomId
     ) {
         endOngoingCall(CallActionType.REJECT, roomId)
     }
 
-    // Case B: this device is a callee and another device of the current user
-    // rejected the call.
+    
+    
     cancelNotificationAndHandleService(roomId, CallActionType.REJECT, "reject: your other device reject the call")
 }
 
@@ -94,26 +88,26 @@ internal fun CallMessageHandler.handleHangupMessage(
 ) {
     L.i { "[Call] handleCallMessage, hasHangup Message:${content.hangup.roomId}" }
 
-    // Case A: this device is already in the call (e.g. the host hangs up the
-    // whole call) — end the ongoing call session.
+    
+    
     if (onGoingCallStateManager.isInCalling() &&
         onGoingCallStateManager.getCurrentRoomId() == roomId
     ) {
         endOngoingCall(CallActionType.HANGUP, roomId)
     }
 
-    // Case B: this device is a callee still being rung — cancel the
-    // incoming-call notification and stop the ringtone/incoming service, the
-    // same way Cancel/Reject/Joined do. Without this the ringtone keeps
-    // playing after a hangup until the call times out.
+    
+    
+    
+    
     cancelNotificationAndHandleService(roomId, CallActionType.HANGUP, "hangup: caller hangup the call")
 
     callDataManager.removeCallData(roomId)
 }
 
-/**
- * Clear the critical-alert highlight on the conversation list for [roomId].
- */
+
+
+
 internal suspend fun CallMessageHandler.dismissCriticalAlertForRoom(roomId: String) {
     val data = callDataManager.getCallData(roomId)
     if (data == null) {
@@ -146,10 +140,10 @@ private fun CallMessageHandler.clearCriticalAlertFor(id: String) {
     LCallManager.dismissCriticalAlert(id)
 }
 
-/**
- * Decide whether an incoming `reject` coming from the current user's other
- * device should be ignored because the local device is already in the call.
- */
+
+
+
+
 internal fun CallMessageHandler.shouldIgnoreSelfReject(
     message: SignalServiceDataClass,
     roomId: String,
@@ -159,11 +153,11 @@ internal fun CallMessageHandler.shouldIgnoreSelfReject(
             onGoingCallStateManager.getCurrentRoomId() == roomId
 }
 
-/**
- * Remove cached call data only when it represents a one-on-one call; group
- * calls keep their cached entry so further control messages can still be
- * matched.
- */
+
+
+
+
+
 internal fun CallMessageHandler.removeCallDataIfOneOnOne(roomId: String) {
     val callDataList = callDataManager.getCallListData()
     if (callDataList.containsKey(roomId)) {

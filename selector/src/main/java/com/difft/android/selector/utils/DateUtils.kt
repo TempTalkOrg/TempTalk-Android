@@ -55,7 +55,7 @@ object DateUtils {
         return (duration / 1000) * 1000
     }
 
-    /** Absolute difference in seconds between now and [d]. */
+    
     @JvmStatic
     fun dateDiffer(d: Long): Int {
         return try {
@@ -83,14 +83,14 @@ object DateUtils {
         }
     }
 
-    /** Create a file name from the current timestamp, with [prefix]. */
+    
     @JvmStatic
     fun getCreateFileName(prefix: String): String {
         val millis = System.currentTimeMillis()
         return prefix + SF.format(millis)
     }
 
-    /** Create a file name from the current timestamp. */
+    
     @JvmStatic
     fun getCreateFileName(): String {
         val millis = System.currentTimeMillis()

@@ -11,18 +11,18 @@ import com.difft.android.chat.dependencies.ApplicationDependencies
 import util.PendingIntentFlags
 import java.util.UUID
 
-/**
- * Schedules tasks using the [AlarmManager].
- *
- * Given that this scheduler is only used when [KeepAliveService] is also used (which keeps
- * all of the [ConstraintObserver]s running), this only needs to schedule future runs in
- * situations where all constraints are already met. Otherwise, the [ConstraintObserver]s will
- * trigger future runs when the constraints are met.
- *
- * For the same reason, this class also doesn't have to schedule jobs that don't have delays.
- *
- * Important: Only use on API < 26.
- */
+
+
+
+
+
+
+
+
+
+
+
+
 class AlarmManagerScheduler(
     private val application: Application
 ) : Scheduler {
@@ -33,7 +33,7 @@ class AlarmManagerScheduler(
         }
     }
 
-    /** No-op: minSdk 26 makes this whole scheduler dead code, so it is kept minimal. */
+    
     override fun cancelAllExcept(keep: Set<Int>) = Unit
 
     private fun setUniqueAlarm(context: Context, time: Long) {

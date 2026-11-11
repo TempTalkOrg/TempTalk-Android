@@ -23,7 +23,7 @@ object Util {
 
     private const val DEFAULT_CLIPBOARD_EXPIRATION_SECONDS = 5 * 60
 
-    // region String join methods
+    
 
     @JvmStatic
     fun join(list: Array<String>, delimiter: String): String =
@@ -46,9 +46,9 @@ object Util {
     fun <E> join(vararg lists: List<E>): List<E> =
         lists.flatMap { it }
 
-    // endregion
+    
 
-    // region Collection utilities
+    
 
     @JvmStatic
     fun isEmpty(collection: Collection<*>?): Boolean =
@@ -62,9 +62,9 @@ object Util {
     fun <K, V> getOrDefault(map: Map<K, V>, key: K, defaultValue: V): V =
         map[key] ?: defaultValue
 
-    // endregion
+    
 
-    // region Threading
+    
 
     @JvmStatic
     fun wait(lock: Any, timeout: Long) {
@@ -75,9 +75,9 @@ object Util {
         }
     }
 
-    // endregion
+    
 
-    // region String split
+    
 
     @JvmStatic
     fun split(source: String?, delimiter: String): List<String> {
@@ -87,9 +87,9 @@ object Util {
         return source!!.split(delimiter)
     }
 
-    // endregion
+    
 
-    // region Byte array operations
+    
 
     @JvmStatic
     fun split(input: ByteArray, firstLength: Int, secondLength: Int): Array<ByteArray> {
@@ -115,9 +115,9 @@ object Util {
         return result
     }
 
-    // endregion
+    
 
-    // region Secret generation
+    
 
     @JvmStatic
     fun getSecret(size: Int): String =
@@ -134,9 +134,9 @@ object Util {
         return secret
     }
 
-    // endregion
+    
 
-    // region Object utilities
+    
 
     @JvmStatic
     fun equals(a: Any?, b: Any?): Boolean =
@@ -150,9 +150,9 @@ object Util {
     fun uri(uri: String?): Uri? =
         uri?.toUri()
 
-    // endregion
+    
 
-    // region Device utilities
+    
 
     @JvmStatic
     fun isLowMemory(context: Context): Boolean {
@@ -168,42 +168,42 @@ object Util {
     fun clamp(value: Float, min: Float, max: Float): Float =
         value.coerceIn(min, max)
 
-    /**
-     * Returns half of the difference between the given length, and the length when scaled by the
-     * given scale.
-     */
+    
+
+
+
     @JvmStatic
     fun halfOffsetFromScale(length: Int, scale: Float): Float {
         val scaledLength = length * scale
         return (length - scaledLength) / 2
     }
 
-    // endregion
+    
 
-    // region Clipboard operations
+    
 
-    /**
-     * Copy text to clipboard with automatic expiration (default 5 minutes).
-     * Uses a special label to identify our content and avoid clearing content from other apps.
-     */
+    
+
+
+
     @JvmStatic
     fun copyToClipboard(context: Context, text: CharSequence) {
         copyToClipboard(context, text, DEFAULT_CLIPBOARD_EXPIRATION_SECONDS)
     }
 
-    /**
-     * Copy text to clipboard with specified expiration time.
-     *
-     * @param context          Application context
-     * @param text             Text to copy
-     * @param expiresInSeconds Time in seconds before clipboard is automatically cleared.
-     *                         Use 0 to disable auto-clear.
-     */
+    
+
+
+
+
+
+
+
     @JvmStatic
     fun copyToClipboard(context: Context, text: CharSequence, expiresInSeconds: Int) {
-        // Use special label to identify content copied by our app
+        
         val clipData = ClipData.newPlainText(ClearClipboardAlarmReceiver.CLIPBOARD_LABEL, text)
-        // Mark as sensitive to prevent clipboard preview and cross-device sync (Android 13+)
+        
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             clipData.description.extras = PersistableBundle().apply {
                 putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true)
@@ -212,16 +212,16 @@ object Util {
         ServiceUtil.getClipboardManager(context).setPrimaryClip(clipData)
         ToastUtil.show(R.string.chat_message_action_copied)
 
-        // Schedule clipboard clear if expiration time is set
+        
         if (expiresInSeconds > 0) {
             scheduleClipboardClear(context, expiresInSeconds)
         }
     }
 
-    /**
-     * Schedule a clipboard clear after the specified delay.
-     * Can be called directly when copying content outside of Util.copyToClipboard (e.g., file copy).
-     */
+    
+
+
+
     @JvmStatic
     fun scheduleClipboardClear(context: Context, delaySeconds: Int) {
         val alarmManager = ServiceUtil.getAlarmManager(context)
@@ -240,5 +240,5 @@ object Util {
         )
     }
 
-    // endregion
+    
 }

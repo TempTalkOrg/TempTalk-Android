@@ -20,21 +20,21 @@ class VerifyCodeView : FrameLayout, TextWatcher, View.OnKeyListener, View.OnFocu
     private var mContext: Context? = null
     var mVerityCodeEditTexts: ArrayList<EditText> = ArrayList()
     private var onCodeInputCompleteListener: OnCodeInputCompleteListener? = null
-//    private lateinit var verifyCodeTitle: TextView
-//    private lateinit var verifyCodeErrorTip: TextView
+
+
 
     constructor(context: Context, attrs: AttributeSet) : super(context, attrs) {
         mContext = context
         LayoutInflater.from(context).inflate(R.layout.uikit_verify_code, this)
         context.withStyledAttributes(attrs, R.styleable.uikit_verify_code) {
-//            var errorTip = getString(R.styleable.uikit_verify_code_verifyErrorTip) ?: ""
+
             var hide = getBoolean(R.styleable.uikit_verify_code_hideInput, false)
             var canDirectInput = getBoolean(R.styleable.uikit_verify_code_canDirectInput, true)
 
-//            verifyCodeErrorTip = findViewById(R.id.tv_verify_code_error_tip)
-//            verifyCodeTitle = findViewById(R.id.tv_verify_code_title)
-//            verifyCodeTitle.text = title
-//            tv_verify_code_error_tip.text = errorTip
+
+
+
+
             initView(hide, canDirectInput)
         }
     }
@@ -53,7 +53,7 @@ class VerifyCodeView : FrameLayout, TextWatcher, View.OnKeyListener, View.OnFocu
             et.background = ContextCompat.getDrawable(context, R.drawable.uikit_verify_code_bg)
             if (hide) {
                 et.transformationMethod = BiggerDotPasswordTransformationMethod()
-                //et.transformationMethod = PasswordTransformationMethod()
+                
             }
             if (!canDirectInput) {
                 et.isClickable = false
@@ -64,9 +64,9 @@ class VerifyCodeView : FrameLayout, TextWatcher, View.OnKeyListener, View.OnFocu
         }
         mVerityCodeEditTexts[0].isFocusable = true
 
-//        if (hideTitle) {
-//            verifyCodeTitle.isVisible = false
-//        }
+
+
+
     }
 
     override fun afterTextChanged(s: Editable?) {
@@ -75,7 +75,6 @@ class VerifyCodeView : FrameLayout, TextWatcher, View.OnKeyListener, View.OnFocu
         }
         if (onCodeInputCompleteListener != null) {
             onCodeInputCompleteListener?.onTextChange(getResult())
-            //如果最后一个输入框有字符，则返回结果
             if (mVerityCodeEditTexts[mVerityCodeEditTexts.size - 1].text.isNotEmpty()) {
                 onCodeInputCompleteListener?.onComplete(getResult())
             }
@@ -113,12 +112,9 @@ class VerifyCodeView : FrameLayout, TextWatcher, View.OnKeyListener, View.OnFocu
         return stringBuffer.toString()
     }
 
-    /**
-     * 获取焦点
-     */
+    
     fun focus() {
         val count = mVerityCodeEditTexts.size
-        //利用for循环找出还最前面那个还没被输入字符的EditText，并把焦点移交给它。
         for ((index, editText) in mVerityCodeEditTexts.withIndex()) {
             if (editText.text.isEmpty()) {
                 editText.isCursorVisible = true
@@ -135,7 +131,6 @@ class VerifyCodeView : FrameLayout, TextWatcher, View.OnKeyListener, View.OnFocu
 
     fun backFocus() {
         var editText: EditText
-        //循环检测有字符的`editText`，把其置空，并获取焦点。
         for (index in mVerityCodeEditTexts.size - 1 downTo 0) {
             editText = mVerityCodeEditTexts[index]
             if (editText.text.isNotEmpty()) {
@@ -147,39 +142,30 @@ class VerifyCodeView : FrameLayout, TextWatcher, View.OnKeyListener, View.OnFocu
         }
     }
 
-//    fun setErrorTip(tip: String) {
-//        verifyCodeErrorTip.text = tip
-//    }
 
-    /**
-     * 错误状态提示信息和提示
-     */
-//    fun showErrorStatus(tip: String) {
-//        mContext?.let {
-//            for (et in mVerityCodeEditTexts){
-//                et.setTextColor(ContextCompat.getColor(it,R.color.Color_Error))
-//            }
-//        }
-//        verifyCodeErrorTip.visibility = View.VISIBLE
-//        setErrorTip(tip)
-//    }
 
-    /**
-     * 正常显示信息
-     */
-//    fun showNormalStatus() {
-//        mContext?.let {
-//            for (et in mVerityCodeEditTexts){
-//                et.setTextColor(it.resources.getColor(R.color.Color_PrimaryText))
-//            }
-//        }
-//        verifyCodeErrorTip.visibility = View.GONE
-//        setErrorTip("")
-//    }
 
-    /**
-     * 清空验证码输入框
-     */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     fun clearInput() {
         for (i in mVerityCodeEditTexts.size - 1 downTo 0) {
             var editText = mVerityCodeEditTexts[i]
@@ -191,25 +177,16 @@ class VerifyCodeView : FrameLayout, TextWatcher, View.OnKeyListener, View.OnFocu
         }
     }
 
-    /**
-     * 设置输入框是否可用
-     */
     override fun setEnabled(enabled: Boolean) {
         for (et in mVerityCodeEditTexts) {
             et.isEnabled = enabled
         }
     }
 
-    /**
-     * 设置输入监听
-     */
     fun setInputListener(listener: OnCodeInputCompleteListener) {
         this.onCodeInputCompleteListener = listener
     }
 
-    /**
-     * 设置输入框内容
-     */
     fun setInputByIndex(input: String, index: Int): Boolean {
         return if (index >= mVerityCodeEditTexts.size || index < 0) {
             false
@@ -219,9 +196,7 @@ class VerifyCodeView : FrameLayout, TextWatcher, View.OnKeyListener, View.OnFocu
         }
     }
 
-    /**
-     * 设置输入内容，自动向后移动
-     */
+    
     fun setInput(input: String) {
         for (et in mVerityCodeEditTexts) {
             if (et.text.toString().isEmpty()) {
@@ -232,9 +207,7 @@ class VerifyCodeView : FrameLayout, TextWatcher, View.OnKeyListener, View.OnFocu
     }
 
 
-    /**
-     * 删除输入内容，自动向前移动
-     */
+    
     fun delInput() {
         for (index in (mVerityCodeEditTexts.size - 1 downTo 0)) {
             if (mVerityCodeEditTexts[index].text.toString().isNotEmpty()) {
@@ -246,9 +219,6 @@ class VerifyCodeView : FrameLayout, TextWatcher, View.OnKeyListener, View.OnFocu
     }
 
 
-    /**
-     * 设置密码是否可见
-     */
     fun setHideInputVisible(visible: Boolean) {
         if (visible) {
             for (et in mVerityCodeEditTexts) {
@@ -257,33 +227,24 @@ class VerifyCodeView : FrameLayout, TextWatcher, View.OnKeyListener, View.OnFocu
         } else {
             for (et in mVerityCodeEditTexts) {
                 et.transformationMethod = BiggerDotPasswordTransformationMethod();
-                //et.transformationMethod = PasswordTransformationMethod()
+                
 
             }
         }
     }
 
 
-    /**
-     * 设置错误提示信息是否是色障模式
-     */
-//    fun enableColorBlind(enable: Boolean) {
-//        if (enable) {
-//            verifyCodeErrorTip.setTextColor(ContextCompat.getColor(context, R.color.Color_Blind_Sell))
-//        } else {
-//            verifyCodeErrorTip.setTextColor(ContextCompat.getColor(context, R.color.Color_Error))
-//        }
-//    }
+
+
+
+
+
+
+
 
     interface OnCodeInputCompleteListener {
-        /**
-         * 文本改变
-         */
         fun onTextChange(content: String)
 
-        /**
-         * 输入完成
-         */
         fun onComplete(content: String)
     }
 

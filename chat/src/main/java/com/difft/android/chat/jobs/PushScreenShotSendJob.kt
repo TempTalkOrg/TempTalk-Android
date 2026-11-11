@@ -4,6 +4,7 @@ import com.difft.android.PushScreenShotSendJobFactory
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.migration.pause.MessagingGate
 import com.difft.android.chat.common.SendType
+import com.difft.android.chat.group.GroupUtil
 import com.difft.android.chat.dependencies.ApplicationDependencies
 import com.difft.android.chat.jobmanager.Data
 import com.difft.android.chat.jobmanager.Job
@@ -23,42 +24,14 @@ import difft.android.messageserialization.model.TextMessage
 import kotlinx.coroutines.CancellationException
 import java.util.concurrent.TimeUnit
 
-/**
- * Sends the "took a screenshot" DataMessage, showing its row immediately and withdrawing it if the
- * send finally fails — the same optimistic shape as an emoji reaction (issue #1435).
- *
- * Why not [PushTextSendJob]: that path flips the row to FAILED once its attempts are exhausted. A
- * screenshot row renders as a centered notice with no status icon and no resend, so a FAILED one is
- * invisible in the conversation (issue #1265). Here the row is shown as Sending, marked Sent with
- * the server's ordering keys on success, and deleted on a permanent rejection or once the job dies.
- * Rows carrying `screenShotJson` are outside the room "Send failed" / "Sending" aggregates, so the
- * pending row never tags the chat list, and a cold-start sweep that flips it to FAILED is harmless
- * until the still-queued job settles it.
- *
- * The row this job writes is [textMessage] itself — the SAME representation the peer and this
- * account's other devices store for the same event: a TYPE_TEXT row carrying `screenShotJson`,
- * rendered through `VIEW_TYPE_SCREENSHOT`. Android deliberately unified screenshot notices onto the
- * text representation (PR #226) rather than a separate notify row; iOS models it as an info message
- * instead, and that difference is local to each client's rendering.
- *
- * Retries are unbounded within the one-day lifespan — the notice has no resend UI, so a spent
- * attempt budget would withdraw it needlessly; the network constraint means attempts are only ever
- * spent on real send failures, not on being offline.
- *
- * [textMessage] is serialized with the job so a process death mid-retry resumes with the same
- * timestamp and id. Its `timeStamp` is the DataMessage timestamp AND the id seed
- * (`generateMessageId(timeStamp, myId, DEFAULT_DEVICE_ID)`), which is exactly the id this device's
- * own sync echo of a 1v1 send carries — so the echo's `putWhenNonExist` finds the pending row and
- * skips, and [ScreenShotRowWriter.markSent] settles that one row. Same three-way timestamp alignment
- * contract [PushForwardNoticeSendJob] and [PushActivityNoticeSendJob] rely on.
- *
- * A group row is deliberately persisted WITHOUT `receiverIds`, unlike [PushTextSendJob.onAdded].
- * That field feeds only the read-status list of the message detail page, and a screenshot row has
- * no detail page: it renders through the Notify view holder, whose interaction callbacks are empty.
- * Populating it here would also be ineffective — the JobController serializes a job before
- * `onAdded` runs and executes a deserialized copy, so a field set in `onAdded` never reaches the
- * persisted row.
- */
+
+
+
+
+
+
+
+
 class PushScreenShotSendJob @AssistedInject constructor(
     @Assisted parameters: Parameters?,
     @Assisted private val textMessage: TextMessage,
@@ -67,6 +40,7 @@ class PushScreenShotSendJob @AssistedInject constructor(
     private val rowWriter: ScreenShotRowWriter,
     private val gson: Gson,
     messagingGate: MessagingGate,
+    private val groupUtil: GroupUtil,
 ) : PushSendJob(parameters ?: buildParameters(textMessage.forWhat), messagingGate) {
 
     override fun serialize(): Data = Data.Builder()
@@ -81,7 +55,7 @@ class PushScreenShotSendJob @AssistedInject constructor(
         } catch (ce: CancellationException) {
             throw ce
         } catch (dbE: Exception) {
-            // The send still goes out; markSent inserts the row on success.
+            
             L.e {
                 "[Screenshot][PushScreenShotSendJob] pending row insert failed target=${textMessage.forWhat.id} " +
                     "timeStamp=${textMessage.timeStamp}: ${dbE.stackTraceToString()}"
@@ -109,20 +83,20 @@ class PushScreenShotSendJob @AssistedInject constructor(
                 admission
             )
         } catch (e: NonSuccessfulResponseCodeException) {
-            // A 4xx is the server's final answer (430 / 432 non-friend limit / 404 offline or
-            // deregistered), and the exception is an IOException, so without this branch
-            // onShouldRetry would keep retrying it for the whole one-day lifespan. Permanent →
-            // swallow so the job leaves the queue, logged at W so production can confirm it
-            // stopped on purpose. Same shape as PushReadReceiptSendJob's permanent-failure catch.
-            //
-            // The permanent set is exactly PushTextSendJob's. Every other code keeps the normal
-            // retry path: 5xx, and the retryable 4xx family — RateLimitException (413/429) and
-            // ProofRequiredException (428), whose Retry-After backoff lives in
-            // PushSendJob.getNextRunAttemptBackoff and must stay reachable.
-            //
-            // Deliberately NOT replicating PushTextSendJob's 430/432/404 local system messages:
-            // an automatic notice must not spawn "offline" / "non-friend limit" rows the user
-            // never asked for.
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
             if (e.code !in PERMANENT_REJECTION_CODES) throw e
             L.w {
                 "[Screenshot][PushScreenShotSendJob] permanent rejection code=${e.code}, " +
@@ -134,8 +108,8 @@ class PushScreenShotSendJob @AssistedInject constructor(
 
         val success = result.success
         if (success == null) {
-            // Defensive branch: sendDataMessage either returns a success or throws, so this is not
-            // reached in practice. A rejection that somehow returned no success withdraws the row.
+            
+            
             L.w {
                 "[Screenshot][PushScreenShotSendJob] send rejected timeStamp=${textMessage.timeStamp}, " +
                     "target=${textMessage.forWhat.id}"
@@ -144,10 +118,12 @@ class PushScreenShotSendJob @AssistedInject constructor(
             return
         }
 
-        // Server accepted -> mark the row Sent with the server's own ordering keys, as
-        // PushTextSendJob.updateMessage(Sent) does, minus the room aggregate writes: screenshot rows
-        // are outside both aggregates. DB failure is isolated (do NOT rethrow: a retry would re-send
-        // the message to peers who already have it).
+        if (textMessage.forWhat is For.Group) groupUtil.clearExpiry(textMessage.forWhat.id, "sent")
+
+        
+        
+        
+        
         try {
             textMessage.sendType = SendType.Sent.rawValue
             textMessage.systemShowTimestamp = success.systemShowTimestamp.takeIf { it > 0 } ?: textMessage.timeStamp
@@ -210,7 +186,7 @@ class PushScreenShotSendJob @AssistedInject constructor(
         const val KEY = "PushScreenShotSendJob"
         private const val KEY_MESSAGE_OUT = "message_out"
 
-        /** Server's final answers, mirroring PushTextSendJob: 404 account gone, 430, 432 non-friend limit. */
+        
         private val PERMANENT_REJECTION_CODES = setOf(404, 430, 432)
 
         private fun buildParameters(target: For): Parameters = Parameters.Builder()

@@ -5,7 +5,6 @@ import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -14,6 +13,7 @@ import androidx.compose.ui.res.stringResource
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.ui.compose.DifftScreen
+import com.difft.android.base.ui.compose.systemBarsWithCutoutPadding
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.call.LCallEngine
@@ -45,7 +45,7 @@ class LCallServerNodeActivity : BaseActivity() {
         val connectionType by viewModel.connectionType.collectAsState()
         val isLoading by viewModel.isLoading.collectAsState()
 
-        Box(Modifier.systemBarsPadding()) {
+        Box(Modifier.systemBarsWithCutoutPadding()) {
             DifftScreen(
                 title = stringResource(R.string.call_server_node_page_title),
                 onNavigateBack = { finish() },
@@ -66,8 +66,8 @@ class LCallServerNodeActivity : BaseActivity() {
                     },
                     onProtocolChange = { checked ->
                         if (checked && !LCallEngine.isQuicSelectable()) {
-                            // QUIC unavailable under the current proxy: refuse the toggle without
-                            // mutating state so the controlled switch snaps back to OFF.
+                            
+                            
                             ToastUtil.show(getString(R.string.call_server_node_quic_unavailable))
                         } else {
                             val protocol =

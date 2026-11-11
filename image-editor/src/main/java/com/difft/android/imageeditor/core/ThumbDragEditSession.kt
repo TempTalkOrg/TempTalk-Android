@@ -26,10 +26,10 @@ internal class ThumbDragEditSession private constructor(
 
         editorMatrix.reset()
 
-        // Think of this process as a pinch to zoom/rotate, one finger being on the control point being manipulated, and the other on its opposite.
-        // Even if the opposite thumb doesn't exist on the tree, the position it would be at gives the virtual second finger position for the pinch.
+        
+        
 
-        // The opposite control point needs an additional mapping to put it in to the same coordinate system as the dragged thumb
+        
         oppositeControlPointOnControlParent[0] = controlPoint.opposite().x
         oppositeControlPointOnControlParent[1] = controlPoint.opposite().y
         thumbContainerRelativeMatrix.mapPoints(oppositeControlPointOnElement, oppositeControlPointOnControlParent)
@@ -51,7 +51,7 @@ internal class ThumbDragEditSession private constructor(
             rotate(editorMatrix, angle)
             editorMatrix.postTranslate(oppositeControlPoint.x, oppositeControlPoint.y)
         } else {
-            // 8 point controls, where edges scale in just one dimension and corners scale in both, optionally fixed aspect ratio
+            
             val aspectLocked = selected.flags.isAspectLocked() && !controlPoint.isCenter()
             val defaultScale = if (aspectLocked) 2f else 1f
             val scaleX = if (controlPoint.isVerticalCenter()) defaultScale else (xEnd - x) / (controlPoint.x - x)
@@ -100,27 +100,27 @@ internal class ThumbDragEditSession private constructor(
 
         private fun angle(a: PointF, b: PointF): Double = atan2((a.y - b.y).toDouble(), (a.x - b.x).toDouble())
 
-        /**
-         * Find relative distance between an old and new Point relative to an anchor.
-         *
-         * ```
-         * |to - anchor| / |from - anchor|
-         * ```
-         *
-         * @param anchor Fixed point.
-         * @param from   Starting point.
-         * @param to     Ending point.
-         * @return Scale required to scale a line anchor->from to reach the to point from anchor.
-         */
+        
+
+
+
+
+
+
+
+
+
+
+
         private fun findScale(anchor: PointF, from: PointF, to: PointF): Float {
             val originalD2 = getDistanceSquared(from, anchor)
             val newD2 = getDistanceSquared(to, anchor)
             return sqrt((newD2 / originalD2).toDouble()).toFloat()
         }
 
-        /**
-         * Distance between two points squared.
-         */
+        
+
+
         private fun getDistanceSquared(a: PointF, b: PointF): Float {
             val dx = a.x - b.x
             val dy = a.y - b.y

@@ -30,17 +30,17 @@ import com.difft.android.base.ui.compose.DifftButton
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.ui.theme.DifftThemePreview
 
-/**
- * Full-screen fail-soft UI shown by [com.difft.android.MainActivity] when the WCDB cipher key is
- * unavailable ([org.difft.app.database.DbHealth.KEY_UNAVAILABLE]) for an existing user (DB file
- * present). The encrypted database can't be opened, but the local data is NOT deleted — it stays
- * on disk behind the (temporarily unavailable) Keystore key. This screen is therefore reassuring,
- * NOT destructive: the only action is a plain retry (process restart, since cipher-key resolution
- * is cached for the process lifetime — a new process re-attempts the Keystore read).
- *
- * Stateless / hoisted — mirrors the [DatabaseRecoveryScreen] idiom; DifftTheme tokens render
- * correctly in light + dark. Design source: NONE (no Figma; reuses the recovery-screen layout).
- */
+
+
+
+
+
+
+
+
+
+
+
 @Composable
 fun KeyUnavailableScreen(
     onRetry: () -> Unit,
@@ -54,12 +54,12 @@ fun KeyUnavailableScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        // ic_launcher_foreground is a pure-white vector — invisible on a light background.
-        // Reconstruct the adaptive-icon look (white mark on its dark circular backdrop) so the
-        // logo reads in BOTH themes. The backdrop uses @color/ic_launcher_background (from :base,
-        // hence BaseR) — the SAME resource the launcher adaptive-icon uses — intentionally
-        // theme-independent (the app icon is identical in light + dark), hence colorResource, not
-        // a DifftTheme token.
+        
+        
+        
+        
+        
+        
         Box(
             modifier = Modifier
                 .size(120.dp)

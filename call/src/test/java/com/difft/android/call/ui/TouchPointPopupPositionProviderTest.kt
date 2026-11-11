@@ -7,10 +7,10 @@ import androidx.compose.ui.unit.LayoutDirection
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/**
- * [TouchPointPopupPositionProvider] must reproduce `ChativePopupWindow.showAtTouchPosition`:
- * centred on the touch X, top edge on the touch Y, clamped inside the window.
- */
+
+
+
+
 class TouchPointPopupPositionProviderTest {
 
     private val window = IntSize(1080, 2400)

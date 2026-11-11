@@ -19,26 +19,26 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos
 
-/**
- * Parsed call information used when processing `Calling` messages.
- *
- * Kept as a package-private top-level type so both the calling processor and
- * the text-message helper can share it without introducing nested visibility
- * noise.
- */
+
+
+
+
+
+
+
 internal data class CallInfo(
     val callType: CallType,
     val conversationId: String?,
     val callName: String,
 )
 
-/**
- * `Calling` message processing extensions for [CallMessageHandler].
- *
- * Splits the `START` / `INVITE` pipeline away from the main handler so it
- * stays within the 500-line budget. All logic stays functionally identical
- * to the pre-refactor implementation.
- */
+
+
+
+
+
+
+
 internal fun CallMessageHandler.handleCallingMessage(
     message: SignalServiceDataClass,
     envelope: SignalServiceProtos.Envelope,
@@ -50,7 +50,7 @@ internal fun CallMessageHandler.handleCallingMessage(
     L.i { "[Call] handleCallMessage, has calling message envelope.timestamp:${envelope.timestamp}" }
     L.i { "[Call] handleCallMessage, start checkCall roomId: $roomId" }
 
-    // Held until the chat-side call record is stored, so a migration pause waits for it (#1382).
+    
     val held = admission.retain("call-calling")
     appScope.launch(Dispatchers.IO) {
         try {
@@ -62,18 +62,18 @@ internal fun CallMessageHandler.handleCallingMessage(
 
             val callInfo = resolveCallInfo(content.calling, callerId)
 
-            // Persist the chat-side call record BEFORE checkCall — independent of whether the call
-            // is still live. A call started while this device was offline may already have ended by
-            // the time the backlog is drained (checkCall then returns fail/userStopped); we still
-            // want the "X called you / started a call" trace + unread red dot. checkCall below only
-            // gates the LIVE-call handling (active-call list + incoming ring UI).
+            
+            
+            
+            
+            
             if (content.calling.createCallMsg) {
                 handleCallTextMessage(envelope, content, callInfo)
             }
             held?.close()
 
-            // No live-call handling while messaging is paused (#1382); showIncomingNotificationOrActivity
-            // re-checks, for a pause that begins during checkCall.
+            
+            
             if (!messagingGate.isOpen) {
                 L.i { "[Call] event=calling_live_skipped reason=messaging_paused roomId=$roomId" }
                 return@launch
@@ -91,7 +91,7 @@ internal fun CallMessageHandler.handleCallingMessage(
 
             handleCallData(roomId, callInfo, envelope, response.data, message.senderId, content, fromServerPush)
         } catch (error: CancellationException) {
-            // Preserve structured concurrency — never swallow coroutine cancellation.
+            
             throw error
         } catch (error: Exception) {
             L.e { "[Call] handleCallMessage, checkCall fail:${error.stackTraceToString()}" }
@@ -111,7 +111,7 @@ internal suspend fun CallMessageHandler.resolveCallInfo(
 
     when {
         calling.hasConversationId() && calling.conversationId.hasNumber() -> {
-            // 1:1 call
+            
             callType = CallType.ONE_ON_ONE
             conversationId = calling.conversationId.number
             contactorCacheManager.getDisplayName(callerId)?.takeIf { it.isNotEmpty() }?.let {
@@ -119,7 +119,7 @@ internal suspend fun CallMessageHandler.resolveCallInfo(
             }
         }
         calling.hasConversationId() && calling.conversationId.hasGroupId() -> {
-            // Group call
+            
             conversationId = calling.conversationId.groupId.toStringUtf8()
             val inGroup = checkUserIsInGroup(mySelfId, conversationId)
             if (inGroup) {
@@ -128,14 +128,14 @@ internal suspend fun CallMessageHandler.resolveCallInfo(
                     callName = it
                 }
             } else {
-                // Not in the group anymore — fall back to instant call.
+                
                 callType = CallType.INSTANT
                 conversationId = null
                 callName = getInstantCallName(callerId)
             }
         }
         else -> {
-            // Instant call
+            
             callType = CallType.INSTANT
             callName = getInstantCallName(callerId)
         }

@@ -42,14 +42,13 @@ kotlin {
 dependencies {
     implementation(project(":base"))
     implementation(libs.picture.selector.ucrop)
-    implementation(libs.picture.selector.compress)
 
-    // Media3 ExoPlayer for video playback with controls
+    
     implementation(libs.media3.common)
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.ui)
 
-    // Test dependencies
+    
     testImplementation(libs.junit)
     testImplementation(libs.kotlin.test)
     testImplementation(libs.kotlinx.coroutines.test)

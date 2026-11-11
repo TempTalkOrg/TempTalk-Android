@@ -15,23 +15,11 @@ import org.junit.Test
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos
 import java.util.concurrent.ConcurrentHashMap
 
-/**
- * Candidate rules 1-10 of the auto-translate coordinator.
- *
- * Pure: no Robolectric, no MockK, no ML Kit. [toCandidate] is the single admission point every
- * scenario funnels through, so these cases are the behavioural contract for "which messages does
- * auto-translate ever touch".
- *
- * What each case asserts:
- *  - T1  outgoing message is never a candidate
- *  - T2  attachment / multi-forward / confidential / blank body are never candidates
- *  - T3  a single forward translates the forwarded text, not the (blank) wrapper body
- *  - T4  4097 characters is over the cap
- *  - T5  pure emoji / digits / URL / @mention carry no translatable letter
- *  - T6  hasAnyCachedTranslation truth table
- *  - T6b a cached EN translation blocks a ZH auto-translate (never overwrite a manual choice)
- *  - T7  admission is an atomic check-and-claim: the second call is rejected and claims nothing
- */
+
+
+
+
+
 class TranslateCandidateTest {
 
     private lateinit var attempted: MutableSet<String>
@@ -68,14 +56,12 @@ class TranslateCandidateTest {
         claims: MutableSet<String> = freshAttempted(),
     ): TranslateJobInput? = toCandidate(input, target, claims, userDisabled)
 
-    // --- T1 -----------------------------------------------------------------
 
     @Test
     fun `T1 an outgoing message is never auto-translated`() {
         assertNull(candidate(input(isMine = true)))
     }
 
-    // --- T2 -----------------------------------------------------------------
 
     @Test
     fun `T2 attachment multi-forward confidential and blank bodies are all rejected`() {
@@ -89,12 +75,11 @@ class TranslateCandidateTest {
         assertNull("blank body", candidate(input(body = "   ")))
     }
 
-    // --- T3 -----------------------------------------------------------------
 
     @Test
     fun `T3 a single forward translates the forwarded text`() {
-        // generateMessageTwo blanks the wrapper body for a forward, so the forwarded text is the
-        // only thing left to translate.
+        
+        
         val result = candidate(input(forwardCount = 1, singleForwardText = "hello", body = ""))
 
         assertEquals(TranslateJobInput("m1", "hello"), result)
@@ -105,7 +90,6 @@ class TranslateCandidateTest {
         assertNull(candidate(input(forwardCount = 1, singleForwardText = "  ", body = "not used")))
     }
 
-    // --- T4 -----------------------------------------------------------------
 
     @Test
     fun `T4 a body over the length cap is rejected and one under it is accepted`() {
@@ -113,7 +97,6 @@ class TranslateCandidateTest {
         assertNotNull(candidate(input(body = "a".repeat(MAX_TRANSLATABLE_LENGTH))))
     }
 
-    // --- T5 -----------------------------------------------------------------
 
     @Test
     fun `T5 text with no letter left after stripping is not translatable`() {
@@ -148,7 +131,6 @@ class TranslateCandidateTest {
         assertTrue(isTranslatableText(text, mentions))
     }
 
-    // --- T6 -----------------------------------------------------------------
 
     @Test
     fun `T6 hasAnyCachedTranslation truth table`() {
@@ -165,7 +147,6 @@ class TranslateCandidateTest {
         )
     }
 
-    // --- T6b ----------------------------------------------------------------
 
     @Test
     fun `T6b a manual EN translation switched off blocks a ZH auto-translate`() {
@@ -174,7 +155,6 @@ class TranslateCandidateTest {
         assertNull(candidate(input(translateData = manualChoice), target = TranslateLang.ZH))
     }
 
-    // --- T7 -----------------------------------------------------------------
 
     @Test
     fun `T7 admission is atomic - the second call is rejected and claims nothing`() {
@@ -208,7 +188,7 @@ class TranslateCandidateTest {
         }
     }
 
-    // --- adapter ------------------------------------------------------------
+    
 
     @Test
     fun `the TextChatMessage adapter feeds the same rules`() {

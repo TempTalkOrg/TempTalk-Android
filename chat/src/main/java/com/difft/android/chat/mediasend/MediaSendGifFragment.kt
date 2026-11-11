@@ -22,8 +22,8 @@ class MediaSendGifFragment : Fragment(), MediaSendPageFragment {
         arguments?.let { args ->
             uri = args.getParcelable(KEY_URI)
             uri?.let {
-                // Load the URI itself: File(uri.path) threw NPE for a path-less URI and resolved to
-                // a non-existent path for a content one. Glide's Uri loader handles every scheme.
+                
+                
                 Glide.with(this).load(it).fitCenter().into(view as ImageView)
             }
         }

@@ -78,14 +78,14 @@ import javax.inject.Inject
 import javax.inject.Provider
 import javax.inject.Singleton
 
-/** The `tag` of envelopes decrypted from an FCM push; the server already judged those for notification. */
+
 const val ENVELOPE_TAG_FCM = "fcm"
 
-/**
- * Takes data about a decrypted message, transforms it into user-presentable data, and writes that
- * data to our data stores.
- */
-// All wcdb calls in this class run on Dispatchers.IO.
+
+
+
+
+
 @Suppress("BlockingWcdbInSuspend")
 @Singleton
 class MessageContentProcessor @Inject constructor(
@@ -112,17 +112,17 @@ class MessageContentProcessor @Inject constructor(
     private val groupFocusRepository: GroupFocusRepository,
 ) {
 
-    /**
-     * Given the details about a message decryption, this will insert the proper message content into
-     * the database.
-     *
-     *
-     * This is super-stateful, and it's recommended that this be run in a transaction so that no
-     * intermediate results are persisted to the database if the app were to crash.
-     *
-     * @param admission the open receive ticket of the envelope; work this deferral hands to a queue
-     *   or a launched write retains its own ticket from it (#1382).
-     */
+    
+
+
+
+
+
+
+
+
+
+
     suspend fun process(content: SignalServiceDataClass, tag: String, admission: MessagingTicket): Message? {
         L.i { "[Message][${tag}] process message -> timestamp:${content.signalServiceEnvelope.timestamp}  device:${content.signalServiceEnvelope.sourceDevice}  stamp:${content.envelopeConversation?.id ?: "absent"}" }
         return handleMessage(content, tag, admission)
@@ -138,7 +138,7 @@ class MessageContentProcessor @Inject constructor(
             } else if (serviceContent.hasNotifyMessage()) {
                 return handleClientNotifyMessage(content, tag)
             } else if (serviceContent.hasDataMessage()) {
-                if (isCrossConversationInjection(content, tag)) return null // drop: no render/persist; eager-ACK already sent
+                if (isCrossConversationInjection(content, tag)) return null 
                 return handleDataMessage(content, isSyncMessage = false, tag = tag)
             } else if (serviceContent.hasSyncMessage()) {
                 if (content.senderId != globalServices.myId) {
@@ -155,7 +155,7 @@ class MessageContentProcessor @Inject constructor(
                     L.i { "[Message][${tag}] process sync read message -> timestamp:${content.signalServiceEnvelope.timestamp}  device:${content.signalServiceEnvelope.sourceDevice}" }
                     val firstReadMessage = serviceContent.syncMessage.readList[0]
                     if (firstReadMessage.messageMode == SignalServiceProtos.Mode.CONFIDENTIAL) {
-                        // Sync: confidential message read on another device, delete locally
+                        
                         serviceContent.syncMessage.readList.forEach { readMessage ->
                             val originalMessage = wcdb.message.getFirstObject(DBMessageModel.timeStamp.eq(readMessage.timestamp)) ?: run {
                                 L.i { "[Message] sync confidential delete, can't find message, timestamp:${readMessage.timestamp}" }
@@ -178,8 +178,8 @@ class MessageContentProcessor @Inject constructor(
                                 firstReadMessage.readPosition.maxServerTime,
                                 firstReadMessage.readPosition.maxSequenceId
                             )
-                            // #1020 Phase 2: readTime = actual read moment, clamped by the server-assigned
-                            // systemShowTimestamp (see SyncReadTimeResolver). WHERE bound stays maxServerTime.
+                            
+                            
                             val resolvedReadAt = SyncReadTimeResolver.resolveSyncReadAt(
                                 payloadReadAt = firstReadMessage.readPosition.readAt,
                                 envelopeServerTimestamp = content.signalServiceEnvelope.systemShowTimestamp,
@@ -193,9 +193,7 @@ class MessageContentProcessor @Inject constructor(
                         }
                     }
                 } else if (serviceContent.syncMessage.hasActivityNoticeSync()) {
-                    // Place ahead of forwardNoticeSync so that if both fields are
-                    // mistakenly populated, the new generic channel wins. In normal
-                    // operation only one is set per envelope by the sender.
+                    
                     L.i { "[Message][${tag}] process activity notice sync -> timestamp:${content.signalServiceEnvelope.timestamp}" }
                     return handleActivityNoticeSync(content, serviceContent.syncMessage.activityNoticeSync, tag)
                 } else if (serviceContent.syncMessage.hasForwardNoticeSync()) {
@@ -211,9 +209,9 @@ class MessageContentProcessor @Inject constructor(
                 LCallManager.removePendingMessage(content.signalServiceEnvelope.source, content.signalServiceEnvelope.timestamp.toString())
                 lCallManagerProvider.get().handleCallMessage(content, admission, fromServerPush = tag == ENVELOPE_TAG_FCM)
             } else if (serviceContent.hasActivityNotice()) {
-                if (isCrossConversationInjection(content, tag)) return null // drop: no render/persist; eager-ACK already sent
-                // Place ahead of forwardNotice — same rationale as the sync branch
-                // above: prefer the generic channel if both fields are populated.
+                if (isCrossConversationInjection(content, tag)) return null 
+                
+                
                 L.i { "[Message][${tag}] process activity notice -> timestamp:${content.signalServiceEnvelope.timestamp}" }
                 return handleActivityNoticeMessage(
                     content = content,
@@ -223,7 +221,7 @@ class MessageContentProcessor @Inject constructor(
                     tag = tag
                 )
             } else if (serviceContent.hasForwardNotice()) {
-                if (isCrossConversationInjection(content, tag)) return null // drop: no render/persist; eager-ACK already sent
+                if (isCrossConversationInjection(content, tag)) return null 
                 L.i { "[Message][${tag}] process forward notice -> timestamp:${content.signalServiceEnvelope.timestamp}" }
                 return handleForwardNoticeMessage(
                     content = content,
@@ -237,13 +235,13 @@ class MessageContentProcessor @Inject constructor(
         return null
     }
 
-    /**
-     * Cross-conversation injection guard (cross-platform-proposal §1-3): the content-resolved
-     * conversation must equal the server-stamped envelope conversation, else the message is dropped.
-     * Gated on content shape (covers MSG_RECALL), not msgType — msgType is attacker-controllable.
-     * isSyncMessage is always false here, so the isSyncOrSelf exemption reduces to senderId==myId.
-     * Returns true when the message must be dropped (no render/persist; eager-ACK already sent).
-     */
+    
+
+
+
+
+
+
     private fun isCrossConversationInjection(content: SignalServiceDataClass, tag: String): Boolean {
         val reject = crossCheckConversation(
             contentConversation = content.conversation,
@@ -260,18 +258,18 @@ class MessageContentProcessor @Inject constructor(
         return reject
     }
 
-    /**
-     * Handle a top-level `Content.forwardNotice` (primary path: from peer / group
-     * / self-as-NTS). Self-sync uses a separate path via SyncMessage.forwardNoticeSync
-     * — see [handleForwardNoticeSync].
-     *
-     * Delegates the "resolve names → render showContent → persist NotifyMessage"
-     * pipeline to [LocalMessageCreator.createForwardNoticeMessage].
-     *
-     * Uses the function parameter [tag] for logging — this class is a
-     * @Singleton, so logging through a parameter (vs. a class-level field)
-     * keeps concurrent callers' tags from racing.
-     */
+    
+
+
+
+
+
+
+
+
+
+
+
     private suspend fun handleForwardNoticeMessage(
         content: SignalServiceDataClass,
         forwardNotice: SignalServiceProtos.ForwardNoticeMessage,
@@ -280,9 +278,9 @@ class MessageContentProcessor @Inject constructor(
         tag: String
     ): Message? {
         val envelop = content.signalServiceEnvelope
-        // Scene guard: proto2-lite decodes both "unset" and "unknown future value"
-        // as the first declared enum value (= UNKNOWN). `toKotlinEnum()` maps that
-        // to null; we drop rather than silently rendering as a wrong scene.
+        
+        
+        
         val sceneKt = forwardNotice.scene.toKotlinEnum() ?: run {
             L.w {
                 "[Message][${tag}] forwardNotice has unknown/unset scene=${forwardNotice.scene}, drop"
@@ -291,14 +289,14 @@ class MessageContentProcessor @Inject constructor(
         }
         val noticeData = ForwardNoticeData(
             scene = sceneKt,
-            // Pass the full list through — the renderer owns display truncation /
-            // de-duplication, and only the rendered string is persisted. Contact
-            // lookup in LocalMessageCreator is a single batch query so list length
-            // has no N+1 cost.
+            
+            
+            
+            
             sourceAuthorIds = forwardNotice.sourceAuthorIdsList.toList(),
-            // Protocol-violation degrade: coerce to >= 1 so plurals always renders.
-            // Do NOT raise to authorIds.size — a peer could craft a payload with
-            // messageCount=1 and 100 authors to inflate the displayed count.
+            
+            
+            
             messageCount = maxOf(1, forwardNotice.messageCount),
             combinedForwardMode = forwardNotice.combinedForwardMode.toKotlinEnum(),
         )
@@ -317,18 +315,18 @@ class MessageContentProcessor @Inject constructor(
         )
     }
 
-    /**
-     * Handle a self-sync `SyncMessage.markAsUnread`: the manual mark-unread state from another
-     * device of this account. The mark time is the server time of this envelope, the same value
-     * the sending device stored once its send succeeded. Never produces a message.
-     */
+    
+
+
+
+
     private suspend fun handleMarkAsUnreadSync(
         content: SignalServiceDataClass,
         markAsUnread: SignalServiceProtos.SyncMessage.MarkAsUnread,
         tag: String
     ): Message? {
-        // A payload without a well-formed conversation must be dropped: the upstream conversation
-        // lazy would fall back to For.Account(myId) and mark Note-to-Self instead.
+        
+        
         val conv = markAsUnread.takeIf { it.hasConversation() }?.conversation
         val hasValidConv = conv != null &&
             (conv.hasGroupId() || (conv.hasNumber() && conv.number.isNotEmpty()))
@@ -337,24 +335,24 @@ class MessageContentProcessor @Inject constructor(
             return null
         }
         L.i { "[Message][${tag}] process markAsUnread sync -> timestamp:${content.signalServiceEnvelope.timestamp} flag:${markAsUnread.flag.number} conversationId:${content.conversation.id}" }
-        // Same fallback as the other sync handlers: a missing server time reads as 0, which the
-        // ordering guard would reject forever.
+        
+        
         val envelope = content.signalServiceEnvelope
         val markedAt = envelope.systemShowTimestamp.takeIf { it > 0 } ?: envelope.timestamp
         conversationUnreadMarker.onIncomingSync(content.conversation, markAsUnread.flag.number, markedAt)
         return null
     }
 
-    /**
-     * Handle a self-sync `SyncMessage.forwardNoticeSync` (a ForwardNoticeMessage).
-     * The outer `handleMessage` has already verified `senderId == myId`; the
-     * Drops silently (returns null + warn log) if the payload is missing a
-     * well-formed `conversation` field. Without this guard the upstream
-     * conversation lazy would fall back to `For.Account(senderId=myId)` and
-     * silently route the notice into Note-to-Self instead of the real peer.
-     *
-     * Operator is always me (sender of the sync).
-     */
+    
+
+
+
+
+
+
+
+
+
     private suspend fun handleForwardNoticeSync(
         content: SignalServiceDataClass,
         forwardNotice: SignalServiceProtos.ForwardNoticeMessage,
@@ -377,18 +375,18 @@ class MessageContentProcessor @Inject constructor(
         )
     }
 
-    /**
-     * Handle a top-level `Content.activityNotice` (primary path: from peer / group /
-     * self-as-NTS). Self-sync uses [handleActivityNoticeSync].
-     *
-     * Mirrors [handleForwardNoticeMessage] 1:1; differences:
-     *   - Parses payload via [toKotlinDataOrNull] so unknown / TYPEDATA_NOT_SET
-     *     oneof cases drop silently with a warn log (forward-compat: future activity
-     *     types on the wire that this client doesn't know about must NOT render as
-     *     an unrelated type — design doc §3.1 rule 1+2).
-     *   - Delegates to [LocalMessageCreator.createActivityNoticeMessage] for the
-     *     "resolve names → render showContent → persist NotifyMessage" pipeline.
-     */
+    
+
+
+
+
+
+
+
+
+
+
+
     private suspend fun handleActivityNoticeMessage(
         content: SignalServiceDataClass,
         activityNotice: SignalServiceProtos.MessageActivityNotice,
@@ -421,12 +419,12 @@ class MessageContentProcessor @Inject constructor(
         )
     }
 
-    /**
-     * Handle a self-sync `SyncMessage.activityNoticeSync`. The outer dispatcher has
-     * already verified `senderId == myId`. Mirrors [handleForwardNoticeSync]:
-     * drops with a warn log if `conversation` is missing/empty, otherwise delegates
-     * to [handleActivityNoticeMessage] with operatorId=myId.
-     */
+    
+
+
+
+
+
     private suspend fun handleActivityNoticeSync(
         content: SignalServiceDataClass,
         activityNotice: SignalServiceProtos.MessageActivityNotice,
@@ -467,18 +465,18 @@ class MessageContentProcessor @Inject constructor(
         if (content.conversation is For.Group) {
             asyncMessageJobsManager.makeSureGroupExist(content.conversation.id)
 
-            // Fallback: extract R_group from group message if present
+            
             if (message.hasGroup() && message.group.hasGroupRootKey()) {
                 val saved = groupCryptoRepo.saveOrRotateRGroup(
                     content.conversation.id,
                     message.group.groupRootKey.toByteArray(),
-                    message.group.keyVersion // absent proto field defaults to 0
+                    message.group.keyVersion 
                 )
                 if (saved) {
                     L.i { "[GE] Fallback key extracted from group message for ${content.conversation.id}" }
-                    // Key just arrived — refresh group info so decrypted name/avatar
-                    // replaces the placeholder in DB. Without this, the group stays
-                    // showing "Encrypted Group" until the next explicit fetch.
+                    
+                    
+                    
                     groupUtil.fetchAndSaveSingleGroupInfo(content.conversation.id, true)
                 }
             }
@@ -527,7 +525,7 @@ class MessageContentProcessor @Inject constructor(
 
         val systemShowTimestamp = content.signalServiceEnvelope.systemShowTimestamp
 
-        // Check protocol version first - if message requires newer version, save as unsupported message
+        
         val requiredVersion = message.requiredProtocolVersion
         val currentVersion = SignalServiceProtos.DataMessage.ProtocolVersion.CURRENT_VALUE
         if (requiredVersion > currentVersion) {
@@ -560,8 +558,7 @@ class MessageContentProcessor @Inject constructor(
                 L.e { "Illegal file name: $fileName" }
                 attachmentPointer.id.toString()
             }
-            // Addressed by its own local identity, minted here — same rule the forward branch has
-            // used since per-copy addressing landed.
+            
             val localId = UUID.randomUUID().toString()
             val attachmentPath = AttachmentPathResolver.stagingFileFor(localId, fileName)
             val attachment = createAttachmentFormPointer(attachmentPointer, fileName, attachmentPath, localId = localId)
@@ -659,9 +656,9 @@ class MessageContentProcessor @Inject constructor(
             }
             var text = quoteMessage.text
             if (TextUtils.isEmpty(quoteMessage.text)) {
-                // No quote body (typical for media quotes from iOS/Mac) → show a precise type label
-                // (gif/image/video/audio) instead of a generic "[Attachment]", matching the conversation
-                // preview (MessageModel.previewContent).
+                
+                
+                
                 val qa = quotedAttachments.firstOrNull()
                 text = context.getString(MediaUtil.quoteTypeLabelRes(qa?.contentType, qa?.flags ?: 0))
             }
@@ -685,13 +682,13 @@ class MessageContentProcessor @Inject constructor(
                 list.add(forward1)
             }
             forwardContext = ForwardContext(list, message.forwardContext.isFromGroup)
-            // Fetch contactor info for forward authors if not already cached
-            // Note: AsyncMessageJobsManager uses in-memory cache to skip already confirmed contactors
+            
+            
             if (forwardContactIds.isNotEmpty()) {
                 asyncMessageJobsManager.needFetchSpecifiedContactors(forwardContactIds.toList())
             }
         }
-        // Handle screenshot
+        
         val screenShot: ScreenShot? = if (message.hasScreenShot()) {
             L.d { "[Message][${tag}] Found screenshot in handle text message" }
             val source = message.screenShot.source
@@ -732,7 +729,7 @@ class MessageContentProcessor @Inject constructor(
             messageStore.updateMessageReaction(content.conversation.id, reaction, content.messageId, content.signalServiceEnvelope.toByteArray())
             return null
         } else {
-            // Check for empty message - don't save to database if no valid content
+            
             val isEmptyMessage = TextUtils.isEmpty(messageBody)
                     && forwardContext == null
                     && quote == null
@@ -745,7 +742,7 @@ class MessageContentProcessor @Inject constructor(
                 return null
             }
 
-            // Set contentText for screenshot messages directly for display
+            
             val contentText = if (screenShot != null) {
                 val screenshotSource = screenShot.realSource?.source
                 val screenshotUserName = if (screenshotSource == globalServices.myId) {
@@ -808,15 +805,15 @@ class MessageContentProcessor @Inject constructor(
         val saved = groupCryptoRepo.saveOrRotateRGroup(
             gid,
             rGroup,
-            groupKeyMessage.keyVersion // absent proto field defaults to 0
+            groupKeyMessage.keyVersion 
         )
         if (saved) {
-            // Key just arrived or rotated — refresh group info so decrypted
-            // name/avatar are re-derived with the new K_group. Stale/older keys
-            // are skipped (saved=false) and need no refresh.
+            
+            
+            
             groupUtil.fetchAndSaveSingleGroupInfo(gid, true)
         }
-        return null // Not displayed in UI
+        return null 
     }
 
     private suspend fun handleClientNotifyMessage(signalServiceDataClass: SignalServiceDataClass, tag: String): Message? {
@@ -827,7 +824,7 @@ class MessageContentProcessor @Inject constructor(
         return null
     }
 
-    /** Type 29: the server pushes the full focus snapshot; the repository applies it by version. */
+    
     private suspend fun handleFocusNotify(message: TTNotifyMessage, tag: String) {
         val focusJson = message.data?.focus
         val snapshot = focusJson?.let { runCatching { gson.fromJson(it, FocusSnapshot::class.java) }.getOrNull() }
@@ -848,10 +845,9 @@ class MessageContentProcessor @Inject constructor(
             val message = notifyMessageContent
             L.i { "[Message][${tag}] process notify message -> timestamp:${envelop.timestamp}  device:${envelop.sourceDevice}  data:${message.notifyType}" }
             if (message.notifyType == TTNotifyMessage.NOTIFY_MESSAGE_TYPE_CONVERSATION_SHARE_SETTING) {
-                // Type 5: messageExpiry, messageClearAnchor
+                
                 message.data?.let { data ->
                     updateDisappearingTime(content.conversation, data.messageExpiry, data.messageClearAnchor, admission)
-                    // 通知 ViewModel 更新 (携带具体值)
                     conversationSettingsManager.emitConversationSettingUpdate(
                         conversationId = content.conversation.id,
                         messageExpiry = data.messageExpiry.toLong(),
@@ -859,13 +855,13 @@ class MessageContentProcessor @Inject constructor(
                     )
                 }
             } else if (message.notifyType == TTNotifyMessage.NOTIFY_MESSAGE_TYPE_CONVERSATION_SETTING) {
-                // Type 4: muteStatus, blockStatus, confidentialMode
+                
                 val data = message.data
                 data?.conversation?.let {
                     kotlin.runCatching {
                         val notifyConversation = gson.fromJson(it.toString(), NotifyConversation::class.java)
-                        // The applier owns the version gate, the own-push skip and the local-first
-                        // gating of confidentialMode, and emits the update event for what it wrote.
+                        
+                        
                         settingsApplier.applyServerSnapshot(
                             ServerConfigSnapshot.fromNotify(notifyConversation),
                             SnapshotSource.Push(
@@ -875,7 +871,7 @@ class MessageContentProcessor @Inject constructor(
                                 operatorDeviceId = data.operatorDeviceId,
                             )
                         )
-                        // Gate on `!= null`: empty string means "clear", null means "not in this notify".
+                        
                         if (notifyConversation.remark != null) {
                             ContactorUtil.updateRemark(notifyConversation.conversation, notifyConversation.remark)
                         }
@@ -935,7 +931,6 @@ class MessageContentProcessor @Inject constructor(
                     return
                 }
 
-                // 忽略自己的消息，避免重复提醒
                 if (data.source == globalServices.myId && data.sourceDevice == DEFAULT_DEVICE_ID) {
                     L.i { "[Message][${tag}] critical alert notify message is from myself" }
                     return
@@ -957,7 +952,6 @@ class MessageContentProcessor @Inject constructor(
                     L.i { "[Message][${tag}] critical alert notification not shown (source=myself or showCriticalAlert=false)" }
                 }
 
-                // 本地生成 critical alert 文本消息
                 createCriticalAlertMessage(serverTimestamp, timestamp, source, forWhat, data.showCriticalAlert, data.sourceDevice, data.roomId)
 
             } else if (message.notifyType == TTNotifyMessage.NOTIFY_MESSAGE_TYPE_FOCUS) {
@@ -969,8 +963,8 @@ class MessageContentProcessor @Inject constructor(
                     L.w { "[Message][${tag}] weakContact missing uid, skip. changeType=${data?.changeType}" }
                     return
                 }
-                // Do NOT feed the trusted-time anchor here: a notify's serverTimestamp is its GENERATION
-                // time, which from offline backlog can be days old and would rewind the global clock.
+                
+                
                 L.i { "[Message][${tag}] weakContact notify uid=$uid changeType=${data.changeType} reason=${data.reason} expireTime=${data.expireTime}" }
                 when (data.changeType) {
                     0 -> {
@@ -979,21 +973,19 @@ class MessageContentProcessor @Inject constructor(
                             it.name = data.name
                             it.avatar = data.avatar
                         }
-                        // Prefer the explicit deleteTime from the server; fall back to serverTimestamp
-                        // when notify=25 omits it (keeps parity with the deletedRecords API path).
+                        
+                        
                         val deleteTime = data.deleteTime.takeIf { it > 0 } ?: data.serverTimestamp
                         weakContactReconciler.enterWeak(uid, data.expireTime, data.reason, deleteTime, snapshot)
                     }
-                    // ct=1 = real removal (expiry / immediate / cross-device); friend restore comes via directory action=0.
+                    
                     1 -> weakContactReconciler.removeWeak(uid)
 
                     else -> L.w { "[Message][${tag}] weakContact unknown changeType=${data.changeType} uid=$uid" }
                 }
 
             } else if (message.notifyType == TTNotifyMessage.NOTIFY_MESSAGE_TYPE_SECONDARY_DEVICE_KEPT) {
-                // The account signed in on a new primary with its identity carried over, and the server kept
-                // its secondary devices signed in — the signal a kicked device would otherwise have been.
-                // Parsed and logged; the user-facing notice waits on its copy.
+                
                 val data = message.data
                 L.i {
                     "[Message][${tag}] secondary devices kept newDeviceNamed=${!data?.newDeviceName.isNullOrEmpty()} " +
@@ -1030,8 +1022,8 @@ class MessageContentProcessor @Inject constructor(
                     L.e { "Illegal file name: $fileName" }
                     attachmentPointer.id.toString()
                 }
-                // A forward attachment is addressed by its own local identity, not by the message
-                // that carries the forward tree: minted here, at the moment the copy is created.
+                
+                
                 val localId = UUID.randomUUID().toString()
                 val attachmentPath = AttachmentPathResolver.stagingFileFor(localId, fileName)
                 val attachment = createAttachmentFormPointer(
@@ -1058,15 +1050,15 @@ class MessageContentProcessor @Inject constructor(
         return Forward(forward.id, forward.type, forward.isFromGroup, forward.author, forward.text, attachments, forwards, mentions, serverTimestamp)
     }
 
-    /**
-     * The domain `id` is left EMPTY: the server-side attachment id is shared by every copy of the
-     * same file, so it can identify nothing locally, and every local operation addresses by [localId]
-     * instead. The column keeps its binding for rows written before per-copy addressing (which the
-     * legacy job locator still resolves through); new rows simply store nothing there.
-     *
-     * @param localId local identity of the attachment copy; must be the same value the caller used to
-     *   build [attachmentPath]. Defaults to a fresh one.
-     */
+    
+
+
+
+
+
+
+
+
     private fun createAttachmentFormPointer(
         attachmentPointer: SignalServiceProtos.AttachmentPointer,
         fileName: String?,
@@ -1091,13 +1083,13 @@ class MessageContentProcessor @Inject constructor(
         isForwardCopy = isForwardCopy
     )
 
-    /**
-     * Maps a quote's inline thumbnail [SignalServiceProtos.AttachmentPointer] to a domain
-     * [Attachment] for preview. The thumbnail travels inside the quote proto, so this carries
-     * no crypto material (key/digest = null) and no local file (path = null); status is SUCCESS
-     * because the inline bytes are immediately renderable. Empty/absent bytes collapse to
-     * thumbnail=null, size=0 so the renderer falls back to a type icon.
-     */
+    
+
+
+
+
+
+
     internal fun createQuoteThumbnailAttachment(pointer: SignalServiceProtos.AttachmentPointer): Attachment {
         val thumbBytes = pointer.thumbnail?.toByteArray()?.takeIf { it.isNotEmpty() }
         return Attachment(
@@ -1121,20 +1113,20 @@ class MessageContentProcessor @Inject constructor(
         messageArchiveManager.updateLocalArchiveTime(forWhat, messageExpiry.toLong(), messageClearAnchor, admission)
     }
 
-    /**
-     * 创建本地 Critical Alert 文本消息
-     * @param serverTimestamp 服务器时间戳
-     * @param source 消息发送者ID
-     * @param forWhat 消息所属会话
-     * @param showCriticalAlert 控制会话的 Critical Alert 高亮状态
-     * @param sourceDevice 消息所属设备类型
-     * @param roomId room id of the alert, if any
-     */
+    
+
+
+
+
+
+
+
+
     private suspend fun createCriticalAlertMessage(serverTimestamp: Long, timestamp: Long, source: String, forWhat: For, showCriticalAlert: Boolean, sourceDevice: Int, roomId: String?) {
         localMessageCreator.createCriticalAlertMessage(serverTimestamp, timestamp, For.Account(source), forWhat, sourceDevice)
-        // 设置会话列表高亮（仅当消息未读时）
+        
         if (source != globalServices.myId && showCriticalAlert) {
-            // #1381: none for the call being joined or already active
+            
             criticalAlertHighlightWriter.highlightIfUnread(forWhat.id, roomId, serverTimestamp)
         }
     }

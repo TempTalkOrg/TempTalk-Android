@@ -6,14 +6,14 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/**
- * Pins the uid-only avatar normalisation onto the app-wide first-letter rule
- * (`ContactorUtil.getFirstLetter`): ASCII letters and CJK survive, everything else becomes `#`.
- * The colour-seed id keeps the device-suffix and `+` strip.
- *
- * Robolectric is required: `ContactorUtil.getFirstLetter` calls `TextUtils.isEmpty`, which returns
- * a stub value under plain JUnit and silently takes the wrong branch for null/blank names.
- */
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33])
 class CallAvatarFieldsTest {

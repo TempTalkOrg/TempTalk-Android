@@ -35,17 +35,6 @@
         android:textColor="@color/t.error"
         android:textSize="16sp" />
 
-
-    <!--    <androidx.appcompat.widget.AppCompatTextView-->
-    <!--        android:id="@+id/tv_block_and_report"-->
-    <!--        android:layout_width="match_parent"-->
-    <!--        android:layout_height="wrap_content"-->
-    <!--        android:gravity="center"-->
-    <!--        android:padding="16dp"-->
-    <!--        android:text="@string/contact_block_and_report"-->
-    <!--        android:textColor="@color/t.error"-->
-    <!--        android:textSize="16sp" />-->
-
     <androidx.appcompat.widget.AppCompatTextView
         android:id="@+id/tv_cancel"
         android:layout_width="match_parent"

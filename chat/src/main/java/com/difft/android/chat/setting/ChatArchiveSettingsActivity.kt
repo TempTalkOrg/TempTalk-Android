@@ -8,7 +8,7 @@ import com.difft.android.base.utils.pane.DetailShellActivity
 import dagger.hilt.android.AndroidEntryPoint
 import difft.android.messageserialization.For
 
-/** Full-window shell for [ChatArchiveSettingsFragment] where it is not pushed onto a home stack. */
+
 @AndroidEntryPoint
 class ChatArchiveSettingsActivity : DetailShellActivity() {
 

@@ -23,10 +23,10 @@ import org.robolectric.annotation.Config
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.CoroutineContext
 
-/**
- * Gesture handling of the real view on a 260px grid (mdpi): dot centres at 16 / 130 / 244 on both
- * axes, ids `row * 3 + column`.
- */
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33], qualifiers = "mdpi", application = PatternLockViewGestureTest.TestScopeApplication::class)
 class PatternLockViewGestureTest {
@@ -46,7 +46,7 @@ class PatternLockViewGestureTest {
     fun setUp() {
         val app = ApplicationProvider.getApplicationContext<TestScopeApplication>()
         ApplicationHelper.init(app)
-        // Attached to a window: delayed runnables posted on a detached view never run.
+        
         val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
         view = PatternLockView(activity)
         activity.setContentView(view, ViewGroup.LayoutParams(260, 260))
@@ -88,8 +88,8 @@ class PatternLockViewGestureTest {
     fun `T8 historical samples of one move event are hit tested along the path`() {
         touchDown(0)
         val now = SystemClock.uptimeMillis()
-        // One batched event: the earlier sample is beside dot 1 (26px from its centre), the current
-        // one is on dot 2. Legacy selection only looks at the current position.
+        
+        
         val move = MotionEvent.obtain(downTime, now, MotionEvent.ACTION_MOVE, 140f, 40f, 0)
         move.addBatch(now + 8, dot(2).first, dot(2).second, 1f, 1f, 0)
         view.dispatchTouchEvent(move)
@@ -118,7 +118,7 @@ class PatternLockViewGestureTest {
         touchDown(0)
         moveTo(1)
         release(1)
-        // The caller has not cleared (set screen clears immediately, unlock after a delay).
+        
         touchDown(7)
         moveTo(8)
         release(8)

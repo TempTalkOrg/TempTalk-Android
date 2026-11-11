@@ -43,44 +43,44 @@ import org.difft.app.database.models.SharedContactPhoneModel
 import java.io.Closeable
 import java.io.File
 
-/**
- * The staging WCDB the restore importer writes into, opened at a dedicated path under the app's files
- * area and never the live `tt_wcdb_database.db`. Once import and verify succeed, [PromoteStep] moves
- * this db file into the real location and installs [stagingKey] as the real cipher key.
- *
- * It carries the same table set and `insert*` call shapes as the live WCDB, so the importer's write
- * seam is reused unchanged, but this file is meant to survive the import and be promoted. Its cipher
- * key mirrors the real DB's policy for the build: the real WCDB key in release, or null in debug,
- * where the real DB is plaintext and there is no key to install.
- *
- * Restore is net-install only, so the target is empty and a plain `insertObject` is correct for every
- * row — no PK collisions and no need for an `insertOrReplaceObject` keyed on `databaseId`.
- *
- * [close] checkpoints, so the rows are durably in the main db file, and closes the handle; it does not
- * delete the staging file, which promote consumes afterwards. [discard] deletes the file and its
- * sidecars when an import is abandoned before promote.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 class StagingDatabase private constructor(
-    /** Absolute path of the dedicated staging db file (NOT the real DB path). */
+    
     val stagingDbPath: String,
-    /**
-     * The cipher key the staging db is encrypted with, mirroring the real DB's policy for this build: a
-     * real key in release, which [PromoteStep] installs as `wcdb_key.bin`, or null in debug, where
-     * staging is plaintext and promote skips the key-install step entirely.
-     */
+    
+
+
+
+
     val stagingKey: ByteArray?,
 ) : WcdbWriteTarget, Closeable {
 
     private val db: Database = Database(stagingDbPath).also { database ->
-        // Set a cipher key only when this build has one. In debug the staging DB is plaintext, and a
-        // key here would make the later keyless open throw Code 26 "file is not a database". The handle
-        // opens eagerly so a cipher or IO failure surfaces here.
+        
+        
+        
         stagingKey?.let { database.setCipherKey(it) }
         database.execute("PRAGMA journal_mode")
         L.i { "[MigrationV2][Restore] staging DB opened path=$stagingDbPath keyed=${stagingKey != null}" }
     }
 
-    // Typed table handles — the same set and pattern as the live WCDB.
+    
     private val messageTable: Table<MessageModel> = table("message", DBMessageModel)
     private val quoteTable: Table<QuoteModel> = table("quote", DBQuoteModel)
     private val forwardContextTable: Table<ForwardContextModel> = table("forward_context", DBForwardContextModel)
@@ -94,12 +94,12 @@ class StagingDatabase private constructor(
     private val sharedContactPhoneTable: Table<SharedContactPhoneModel> =
         table("shared_contact_phone", DBSharedContactPhoneModel)
     private val readInfoTable: Table<ReadInfoModel> = table("read_info", DBReadInfoModel)
-    // Named like the live accessor: the PK is the natural key messageId, so insert-or-replace is safe.
+    
     private val pendingMessageNew: Table<PendingMessageModelNew> = table("pending_message_new", DBPendingMessageModelNew)
 
     init {
-        // Created but never written: the live schema still carries this table, and promote moves this
-        // whole file into place, so a missing table would leave the promoted DB without it.
+        
+        
         db.createTable("group_member_contactor", DBGroupMemberContactorModel)
     }
 
@@ -108,7 +108,7 @@ class StagingDatabase private constructor(
         return db.getTable(name, binding)
     }
 
-    // ── WcdbWriteTarget — identical call shapes to WcdbWriteTargetImpl ──────────────────────────
+    
 
     override fun runInTransaction(block: () -> Unit) {
         db.runTransaction { _ ->
@@ -158,15 +158,15 @@ class StagingDatabase private constructor(
     }
 
     override fun upsertRoom(model: RoomModel) {
-        // The target is empty, so every imported room arrives with databaseId=0. insertOrReplaceObject
-        // keys on that PK and would collide every room at rowid 0; a plain insertObject lets SQLite
-        // assign distinct rowids while the unique roomId index stays satisfied.
+        
+        
+        
         roomTable.insertObject(model)
     }
 
     override fun insertReadInfo(model: ReadInfoModel) {
-        // Insert-or-replace on the {roomId, uid} composite PK, mirroring the live write. The target is
-        // empty so there is nothing to replace, but the semantics keep a re-import safe.
+        
+        
         readInfoTable.insertOrReplaceObject(model)
     }
 
@@ -175,7 +175,7 @@ class StagingDatabase private constructor(
     }
 
     override fun insertPendingEnvelope(model: PendingMessageModelNew) {
-        // Promoted with the rest of this file, so the row is in the live table before sign-in (#1382).
+        
         pendingMessageNew.insertOrReplaceObject(model)
     }
 
@@ -194,8 +194,8 @@ class StagingDatabase private constructor(
         attachmentTable.updateValue(0, DBAttachmentModel.status, DBAttachmentModel.id.eq(attachmentId))
     }
 
-    // ── RoomStateReadWrite: post-import derived-state recompute against this staging DB ─────────
-    // Every read is a per-room query; a full-table load per room is O(rooms × messages) and OOMs.
+    
+    
 
     override fun roomIdsWithMessages(): List<String> =
         roomTable.allObjects.mapNotNull { it.roomId?.takeIf { id -> id.isNotEmpty() } }
@@ -239,7 +239,7 @@ class StagingDatabase private constructor(
             messageTable.getAllObjects(DBMessageModel.roomId.eq(roomId).and(DBMessageModel.sendType.eq(MessageModel.SEND_TYPE_FAILED))),
         )
 
-    // Alerts are rare; the alert rows are the small side of the intersection.
+    
     override fun hasCriticalAlert(messageIds: List<String>): Boolean =
         RoomStateSupport.hasCriticalAlert(
             messageIds,
@@ -268,17 +268,17 @@ class StagingDatabase private constructor(
         )
     }
 
-    /**
-     * Checkpoint the WAL into the main db file, so promote can move that one file without leaving rows
-     * pending in `-wal`. [PromoteStep] also moves any surviving sidecars as a second line of defence.
-     *
-     * @throws MigrationException.RestoreFailed if `truncateCheckpoint` fails. A failed checkpoint means
-     *   WAL rows may not be folded into the main db file, so the staging DB is not promote-ready and
-     *   the caller must treat this as a hard failure rather than a warning to swallow.
-     */
+    
+
+
+
+
+
+
+
     fun checkpoint() {
-        // truncateCheckpoint both merges and truncates the WAL, leaving the main db file
-        // self-contained. A failure is surfaced, not swallowed: without it that file is row-incomplete.
+        
+        
         try {
             db.truncateCheckpoint()
         } catch (e: Throwable) {
@@ -287,11 +287,11 @@ class StagingDatabase private constructor(
         }
     }
 
-    /**
-     * Checkpoint and then close the handle. A failed checkpoint propagates out of [close], so the caller
-     * knows the staging DB is not promote-ready; the handle is still closed first, so the file is not
-     * left open.
-     */
+    
+
+
+
+
     override fun close() {
         var checkpointFailure: Throwable? = null
         try {
@@ -308,10 +308,10 @@ class StagingDatabase private constructor(
         L.i { "[MigrationV2][Restore] staging DB closed path=$stagingDbPath (file retained for promote)" }
     }
 
-    /**
-     * Delete the staging db file and every WCDB sidecar. Call when an import is abandoned before
-     * promote. Safe to call after [close].
-     */
+    
+
+
+
     fun discard() {
         runCatching { db.close() }
         deleteStagingArtifacts(stagingDbPath)
@@ -319,25 +319,25 @@ class StagingDatabase private constructor(
     }
 
     companion object {
-        /** Keeps an `IN (...)` list under SQLite's bound-variable limit. */
+        
         private const val SQL_IN_CHUNK = 500
 
-        /**
-         * Open a fresh staging db at [stagingDbPath], encrypted with the key this build uses for the
-         * real DB rather than a throwaway random one, which keeps the staging and real encryption state
-         * coherent through promote: in release the key installed as `wcdb_key.bin` is already the real
-         * key, and in debug both are plaintext so promote skips the key step.
-         *
-         * Any pre-existing file at that path, and its sidecars, is deleted first so the staging db
-         * always starts empty.
-         */
+        
+
+
+
+
+
+
+
+
         fun create(context: Context, stagingDbPath: String): StagingDatabase {
             deleteStagingArtifacts(stagingDbPath)
             File(stagingDbPath).parentFile?.mkdirs()
             return StagingDatabase(stagingDbPath, WCDBKeyManager.cipherKeyForCurrentBuild(context))
         }
 
-        /** Delete the db file and every WCDB sidecar for [path]. */
+        
         fun deleteStagingArtifacts(path: String) {
             val base = File(path)
             val parent = base.parentFile

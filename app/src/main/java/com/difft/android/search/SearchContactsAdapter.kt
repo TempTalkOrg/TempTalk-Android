@@ -41,7 +41,7 @@ abstract class SearchContactAdapter : ListAdapter<ContactorModel, SearchContactV
         holder.itemView.setSearchRowSelected(data.id == selectedId)
     }
 
-    /** Two-pane: the contact whose conversation or card is open; its row is highlighted. */
+    
     var selectedId: String? = null
         set(value) {
             if (field == value) return
@@ -67,35 +67,24 @@ class SearchContactViewHolder(parentView: ViewGroup) : RecyclerView.ViewHolder(r
     private var binding: SearchItemContactBinding = SearchItemContactBinding.bind(itemView)
 
     fun bind(searchKey: String, data: ContactorModel, onItemClickListener: View.OnClickListener) {
-        if (data.id == globalServices.myId) {
+        val title = if (data.id == globalServices.myId) {
             binding.avatarView.showFavorites()
-            binding.tvName.setHighLightText(binding.root.context.getString(com.difft.android.base.R.string.chat_favorites), searchKey)
+            binding.root.context.getString(com.difft.android.base.R.string.chat_favorites)
         } else {
             binding.avatarView.setAvatar(data)
-            binding.tvName.setHighLightText(data.getDisplayNameForUI(), searchKey)
+            data.getDisplayNameForUI()
         }
+        binding.tvName.setHighLightText(title, searchKey)
 
-        binding.tvInfo1.visibility = View.GONE
-        binding.tvInfo2.visibility = View.GONE
-
-        val infoList = listOf(data.email)
-            .sortedByDescending { it?.contains(searchKey, ignoreCase = true) }
-            .filter { !it.isNullOrEmpty() }
-
-
-        if (infoList.size == 1) {
-            val text = ContactorUtil.getLastPart(infoList[0].toString())
-            binding.tvInfo1.visibility = View.VISIBLE
-            binding.tvInfo1.setHighLightText(text, searchKey)
-            binding.tvInfo2.visibility = View.GONE
-        }
-        if (infoList.size > 1) {
-            val text1 = ContactorUtil.getLastPart(infoList[0].toString())
-            val text2 = ContactorUtil.getLastPart(infoList[1].toString())
-            binding.tvInfo1.visibility = View.VISIBLE
-            binding.tvInfo1.setHighLightText(text1, searchKey)
-            binding.tvInfo2.visibility = View.VISIBLE
-            binding.tvInfo2.setHighLightText(text2, searchKey)
+        
+        
+        val details = listOfNotNull(data.remark, data.email?.let { ContactorUtil.getLastPart(it) })
+            .filter { it.isNotEmpty() && it != title }
+            .take(2)
+        listOf(binding.tvInfo1, binding.tvInfo2).forEachIndexed { index, view ->
+            val text = details.getOrNull(index)
+            view.visibility = if (text == null) View.GONE else View.VISIBLE
+            if (text != null) view.setHighLightText(text, searchKey)
         }
 
         binding.tvTime.visibility = View.GONE

@@ -17,13 +17,11 @@ class IndexBackgroundDrawable(
     private val view: View
 ) : Drawable() {
 
-    // 创建画笔用于绘制上半部分背景
     private val topPaint = Paint().apply {
         color = ContextCompat.getColor(context, R.color.bg1)
         isAntiAlias = true
     }
 
-    // 创建画笔用于绘制下半部分背景
     private val bottomPaint = Paint().apply {
         color = ContextCompat.getColor(context, R.color.bg2)
         isAntiAlias = true
@@ -33,8 +31,6 @@ class IndexBackgroundDrawable(
         val bounds = bounds
         val navigationBarHeight = ViewUtil.getNavigationBarHeight(view)
 
-        // 1. 绘制上半部分背景（bg1颜色）
-        // 从顶部到导航栏上方
         canvas.drawRect(
             0f,
             0f,
@@ -43,8 +39,6 @@ class IndexBackgroundDrawable(
             topPaint
         )
 
-        // 2. 绘制下半部分背景（bottom_tab_bg颜色）
-        // 从导航栏上方到底部
         canvas.drawRect(
             0f,
             (bounds.height() - navigationBarHeight).toFloat(),

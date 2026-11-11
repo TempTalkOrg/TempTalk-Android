@@ -26,10 +26,11 @@ abstract class ProxyE2eProbeBindModule {
 @InstallIn(SingletonComponent::class)
 @Module
 object ProxyE2eProbeProvideModule {
-    /**
-     * 专用探针 client：chative-CA 内层信任（self 自签）+ 不带 token + 不入 chat 池（不传 service，
-     * 无 host 路由与 failover，#1396）+ 不做响应归一化 + 走代理工厂。baseUrl 用字面量哨兵（探针恒用 @Url 传完整绝对 URL，baseUrl 不参与路由）。
-     */
+    
+
+
+
+
     @ProxyProbe
     @Provides
     @Singleton
@@ -38,17 +39,15 @@ object ProxyE2eProbeProvideModule {
         proxyConfigProvider: ProxyConfigProvider,
     ): ChativeHttpClient = ChativeHttpClient(
         applicationContext = ctx,
-        // 哨兵占位，绝不要用 urlManager.default：它是计算属性，每次取值都触发 getBestHost()，
-        // 且在 @Singleton @Provides 构造期被 eager 求值（牵动 speedtest 协调器）。
-        // 探针只用 @Url 绝对 URL，baseUrl 不参与路由，故用恒不可达的字面量即可。
-        // Retrofit 仅要求 baseUrl 是带结尾斜杠的合法 HttpUrl —— probe.invalid 语法合法且永不解析。
+        
+        
         baseUrl = "https://probe.invalid/",
         authProvider = null,
-        useCustomCa = true,                    // 必须：信任 self 自签 origin 证书（否则 SSLHandshakeException 假阴性）
-        removeHeader = true,                   // 不带 token
-        connectTimeoutSeconds = 8L,            // 构造器签名是 Long，须用 Long 字面量
+        useCustomCa = true,                    
+        removeHeader = true,
+        connectTimeoutSeconds = 8L,
         readWriteTimeoutSeconds = 8L,
-        useHttpClientInterceptor = false,      // 不可改：不做 5xx 归一化，保「任意响应(含5xx)=成功」；service 保持 null（无路由/failover）
+        useHttpClientInterceptor = false,      
         proxyConfigProvider = proxyConfigProvider,
     )
 }

@@ -31,23 +31,23 @@ import java.util.Objects
 import java.util.function.Function
 import javax.inject.Inject
 
-/**
- * Provide WebSocket based interface to message sending endpoints.
- *
- *
- * Note: To be expanded to have REST fallback and other messaging related operations.
- */
+
+
+
+
+
+
 class NewMessagingService @Inject constructor(
     private val appWebSocketHelper: AppWebSocketHelper,
-    // Lazy breaks the Dagger cycle: the sink implementation confirms a rejection over the
-    // device endpoints, which pull in this module's http stack.
+    
+    
     private val authFailureSink: dagger.Lazy<AuthFailureSink>,
 ) {
     suspend fun send(
         newOutgoingPushMessage: NewOutgoingPushMessage,
         recipientId: String?,
     ): ServiceResponse<NewSendMessageResponse> {
-        // v4 API for 1v1 messages with syncContent support
+        
         val basePath = "/v4/messages/%s"
         return innerSend(newOutgoingPushMessage, String.format(basePath, recipientId), false)
     }
@@ -56,7 +56,7 @@ class NewMessagingService @Inject constructor(
         newOutgoingPushMessage: NewOutgoingPushMessage,
         groupId: String,
     ): ServiceResponse<NewSendMessageResponse> {
-        // v4 API for group messages, server handles sync
+        
         return innerSend(
             newOutgoingPushMessage,
             String.format("/v4/messages/group/%s", groupId),
@@ -143,15 +143,15 @@ class NewMessagingService @Inject constructor(
             val response = appWebSocketHelper.sendChatMessage(requestMessage)
             L.d { "[Message] send message response received, status=${response.status}" }
             val mapped = responseMapper.map(response)
-            // AuthorizationFailedException extends IOException, so NewSignalServiceMessageSender
-            // swallows it and falls back to HTTP. Report here, before that fallback can mask the
-            // rejection behind a plain network error.
+            
+            
+            
             if (mapped.applicationError.orElse(null) is AuthorizationFailedException) {
                 authFailureSink.get().onAuthRejected(AuthFailureSource.WS_RESPONSE)
             }
             mapped
         } catch (throwable: Throwable) {
-            // Real cancellation must propagate rather than become a send error.
+            
             if (throwable is CancellationException) currentCoroutineContext().ensureActive()
             ServiceResponse.forUnknownError(throwable)
         }

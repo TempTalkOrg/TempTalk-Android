@@ -26,15 +26,15 @@ private fun scoStateName(state: Int): String = when (state) {
     else -> "ERROR($state)"
 }
 
-/**
- * Every platform wake-up source that can shorten [AudioRouteApplier]'s verification wait.
- *
- * Wake-up sources ONLY, never sources of truth: polling decides. A missing signal (OEMs that never
- * deliver the SCO broadcast, a route already connected before registration) must cost at most one
- * interval, and a comm-device callback reports the platform's routing target, not that audio flows.
- *
- * Takes its own lock, so it does not depend on the caller holding one.
- */
+
+
+
+
+
+
+
+
+
 internal class AudioRouteWakeSignals(
     appContext: Context,
     private val host: AudioRouteHost,
@@ -42,29 +42,29 @@ internal class AudioRouteWakeSignals(
 ) {
     private val appContext: Context = appContext.applicationContext
 
-    /** At most one pending wake-up; a stale one only skips one wait, never a verification. */
+    
     private val signals = Channel<Unit>(Channel.CONFLATED)
 
     private var scoRegistered = false
     private var commRegistered = false
 
-    /**
-     * Written and read ONLY inside the API 31+ gated functions below, so the platform interface is
-     * never resolved on a device that does not have it.
-     */
+    
+
+
+
     private var commWaker: AudioManager.OnCommunicationDeviceChangedListener? = null
 
-    /**
-     * Runs the listener body on the framework's dispatch thread: a hop would only add latency to a
-     * wake-up whose purpose is to beat a 500 ms poll. Requires the body to stay non-blocking.
-     */
+    
+
+
+
     private val directExecutor = Executor { it.run() }
 
-    /**
-     * Only CONNECTED wakes the loop. A CONNECTED wake is followed by a confirming round that exits,
-     * so wake-ups stay bounded; letting ERROR wake it would let a flapping headset drive hundreds
-     * of reapply round trips inside one budget.
-     */
+    
+
+
+
+
     @VisibleForTesting
     internal val scoReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -81,8 +81,8 @@ internal class AudioRouteWakeSignals(
             val confirmedBt = (snapshotState as? AudioRouteState.Confirmed)
                 ?.device?.kind == AudioDeviceKind.BLUETOOTH_HEADSET
             if (state == AudioManager.SCO_AUDIO_STATE_DISCONNECTED && confirmedBt) {
-                // A confirmed route dying mid-call has no contract expression yet; recorded so the
-                // field logs can tell it apart from "never confirmed".
+                
+                
                 L.w { "[call] audioRoute scoState=DISCONNECTED whileConfirmed=BLUETOOTH_HEADSET" }
             } else {
                 L.i { "[call] audioRoute scoState=${scoStateName(state)} state=${snapshotState.logName}" }
@@ -90,24 +90,24 @@ internal class AudioRouteWakeSignals(
         }
     }
 
-    /** Idempotent. */
+    
     fun start() = synchronized(this) {
         registerScoReceiver()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) registerCommWaker()
     }
 
-    /** Idempotent, callable from any thread. */
+    
     fun stop() = synchronized(this) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) unregisterCommWaker()
         unregisterScoReceiver()
     }
 
-    /** Suspends until any source signals. The caller owns the timeout / cadence policy. */
+    
     suspend fun await() {
         signals.receive()
     }
 
-    /** Positive control: a silent wake log must read as "not registered", never "logging broken". */
+    
     fun summary(): String = synchronized(this) {
         val comm = when {
             Build.VERSION.SDK_INT < Build.VERSION_CODES.S -> "n/a"
@@ -128,7 +128,7 @@ internal class AudioRouteWakeSignals(
             )
             scoRegistered = true
         } catch (e: Exception) {
-            // Verification degrades to polling only — still correct, at most one interval slower.
+            
             L.w { "[call] audioRoute sco receiver register failed: ${e.message}" }
         }
     }
@@ -150,12 +150,12 @@ internal class AudioRouteWakeSignals(
             val waker = commWaker
                 ?: AudioManager.OnCommunicationDeviceChangedListener { onCommDeviceChanged(it) }
                     .also { commWaker = it }
-            // Adding the same instance twice throws and removing an unregistered one throws, so
-            // this flag must be exact rather than optimistic: only set it on success.
+            
+            
             audioManager.addOnCommunicationDeviceChangedListener(directExecutor, waker)
             commRegistered = true
         } catch (e: Exception) {
-            // Degrades to polling, exactly like an SCO registration failure.
+            
             L.w { "[call] audioRoute commWakerRegisterFailed error=${e.message}" }
         }
     }
@@ -172,21 +172,21 @@ internal class AudioRouteWakeSignals(
         }
     }
 
-    /**
-     * Wakes the loop only for a callback reporting the route the CURRENT attempt is driving: our own
-     * `selectDevice(null)` -> `selectDevice(target)` round trip makes the platform emit a clear and
-     * a set callback every round, so an unfiltered wake would spend the whole budget echoing itself.
-     *
-     * Invariant: no blocking work, no `audioHandler` touch, no host mutation.
-     */
+    
+
+
+
+
+
+
     private fun onCommDeviceChanged(device: AudioDeviceInfo?) {
-        // Our own clear hop; never information about the target.
+        
         val route = device?.type?.let(::commDeviceRoute) ?: return
         val state = host.routeSnapshot.value.state
         val target = (state as? AudioRouteState.Applying)?.device
         if (target == null) {
-            // No attempt outstanding: "another app took the route". Recorded, never acted on —
-            // there is no contract expression for it, as with scoState=DISCONNECTED whileConfirmed.
+            
+            
             val confirmedKind = (state as? AudioRouteState.Confirmed)?.device?.kind
             if (confirmedKind != null && !route.matches(confirmedKind)) {
                 L.w { "[call] audioRoute commDeviceOther type=${device.type} whileConfirmed=$confirmedKind" }

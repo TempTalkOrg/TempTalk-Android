@@ -17,16 +17,16 @@ import java.security.SecureRandom
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
-/**
- * Unit tests for [AvatarCacheCipher] — the encrypt-at-rest choke-point for the avatar disk cache
- * (docs §15). The Keystore master key is injected via [AvatarCacheCipher.masterKeyProvider] so this
- * runs as pure JVM (javax.crypto + java.io), no Android / real Keystore.
- *
- * Covers: ciphertext round-trip (small + large), on-disk confidentiality, legacy-plaintext pass-through
- * on read, `plaintextLength` (= fileLen − 64 for our ciphertext, raw length for plaintext), the
- * Keystore-unavailable plaintext fallback, atomic write (no leftover temp), a wrong-key decrypt
- * surfacing as [IOException] (→ cache miss), and a concurrent same-file write staying uncorrupted.
- */
+
+
+
+
+
+
+
+
+
+
 class AvatarCacheCipherTest {
 
     @get:Rule
@@ -41,7 +41,7 @@ class AvatarCacheCipherTest {
 
     @After
     fun tearDown() {
-        // Restore the production default so test order can't leak the injected key.
+        
         AvatarCacheCipher.masterKeyProvider = { null }
     }
 
@@ -89,7 +89,7 @@ class AvatarCacheCipherTest {
         AvatarCacheCipher.writeEncrypted(file, payload)
 
         assertEquals(payload.size.toLong(), AvatarCacheCipher.plaintextLength(file))
-        // Cross-check the framing constant: file = payload + HEADER_OVERHEAD (AES/CTR, no padding).
+        
         assertEquals(
             payload.size.toLong() + EncryptedCacheCoder.HEADER_OVERHEAD,
             file.length()
@@ -100,25 +100,25 @@ class AvatarCacheCipherTest {
     fun `openDecrypting passes through legacy plaintext without MAGIC`() {
         val file = cacheFile()
         val payload = "legacy-plaintext-avatar".toByteArray()
-        file.writeBytes(payload) // pre-encryption on-disk form (no MAGIC)
+        file.writeBytes(payload) 
 
         assertFalse(EncryptedCacheCoder.hasMagic(file))
         assertArrayEquals(payload, readAll(file))
-        // For plaintext, reported length is the raw file length.
+        
         assertEquals(payload.size.toLong(), AvatarCacheCipher.plaintextLength(file))
     }
 
     @Test
     fun `keystore unavailable falls back to plaintext write and read`() {
-        AvatarCacheCipher.masterKeyProvider = { null } // model degraded Keystore
+        AvatarCacheCipher.masterKeyProvider = { null } 
         val file = cacheFile()
         val payload = "no-keystore-avatar".toByteArray()
         AvatarCacheCipher.writeEncrypted(file, payload)
 
         assertNull(AvatarCacheCipher.masterKeyProvider())
         assertFalse("degraded write must be plaintext (no MAGIC)", EncryptedCacheCoder.hasMagic(file))
-        assertArrayEquals(payload, file.readBytes())      // literally plaintext on disk
-        assertArrayEquals(payload, readAll(file))         // and still readable through the cipher
+        assertArrayEquals(payload, file.readBytes())      
+        assertArrayEquals(payload, readAll(file))         
     }
 
     @Test(expected = IOException::class)
@@ -126,8 +126,8 @@ class AvatarCacheCipherTest {
         val file = cacheFile()
         AvatarCacheCipher.writeEncrypted(file, "payload".toByteArray())
 
-        // Simulate a rotated/regenerated Keystore key: the old ciphertext must fail to decrypt so the
-        // caller treats it as a cache miss and re-downloads (self-heal).
+        
+        
         AvatarCacheCipher.masterKeyProvider = { ByteArray(32) { (it + 1).toByte() } }
         AvatarCacheCipher.openDecrypting(file).use { it.readBytes() }
     }
@@ -150,8 +150,8 @@ class AvatarCacheCipherTest {
         start.countDown()
         assertTrue(done.await(30, TimeUnit.SECONDS))
 
-        // The unique-temp + atomic-rename contract guarantees the final file is one complete payload
-        // (last writer wins), never an interleaved/corrupt mix.
+        
+        
         val decrypted = readAll(file)
         val isValid = decrypted.contentEquals(payloadA) || decrypted.contentEquals(payloadB)
         assertTrue("final file must decrypt to one intact payload, not a corrupt mix", isValid)

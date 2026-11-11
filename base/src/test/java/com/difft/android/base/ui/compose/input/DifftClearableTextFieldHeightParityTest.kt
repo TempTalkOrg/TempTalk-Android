@@ -21,13 +21,13 @@ import org.robolectric.annotation.GraphicsMode
 import kotlin.math.abs
 import kotlin.test.assertTrue
 
-/**
- * Height-parity pin for the intrinsic-height (form) variant: the field's height must not
- * change across empty/focused/filled states. Regression source: the hint Text and the text
- * field resolve line height differently on device, so conditionally REMOVING the hint on the
- * first character made the field jump — the hint now stays composed (alpha-hidden). The hidden
- * hint clears its semantics, so it must be unfindable by text while the field is filled.
- */
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34])
@@ -65,7 +65,7 @@ class DifftClearableTextFieldHeightParityTest {
                 abs((emptyFocused - filledFocused).value) <= 0.5f,
             "height jitter: $emptyUnfocused -> $emptyFocused -> $filledFocused",
         )
-        // The alpha-hidden hint must be semantically invisible while filled.
+        
         rule.onNodeWithText("HeightHintProbe").assertDoesNotExist()
     }
 }

@@ -27,14 +27,14 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
-/**
- * T45 — the selected-media strip binds the normalized URI.
- *
- * The strip is the first thing the user sees after picking, so a bare gallery `realPath` here shows
- * an empty row even when the rest of the chain is correct.
- *
- * Run: :chat:testDebugUnitTest
- */
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [33])
 class MediaReviewSelectedItemTest {

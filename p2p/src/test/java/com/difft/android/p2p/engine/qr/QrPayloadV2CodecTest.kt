@@ -9,10 +9,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Test
 
-/**
- * The v2 layout against the cross-platform vectors (§2.6), and every reject the three platforms
- * agreed on. A vector mismatch here means the other two platforms will not read our codes.
- */
+
 class QrPayloadV2CodecTest {
 
     private val fp = QrPayloadV2Vectors.FP_HEX
@@ -76,7 +73,7 @@ class QrPayloadV2CodecTest {
         assertEquals(47821, decoded.port)
         assertEquals(fp, decoded.fp)
         assertEquals("", decoded.alias)
-        // 24-byte cap, cut between characters: 12 × "中" is 36 bytes; 8 fit.
+        
         val long = QrPayloadV2Codec.decode(QrPayloadV2Codec.encode(phoneReceive.copy(alias = "中".repeat(12))))!!
         assertEquals("中".repeat(8), long.alias)
     }
@@ -104,12 +101,12 @@ class QrPayloadV2CodecTest {
         assertNull("trailing byte", QrPayloadV2Codec.decode(a + byteArrayOf(0)))
         assertNull("empty", QrPayloadV2Codec.decode(ByteArray(0)))
         for (cut in 1 until a.size) assertNull("truncated at $cut", QrPayloadV2Codec.decode(a.copyOf(cut)))
-        // alias length claims more than remains
+        
         assertNull("alias overrun", QrPayloadV2Codec.decode(mutated(3 + 8 + 32 + 3 + 32, 200)))
-        // hasPort with port 0
+        
         val withPort = QrPayloadV2Codec.encode(phoneReceive.copy(port = 1))
         assertNull("port=0", QrPayloadV2Codec.decode(withPort.copyOf().also { it[3 + 8] = 0; it[3 + 8 + 1] = 0 }))
-        // alias bytes that are not UTF-8
+        
         val badAlias = a.copyOf().also { it[3 + 8 + 32 + 3 + 32 + 1] = 0xFF.toByte() }
         assertNull("alias utf8", QrPayloadV2Codec.decode(badAlias))
     }

@@ -1,12 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- 20231030@w ________________________________________________________ -->
-    <!-- Purpose: custom Theme for Event Editor -->
+    
     <style name="CustomPickerDialogThemeDark" parent="Theme.AppCompat.Dialog">
-        <!-- Background color of the dialog -->
         <item name="android:windowBackground">@color/primary</item>
-        <!-- ... other attributes you want to customize -->
     </style>
-    <!-- 20231030@w ________________________________________________________ -->
 
 </resources>

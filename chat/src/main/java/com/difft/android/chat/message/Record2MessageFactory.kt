@@ -24,8 +24,7 @@ import difft.android.messageserialization.model.isAttachmentMessage
 import difft.android.messageserialization.model.isAudioFile
 import difft.android.messageserialization.model.isAudioMessage
 import difft.android.messageserialization.model.isImage
-import difft.android.messageserialization.model.isVideo
-import com.google.gson.Gson
+import difft.android.messageserialization.model.isWhitelistedVideoType
 import com.google.gson.reflect.TypeToken
 import com.google.protobuf.ByteString
 import org.difft.app.database.models.ContactorModel
@@ -62,8 +61,8 @@ fun calculateReadStatus(
 ): ReadStatusResult {
     if (record.fromWho != globalServices.myId) return ReadStatusResult(0, 0)
 
-    // Confidential messages never show read status — once the recipient reads,
-    // the message is deleted, so read tracking is meaningless.
+    
+    
     if (record.mode == SignalServiceProtos.Mode.CONFIDENTIAL_VALUE) return ReadStatusResult(0, 0)
 
     if (forWhat is For.Account) {
@@ -75,7 +74,7 @@ fun calculateReadStatus(
         }
     }
 
-    // Group
+    
     if (isLargeGroup) {
         val receiverIds = parseReceiverIds(record.receiverIds)
         return ReadStatusResult(1, receiverIds?.size ?: 0)
@@ -88,7 +87,7 @@ fun calculateReadStatus(
         readInfos == null -> ReadStatusResult(0, 0)
         receiverIds == null -> {
             val readContactIds = readInfos.map { it.uid }.filter { it != globalServices.myId }.toSet()
-            // Fallback: use current group member count to determine "all read"
+            
             val expectedReceiverCount = (groupMemberCount - 1).coerceAtLeast(0)
             val isAllRead = expectedReceiverCount > 0 && readContactIds.size >= expectedReceiverCount
             ReadStatusResult(if (isAllRead) 1 else 0, readContactIds.size)
@@ -103,14 +102,14 @@ fun calculateReadStatus(
     }
 }
 
-/**
- * Builds the UI model for [record]. Pure CPU: every child-table row it needs arrives in [subData],
- * already resolved by `MessageHydrator` in one batched pass over the whole window.
- *
- * [subData] deliberately has NO default value. A default would let a forgotten call site compile
- * while silently rendering a message with no attachment, quote, forward, mention, reaction, shared
- * contact or translation — a failure that looks like missing data, not like a bug.
- */
+
+
+
+
+
+
+
+
 @Suppress("LongParameterList")
 fun generateMessageTwo(
     forWhat: For,
@@ -139,7 +138,7 @@ fun generateMessageTwo(
             this.notifySequenceId = record.notifySequenceId
             this.readMaxSId = record.sequenceId
             this.mode = record.mode
-            // For unsupported messages, show a placeholder text
+            
             this.message = if (record.type == MessageModel.TYPE_UNSUPPORTED) {
                 ResUtils.getString(R.string.chat_message_unsupported)
             } else if (subData.forwardContext != null) {
@@ -149,8 +148,7 @@ fun generateMessageTwo(
             }
             this.attachment = subData.attachment
             this.quote = subData.quote
-            // Same reference the branch above tested — the forward context is resolved once per
-            // message by the hydrator, so the double `forwardContext()` query is gone structurally.
+            
             this.forwardContext = subData.forwardContext
             this.mentions = subData.mentions
             this.reactions = subData.reactions
@@ -162,8 +160,7 @@ fun generateMessageTwo(
             this.translateData = subData.translateData
             this.speechToTextData = subData.speechToTextData
             this.criticalAlertType = record.criticalAlertType
-            // Still a direct call: screenShot() parses the in-memory screenShotJson column, it is
-            // not a DB read, so there is nothing for the hydrator to batch.
+            
             this.isScreenShotMessage = record.screenShot() != null
         }
     } else if (record.type == MessageModel.TYPE_CONFIDENTIAL_PLACEHOLDER) {
@@ -267,7 +264,7 @@ fun createForward(forward: Forward): SignalServiceProtos.DataMessage.Forward {
 fun getRecordMessageContentTwo(record: Message?, isGroup: Boolean, messageSenderName: String?): String {
     val senderName = if (isGroup && !TextUtils.isEmpty(messageSenderName)) "$messageSenderName: " else ""
 
-    // Check for unsupported message first
+    
     if (record is TextMessage && record.isUnsupported) {
         return senderName + ResUtils.getString(R.string.chat_message_unsupported)
     }
@@ -282,7 +279,7 @@ fun getRecordMessageContentTwo(record: Message?, isGroup: Boolean, messageSender
                         senderName + ResUtils.getString(R.string.chat_message_gif)
                     } else if (record.attachments?.firstOrNull()?.isImage() == true) {
                         senderName + ResUtils.getString(R.string.chat_message_image)
-                    } else if (record.attachments?.firstOrNull()?.isVideo() == true) {
+                    } else if (isWhitelistedVideoType(record.attachments?.firstOrNull()?.contentType)) {
                         senderName + ResUtils.getString(R.string.chat_message_video)
                     } else if (record.attachments?.firstOrNull()?.isAudioMessage() == true || record.attachments?.firstOrNull()?.isAudioFile() == true) {
                         senderName + ResUtils.getString(R.string.chat_message_audio)
@@ -309,21 +306,21 @@ fun getRecordMessageContentTwo(record: Message?, isGroup: Boolean, messageSender
 }
 
 
-/**
- * The attachment a [Forward] record is addressed by: its own first attachment, else the first
- * attachment of its first nested forward. Null when neither level carries one.
- *
- * Disambiguation only — it answers WHICH attachment, never where its file lives.
- */
+
+
+
+
+
+
 internal fun forwardAddressingAttachment(record: Forward): Attachment? =
     record.attachments?.firstOrNull()
         ?: record.forwards?.firstOrNull()?.attachments?.firstOrNull()
 
 fun generateMessageFromForward(record: Forward, mode: Int = 0): ChatMessage {
     return TextChatMessage().apply {
-        // A stable per-forward identity for list diffing and playback/progress matching. NOT an
-        // addressing key: a forward copy's file is located from the attachment itself (see
-        // AttachmentPathResolver), so this id is never used to build a path.
+        
+        
+        
         val attachmentID = forwardAddressingAttachment(record)?.authorityId?.toString() ?: ""
         this.id = if (!TextUtils.isEmpty(attachmentID)) attachmentID else System.currentTimeMillis().toString()
         this.authorId = record.author

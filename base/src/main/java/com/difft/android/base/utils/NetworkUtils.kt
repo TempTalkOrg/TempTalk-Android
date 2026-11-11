@@ -20,11 +20,11 @@ object NetworkUtils {
         return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
     }
 
-    /**
-     * One-line `key=value` reasons for [isNetworkAvailable] being false, for field diagnosis of long
-     * network-unavailable windows: which check failed, how many networks exist, and the system
-     * states that can withhold one from the app (Doze, battery saver, data saver).
-     */
+    
+
+
+
+
     fun unavailabilityDiagnostics(context: Context): String {
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
             ?: return "check=no_service"

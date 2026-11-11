@@ -19,11 +19,11 @@ import org.junit.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
-/**
- * The mute sub-options (`allowMentionMe/All/GroupCall`) ride the same version gate as `muteStatus`:
- * written from a newer snapshot or an authoritative same-version one, never from an older one, and
- * only when the value differs from the row.
- */
+
+
+
+
+
 class ConversationSettingsApplierMuteOptionsTest {
 
     private val q = FakeQueue()

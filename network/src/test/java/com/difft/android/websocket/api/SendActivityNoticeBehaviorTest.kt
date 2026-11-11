@@ -37,14 +37,14 @@ import org.whispersystems.signalservice.internal.push.copyData
 import org.whispersystems.signalservice.internal.push.messageActivityNotice
 import java.io.IOException
 
-/**
- * Behavioral contract for [NewSignalServiceMessageSender.sendActivityNoticeMessage].
- *
- * Mirrors [SendForwardNoticeBehaviorTest] 1:1 — locks in the v2 design (one HTTP
- * request per send, with self-sync envelope piggybacked via
- * [NewOutgoingPushMessage.syncContent] for 1v1-to-other; pre-PR-#705 issued two).
- * If anyone re-introduces the two-call pattern these tests fail loud.
- */
+
+
+
+
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class SendActivityNoticeBehaviorTest {
 
@@ -54,7 +54,7 @@ class SendActivityNoticeBehaviorTest {
     private val conversationManager: ConversationManager = mockk(relaxed = true)
     private val messageSendRepository: MessageSendRepository = mockk(relaxed = true)
 
-    /** An open send ticket: every public send requires one (#1382). */
+    
     private val admission = TestMessagingPause().open().gate.tryAdmit(AdmissionKind.SEND, "test")!!
 
     private lateinit var sender: NewSignalServiceMessageSender
@@ -77,8 +77,8 @@ class SendActivityNoticeBehaviorTest {
             messageSendRepository = messageSendRepository,
         )
 
-        // Public key info present for both peer and self — generateActivityNoticeSyncContent
-        // depends on the self-key being non-blank.
+        
+        
         coEvery { conversationManager.hasPublicKeyInfoData(any()) } returns true
         coEvery { conversationManager.getPublicKeyInfos(any<For>()) } returns listOf(
             PublicKeyInfo(uid = PEER_UID, identityKey = "k-peer", registrationId = 1, resetIdentityKeyTime = 0),
@@ -91,7 +91,7 @@ class SendActivityNoticeBehaviorTest {
             messageEncryptor.encryptGroupMessage(any(), any())
         } returns stubEncryptResult()
 
-        // Force HTTP fallback by failing the WS path.
+        
         coEvery { messagingService.send(any(), any()) } throws IOException("ws down")
         coEvery { messagingService.sendToGroup(any(), any()) } throws IOException("ws down")
     }
@@ -103,9 +103,9 @@ class SendActivityNoticeBehaviorTest {
         clearMocks(messagingService, messageEncryptor, conversationManager, messageSendRepository)
     }
 
-    // -----------------------------------------------------------------
-    // 1v1-to-other: ONE network call carrying syncContent.
-    // -----------------------------------------------------------------
+    
+    
+    
     @Test
     fun `1v1 to other peer sends one request with non-null syncContent`() = runTest {
         val captured = slot<NewOutgoingPushMessage>()
@@ -129,9 +129,9 @@ class SendActivityNoticeBehaviorTest {
         )
     }
 
-    // -----------------------------------------------------------------
-    // #1347: the outgoing envelope is typed MSG_ACTIVITY_NOTICE, not MSG_NORMAL.
-    // -----------------------------------------------------------------
+    
+    
+    
     @Test
     fun `activity notice is sent with msgType MSG_ACTIVITY_NOTICE`() = runTest {
         val captured = slot<NewOutgoingPushMessage>()
@@ -151,9 +151,9 @@ class SendActivityNoticeBehaviorTest {
         assertEquals(15, captured.captured.msgType)
     }
 
-    // -----------------------------------------------------------------
-    // Group: server-side fan-out covers self's other devices. No syncContent.
-    // -----------------------------------------------------------------
+    
+    
+    
     @Test
     fun `group send issues one request with null syncContent`() = runTest {
         val captured = slot<NewOutgoingPushMessage>()
@@ -177,9 +177,9 @@ class SendActivityNoticeBehaviorTest {
         )
     }
 
-    // -----------------------------------------------------------------
-    // Note-to-Self: recipient == self, primary already routes to all my devices.
-    // -----------------------------------------------------------------
+    
+    
+    
     @Test
     fun `NTS send issues one request with null syncContent`() = runTest {
         val captured = slot<NewOutgoingPushMessage>()
@@ -203,9 +203,9 @@ class SendActivityNoticeBehaviorTest {
         )
     }
 
-    // -----------------------------------------------------------------
-    // Helpers
-    // -----------------------------------------------------------------
+    
+    
+    
     private fun sampleProto(): SignalServiceProtos.MessageActivityNotice = messageActivityNotice {
         conversation = conversationId {
             number = PEER_UID

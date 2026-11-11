@@ -21,16 +21,14 @@ object SecurityLib {
     @Volatile
     private var tracerPidMonitorJob: Job? = null
 
-    /**
-     * 校验"待安装的 APK 文件"（尚未安装）的签名证书是否在硬编码白名单内。
-     *
-     * 应用内升级时，下载 URL 与 hash 均由服务器/CDN 控制，仅校验 hash 无法防御
-     * 服务器被攻破后下发恶意 APK。安装前调用本方法做签名证书白名单强校验。
-     *
-     * @param apkPath 已下载到本地的 APK 文件绝对路径
-     * @param expectedPackageName 期望的包名（一般传入当前应用包名），为空则不校验
-     * @return true 表示签名证书在白名单内且包名匹配，可安全安装
-     */
+    
+
+
+
+
+
+
+
     @JvmStatic
     @JvmOverloads
     fun checkApkFileSign(
@@ -66,9 +64,7 @@ object SecurityLib {
         return DebuggerDetector.isDebuggerConnected()
     }
 
-    /**
-     * 启动 TracerPid 轮询：每 15 秒检测一次，命中后结束应用进程。
-     */
+    
     @JvmStatic
     fun startTracerPidMonitor() {
         if (tracerPidMonitorJob?.isActive == true) {
@@ -86,26 +82,22 @@ object SecurityLib {
         }
     }
 
-    /**
-     * true 表示检测到 Hook 框架/注入风险（如 xposed/frida/zygisk 等特征）。
-     */
+    
     @JvmStatic
     fun checkHookFramework(): Boolean {
         return HookFrameworkDetector.isHookFrameworkDetected()
     }
 
-    /**
-     * true 表示当前线程栈中出现已知 Hook 包名。
-     */
+    
     @JvmStatic
     fun checkHookStackTrace(): Boolean {
         return HookFrameworkDetector.hasSuspiciousStackTrace()
     }
 
-    /**
-     * True when the given stack trace contains a known hook-framework package
-     * (lets ANR-report filtering reuse the same framework list).
-     */
+    
+
+
+
     @JvmStatic
     fun checkHookStackTrace(stackTrace: Array<StackTraceElement>): Boolean {
         return HookFrameworkDetector.containsHookFrame(stackTrace)

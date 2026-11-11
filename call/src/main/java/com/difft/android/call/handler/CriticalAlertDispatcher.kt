@@ -27,13 +27,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import retrofit2.HttpException
 
-/**
- * Owns the critical alert (server-side "重要通知") workflow that was previously
- * inlined in `LCallViewModel.handleCriticalAlertNew` and
- * `checkCriticalAlertStatusById`. The dispatcher builds the request, parses
- * the response, triggers barrage / toast feedback and persists delivery
- * receipts via `callToChatController`.
- */
+
 class CriticalAlertDispatcher(
     private val scope: CoroutineScope,
     private val httpClientProvider: () -> ChativeHttpClient,
@@ -47,11 +41,11 @@ class CriticalAlertDispatcher(
     private val messagingGate: MessagingGate,
 ) {
 
-    /**
-     * A critical alert is delivered to its recipients as a message, so it is admitted like any
-     * send (#1382): refused while messaging is paused, and holding its ticket until the delivery
-     * rows are written.
-     */
+    
+
+
+
+
     suspend fun send(gid: String? = null): Boolean {
         val admission = messagingGate.tryAdmit(AdmissionKind.SEND, SOURCE) ?: run {
             L.w { "[MigrationPause] event=send_refused source=$SOURCE" }
@@ -120,10 +114,10 @@ class CriticalAlertDispatcher(
         }
     }
 
-    /**
-     * Awaited under the send ticket and not cancelled with the caller's UI scope. A local write
-     * failure does not turn the delivered alert into a failed send.
-     */
+    
+
+
+
     private suspend fun persistUnderTicket(
         requestBody: CriticalAlertRequestBodyNew,
         response: BaseResponse<CriticalAlertResponse>,
@@ -159,7 +153,7 @@ class CriticalAlertDispatcher(
         }
     }
 
-    /** Refreshes the group's critical-alert flag in the session UI state. */
+    
     fun refreshGroupStatus(callIntent: CallIntent) {
         if (callIntent.callType != CallType.GROUP.type) return
         val conversationId = callIntent.conversationId ?: return

@@ -33,9 +33,9 @@ class RtmMessageHandler(
 ) {
     private val json = Json { ignoreUnknownKeys = true }
 
-    /**
-     * Sends a chat message as a barrage (scrolling message) to the RTM channel.
-     */
+    
+
+
     fun sendChatBarrage(text: String, type: Int, onComplete: (Boolean) -> Unit = {}) {
         if (text.isEmpty()) return
         val timestamp = System.currentTimeMillis()
@@ -49,12 +49,12 @@ class RtmMessageHandler(
         send(topic = RTM_MESSAGE_TOPIC_CHAT, payload = payload, timestamp = timestamp, encrypt = true, onComplete = onComplete)
     }
 
-    /**
-     * Toggles the mute state for a remote participant in the call. [onComplete] is invoked exactly
-     * once: on Main once a sent request completes, or synchronously on the caller's thread when
-     * the request cannot be sent at all (local participant, no identity) — that case reports false
-     * instead of dropping silently.
-     */
+    
+
+
+
+
+
     fun toggleMute(target: Participant, onComplete: (Boolean) -> Unit) {
         val identities = target.identity?.takeIf { target !is LocalParticipant }?.let { listOf(it) }
         if (identities == null) {
@@ -72,13 +72,13 @@ class RtmMessageHandler(
         send(topic = RTM_MESSAGE_TOPIC_MUTE, payload = payload, timestamp = timestamp, encrypt = true, onComplete = onComplete, identities = identities)
     }
 
-    /**
-     * Handles various RTM (Real-Time Messaging) events received in the room and dispatches them to appropriate callbacks.
-     *
-     * This method processes incoming data messages from the RTM channel, decrypts them, and routes them to
-     * different handler functions based on the message topic. It supports multiple message types including
-     * chat messages, mute/unmute requests, call control commands, and countdown timer operations.
-     */
+    
+
+
+
+
+
+
     fun handleDataReceived(
         event: RoomEvent.DataReceived,
         onChat: (Participant, String, Int?) -> Unit,
@@ -130,11 +130,11 @@ class RtmMessageHandler(
         }
     }
 
-    /**
-     * Validates the plaintext `server-end-call` packet (RTM protocol §4.1). Trust
-     * model: `event.participant` must be null (server-injected); no decrypt / no PA.
-     * Any validation failure logs and drops.
-     */
+    
+
+
+
+
     private fun handleServerEndCallPacket(
         event: RoomEvent.DataReceived,
         outerTopic: String,
@@ -169,9 +169,9 @@ class RtmMessageHandler(
         onServerEndCall()
     }
 
-    /**
-     * Sends an end-call command to all participants in the room via RTM (Real-Time Messaging).
-     */
+    
+
+
     fun sendEndCall(onComplete: (Boolean) -> Unit) {
         val timestamp = System.currentTimeMillis()
         val payload = json.encodeToString(
@@ -183,9 +183,9 @@ class RtmMessageHandler(
         send(topic = RTM_MESSAGE_TOPIC_END_CALL, payload = payload, timestamp = timestamp, encrypt = true, onComplete = onComplete)
     }
 
-    /**
-     * Sends an RTM (Real-Time Messaging) message to a participant to continue a call.
-     */
+    
+
+
     fun sendContinueCallRtmMessage(participant: Participant) {
         L.i { "[Call] LCallViewModel sendContinueCallRtmMessage" }
         participant.identity?.let { identity ->
@@ -201,9 +201,9 @@ class RtmMessageHandler(
         }
     }
 
-    /**
-     * Sends a data payload through the RTM (Real-Time Messaging) channel with optional encryption.
-     */
+    
+
+
     private fun send(topic: String, payload: String, timestamp: Long, encrypt: Boolean, onComplete: (Boolean) -> Unit, identities: List<Participant.Identity>? = null) {
         scope.launch(Dispatchers.IO) {
             val success = try {
@@ -230,7 +230,7 @@ class RtmMessageHandler(
                 false
             }
 
-            // Always switch to Main thread for callback
+            
             withContext(Dispatchers.Main) {
                 onComplete(success)
             }

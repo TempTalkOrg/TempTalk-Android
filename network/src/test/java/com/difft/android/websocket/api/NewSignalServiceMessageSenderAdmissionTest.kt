@@ -20,10 +20,10 @@ import org.junit.Test
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos
 import kotlin.test.assertFailsWith
 
-/**
- * The sender refuses a send whose ticket is not an open send ticket (#1382), before any request,
- * so neither the socket nor the HTTP fallback can carry a send the pause did not admit.
- */
+
+
+
+
 class NewSignalServiceMessageSenderAdmissionTest {
 
     private val messagingService: NewMessagingService = mockk(relaxed = true)

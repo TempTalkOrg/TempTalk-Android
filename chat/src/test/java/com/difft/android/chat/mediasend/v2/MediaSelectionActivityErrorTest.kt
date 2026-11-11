@@ -22,18 +22,18 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
-/**
- * T72 — a throwable that escaped the whole send must not take the screen down with it.
- *
- * The previous implementation showed a generic toast, set a cancelled result and finished, which
- * discarded the typed caption and every selected item, and dropped the throwable without a log line.
- *
- * The activity is instantiated but not created: `onCreate` inflates a fragment container that pulls
- * in the whole DI graph, and none of that is what this contract is about. `onSendError` needs no
- * created state — it classifies, shows the notice and returns.
- *
- * Run: :chat:testDebugUnitTest
- */
+
+
+
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [33])
 class MediaSelectionActivityErrorTest {
@@ -48,8 +48,8 @@ class MediaSelectionActivityErrorTest {
         mockkObject(MediaSendFailureNotice)
         every { MediaSendFailureNotice.showThrown(any(), any(), any()) } just Runs
         val activity = Robolectric.buildActivity(MediaSelectionActivity::class.java).get()
-        // Pre-set a distinguishable result: RESULT_CANCELED is also the shadow's default, so only a
-        // value that would be overwritten can prove setResult was not called.
+        
+        
         activity.setResult(Activity.RESULT_OK)
         val error = IllegalStateException("boom")
 

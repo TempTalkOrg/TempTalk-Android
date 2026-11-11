@@ -4,23 +4,23 @@ import com.difft.android.base.call.ServiceUrls
 import com.difft.android.base.call.UrlInfo
 import com.difft.android.network.proxy.ProxyConfigProvider
 
-/**
- * Connection strategy:
- * - QUIC normally uses IP direct connections (from [UrlInfo.addrs]). EXCEPTION: under a
- *   self-hosted proxy QUIC relay ([ProxyConfigProvider.isProxyForCallQuicEnabled], MASQUE-lite §9.6)
- *   QUIC uses the DOMAIN instead — the relay forwards by the tunnel's CONNECT target host and
- *   enforces a domain-suffix allowlist, so an IP literal would be denied.
- * - WSS (WebSocket) is only used with the domain (from [UrlInfo.domain]); WSS over IP is not allowed.
- *
- * Attempt order:
- * - QUIC enabled: primary.addrs (QUIC) → each fallback.addrs (QUIC); the SDK falls back to
- *   WSS on the domain inside each QUIC attempt, so no separate WSS attempt is added
- * - QUIC enabled + proxy QUIC relay: primary.domain (QUIC) → each fallback.domain (QUIC)
- * - QUIC disabled: primary.domain (WSS) → each fallback.domain (WSS)
- *
- * [ConnectionAttempt.serverHost] is used for TLS/SNI (typically the certificate domain);
- * for IP direct connections, the node's [UrlInfo.domain] is passed.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 data class ConnectionAttempt(
     val serverHost: String,
     val connectUrl: String,
@@ -54,9 +54,9 @@ object MeetingConnectionPlanner {
         }
         val sizeBefore = out.size
         if (ProxyConfigProvider.isProxyForCallQuicEnabled) {
-            // QUIC-over-proxy (MASQUE-lite, §9.6): connect via the DOMAIN, not the
-            // node IPs. The relay forwards by the tunnel's CONNECT target host and
-            // enforces a domain-suffix allowlist — an IP literal would be denied.
+            
+            
+            
             out += ConnectionAttempt(serverHost = domain, connectUrl = domainUrl, useQuic = true, nodeType = nodeType)
         } else {
             for (raw in node.addrs) {
@@ -64,8 +64,8 @@ object MeetingConnectionPlanner {
                 out += ConnectionAttempt(serverHost = domain, connectUrl = url, useQuic = true, nodeType = nodeType)
             }
         }
-        // The SDK falls back to WSS on the domain inside every QUIC attempt, so a separate
-        // WSS attempt is only needed when this node produced no QUIC attempt at all.
+        
+        
         if (out.size == sizeBefore) {
             out += ConnectionAttempt(serverHost = domain, connectUrl = domainUrl, useQuic = false, nodeType = nodeType)
         }
@@ -81,9 +81,9 @@ object MeetingConnectionPlanner {
         return result
     }
 
-    /**
-     * Normalizes an IP, domain, or URL with scheme into an https URL used by LiveKit.
-     */
+    
+
+
     fun normalizeConnectUrl(hostOrUrl: String): String? {
         val t = hostOrUrl.trim()
         if (t.isEmpty()) return null
@@ -94,10 +94,10 @@ object MeetingConnectionPlanner {
         }
     }
 
-    /**
-     * Heuristic: tells whether [host] is an IP literal rather than a domain name.
-     * Recognizes IPv4, bracketed IPv6 (`[::1]`), and bare IPv6 (≥2 colons).
-     */
+    
+
+
+
     fun isIpHost(host: String): Boolean {
         return host.matches(IPV4_REGEX) ||
             host.startsWith("[") ||

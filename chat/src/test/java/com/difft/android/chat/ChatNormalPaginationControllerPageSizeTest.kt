@@ -18,18 +18,18 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * Cases #67..#71 — which page-size constant each entry point actually asks the source for.
- *
- * Asserted on the recorded LIMIT argument, not on the resulting window size: a window can come out
- * the right length for the wrong reason (a short conversation, a truncation), while the limit
- * argument is the choice the code made. The over-fetch of exactly one row is part of every
- * assertion — that extra row is what becomes the anchor.
- */
+
+
+
+
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class ChatNormalPaginationControllerPageSizeTest : PaginationTestBase() {
 
-    // #67 — first screen from the read position pages on INITIAL_PAGE_SIZE.
+    
     @Test
     fun `first screen from the read position asks for one more than the initial page`() = runTest {
         source.seed(buildMessageSequence(ROWS))
@@ -43,9 +43,9 @@ class ChatNormalPaginationControllerPageSizeTest : PaginationTestBase() {
         assertNotNull("the over-fetched row becomes the after-anchor", controller.behavior().anchorMessageAfter)
     }
 
-    // #68 — the #1103 failure-anchored first screen pages on INITIAL_PAGE_SIZE too, on its own `ge`
-    // query. Its scroll command must stay ToMessage: that is the one action the call-header
-    // compensation skips.
+    
+    
+    
     @Test
     fun `first screen anchored at a failure asks for one more than the initial page`() = runTest {
         val failed = buildMessageModel(id = "failed", systemShowTimestamp = 3_000L, fromWho = MY_ID)
@@ -61,8 +61,8 @@ class ChatNormalPaginationControllerPageSizeTest : PaginationTestBase() {
         assertTrue(controller.behavior().scrollAction is ScrollAction.ToMessage)
     }
 
-    // #69 — scroll paging backwards uses SCROLL_PAGE_SIZE, and the over-fetched row becomes the
-    // before-anchor.
+    
+    
     @Test
     fun `loadPreviousPage asks for one more than the scroll page and anchors on the extra row`() = runTest {
         val rows = buildMessageSequence(ROWS)
@@ -76,13 +76,13 @@ class ChatNormalPaginationControllerPageSizeTest : PaginationTestBase() {
 
         assertEquals(SCROLL_PAGE_SIZE + 1, limitOf("olderThan"))
         val behavior = controller.behavior()
-        // The page displays SCROLL_PAGE_SIZE rows; row 51 of the query is the anchor, not content.
+        
         assertEquals(rows[oldestIndex - SCROLL_PAGE_SIZE.toInt()].id, behavior.messageList.first().id)
         assertEquals(rows[oldestIndex - SCROLL_PAGE_SIZE.toInt() - 1].id, behavior.anchorMessageBefore?.id)
     }
 
-    // #69 (truncating half) — once the window is at the cap, the next backwards page drops rows off
-    // the NEWEST end, and the first dropped row becomes the after-anchor.
+    
+    
     @Test
     fun `a backwards page past the cap truncates the newest end and anchors on the first dropped row`() = runTest {
         val rows = buildMessageSequence(ROWS)
@@ -101,8 +101,8 @@ class ChatNormalPaginationControllerPageSizeTest : PaginationTestBase() {
         assertEquals(firstDropped, behavior.anchorMessageAfter?.id)
     }
 
-    // #70 — scroll paging forwards uses SCROLL_PAGE_SIZE, and its truncation drops rows off the
-    // OLDEST end, so the before-anchor is the row immediately older than the surviving window.
+    
+    
     @Test
     fun `loadNextPage asks for one more than the scroll page and re-anchors after truncation`() = runTest {
         val rows = buildMessageSequence(ROWS)
@@ -122,8 +122,8 @@ class ChatNormalPaginationControllerPageSizeTest : PaginationTestBase() {
         assertEquals(rows[firstKeptIndex - 1].id, behavior.anchorMessageBefore?.id)
     }
 
-    // #71 — both jump entries page on JUMP_PAGE_SIZE, NOT on the scroll page: a jump is tuned for
-    // landing latency, and reaching for the scroll page here is the easy mistake.
+    
+    
     @Test
     fun `jumpToMessage asks for one more than the jump page`() = runTest {
         val rows = buildMessageSequence(ROWS)
@@ -147,12 +147,12 @@ class ChatNormalPaginationControllerPageSizeTest : PaginationTestBase() {
         assertEquals(JUMP_PAGE_SIZE.toInt(), controller.window().size)
     }
 
-    /** The LIMIT argument of the last recorded [method] call. */
+    
     private fun limitOf(method: String): Long =
         source.callLog.last { it.method == method }.args.last() as Long
 
     private companion object {
-        /** More than twice the window cap, so every truncation branch is reachable. */
+        
         const val ROWS = 400
         const val MAX_PAGE_FORWARD_STEPS = 20
     }

@@ -14,25 +14,25 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-/**
- * Picks which address of a displayer to talk to when its code advertises several: every candidate
- * is tried at once — TCP connect, TLS handshake, certificate pinned to the code's fingerprint —
- * and the first to complete all three wins; the rest are closed. The HTTP client's own connection
- * fallback races TCP only, so a peer that accepts but never completes the handshake would stall it.
- *
- * One deadline covers TCP and TLS together, because `startHandshake()` blocks with no clock of its
- * own: a watchdog closes every socket still open at the deadline, on a winner, or on cancellation.
- * Nothing here logs the PIN or the transfer key.
- */
+
+
+
+
+
+
+
+
+
+
 object EndpointRace {
-    /** Budget for TCP + TLS per candidate; all candidates run inside the same window. */
+    
     const val BUDGET_MS = 3_000L
 
-    /**
-     * [target] with its address settled: the winner in `ip`, alone in `ips`. A code with one address
-     * is returned as is, letting the ordinary connection decide. Null when every candidate failed
-     * within the budget.
-     */
+    
+
+
+
+
     suspend fun resolve(target: QrPayload, budgetMs: Long = BUDGET_MS): QrPayload? {
         val candidates = target.candidates.distinct()
         if (candidates.size <= 1) return target.copy(ip = candidates.first(), ips = candidates)
@@ -40,7 +40,7 @@ object EndpointRace {
         return target.copy(ip = winner, ips = listOf(winner))
     }
 
-    /** The first of [candidates] to complete TCP + TLS + pin against [fingerprint], or null. */
+    
     suspend fun race(candidates: List<String>, port: Int, fingerprint: String, budgetMs: Long = BUDGET_MS): String? = coroutineScope {
         val started = System.nanoTime()
         val tm = FingerprintTrustManager(fingerprint)

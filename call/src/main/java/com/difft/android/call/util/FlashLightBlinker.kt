@@ -28,27 +28,26 @@ object FlashLightBlinker {
     @Volatile
     private var currentToken: Long = 0L
 
-    // 协程 Mutex 仅用于 startBlinking 内部的 start-start 协调（含 cancelAndJoin suspend 调用）
+    
     private val mutex = Mutex()
 
     private val blinkerScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    // AtomicReference 保证 stopBlinking 的 read-then-clear 与 startBlinking 的安装是原子的，
-    // 避免新启动的 blinkJob 被并发 stopBlinking 静默孤立
+    
     private val blinkJobRef = AtomicReference<Job?>(null)
 
     @Volatile
     private var cameraId: String? = null
 
-    /**
-     * 开始闪灯
-     * @param context 上下文
-     * @param intervalMs 闪烁间隔时间（每次亮灭的间隔）
-     * @param durationMs 持续时长（到期自动停止），null 表示无限时长
-     * @param admitted checked before this start touches any state, again once it is marked blinking, and
-     *   on every blink; false skips the start or ends the blinking (#1381: a critical alert for the
-     *   current call; #1387: for an ended call)
-     */
+    
+
+
+
+
+
+
+
+
     fun startBlinking(
         context: Context,
         intervalMs: Long = 400,
@@ -58,7 +57,7 @@ object FlashLightBlinker {
         val token = System.currentTimeMillis()
 
         blinkerScope.launch {
-            // #1381: admission is decided under the mutex before this start takes another start's job.
+            
             var admittedFirst = false
             val oldJob: Job? = mutex.withLock {
                 admittedFirst = admitted()
@@ -77,8 +76,8 @@ object FlashLightBlinker {
                 val wasBlinking = isBlinking
                 currentToken = token
                 isBlinking = true
-                // A stop that ran just before isBlinking was set is caught here; restoring the previous
-                // values leaves a start admitted meanwhile untouched.
+                
+                
                 admitted().also {
                     if (it) {
                         turnOffTorch(context)
@@ -141,18 +140,12 @@ object FlashLightBlinker {
         }
     }
 
-    /**
-     * 停止闪灯（同步非阻塞，可安全在主线程调用）。
-     *
-     * 不 launch 协程，避免 CoroutineScheduler.dispatch 在主线程触发
-     * Object.notifyAll 导致低端设备 ANR。
-     *
-     * 不在主线程做 setTorchMode（binder IPC）：被 cancel 的 blinkJob 的 finally 块
-     * 会在 IO 线程上调用 setTorchMode(id, false) 兜底关灯。
-     *
-     * 用 AtomicReference.getAndSet 原子交换，避免与并发的 startBlinking 安装新 Job
-     * 之间产生 read-then-clear 竞态导致新 Job 被孤立。
-     */
+    
+
+
+
+
+
     fun stopBlinking() {
         isBlinking = false
         blinkJobRef.getAndSet(null)?.cancel()

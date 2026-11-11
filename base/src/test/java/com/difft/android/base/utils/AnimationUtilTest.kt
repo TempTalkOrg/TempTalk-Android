@@ -9,10 +9,10 @@ import org.robolectric.annotation.Config
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/**
- * T1-6/T1-7: [isAnimationsDisabled] is the closest Android equivalent of `prefers-reduced-motion`
- * — Settings.Global.ANIMATOR_DURATION_SCALE == 0 means the user disabled animations system-wide.
- */
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class AnimationUtilTest {

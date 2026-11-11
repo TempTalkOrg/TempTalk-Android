@@ -12,7 +12,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
-/** Picture in picture takes the shape of what it shows (guide §5.3). */
+
 class PipContentAspectTest {
 
     private fun state(mode: LayoutMode, focus: String?) = ControllerState(

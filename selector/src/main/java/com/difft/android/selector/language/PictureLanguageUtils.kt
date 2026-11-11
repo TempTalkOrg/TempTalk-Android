@@ -5,17 +5,17 @@ import android.content.res.Resources
 import com.difft.android.selector.utils.SpUtils
 import java.util.Locale
 
-/**
- * PictureLanguageUtils
- */
+
+
+
 object PictureLanguageUtils {
 
     private const val KEY_LOCALE = "KEY_LOCALE"
     private const val VALUE_FOLLOW_SYSTEM = "VALUE_FOLLOW_SYSTEM"
 
-    /**
-     * init app the language
-     */
+    
+
+
     @JvmStatic
     fun setAppLanguage(context: Context, languageId: Int, defaultLanguageId: Int) {
         if (languageId >= 0) {
@@ -29,9 +29,9 @@ object PictureLanguageUtils {
         }
     }
 
-    /**
-     * Apply the language.
-     */
+    
+
+
     private fun applyLanguage(context: Context, locale: Locale) {
         applyLanguage(context, locale, false)
     }
@@ -62,9 +62,9 @@ object PictureLanguageUtils {
         resources.updateConfiguration(config, dm)
     }
 
-    /**
-     * set default language
-     */
+    
+
+
     private fun setDefaultLanguage(context: Context) {
         val resources: Resources = context.resources
         val config = resources.configuration

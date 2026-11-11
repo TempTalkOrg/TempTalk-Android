@@ -33,7 +33,7 @@ android {
 
     testOptions {
         unitTests.isIncludeAndroidResources = true
-        // Gradle test workers default to 512m; the Robolectric/Compose suite OOMs there on CI.
+        
         unitTests.all { it.maxHeapSize = "2g" }
     }
 }
@@ -53,14 +53,14 @@ dependencies {
     implementation(project(":base"))
     implementation(project(":database"))
 
-    // Hilt
+    
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
 
-    // Compose Debug
+    
     debugImplementation(libs.bundles.compose.debug)
 
-    // Test dependencies
+    
     testImplementation(libs.junit)
     testImplementation(libs.kotlin.test)
     testImplementation(libs.kotlinx.coroutines.test)
@@ -71,15 +71,15 @@ dependencies {
     kspTest(libs.hilt.compiler)
     testImplementation(testFixtures(project(":base")))
     testImplementation(testFixtures(project(":database")))
-    // Compose test
+    
     testImplementation(platform(libs.compose.bom))
     testImplementation(libs.compose.ui.test.junit4)
-    // Roborazzi
+    
     testImplementation(libs.roborazzi)
     testImplementation(libs.roborazzi.compose)
     testImplementation(libs.roborazzi.junit.rule)
 
-    // Call specific dependencies
+    
     implementation(libs.accompanist.systemuicontroller)
     implementation(libs.livekit.android)
     implementation(libs.livekit.android.camerax)
@@ -88,7 +88,7 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.coil)
     implementation(libs.coil.gif)
-    // Lottie: the call wait dialog animation.
+    
     implementation(libs.lottie)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.compose.foundation)

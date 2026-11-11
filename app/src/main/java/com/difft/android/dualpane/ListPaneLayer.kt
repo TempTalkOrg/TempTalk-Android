@@ -1,9 +1,13 @@
 package com.difft.android.dualpane
 
+import android.graphics.Rect
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.View
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.fragment.app.FragmentManager
 import androidx.lifecycle.Lifecycle
@@ -17,19 +21,19 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-/** What the list pane's layer shows at its root. */
-enum class ListPaneLayerRoot { SEARCH, FOLDED_GROUPS }
 
-/**
- * The list pane's layer (global search, folded groups): one [ListPaneLayerHostFragment] in
- * `list_layer` (tag [ListPaneLayerHostFragment.TAG]) while [active], its root kind carried in the
- * host's arguments. Owned by IndexActivity next to [PaneNavigator]; `active` is the single truth,
- * flipped when a request is made and saved with the Activity, and every FragmentManager change runs
- * through one FIFO queue drained on the main thread with `commitNow` while state is not saved
- * (requests made after `onSaveInstanceState` wait for the next start). Each queued op inspects the
- * host it finds when it runs: a second `open()` of the same root is a no-op, an `open()` of another
- * root replaces the host, and `close()` then `open()` queued together leave one host and `active` true.
- */
+enum class ListPaneLayerRoot { SEARCH, FOLDED_GROUPS, CREATE_GROUP }
+
+
+
+
+
+
+
+
+
+
+
 class ListPaneLayer internal constructor(
     private val activity: FragmentActivity,
     private val chrome: PaneChrome,
@@ -37,7 +41,7 @@ class ListPaneLayer internal constructor(
     private val detailCoversList: StateFlow<Boolean>,
     private val onActiveChanged: () -> Unit,
 ) {
-    /** Implemented by the Activity that owns the layer; the host fragment finds it through this. */
+    
     interface Owner {
         val listLayer: ListPaneLayer
     }
@@ -53,21 +57,32 @@ class ListPaneLayer internal constructor(
     }
 
     private val activeFlow = MutableStateFlow(false)
+    private val coversListFlow = MutableStateFlow(false)
 
-    /** The layer is up: it covers the tab content (both layouts). */
+    
+    private var revealOrigin: Rect? = null
+
+    
+    private var revealPending = false
+    private val afterReveal = ArrayList<() -> Unit>()
+
+    
     val activeState: StateFlow<Boolean> = activeFlow.asStateFlow()
     val active: Boolean get() = activeFlow.value
 
-    /** Pages in the layer's stack; 0 when the layer is down. */
+    
+    val coversList: StateFlow<Boolean> = coversListFlow.asStateFlow()
+
+    
     val depth: Int get() = if (active) host?.depth ?: 0 else 0
 
-    /** The root kind of the host in place; null while no host is added. */
+    
     val root: ListPaneLayerRoot? get() = host?.root
 
     internal val host: ListPaneLayerHostFragment?
         get() = fm.findFragmentByTag(ListPaneLayerHostFragment.TAG) as? ListPaneLayerHostFragment
 
-    /** Call right after `setContentView`, before any request: restores `active` and reconciles it with the restored host. */
+    
     fun attach(savedInstanceState: Bundle?) {
         activeFlow.value = savedInstanceState?.getBoolean(STATE_LAYER_ACTIVE) ?: false
         activity.lifecycle.addObserver(
@@ -76,6 +91,7 @@ class ListPaneLayer internal constructor(
                     Lifecycle.Event.ON_START, Lifecycle.Event.ON_RESUME -> if (pending.isNotEmpty()) scheduleDrain()
                     Lifecycle.Event.ON_DESTROY -> {
                         destroyed = true
+                        afterReveal.clear()
                         pending.clear()
                         handler.removeCallbacks(drainRunnable)
                     }
@@ -91,18 +107,18 @@ class ListPaneLayer internal constructor(
             L.w { "[ListLayer] restore_mismatch host=absent active=true" }
             activeFlow.value = false
         }
-        applyPresentation()
+        applyPresentation(animate = false)
         if (savedInstanceState != null) L.i { "[ListLayer] restored active=$active root=$root depth=$depth" }
         observeUncover()
     }
 
-    /**
-     * One-pane edges of the conversation layer over an active layer (never the restored value):
-     * when it pops (true to false) the layer's visible top page takes the keyboard back; when it
-     * covers (false to true: a notification, a link or a brought-home conversation as well as a
-     * result tap) that page lets the keyboard go, so it does not stay over the conversation. Only
-     * search pages take part ([UncoverableSearchPage]); hidden pages under a pushed one are not told.
-     */
+    
+
+
+
+
+
+
     private fun observeUncover() {
         var covered = detailCoversList.value
         activity.lifecycleScope.launch {
@@ -120,43 +136,68 @@ class ListPaneLayer internal constructor(
         outState.putBoolean(STATE_LAYER_ACTIVE, active)
     }
 
-    /**
-     * Shows the layer with [root]. Inactive: adds a host of [root]. Active: the queued op replaces
-     * the host it finds when that host has another root, so the last request wins.
-     */
-    fun open(root: ListPaneLayerRoot) {
+    
+
+
+
+
+
+
+    fun open(root: ListPaneLayerRoot, revealFrom: Rect? = null, args: Bundle? = null) {
         if (destroyed) return
         if (!active) {
             activeFlow.value = true
+            setPresentationCovers(true)
             onActiveChanged()
-            L.i { "[ListLayer] open root=$root dualPane=${chromeIsDualPane()}" }
+            revealOrigin = revealFrom?.takeIf { root == ListPaneLayerRoot.SEARCH }
+            revealPending = revealOrigin != null
+            L.i { "[ListLayer] open root=$root dualPane=${chromeIsDualPane()} reveal=${revealOrigin != null}" }
         }
         submit {
             val current = host
-            if (current?.root != root) {
+            if (current?.root != root || !current.hasRootArgs(args)) {
                 if (current != null) L.i { "[ListLayer] replace from=${current.root} to=$root" }
                 fm.beginTransaction()
                     .apply { if (current != null) remove(current) }
-                    .add(R.id.list_layer, ListPaneLayerHostFragment.newInstance(root), ListPaneLayerHostFragment.TAG)
+                    .add(R.id.list_layer, ListPaneLayerHostFragment.newInstance(root, args), ListPaneLayerHostFragment.TAG)
                     .commitNow()
             }
             applyPresentation()
         }
     }
 
-    /** Takes the layer down, dropping its pages and their state; idempotent while inactive. */
+    
+
+
+
     fun close() {
         if (destroyed || !active) return
         activeFlow.value = false
         onActiveChanged()
+        
+        revealPending = false
+        afterReveal.clear()
         L.i { "[ListLayer] close root=$root depth=${host?.depth ?: 0}" }
-        submit {
-            host?.let { fm.beginTransaction().remove(it).commitNow() }
-            applyPresentation()
-        }
+        submit { applyPresentation() }
     }
 
-    /** Back on a pushed layer page: pops it, unless the stack changed before the pop ran. */
+    
+
+
+
+    fun runAfterReveal(action: () -> Unit) {
+        if (revealPending && !destroyed) afterReveal += action else action()
+    }
+
+    private fun finishReveal() {
+        revealPending = false
+        if (afterReveal.isEmpty()) return
+        val actions = afterReveal.toList()
+        afterReveal.clear()
+        actions.forEach { it() }
+    }
+
+    
     fun pop(): Boolean {
         val current = host ?: return false
         if (!active || current.depth < 2) return false
@@ -165,11 +206,92 @@ class ListPaneLayer internal constructor(
         return true
     }
 
-    private fun applyPresentation() {
+    
+
+
+
+
+
+    private fun applyPresentation(animate: Boolean = true) {
         if (destroyed || activity.isDestroyed) return
-        activity.findViewById<View>(R.id.list_layer)?.visibility = if (active) View.VISIBLE else View.GONE
-        chrome.setLayerCovers(active)
+        val layer = activity.findViewById<View>(R.id.list_layer) ?: return
+        val origin = revealOrigin?.takeIf { animate && SearchReveal.enabled() }
+        if (active) {
+            setPresentationCovers(true)
+            chrome.cancelListLayerAnimation()
+            freezeInsets(layer, frozen = false)
+            var revealing = false
+            if (layer.visibility != View.VISIBLE) {
+                layer.visibility = View.VISIBLE
+                when {
+                    origin != null -> {
+                        layer.translationX = 0f
+                        revealing = true
+                        chrome.runListLayerAnimation(SearchReveal.open(layer, origin)) { finishReveal() }
+                    }
+                    animate -> chrome.runListLayerAnimation(PaneMotion.cover(layer, underLayer())) {}
+                    else -> layer.translationX = 0f
+                }
+            } else {
+                
+                
+                layer.translationX = 0f
+                layer.alpha = 1f
+            }
+            if (!revealing) finishReveal()
+        } else if (animate && layer.visibility == View.VISIBLE) {
+            
+            
+            freezeInsets(layer, frozen = true)
+            WindowInsetsControllerCompat(activity.window, layer).hide(WindowInsetsCompat.Type.ime())
+            val animator = if (origin != null) SearchReveal.close(layer, origin) else PaneMotion.uncover(layer, underLayer())
+            chrome.runListLayerAnimation(animator) { cancelled ->
+                
+                
+                if (!cancelled && !active) {
+                    layer.visibility = View.INVISIBLE
+                    setPresentationCovers(false)
+                }
+                submit { takeDown() }
+            }
+        } else {
+            takeDown()
+        }
     }
+
+    
+    private fun takeDown() {
+        if (active || destroyed || activity.isDestroyed) return
+        revealOrigin = null
+        host?.let { fm.beginTransaction().remove(it).commitNow() }
+        activity.findViewById<View>(R.id.list_layer)?.let {
+            freezeInsets(it, frozen = false)
+            it.translationX = 0f
+            it.visibility = View.GONE
+        }
+        setPresentationCovers(false)
+    }
+
+    private fun setPresentationCovers(covers: Boolean) {
+        coversListFlow.value = covers
+        chrome.setLayerCovers(covers)
+    }
+
+    private var insetsFrozen = false
+
+    
+
+
+
+
+    private fun freezeInsets(layer: View, frozen: Boolean) {
+        if (insetsFrozen == frozen) return
+        insetsFrozen = frozen
+        ViewCompat.setOnApplyWindowInsetsListener(layer) { _, insets -> if (insetsFrozen) WindowInsetsCompat.CONSUMED else insets }
+        if (!frozen) ViewCompat.requestApplyInsets(layer)
+    }
+
+    private fun underLayer(): List<View> = listOfNotNull(activity.findViewById(R.id.list_content))
 
     private fun chromeIsDualPane(): Boolean = activity.findViewById<View>(R.id.list_pane) != null
 

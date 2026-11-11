@@ -31,12 +31,12 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/**
- * [DifftSwitchRow] contract (issue #1206): the whole row is the touch target (as on the
- * `SwitchCompat` it replaces, which is a TextView clickable across its full width), a null
- * `onCheckedChange` makes it inert for the View shell, and `minHeight = 0` keeps a compact row from
- * being stretched to the default 52dp settings-row height.
- */
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34])
@@ -61,7 +61,7 @@ class DifftSwitchRowTest {
         val node = composeTestRule.onNodeWithTag(TAG)
 
         node.assertIsOff()
-        // Far from the switch: only a row-level toggle can register this.
+        
         node.performTouchInput { click(Offset(4f, height / 2f)) }
         node.assertIsOn()
     }
@@ -100,8 +100,8 @@ class DifftSwitchRowTest {
         }
 
         val height = composeTestRule.onNodeWithTag(TAG).getBoundsInRoot().height
-        // max(single-line label, 32dp track), so assert the floor: Robolectric font metrics decide
-        // which of the two wins. Never the 52dp settings-row default.
+        
+        
         assertTrue(height >= DifftSwitchDefaults.TrackHeight)
         assertTrue(height < DifftSettingsDefaults.RowMinHeight)
     }

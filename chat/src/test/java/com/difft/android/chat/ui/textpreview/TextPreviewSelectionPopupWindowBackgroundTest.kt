@@ -15,21 +15,21 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import kotlin.test.assertEquals
 
-/**
- * M6/M7 (issue #1127, family F): [TextPreviewSelectionPopup] is a temporary overlay that adds
- * a `ComposeView` directly onto the host Activity's `android.R.id.content` root — it never owns
- * the host window, so its `DifftTheme(applyWindowBackground = false)` migration must leave the
- * window background completely untouched, both while shown (M6) and after dismiss (M7).
- *
- * Uses `Robolectric.buildActivity(...).setup()` (not `createAndroidComposeRule`) — the popup
- * builds its own `ComposeView` and adds it directly to `android.R.id.content` outside of any
- * compose test rule's own composition, so the rule's `ViewTreeLifecycleOwner` wiring (only
- * established via the rule's own `setContent`) does not apply here. The activity must call
- * `setContentView` once before `show()` — a real host Activity always has by the time a popup is
- * shown, and `ComponentActivity` only installs the ViewTree owners on the decor once a content
- * view has actually been set (see `ComposeActivityMount`'s KDoc for the same fact, for the
- * `DifftTheme`-mounted-without-`setContentView` case).
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34])

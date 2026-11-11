@@ -13,12 +13,12 @@ import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * The session→UI binding of the five session-written fields: [CallUiController] exposes the
- * session's own `StateFlow` objects, so a session write is visible to the UI with no hop. And the
- * one-shot events: kept for the first subscriber (the first call page), in order and capped, toasts
- * excepted; dropped with no subscriber after that. Rows: T3-02, T3-03.
- */
+
+
+
+
+
+
 class CallSessionUiStateTest {
 
     @Test

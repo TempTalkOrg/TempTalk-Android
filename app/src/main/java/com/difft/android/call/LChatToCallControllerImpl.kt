@@ -52,7 +52,7 @@ class LChatToCallControllerImpl @Inject constructor(
     private val globalConfigsManager: GlobalConfigsManager,
     private val contactorCacheManager: ContactorCacheManager,
     private val callMessageHandler: CallMessageHandler,
-    // Lazy: the launcher's session graph depends back on the call-to-chat controller.
+    
     private val sessionLauncher: Lazy<CallSessionLauncher>,
 ) : LChatToCallController {
 
@@ -73,11 +73,11 @@ class LChatToCallControllerImpl @Inject constructor(
         }
 
         appScope.launch(Dispatchers.IO) {
-            // This start's own share of the wait dialog: every failure path releases only it, so a
-            // refused second tap leaves the first start's dialog up.
+            
+            
             var waitToken = CallWaitDialogUtil.NO_CLAIM
             try {
-                // One config snapshot per start: the envelope and the session launch share it (#1395).
+                
                 val callConfig = globalConfigsManager.callConfigSnapshot()
                 waitToken = withContext(Dispatchers.Main) { CallWaitDialogUtil.show(activity) }
 
@@ -127,9 +127,6 @@ class LChatToCallControllerImpl @Inject constructor(
     }
 
 
-    /**
-     * 处理通话结束通知消息
-     */
     override fun handleCallEndNotification(roomId: String) {
         if (roomId.isEmpty()) return
 
@@ -161,10 +158,10 @@ class LChatToCallControllerImpl @Inject constructor(
         )
         val notification = Notification(Args(collapseId), LCallConstants.CALL_NOTIFICATION_TYPE)
 
-        // Generated once per user-initiated start. Reported via TTStartCall and threaded to
-        // all outbound control messages so the server can locate the room by clientCallId when
-        // roomId is not yet assigned (window W). Stable across the initial connect failover
-        // because it is baked into startCallParams (reused for every failover URL).
+        
+        
+        
+        
         val clientCallId = java.util.UUID.randomUUID().toString()
 
         val body = StartCallRequestBody(
@@ -193,7 +190,7 @@ class LChatToCallControllerImpl @Inject constructor(
             .withCallWaitDialogShown(true)
             .withClientCallId(clientCallId)
 
-        // Main: the page launch and the session start share one main-thread message.
+        
         return withContext(Dispatchers.Main) {
             sessionLauncher.get().launch(activity, callIntentBuilder.build(), waitToken, callConfig)
         }

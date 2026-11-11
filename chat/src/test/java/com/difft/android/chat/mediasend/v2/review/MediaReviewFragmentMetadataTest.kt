@@ -36,21 +36,21 @@ import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
-/**
- * T42 / T43 / T44 / T45 — the review screen's video hint must never dress a failed read up as a fact.
- *
- * T42 is the reported symptom pinned as a regression: the timeline never reports a duration for a
- * gallery item whose bare path cannot be opened, and the old code rendered that as "0:00 • 0.0MB".
- * T43 is the honest-unknown case, T44 the observer-safety case, T45 the same fallback one branch
- * deeper — inside the compression estimate.
- *
- * The two presenters are driven directly instead of through a launched fragment: the fragment's
- * `onViewCreated` needs the whole DI graph, a Callback host and a dozen custom views, none of which
- * this contract is about. A real activity supplies the context and the shared view model, so the
- * presenters run against real framework objects.
- *
- * Run: :chat:testDebugUnitTest
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [33])
 class MediaReviewFragmentMetadataTest {
@@ -66,16 +66,16 @@ class MediaReviewFragmentMetadataTest {
         controller = Robolectric.buildActivity(MetadataHostActivity::class.java).setup()
         activity = controller.get()
 
-        // An anchor fragment is the only supported way to obtain a live FragmentHostCallback; the
-        // fragment under test is then given the same host so requireContext() / requireActivity()
-        // resolve without running its onViewCreated.
+        
+        
+        
         val anchor = Fragment()
         activity.supportFragmentManager.beginTransaction().add(anchor, "anchor").commitNow()
 
         fragment = MediaReviewFragment()
         hostFieldOf(Fragment::class.java, "mHost").set(fragment, hostFieldOf(Fragment::class.java, "mHost").get(anchor))
-        // Pre-seeding Hilt's component context short-circuits its lazy initialisation, which would
-        // otherwise demand a Hilt application just to answer getContext().
+        
+        
         declaredFieldOf(fragment, "componentContext").set(fragment, ContextWrapper(activity))
 
         videoSizeHint = TextView(activity)
@@ -90,24 +90,24 @@ class MediaReviewFragmentMetadataTest {
         runCatching { controller.destroy() }
     }
 
-    /**
-     * T42 — MediaStore duration and size carry the hint even when the timeline reported nothing.
-     * The two negative assertions are the reported symptom itself.
-     */
+    
+
+
+
     @Test
     fun `size hint uses store metadata when the timeline reported no duration`() {
         presentVideoSizeHint(stateFor(videoMedia(size = 1_500_000L, durationMs = 8_000L)))
 
         val text = requireNotNull(videoSizeHint.text) { "hint was hidden" }.toString()
         assertTrue(text, text.contains("0:08"))
-        // Expected strings come from the same formatter so the assertion cannot fail on a locale
-        // that renders decimals differently — while still pinning the exact reported symptom.
+        
+        
         assertTrue(text, text.contains(MemoryUnitFormat.formatBytes(1_500_000L, MemoryUnitFormat.MEGA_BYTES, true)))
         assertFalse(text, text.contains("0:00"))
         assertFalse(text, text.contains(MemoryUnitFormat.formatBytes(0L, MemoryUnitFormat.MEGA_BYTES, true)))
     }
 
-    /** T43 — genuinely unknown metadata hides the hint rather than printing a fabricated zero. */
+    
     @Test
     fun `size hint is hidden and logged when metadata is truly unknown`() {
         val log = LogCapture()
@@ -120,11 +120,11 @@ class MediaReviewFragmentMetadataTest {
         assertTrue(log.messages.toString(), log.messages.any { it.contains("[MediaAccess]") && it.contains("size hint unavailable") })
     }
 
-    /**
-     * T44 — `setInput` is declared @Throws(IOException) and the presenters run inside a LiveData
-     * observer, so an escape would abort the whole observer dispatch. The size hint that follows in
-     * the same observer must still run.
-     */
+    
+
+
+
+
     @Test
     fun `timeline input failure is contained and does not stop the following presenter`() {
         val media = videoMedia(size = 1_500_000L, durationMs = 8_000L)
@@ -142,17 +142,17 @@ class MediaReviewFragmentMetadataTest {
         assertTrue(text, text.contains("0:08"))
     }
 
-    /**
-     * T45 — the compression estimate uses the same fallback duration the hint displays.
-     *
-     * The timeline reports no duration until it has read the source, so the estimate was taken over
-     * 0ms — which is 0 bytes — and hid the hint for an item whose duration the MediaStore row knew
-     * all along. This is the same defect as T42, one branch deeper.
-     */
+    
+
+
+
+
+
+
     @Test
     fun `size hint survives the compression estimate when the timeline reported no duration`() {
-        // Over getCompressedVideoMaxSize, so the estimate branch runs instead of returning the
-        // original size — that branch is the one that consumed the timeline's zero.
+        
+        
         val state = stateFor(videoMedia(size = 60L * 1024 * 1024, durationMs = 8_000L))
         val expected = TranscodingQuality.createFromPreset(state.transcodingPreset, 8_000L).byteCountEstimate
         assertTrue("preset yields no estimate, the row proves nothing", expected > 0)
@@ -193,7 +193,7 @@ class MediaReviewFragmentMetadataTest {
     private fun hostFieldOf(owner: Class<*>, name: String) =
         owner.getDeclaredField(name).apply { isAccessible = true }
 
-    /** Walks up to whichever class in the hierarchy declares [name] — Hilt owns some of them. */
+    
     private fun declaredFieldOf(instance: Any, name: String): java.lang.reflect.Field {
         var klass: Class<*>? = instance.javaClass
         while (klass != null) {
@@ -203,11 +203,11 @@ class MediaReviewFragmentMetadataTest {
         throw NoSuchFieldException(name)
     }
 
-    /**
-     * L's warn entry point is a @JvmStatic bridge, so a call site is dispatched statically and an
-     * object mock never sees it; a real planted tree is the only way to observe the line. Delivery
-     * is asynchronous over L's own channel, hence the bounded wait rather than a bare assertion.
-     */
+    
+
+
+
+
     private class LogCapture {
         val messages: MutableList<String> = CopyOnWriteArrayList()
         private val logged = CountDownLatch(1)
@@ -230,10 +230,10 @@ class MediaReviewFragmentMetadataTest {
     }
 }
 
-/**
- * Supplies the shared [MediaSelectionViewModel]: the fragment resolves it from the activity, and
- * the real one has no no-argument constructor.
- */
+
+
+
+
 class MetadataHostActivity : FragmentActivity() {
     override val defaultViewModelProviderFactory: ViewModelProvider.Factory =
         object : ViewModelProvider.Factory {

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Tintable hang-up glyph at its natural 31x24 box (the design's icon size); no background. -->
+
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="31dp"
     android:height="24dp"

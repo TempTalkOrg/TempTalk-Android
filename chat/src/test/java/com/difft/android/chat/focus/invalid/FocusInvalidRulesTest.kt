@@ -6,7 +6,7 @@ import org.junit.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
-/** Which invalid reason shows which dialog, when a dialog is answered, and when the strip and the D4 body apply. */
+
 class FocusInvalidRulesTest {
 
     private fun invalid(reason: Int?, version: Int = 5, gid: String = "A") = EffectiveFocus(
@@ -18,7 +18,7 @@ class FocusInvalidRulesTest {
         version = version,
     )
 
-    // ---------------------------------------------------------------- dialog kind per reason
+    
 
     @Test
     fun `dismissed and expired groups show D5, removed ones D5b`() {
@@ -39,7 +39,7 @@ class FocusInvalidRulesTest {
         assertEquals(PendingFocusDialog(FocusInvalidKind.DISBANDED, "0:G1", 5, "G1"), FocusInvalidRules.pendingDialog(invalid(0, version = 5, gid = "G1"), ""))
     }
 
-    // ---------------------------------------------------------------- handled version and clearing
+    
 
     @Test
     fun `an answered episode is not shown again, but a different reason or group is`() {
@@ -69,7 +69,7 @@ class FocusInvalidRulesTest {
         assertNull(FocusInvalidRules.pendingDialog(EffectiveFocus.INACTIVE, handledEpisode = ""))
     }
 
-    // ---------------------------------------------------------------- status strip
+    
 
     @Test
     fun `the strip shows for every invalid reason including a self leave`() {
@@ -88,11 +88,11 @@ class FocusInvalidRulesTest {
         val reselected = EffectiveFocus(featureEnabled = true, active = true, invalid = false, groupIds = setOf("B"), version = 6)
         assertEquals(false, FocusInvalidRules.stripVisible(reselected, ""))
         assertEquals(false, FocusInvalidRules.stripVisible(EffectiveFocus.INACTIVE, ""))
-        // Expired locally while invalid: derive() turns the state inactive, so it is no longer "invalid".
+        
         assertEquals(false, FocusInvalidRules.stripVisible(EffectiveFocus(featureEnabled = true, active = false, invalid = false, version = 5), ""))
     }
 
-    // ---------------------------------------------------------------- D4 leave body
+    
 
     @Test
     fun `the leave body changes only for the current valid focus group`() {

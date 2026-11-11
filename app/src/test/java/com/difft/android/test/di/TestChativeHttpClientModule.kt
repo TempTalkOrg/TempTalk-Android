@@ -11,11 +11,11 @@ import dagger.hilt.testing.TestInstallIn
 import io.mockk.mockk
 import javax.inject.Singleton
 
-/**
- * Replaces the real HTTP clients — and the auth binding that depends on them — so a Hilt test
- * never builds an OkHttp stack or reaches the network. Kept in lockstep with
- * [ChativeHttpClientModule] and [AuthModule].
- */
+
+
+
+
+
 @Module
 @TestInstallIn(
     components = [SingletonComponent::class],
@@ -29,7 +29,7 @@ object TestChativeHttpClientModule {
             override fun provideAuth(): String = "test-auth"
         }
 
-    /** Fake rather than a mock: the three members are trivial and call counts stay readable. */
+    
     @Provides
     @Singleton
     fun provideAuthTokenProvider(): AuthTokenProvider = object : AuthTokenProvider {

@@ -9,11 +9,11 @@ import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.annotation.Config
 
-/**
- * [SoftInputModeLease] below API 30: the home screen's window resizes for the keyboard while any
- * page needs it, so a conversation view destroyed in another tab (closed, disbanded, replaced) no
- * longer writes ADJUST_NOTHING under a keyboard page that is still shown.
- */
+
+
+
+
+
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [29])
 class SoftInputModeLeaseTest {
@@ -39,8 +39,8 @@ class SoftInputModeLeaseTest {
         SoftInputModeLease.acquireResize(activity, searchPage)
         assertEquals(resize, activity.adjust())
 
-        SoftInputModeLease.release(activity, chatsRoot) // replaced by a notification
-        SoftInputModeLease.release(activity, hiddenGroupRoot) // group disbanded
+        SoftInputModeLease.release(activity, chatsRoot) 
+        SoftInputModeLease.release(activity, hiddenGroupRoot) 
         assertEquals("the search page still resizes", resize, activity.adjust())
 
         SoftInputModeLease.release(activity, searchPage)
@@ -69,7 +69,7 @@ class SoftInputModeLeaseTest {
         SoftInputModeLease.acquireResize(activity, page)
         assertEquals(resize, activity.adjust())
         SoftInputModeLease.release(activity, page)
-        SoftInputModeLease.release(activity, page) // a second release changes nothing
+        SoftInputModeLease.release(activity, page) 
 
         assertEquals(found, activity.mode())
     }

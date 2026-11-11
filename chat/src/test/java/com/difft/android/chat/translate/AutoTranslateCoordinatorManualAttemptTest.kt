@@ -11,11 +11,11 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 import java.util.concurrent.ConcurrentLinkedQueue
 
-/**
- * [AutoTranslateCoordinator] manual attempts: with two overlapping attempts on one row only the
- * latest one may write the row's outcome, and a same-language manual result is shown and persisted
- * like any other translation. Fixture in [AutoTranslateCoordinatorTestBase].
- */
+
+
+
+
+
 class AutoTranslateCoordinatorManualAttemptTest : AutoTranslateCoordinatorTestBase() {
 
     @Test
@@ -30,14 +30,14 @@ class AutoTranslateCoordinatorManualAttemptTest : AutoTranslateCoordinatorTestBa
         val target = message("m0")
         coordinator.onWindowAssembled(listOf(target))
 
-        // Attach the attempts one at a time: the launched waits run on a real dispatcher, so two
-        // back-to-back calls could poll the gates in either order.
+        
+        
         coordinator.translateManually(target, TranslateTargetLanguage.ZH)
         awaitCondition("the first wait attached") { waits.size == 1 }
         coordinator.translateManually(target, TranslateTargetLanguage.ZH)
         awaitCondition("the second wait attached") { waits.isEmpty() }
 
-        // The older wait gives up after the retry took over the row: its failure must not land.
+        
         firstWait.complete(false)
         delay(SETTLE_MS)
         assertEquals(TranslateStatus.Translating, coordinator.overlay.value.getValue("m0").translateStatus)
@@ -56,7 +56,7 @@ class AutoTranslateCoordinatorManualAttemptTest : AutoTranslateCoordinatorTestBa
         coordinator.translateManually(target, TranslateTargetLanguage.EN)
         awaitCondition("the manual job to be submitted") { submissions.size == 1 }
 
-        // What the engine answers in MANUAL mode for text already in the target language.
+        
         completions.emit(
             TranslateQueue.Completion(
                 owner = "$ROOM#manual",

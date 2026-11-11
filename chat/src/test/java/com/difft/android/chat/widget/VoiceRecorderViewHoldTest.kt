@@ -85,7 +85,7 @@ class VoiceRecorderViewHoldTest {
         }
         assertTrue(states.any { it is RecordingState.Cancelled })
 
-        // The finalizer job completes on its IO thread just after delivering the callback.
+        
         var restarted = false
         while (!restarted && System.currentTimeMillis() < deadline) {
             shadowOf(Looper.getMainLooper()).idleFor(10, TimeUnit.MILLISECONDS)
@@ -115,6 +115,56 @@ class VoiceRecorderViewHoldTest {
 
         assertFalse("a moving anchor must not cancel the window draw", bar.viewTreeObserver.dispatchOnPreDraw())
         bar.cancelHold()
+    }
+
+    @Test
+    @Config(qualifiers = "night-mdpi")
+    @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    fun `recording keeps primary content through cancel effect and neutral hover`() {
+        assertTrue(recorder.beginHold(anchor))
+        recorder.measure(View.MeasureSpec.makeMeasureSpec(600, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(600, View.MeasureSpec.EXACTLY))
+        recorder.layout(0, 0, 600, 600)
+        val label = recorder.findViewById<android.widget.TextView>(com.difft.android.chat.R.id.record_button)
+        val effect = recorder.findViewById<android.widget.TextView>(com.difft.android.chat.R.id.tv_effect_label)
+        val primary = recorder.context.getColor(com.difft.android.base.R.color.primary)
+        val onPrimary = recorder.context.getColor(com.difft.android.base.R.color.on_primary)
+        val bar = recorder.findViewById<View>(com.difft.android.chat.R.id.ll_record)
+        fun assertBar() {
+            assertEquals(onPrimary, label.currentTextColor)
+            val waveform = recorder.findViewById<WaveformView>(com.difft.android.chat.R.id.waveform_view)
+            waveform.layout(0, 0, 50, 44)
+            waveform.updateAmplitude(1f)
+            val waveBitmap = android.graphics.Bitmap.createBitmap(50, 44, android.graphics.Bitmap.Config.ARGB_8888)
+            try {
+                waveform.draw(android.graphics.Canvas(waveBitmap))
+                assertEquals(onPrimary, waveBitmap.getPixel(26, 22))
+            } finally {
+                waveBitmap.recycle()
+            }
+            val bitmap = android.graphics.Bitmap.createBitmap(100, 44, android.graphics.Bitmap.Config.ARGB_8888)
+            try {
+                bar.background.setBounds(0, 0, 100, 44)
+                bar.background.draw(android.graphics.Canvas(bitmap))
+                assertEquals(primary, bitmap.getPixel(50, 22))
+            } finally {
+                bitmap.recycle()
+            }
+        }
+        fun hover(id: Int) {
+            val target = recorder.findViewById<View>(id)
+            val location = IntArray(2).also(target::getLocationOnScreen)
+            recorder.moveHold(location[0] + target.width / 2f, location[1] + target.height / 2f)
+        }
+        assertBar()
+        hover(com.difft.android.chat.R.id.btn_cancel)
+        assertBar()
+        hover(com.difft.android.chat.R.id.btn_add_effect)
+        assertBar()
+        assertEquals(onPrimary, effect.currentTextColor)
+        recorder.moveHold(-100f, -100f)
+        assertBar()
+        assertEquals(recorder.context.getColor(com.difft.android.base.R.color.t_white), effect.currentTextColor)
+        recorder.cancelHold()
     }
 
     private fun loseAudioFocus() {

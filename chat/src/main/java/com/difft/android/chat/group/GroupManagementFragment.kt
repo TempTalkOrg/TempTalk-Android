@@ -26,7 +26,7 @@ import com.difft.android.base.utils.pane.detailNavigation
 import com.difft.android.base.utils.pane.waitWhileVisibleTop
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.chat.R
-import com.difft.android.chat.contacts.contactsdetail.ContactDetailDestination
+import com.difft.android.chat.contacts.contactsdetail.showContactCard
 import com.difft.android.chat.contacts.data.FriendSourceType
 import com.difft.android.chat.databinding.ActivityGroupManagementBinding
 import com.difft.android.chat.group.mvi.GroupPageContract.Effect
@@ -78,8 +78,7 @@ class GroupManagementFragment : Fragment(), SettingsIdiomPage {
                         GroupModeratorsDestination(vm.gid, ModeratorAction.ADD))
                     "-" -> detailNavigation().push(this@GroupManagementFragment,
                         GroupModeratorsDestination(vm.gid, ModeratorAction.REMOVE))
-                    else -> contact.uid?.let { detailNavigation().push(this@GroupManagementFragment,
-                        ContactDetailDestination(it, FriendSourceType.FROM_GROUP, vm.gid)) }
+                    else -> contact.uid?.let { showContactCard(this@GroupManagementFragment, it, FriendSourceType.FROM_GROUP, vm.gid) }
                 }
             }
         }

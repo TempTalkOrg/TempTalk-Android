@@ -34,16 +34,16 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlin.test.assertTrue
 
-/**
- * Unit tests for the exit decision in [LogoutManagerImpl.performLogout] (issue #1230).
- *
- * This is what the [AppExiter] seam buys: without it any test reaching `performLogout` would run
- * `Process.killProcess` and take down the Gradle test worker. `exit` never returns in production
- * either, so the fake throws.
- *
- * `appScope` is a real global `CoroutineScope(Dispatchers.IO)` and is not injectable here, so the
- * assertions use MockK's timeout verification rather than virtual time.
- */
+
+
+
+
+
+
+
+
+
+
 class LogoutManagerImplExitTest {
 
     @get:Rule
@@ -87,8 +87,8 @@ class LogoutManagerImplExitTest {
         translateModelStore = mockk(relaxed = true)
         translateQueue = mockk(relaxed = true)
 
-        // Both storage clears sit inside runBlocking { withTimeoutOrNull(3_000) { ... } }; an
-        // unstubbed relaxed suspend mock would stall each test for the full timeout.
+        
+        
         coEvery { storageBoundUserManager.clearAuthOnly() } returns Unit
         coEvery { storageBoundUserManager.clearAll() } returns Unit
         every { appExiter.exit(any()) } throws TestExit()
@@ -119,7 +119,7 @@ class LogoutManagerImplExitTest {
         heldSendJobs = heldSendJobs,
     )
 
-    // T21
+    
     @Test
     fun `with a resumed activity the app relaunches and posts no notification`() {
         every { appVisibility.hasResumedActivity() } returns true
@@ -130,7 +130,7 @@ class LogoutManagerImplExitTest {
         verify(exactly = 0) { loggedOutNotifier.post() }
     }
 
-    // T22 — the #1230 safety net: a kick confirmed with nothing on screen must explain itself.
+    
     @Test
     fun `with no resumed activity the notification is posted before a non-relaunching exit`() {
         every { appVisibility.hasResumedActivity() } returns false
@@ -144,7 +144,7 @@ class LogoutManagerImplExitTest {
         }
     }
 
-    // T23
+    
     @Test
     fun `a duplicate logout call is dropped by the latch`() {
         every { appVisibility.hasResumedActivity() } returns true
@@ -159,8 +159,8 @@ class LogoutManagerImplExitTest {
         verify(exactly = 1) { webSocketManager.stop() }
     }
 
-    // #1382 — every logout ends a migration message pause before the storage clears wipe app_state,
-    // which they do on disk only.
+    
+    
     @Test
     fun `a passive logout clears the migration pause before the auth clear`() {
         every { appVisibility.hasResumedActivity() } returns true
@@ -200,8 +200,8 @@ class LogoutManagerImplExitTest {
         }
     }
 
-    // #1382 — a passive logout keeps the database, so the sends a migration pause holds are dropped
-    // before the pause clears; a later login must never send them.
+    
+    
     @Test
     fun `a passive logout while paused drops the held sends before the pause clears`() {
         every { appVisibility.hasResumedActivity() } returns true
@@ -216,7 +216,7 @@ class LogoutManagerImplExitTest {
         }
     }
 
-    // #1382 A04 — sends queued before the login loaded would otherwise be adopted by the next login.
+    
     @Test
     fun `a passive logout with messaging open drops only the sends the ending login does not own`() {
         every { appVisibility.hasResumedActivity() } returns true
@@ -244,13 +244,13 @@ class LogoutManagerImplExitTest {
         verify(exactly = 1) { messageStore.deleteDatabase() }
     }
 
-    // T24 — a user-initiated "Log Out" that loses the latch to an in-flight passive logout must
-    // still wipe the data: the latch escalates the running sequence instead of dropping the request.
+    
+    
     @Test
     fun `a full clear requested during a passive logout escalates instead of being dropped`() {
         every { appVisibility.hasResumedActivity() } returns true
-        // Hold the passive sequence at its first storage clear so the full-wipe request can land
-        // while it is genuinely in flight.
+        
+        
         val passiveClearReached = CountDownLatch(1)
         val releasePassiveClear = CountDownLatch(1)
         coEvery { storageBoundUserManager.clearAuthOnly() } coAnswers {

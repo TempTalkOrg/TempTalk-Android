@@ -21,11 +21,11 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/**
- * Wide-screen contract for [DifftModalBottomSheet] (issue #1197): the sheet must stop at the
- * Material 640dp cap on a 1000dp window, and the Compose token must stay in sync with the
- * View-side `R.dimen.bottom_sheet_max_width` that [com.difft.android.base.widget.BaseBottomSheetDialogFragment] uses.
- */
+
+
+
+
+
 @OptIn(ExperimentalMaterial3Api::class)
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -51,7 +51,8 @@ class DifftModalBottomSheetWidthTest {
         }
         composeTestRule.waitForIdle()
 
-        composeTestRule.onNodeWithTag(CONTENT_TAG).assertWidthIsEqualTo(DifftBottomSheetDefaults.MaxWidth)
+        
+        composeTestRule.onNodeWithTag(CONTENT_TAG).assertWidthIsEqualTo(DifftBottomSheetDefaults.MaxWidth - DifftBottomSheetDefaults.Inset * 2)
     }
 
     @Test
@@ -70,7 +71,7 @@ class DifftModalBottomSheetWidthTest {
         }
         composeTestRule.waitForIdle()
 
-        composeTestRule.onNodeWithTag(CONTENT_TAG).assertWidthIsEqualTo(400.dp)
+        composeTestRule.onNodeWithTag(CONTENT_TAG).assertWidthIsEqualTo(400.dp - DifftBottomSheetDefaults.Inset * 2)
     }
 
     @Test

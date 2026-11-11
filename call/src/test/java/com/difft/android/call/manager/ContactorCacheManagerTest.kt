@@ -29,23 +29,12 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.util.Optional
 
-/**
- * Unit tests for [ContactorCacheManager.getParticipantDisplayInfo].
- *
- * Test coverage:
- *  - Branch coverage: FromContactor (DB hit), FromNameOrUid (DB miss).
- *  - Regression assertion: the IO-only path must NOT call `createAvatarViewBinder`
- *    from inside the manager.
- *  - Dispatcher proof: the body must execute off the Main dispatcher.
- *  - Path B regression: repeat invocations must not invoke avatar-construction APIs.
- *
- * Signature regression guard: every test calls `getParticipantDisplayInfo(uid)` with no
- * `Context` argument. If a future refactor re-introduces a `Context` parameter, every
- * call site here becomes a compile error — that's intentional.
- *
- * We use Robolectric so that any incidental Android framework class touched by
- * the init path resolves cleanly.
- */
+
+
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33])
@@ -72,7 +61,7 @@ class ContactorCacheManagerTest {
         Dispatchers.resetMain()
     }
 
-    // --- Regression assertions ---------------------------------------------------------
+    
 
     @Test
     fun `getParticipantDisplayInfo does NOT build an avatar View`() = runTest(testDispatcher) {
@@ -83,12 +72,11 @@ class ContactorCacheManagerTest {
 
         subject.getParticipantDisplayInfo("+12312345678.1")
 
-        // Regression assertion: the OLD path built an avatar View on Main; the NEW IO-only
-        // path must NOT — UI construction belongs to the render sites.
+        
         verify(exactly = 0) { callToChatController.createAvatarViewBinder(any(), any()) }
     }
 
-    // --- Branch coverage ---------------------------------------------------------------
+    
 
     @Test
     fun `getParticipantDisplayInfo returns AvatarData_FromContactor when DB hit`() = runTest(testDispatcher) {
@@ -126,14 +114,12 @@ class ContactorCacheManagerTest {
         assertEquals("+19998887777", data.userId)
     }
 
-    // --- Dispatcher proof --------------------------------------------------------------
+    
 
     @Test
     fun `getParticipantDisplayInfo body executes off Main`() = runTest {
-        // Use a StandardTestDispatcher for Main so it has a distinct, named Main thread
-        // surrogate. The IO body of getParticipantDisplayInfo wraps in withContext(Dispatchers.IO);
-        // we capture the dispatch site's thread name from inside the suspend stub and assert it
-        // is NOT a "main"-prefixed thread.
+        
+        
         val standardMain = StandardTestDispatcher(testScheduler, name = "main-test")
         Dispatchers.setMain(standardMain)
         try {
@@ -157,12 +143,11 @@ class ContactorCacheManagerTest {
         }
     }
 
-    // --- Path B regression -------------------------------------------------------------
+    
 
     @Test
     fun `repeat 5 times — no avatar-construction API called`() = runTest(testDispatcher) {
-        // Path B (mid-call contact updates) calls getParticipantDisplayInfo repeatedly;
-        // no avatar-construction API may ever be invoked from inside the manager.
+        
         val contactor = buildContactor(id = "+12312345678", name = "Alice")
         coEvery {
             callToChatController.getContactorById(any(), any())
@@ -175,7 +160,7 @@ class ContactorCacheManagerTest {
         verify(exactly = 0) { callToChatController.createAvatarViewBinder(any(), any()) }
     }
 
-    // --- Sanity: id/name are propagated unchanged --------------------------------------
+    
 
     @Test
     fun `getParticipantDisplayInfo propagates uid into id field`() = runTest(testDispatcher) {
@@ -193,19 +178,19 @@ class ContactorCacheManagerTest {
         val result = subject.getParticipantDisplayInfo("+19998887777")
 
         assertEquals("+19998887777", result.id)
-        // FromNameOrUid carries userId stripped of any device suffix
+        
         val data = result.avatarData as AvatarData.FromNameOrUid
         assertEquals("+19998887777", data.userId)
     }
 
     @Test
     fun `getParticipantDisplayInfo returns non-null avatarData for both branches`() = runTest(testDispatcher) {
-        // FromContactor branch
+        
         val contactor = buildContactor(id = "+10000000000", name = "Carol")
         coEvery { callToChatController.getContactorById(any(), "+10000000000") } returns Optional.of(contactor)
         assertNotNull(subject.getParticipantDisplayInfo("+10000000000.1").avatarData)
 
-        // FromNameOrUid branch
+        
         coEvery { callToChatController.getContactorById(any(), "+10000000001") } returns Optional.empty()
         assertNotNull(subject.getParticipantDisplayInfo("+10000000001.1").avatarData)
     }
@@ -217,7 +202,7 @@ class ContactorCacheManagerTest {
         val result = subject.getParticipantDisplayInfo("")
 
         assertEquals("", result.id)
-        // Body still produces an AvatarData without crashing
+
         assertNotNull(result.avatarData)
     }
 }

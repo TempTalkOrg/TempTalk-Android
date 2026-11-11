@@ -11,12 +11,12 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * The sender's verdict wait, on a virtual clock: only `progressRevision` and `terminal` decide; a
- * stall is reported and slows the polling but never ends the wait; the total limit ends it as
- * unknown; a receiver that does not know the session ends it as unknown at once; and an
- * unreachable receiver is treated as one that made no progress.
- */
+
+
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class VerdictWatchTest {
 
@@ -55,16 +55,16 @@ class VerdictWatchTest {
             bodySentAt = 0,
             status = {
                 pollTimes += testScheduler.currentTime
-                // Frozen until t=150s, then moving again, then done.
+                
                 if (testScheduler.currentTime >= 150_000) revision++
                 if (revision >= 4) status(revision, TransferTerminal.SUCCEEDED) else status(revision)
             },
             onStall = { stalls += it },
         )
         assertEquals(Verdict.Succeeded, verdict)
-        // Stalled once at the first poll on or after 60s of no movement, resumed once.
+        
         assertEquals(listOf(true, false), stalls)
-        // Steady 10s polls until the stall; then 20s, 30s, 30s … never past half the threshold.
+        
         val gaps = pollTimes.zipWithNext { a, b -> b - a }
         assertTrue("gaps=$gaps", gaps.all { it <= 30_000 })
         assertTrue("gaps=$gaps", gaps.contains(20_000L) && gaps.contains(30_000L))
@@ -81,7 +81,7 @@ class VerdictWatchTest {
 
     @Test
     fun `the total limit is measured from the body-sent time, not from the first poll`() = runTest {
-        // Body sent long ago (a process that was suspended): the very first poll is already past the limit.
+        
         val verdict = watch(totalMs = 120_000).run(bodySentAt = -200_000, status = { status(1) })
         assertEquals(Verdict.Unknown(Verdict.Unknown.Reason.TIMED_OUT), verdict)
         assertEquals(10_000L, testScheduler.currentTime)
@@ -125,6 +125,6 @@ class VerdictWatchTest {
         )
         assertEquals(Verdict.Ended(TransferTerminal.CANCELLED), verdict)
         assertEquals(4, polls)
-        assertTrue(stalls.isEmpty()) // 40s of silence is under the threshold
+        assertTrue(stalls.isEmpty()) 
     }
 }

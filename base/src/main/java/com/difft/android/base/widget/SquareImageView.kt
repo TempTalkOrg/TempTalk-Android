@@ -5,9 +5,6 @@ import android.util.AttributeSet
 import androidx.appcompat.widget.AppCompatImageView
 
 
-/**
- * SquareImageView为正方形的ImageView
- */
 class SquareImageView @JvmOverloads constructor(
     context: Context?,
     attrs: AttributeSet? = null,

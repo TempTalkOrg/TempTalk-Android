@@ -11,24 +11,24 @@ import com.difft.android.migration.v2.model.NeutralRecord
 import difft.android.messageserialization.model.AttachmentStatus
 import java.io.ByteArrayInputStream
 
-/**
- * Synthesized container payload used to exercise the transfer byte pipe without reading the real
- * database: N fake neutral records plus one in-memory attachment byte source. Shared by the debug
- * demo and the fusion test so both drive the identical payload.
- */
+
+
+
+
+
 object I1ContainerFixtures {
 
     const val CONVERSATION_REF = "room-i1"
     const val ATTACHMENT_REF = "att-i1"
 
-    /** Deterministic bytes, so the receiver can byte-compare what it got. */
+    
     fun attachmentBytes(sizeBytes: Int = 7000): ByteArray =
         ByteArray(sizeBytes) { (it * 29 + 11).toByte() }
 
-    /**
-     * [recordCount] fake records (minimum 2): one conversation, one attachment record whose bytes
-     * ride as a separate binary frame, and the rest text messages.
-     */
+    
+
+
+
     fun records(recordCount: Int = 5): List<NeutralRecord> {
         val n = recordCount.coerceAtLeast(2)
         val out = ArrayList<NeutralRecord>(n)
@@ -38,7 +38,7 @@ object I1ContainerFixtures {
         return out
     }
 
-    /** Yields [attachmentBytes] for [ATTACHMENT_REF], null otherwise. */
+    
     fun attachmentSource(sizeBytes: Int = 7000): AttachmentByteSource = AttachmentByteSource { ref ->
         if (ref == ATTACHMENT_REF) {
             val bytes = attachmentBytes(sizeBytes)

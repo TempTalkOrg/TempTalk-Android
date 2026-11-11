@@ -15,12 +15,12 @@ import com.difft.android.base.R
 import com.difft.android.base.log.lumberjack.L
 import java.util.UUID
 
-/** A shell starts one child at a time and accepts only that launch's subject-bound pop result. */
+
 interface DetailShellHost {
     fun launchPush(intent: Intent): Boolean
 }
 
-/** Full-window compatibility host for the same page used by the home detail stack. */
+
 abstract class DetailShellActivity : BaseActivity(), DetailShellHost {
     private var pendingChild: DetailShellPop.Request? = null
     internal var inheritedShellRequest: DetailShellPop.Request? = null
@@ -31,8 +31,8 @@ abstract class DetailShellActivity : BaseActivity(), DetailShellHost {
 
     override fun launchPush(intent: Intent): Boolean {
         if (pendingChild != null || isFinishing || isDestroyed) return false
-        // ContactDetail, GroupInfo and SingleChatSetting keep their ordinary Activity boundary.
-        // They cannot echo this protocol, so their cancellation must not release a protocol request.
+        
+        
         if (!isProtocolDestination(intent)) {
             startActivity(Intent(intent).apply { removeExtra(DetailShellPop.EXTRA_REQUEST_ID) })
             return true
@@ -64,12 +64,12 @@ abstract class DetailShellActivity : BaseActivity(), DetailShellHost {
     }
 
     private fun registerChild(request: DetailShellPop.Request): ActivityResultLauncher<Intent> {
-        // A key per request prevents an old result from consuming the next launch's registry marker.
+        
         val launcher = activityResultRegistry.register("detail-shell:${request.id}",
             ActivityResultContracts.StartActivityForResult()) { result ->
             if (pendingChild == request) consumeShellResult(result.resultCode, result.data)
         }
-        // Restored pending results can call back synchronously before register returns its launcher.
+        
         if (pendingChild == request) childLauncher = launcher else unregisterAfterDispatch(launcher)
         return launcher
     }
@@ -83,45 +83,60 @@ abstract class DetailShellActivity : BaseActivity(), DetailShellHost {
 
     private fun unregisterAfterDispatch(launcher: ActivityResultLauncher<Intent>) {
         launcher.unregister()
-        // Registry removes the launched marker after invoking the callback. A second public
-        // unregister after that dispatch unwinds can also release its ordinary request-code map.
+        
+        
         resultCleanup.post { launcher.unregister() }
     }
 
     internal fun consumeShellResult(resultCode: Int, data: Intent?): Boolean {
         val pending = pendingChild ?: return false
         if (DetailShellPop.request(data) != pending) return false
-        // Normal cancellation is identity-bound too: a duplicate of A must not release pending B.
+        
         releaseChild(pending)
         if (resultCode != DetailShellPop.RESULT_POP_MORE) return false
         val remaining = data?.getIntExtra(DetailShellPop.EXTRA_REMAINING, 0) ?: 0
         return remaining > 0 && DetailShellPop.finish(this, remaining)
     }
 
-    /** The page for this Activity's intent; null when the intent lacks what the page needs. */
+    
+    override fun participatesInSideChrome(): Boolean = true
+
+    
     protected abstract fun createPage(): Fragment?
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        // Restore the one active registry key and both identities before attaching its callback.
+        
         pendingChild = savedInstanceState.readRequest(STATE_PENDING)
         inheritedShellRequest = if (savedInstanceState != null) savedInstanceState.readRequest(STATE_ORIGIN)
             else DetailShellPop.request(intent)
         super.onCreate(savedInstanceState)
-        // All participating shells retain this normal cancellation result when Back/pop1 finishes.
+        
         inheritedShellRequest?.let { setResult(Activity.RESULT_CANCELED, it.writeTo(Intent())) }
         setContentView(FrameLayout(this).apply {
             id = R.id.detail_shell_container
             layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
         })
         pendingChild?.let { registerChild(it) }
-        if (savedInstanceState != null || isFinishing) return
+        if (savedInstanceState != null || isFinishing) {
+            supportFragmentManager.findFragmentById(R.id.detail_shell_container)?.let(::matchWindowToPage)
+            return
+        }
         val page = createPage()
         if (page == null) {
             L.w { "[DetailShell] no page shell=${javaClass.simpleName}" }
             finish()
             return
         }
+        matchWindowToPage(page)
         supportFragmentManager.beginTransaction().replace(R.id.detail_shell_container, page).commit()
+    }
+
+    
+
+
+
+    private fun matchWindowToPage(page: Fragment) {
+        window.setBackgroundDrawableResource(if (page is SettingsIdiomPage) R.color.bg else R.color.bg1)
     }
 
     override fun onSaveInstanceState(outState: Bundle) {

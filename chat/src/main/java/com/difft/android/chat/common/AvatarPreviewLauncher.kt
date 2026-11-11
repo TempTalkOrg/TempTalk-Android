@@ -20,18 +20,18 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
-/**
- * Full-screen avatar preview for contact and group avatars. Both flows end in the same
- * PictureSelector preview fed by a decrypting `content://` uri, so no plaintext touches disk.
- * On a cache miss the avatar is downloaded behind a wait dialog (the avatar utils own the cache
- * layout and retry); a failed download is logged there and the preview is simply not opened.
- *
- * A page that can sit in the home screen's detail stack passes its [PageWait], so a page closed
- * during the download releases the dialog; otherwise the dialog is claimed and released by token.
- */
+
+
+
+
+
+
+
+
+
 object AvatarPreviewLauncher {
 
-    /** Contact avatar (public or remark) addressed by its CDN [url] and AES-GCM [key]. */
+    
     suspend fun previewContact(activity: FragmentActivity, url: String?, key: String?, wait: PageWait? = null) {
         if (url.isNullOrEmpty()) return
         val cached = withContext(Dispatchers.IO) { AvatarUtil.getCacheFile(url) }
@@ -47,7 +47,7 @@ object AvatarPreviewLauncher {
         }
     }
 
-    /** Group avatar; [GroupAvatarUtil.ensureCached] already downloads + encrypts on a miss. */
+    
     suspend fun previewGroup(activity: FragmentActivity, data: GroupAvatarData, wait: PageWait? = null) {
         val serverId = data.serverId ?: return
         val cached = withContext(Dispatchers.IO) { GroupAvatarUtil.getCacheFile(serverId) }
@@ -62,7 +62,7 @@ object AvatarPreviewLauncher {
         }
     }
 
-    /** The wait dialog around a download, released on every path (cancellation included). */
+    
     internal suspend fun <T> withWait(activity: FragmentActivity, wait: PageWait?, block: suspend () -> T): T =
         withTaskWait(activity, wait, block)
 
@@ -79,17 +79,17 @@ object AvatarPreviewLauncher {
     }
 }
 
-/**
- * One avatar preview at a time for a page, with its own wait. The cache check runs before the
- * wait shows, so a second tap in that window would otherwise start a second download and viewer,
- * and the first download's release would close the wait while the second still runs.
- */
+
+
+
+
+
 class AvatarPreviewFlight(private val page: Fragment) {
 
     private val previewWait = PageWait(page)
     private var previewJob: Job? = null
 
-    /** Starts [preview] on the page's view scope unless one is running; returns whether it did. */
+    
     fun launch(preview: suspend (previewWait: PageWait) -> Unit): Boolean {
         if (previewJob?.isActive == true) return false
         previewJob = page.viewLifecycleOwner.lifecycleScope.launch { preview(previewWait) }

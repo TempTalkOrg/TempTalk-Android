@@ -33,11 +33,11 @@ import com.difft.android.imageeditor.core.model.EditorModel
 import java.io.File
 import java.util.concurrent.ExecutionException
 
-/**
- * Uses Glide to load an image and implements a [Renderer].
- *
- * The image can be encrypted.
- */
+
+
+
+
+
 class UriGlideRenderer @JvmOverloads constructor(
     private val imageUri: Uri,
     private val decryptable: Boolean,
@@ -88,8 +88,7 @@ class UriGlideRenderer @JvmOverloads constructor(
                         currentBitmap = null
                     }
 
-                    // Without this the non-blocking branch fails silently: the preview stays black
-                    // and nothing anywhere records that the image was never decoded.
+                    
                     override fun onLoadFailed(errorDrawable: Drawable?) {
                         L.w { "[MediaAccess] $TAG preview load failed scheme=${imageUri.scheme}" }
                     }
@@ -103,7 +102,7 @@ class UriGlideRenderer @JvmOverloads constructor(
 
             rendererContext.canvasMatrix.concat(imageProjectionMatrix)
 
-            // Units are image level pixels at this point.
+            
 
             val alpha = paint.alpha
             paint.alpha = rendererContext.getAlpha(alpha)
@@ -116,7 +115,7 @@ class UriGlideRenderer @JvmOverloads constructor(
 
             renderBlurOverlay(rendererContext)
         } else if (rendererContext.isBlockingLoad()) {
-            // If failed to load, we draw a black out, in case image was sticker positioned to cover private info.
+            
             rendererContext.canvas.drawRect(Bounds.FULL_BOUNDS, paint)
         }
     }
@@ -147,7 +146,7 @@ class UriGlideRenderer @JvmOverloads constructor(
             blurPaint!!.xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_ATOP)
             blurPaint!!.maskFilter = null
 
-            // Synchronize access to blurredBitmap to prevent race conditions
+            
             synchronized(blurLock) {
                 if (blurredBitmap == null) {
                     blurredBitmap = blur(currentBitmap!!, rendererContext.context, blurRadius)
@@ -183,10 +182,7 @@ class UriGlideRenderer @JvmOverloads constructor(
             .centerInside()
             .addListener(bitmapRequestListener)
 
-        // A content URI must go through ContentResolver: File(uri.path) would be
-        // "/external/images/media/1", a path that never exists, so every gallery image failed to
-        // decode here. file:// keeps the File model so sandbox / SAF loads stay byte-identical —
-        // limiting the change to the branch that is already 100% broken.
+        
         if (ContentResolver.SCHEME_CONTENT == imageUri.scheme) {
             return requestBuilder.load(imageUri)
         }
@@ -220,10 +216,10 @@ class UriGlideRenderer @JvmOverloads constructor(
         }
     }
 
-    /**
-     * Always use this getter, as Bitmap is kept in Glide's LRUCache, so it could have been recycled
-     * by Glide. If it has, or was never set, this method returns null.
-     */
+    
+
+
+
     fun getBitmap(): Bitmap? {
         val b = currentBitmap
         if (b != null && b.isRecycled) {
@@ -241,12 +237,12 @@ class UriGlideRenderer @JvmOverloads constructor(
         }
     }
 
-    /**
-     * Clears the blurred bitmap to free memory after editing is complete.
-     * The blurred bitmap will be recreated if needed during rendering (e.g., when sending).
-     * Does not clear the main bitmap as it's managed by Glide and may be needed for sending.
-     * Thread-safe: synchronized to prevent concurrent access during rendering.
-     */
+    
+
+
+
+
+
     fun clearBlurredBitmap() {
         synchronized(blurLock) {
             blurredBitmap?.let {

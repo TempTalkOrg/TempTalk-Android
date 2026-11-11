@@ -2,12 +2,12 @@ package com.difft.android.base.notification
 
 import java.security.MessageDigest
 
-/**
- * The readable settings a test result depends on (#1350): the system build, the app-level switch
- * and permission, the MESSAGE group switch, the tested category's importance, sound and lock-screen
- * override, and for the call test the full-screen permission. Any change makes an old result stale,
- * because the vendor switches it vouches for cannot be read and may have changed with it.
- */
+
+
+
+
+
+
 object NotificationTestFingerprint {
 
     private const val HASH_CHARS = 16

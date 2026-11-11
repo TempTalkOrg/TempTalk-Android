@@ -21,13 +21,13 @@ import javax.net.ssl.SSLContext
 import javax.net.ssl.TrustManager
 import javax.net.ssl.X509TrustManager
 
-/**
- * Cancelling a receive must end the connection the body is arriving on. Each connection is a blocking
- * socket read on an IO thread, which cancelling its coroutine cannot unblock, so before [ReceiverHttpServer.stop]
- * closed the accepted sockets a cancelled receiver went on reading the upload — the sender saw nothing
- * and kept sending until its own user cancelled too. The connection dropped by the stop must also not
- * be reported as a failure: the owner already left the transfer, and a late error would overwrite that.
- */
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 class ReceiverStopClosesConnectionsTest {
 
@@ -48,9 +48,9 @@ class ReceiverStopClosesConnectionsTest {
 
         trustAllSocket(port).use { socket ->
             socket.soTimeout = 5_000
-            // A head the handler blocks on — the request never completes, the way a body still in
-            // flight looks from the read side. The write returning means the handshake is done and
-            // the server thread is inside the connection handler.
+            
+            
+            
             socket.getOutputStream().apply {
                 write("POST /api/localsend/v2/upload?sessionId=s&fileId=f&token=t HTTP/1.1\r\n".toByteArray())
                 flush()
@@ -58,7 +58,7 @@ class ReceiverStopClosesConnectionsTest {
 
             srv.stop()
 
-            // The peer sees the connection end — EOF or a reset — rather than its read timing out.
+            
             val ended = try {
                 socket.getInputStream().read() == -1
             } catch (_: SocketTimeoutException) {
@@ -86,7 +86,7 @@ class ReceiverStopClosesConnectionsTest {
         return srv
     }
 
-    /** The pin is not the subject here — accept whatever cert the server presents. */
+    
     private fun trustAllSocket(port: Int): Socket {
         val trustAll = object : X509TrustManager {
             override fun checkClientTrusted(chain: Array<out java.security.cert.X509Certificate>?, authType: String?) = Unit

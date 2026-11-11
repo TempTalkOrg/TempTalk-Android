@@ -27,10 +27,10 @@ import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.utils.DualPaneUtils.isInDualPaneMode
 import dagger.hilt.android.AndroidEntryPoint
 
-/**
- * Compose host for the Linked Devices screen on both form factors: a thin ComposeView shell inside
- * [LinkedDevicesActivity] or any home detail stack. The container owns system-bar insets.
- */
+
+
+
+
 @AndroidEntryPoint
 class LinkedDevicesFragment : Fragment(), SettingsIdiomPage {
 
@@ -69,12 +69,12 @@ class LinkedDevicesFragment : Fragment(), SettingsIdiomPage {
 
     override fun onPause() {
         super.onPause()
-        viewModel.stopExpecting() // stop the expect-more poll timer while off-screen
+        viewModel.stopExpecting() 
     }
-    /**
-     * Confirm dialog. Resolves the display name + destructive button colour via resources and delegates
-     * to the app-wide [ComposeDialogManager]. Colour token is base R.color.error.
-     */
+    
+
+
+
     private fun showUnlinkConfirm(device: DeviceUiState) {
         val context = requireContext()
         val name = device.displayName ?: context.getString(R.string.linked_devices_unnamed)

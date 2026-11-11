@@ -6,7 +6,7 @@
     android:layout_height="52dp"
     android:background="@android:color/transparent">
 
-    <!-- Back/Close button - same as normal ChatActivity header -->
+    
     <androidx.appcompat.widget.AppCompatImageView
         android:id="@+id/ib_back"
         android:layout_width="wrap_content"
@@ -21,7 +21,7 @@
         app:layout_constraintTop_toTopOf="parent"
         app:tint="@color/icon" />
 
-    <!-- Nickname - same font size as normal ChatActivity header (20sp) -->
+    
     <TextView
         android:id="@+id/textview_nickname"
         android:layout_width="wrap_content"
@@ -33,30 +33,46 @@
         android:textSize="20sp"
         android:textStyle="bold"
         app:layout_constrainedWidth="true"
-        app:layout_constraintEnd_toStartOf="@+id/textview_timer"
+        app:layout_constraintEnd_toStartOf="@+id/timer_row"
         app:layout_constraintHorizontal_bias="0"
         app:layout_constraintHorizontal_chainStyle="packed"
         app:layout_constraintStart_toEndOf="@+id/ib_back"
         tools:text="Contact Name" />
 
-    <!-- Archive time indicator - same font size as normal ChatActivity header (20sp) -->
-    <androidx.appcompat.widget.AppCompatTextView
-        android:id="@+id/textview_timer"
+    <LinearLayout
+        android:id="@+id/timer_row"
         android:layout_width="wrap_content"
-        android:layout_height="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="4dp"
         android:gravity="center_vertical"
-        android:textColor="@color/t.third"
-        android:textSize="20sp"
+        android:orientation="horizontal"
         android:visibility="gone"
         app:layout_constraintBottom_toBottomOf="@+id/textview_nickname"
         app:layout_constraintEnd_toStartOf="@+id/ib_maximize"
-        app:layout_constraintHorizontal_bias="0"
         app:layout_constraintStart_toEndOf="@+id/textview_nickname"
         app:layout_constraintTop_toTopOf="@+id/textview_nickname"
-        tools:text=" [7d]"
-        tools:visibility="visible" />
+        tools:visibility="visible">
 
-    <!-- Maximize button -->
+        <ImageView
+            android:layout_width="12dp"
+            android:layout_height="12dp"
+            android:importantForAccessibility="no"
+            android:src="@drawable/chat_ic_hourglass"
+            app:tint="@color/t.third" />
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/textview_timer"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="2dp"
+            android:includeFontPadding="false"
+            android:singleLine="true"
+            android:textColor="@color/t.third"
+            android:textSize="12sp"
+            tools:text="7d" />
+    </LinearLayout>
+
+    
     <androidx.appcompat.widget.AppCompatImageButton
         android:id="@+id/ib_maximize"
         android:layout_width="44dp"

@@ -29,13 +29,13 @@ import org.junit.Before
 import org.junit.Test
 import util.AppForegroundObserver
 
-/**
- * Branch coverage for [MessageNotificationUtil.showCriticalAlert]: the foreground branch posts a
- * silent companion notification before launching CriticalAlertActivity, the background branch
- * posts the full-screen notification and plays sound only after a successful notify, and the
- * cache-hit / already-showing / concurrent-add branches stay no-ops, and an alert for the call
- * being joined or already active (#1381) is only recorded as processed.
- */
+
+
+
+
+
+
+
 class MessageNotificationUtilCriticalAlertTest {
 
     private val conversationId = "+10001"
@@ -57,13 +57,13 @@ class MessageNotificationUtilCriticalAlertTest {
 
     @Before
     fun setUp() {
-        // LCallManager's <clinit> reads ApplicationHelper.instance (lateinit).
+        
         ApplicationHelper.init(mockk<ScopeApplication>(relaxed = true))
         mockkObject(LCallManager)
-        // isForegrounded() is @JvmStatic, so callers hit the static method.
+        
         mockkStatic(AppForegroundObserver::class)
         every { AppForegroundObserver.isForegrounded() } returns true
-        // isRecording is a @Volatile property read; it is not interceptable by mockkObject, so drive the real flag.
+        
         VoiceRecordingTracker.setRecording(false, "test")
         every { LCallManager.dismissIncomingNotification(any()) } just Runs
         every { LCallManager.dismissIncomingNotificationByRoomId(any()) } just Runs
@@ -114,7 +114,7 @@ class MessageNotificationUtilCriticalAlertTest {
     private fun payload(roomId: String? = "r1") =
         CriticalAlertPayload(conversationId, alertTitle, alertContent, notificationId, timestamp, roomId)
 
-    // N1
+    
     @Test
     fun `foreground posts silent companion then launches activity`() {
         show()
@@ -132,7 +132,7 @@ class MessageNotificationUtilCriticalAlertTest {
         verify(exactly = 0) { criticalAlertManager.playSoundAndFlashLight(any(), any(), any()) }
     }
 
-    // N2
+    
     @Test
     fun `foreground notify failure still launches activity`() {
         every { nm.notify(any(), any()) } throws RuntimeException("boom")
@@ -145,7 +145,7 @@ class MessageNotificationUtilCriticalAlertTest {
         verify(exactly = 0) { criticalAlertManager.playSoundAndFlashLight(any(), any(), any()) }
     }
 
-    // N3
+    
     @Test
     fun `background posts full screen notification and plays sound`() {
         every { AppForegroundObserver.isForegrounded() } returns false
@@ -155,7 +155,7 @@ class MessageNotificationUtilCriticalAlertTest {
         assertBackgroundPath()
     }
 
-    // N4
+    
     @Test
     fun `foreground while recording falls back to full screen notification`() {
         VoiceRecordingTracker.setRecording(true, "test")
@@ -165,7 +165,7 @@ class MessageNotificationUtilCriticalAlertTest {
         assertBackgroundPath()
     }
 
-    // N5
+    
     @Test
     fun `background notify failure skips sound`() {
         every { AppForegroundObserver.isForegrounded() } returns false
@@ -177,7 +177,7 @@ class MessageNotificationUtilCriticalAlertTest {
         verify(exactly = 0) { criticalAlertManager.startCriticalAlertActivity(any(), any(), any(), any(), any()) }
     }
 
-    // T29 (#1382): the migration message pause suppresses ordinary notifications, never critical alerts.
+    
     @Test
     fun `critical alert is still posted while messaging is paused`() {
         every { AppForegroundObserver.isForegrounded() } returns false
@@ -188,7 +188,7 @@ class MessageNotificationUtilCriticalAlertTest {
         assertBackgroundPath()
     }
 
-    // N6
+    
     @Test
     fun `cache hit is a no-op whether or not the alert is still showing`() {
         listOf(true, false).forEach { showing ->
@@ -204,8 +204,8 @@ class MessageNotificationUtilCriticalAlertTest {
         }
     }
 
-    // #1347: a late duplicate FCM for an already-processed alert goes through the repost guard,
-    // which decides (active, not cancelled in-process) whether to refresh it.
+    
+    
     @Test
     fun `cache hit asks the guard to re-post the alert`() {
         every { criticalAlertManager.isCriticalAlertNotificationProcessed(conversationId, notificationId) } returns true
@@ -234,7 +234,7 @@ class MessageNotificationUtilCriticalAlertTest {
         verify(exactly = 0) { nm.cancel(any<Int>()) }
     }
 
-    // N7
+    
     @Test
     fun `already showing records the id in cache and asks the guard to re-post`() {
         val sbn = mockk<StatusBarNotification>()
@@ -249,7 +249,7 @@ class MessageNotificationUtilCriticalAlertTest {
         verify(exactly = 0) { criticalAlertManager.startCriticalAlertActivity(any(), any(), any(), any(), any()) }
     }
 
-    // N8
+    
     @Test
     fun `concurrent add failure is a no-op`() {
         every { criticalAlertManager.addCriticalAlertNotificationIfNotExists(any(), any()) } returns false
@@ -262,7 +262,7 @@ class MessageNotificationUtilCriticalAlertTest {
         verify(exactly = 0) { LCallManager.dismissIncomingNotificationByRoomId(any()) }
     }
 
-    // N9
+    
     @Test
     fun `incoming call notification is dismissed by room id before notify`() {
         show(roomId = "r1")
@@ -274,7 +274,7 @@ class MessageNotificationUtilCriticalAlertTest {
         verify(exactly = 0) { LCallManager.dismissIncomingNotification(any()) }
     }
 
-    // N9
+    
     @Test
     fun `incoming call notification is dismissed by conversation id when room id is null`() {
         show(roomId = null)
@@ -287,7 +287,7 @@ class MessageNotificationUtilCriticalAlertTest {
         verify(exactly = 1) { builder.build(payload(roomId = null), any(), CriticalAlertPresentation.SILENT_COMPANION) }
     }
 
-    // #1381
+    
     @Test
     fun `alert for the joining call is recorded as processed and shows nothing`() {
         callGate.beginJoin("r1", conversationId)
@@ -303,8 +303,8 @@ class MessageNotificationUtilCriticalAlertTest {
         }
     }
 
-    // #1381: a join that begins while the alert is being published may have cancelled alerts
-    // before the post; the publisher re-checks and undoes it.
+    
+    
     @Test
     fun `a join that begins during the post undoes it`() {
         listOf(true, false).forEach { foreground ->
@@ -340,7 +340,7 @@ class MessageNotificationUtilCriticalAlertTest {
         verify(exactly = 1) { criticalAlertManager.startCriticalAlertActivity(conversationId, alertTitle, alertContent, notificationId, "r1") }
     }
 
-    // #1387
+    
     @Test
     fun `alert for an ended room shows nothing and is not recorded`() {
         registry.end("r1")
@@ -356,7 +356,7 @@ class MessageNotificationUtilCriticalAlertTest {
         }
     }
 
-    // #1387: a call end that lands while the alert is being published is caught by the re-check.
+    
     @Test
     fun `a room that ends during the foreground post undoes it`() {
         assertEndDuringPostUndone(foreground = true)

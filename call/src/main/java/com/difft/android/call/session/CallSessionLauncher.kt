@@ -16,26 +16,26 @@ import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Starts a call from its entry point (outgoing START, JOIN): launches the call page and starts the
- * call session in the same main-thread message, so the page's `onCreate` (a later message) always
- * finds the session, and a second launch while a call is live is always refused.
- *
- * The page launch comes first: a launch that throws leaves no session behind.
- */
+
+
+
+
+
+
+
 @Singleton
 class CallSessionLauncher @Inject constructor(
     private val holder: CallSessionHolder,
     private val globalConfigsManager: GlobalConfigsManager,
     private val userManager: UserManager,
 ) {
-    /**
-     * Launches the call page for [intent] and starts its session. Returns false, and starts nothing,
-     * when a call is already live, the page launch throws or the session failed to start; the
-     * caller then releases its wait-dialog claim [entryWaitToken]. On success the session owns it.
-     * [callConfig] is the entry point's snapshot (START passes the one its envelope used, #1395);
-     * null reads the live config now.
-     */
+    
+
+
+
+
+
+
     @MainThread
     fun launch(context: Context, intent: Intent, entryWaitToken: Int, callConfig: CallConfig? = null): Boolean {
         holder.current.value?.let {
@@ -73,7 +73,7 @@ class CallSessionLauncher @Inject constructor(
         return !user.pattern.isNullOrEmpty() || !user.passcode.isNullOrEmpty()
     }
 
-    // The accepted call is live: its ringing (service, notification, sound) stops now.
+    
     private fun stopIncomingCallService(params: CallSessionParams) {
         try {
             LCallManager.stopIncomingCallService(params.callIntent.roomId, tag = "accept: call session started")
@@ -83,11 +83,11 @@ class CallSessionLauncher @Inject constructor(
     }
 }
 
-/**
- * The session a call page attaches to: the live one, unless the page was launched for another
- * session (its [sessionKey] differs from the live session's launch key). A page with no key is a
- * return to the call; null means there is no session for this page and it must finish.
- */
+
+
+
+
+
 internal fun resolveCallSession(current: CallSession?, sessionKey: String?): CallSession? = when {
     current == null -> null
     sessionKey == null || sessionKey == current.params.launchKey -> current

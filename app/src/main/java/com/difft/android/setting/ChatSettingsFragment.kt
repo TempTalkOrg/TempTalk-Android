@@ -20,10 +20,10 @@ import com.difft.android.databinding.ActivityChatSettingsBinding
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
-/**
- * Fragment for chat settings
- * Can be displayed in both Activity (single-pane) and dual-pane mode
- */
+
+
+
+
 @AndroidEntryPoint
 class ChatSettingsFragment : Fragment(), SettingsIdiomPage {
 
@@ -61,19 +61,19 @@ class ChatSettingsFragment : Fragment(), SettingsIdiomPage {
     }
 
     private fun initView() {
-        // Save to photos setting - local only, no server sync
+        
         binding.switchSaveToPhotos.isChecked = (userManager.getUserData()?.saveToPhotos == true)
         binding.switchSaveToPhotos.setOnCheckedChangeListener { _, checked ->
             userManager.update { saveToPhotos = checked }
         }
 
-        // Voice playback speed setting
+        
         updateVoicePlaybackSpeedDisplay()
         binding.clVoicePlaybackSpeed.setOnClickListener {
             detailNavigation().push(this, VoicePlaybackSpeedDestination)
         }
 
-        // Call voice-changer global preference - local only, no server sync
+        
         updateVoiceChangerDisplay()
         binding.clVoiceChanger.setOnClickListener {
             detailNavigation().push(this, VoiceChangerDestination)

@@ -24,7 +24,7 @@ class PictureSelectionModel(private val selector: PictureSelector, chooseMode: I
         setMaxVideoSelectNum(selectionConfig.maxVideoSelectNum)
     }
 
-    /** PictureSelector theme style settings */
+    
     fun setSelectorUIStyle(uiStyle: PictureSelectorStyle?): PictureSelectionModel {
         if (uiStyle != null) {
             selectionConfig.selectorStyle = uiStyle
@@ -32,57 +32,57 @@ class PictureSelectionModel(private val selector: PictureSelector, chooseMode: I
         return this
     }
 
-    /** Set App Language */
+    
     fun setLanguage(language: Int): PictureSelectionModel {
         selectionConfig.language = language
         return this
     }
 
-    /** Set App default Language */
+    
     fun setDefaultLanguage(defaultLanguage: Int): PictureSelectionModel {
         selectionConfig.defaultLanguage = defaultLanguage
         return this
     }
 
-    /** Image Load the engine */
+    
     fun setImageEngine(engine: ImageEngine?): PictureSelectionModel {
         selectionConfig.imageEngine = engine
         return this
     }
 
-    /** Image Compress the engine */
+    
     fun setCompressEngine(engine: CompressFileEngine?): PictureSelectionModel {
         selectionConfig.compressFileEngine = engine
         selectionConfig.isCompressEngine = true
         return this
     }
 
-    /** Image Crop the engine */
+    
     fun setCropEngine(engine: CropFileEngine?): PictureSelectionModel {
         selectionConfig.cropFileEngine = engine
         return this
     }
 
-    /** @param selectionMode PictureSelector Selection model, [SelectModeConfig.MULTIPLE] or [SelectModeConfig.SINGLE] */
+    
     fun setSelectionMode(selectionMode: Int): PictureSelectionModel {
         selectionConfig.selectionMode = selectionMode
         selectionConfig.maxSelectNum = if (selectionConfig.selectionMode == SelectModeConfig.SINGLE) 1 else selectionConfig.maxSelectNum
         return this
     }
 
-    /** You can select pictures and videos at the same time */
+    
     fun isWithSelectVideoImage(isWithVideoImage: Boolean): PictureSelectionModel {
         selectionConfig.isWithVideoImage = selectionConfig.chooseMode == SelectMimeType.ofAll() && isWithVideoImage
         return this
     }
 
-    /** Select the maximum number of files */
+    
     fun setMaxSelectNum(maxSelectNum: Int): PictureSelectionModel {
         selectionConfig.maxSelectNum = if (selectionConfig.selectionMode == SelectModeConfig.SINGLE) 1 else maxSelectNum
         return this
     }
 
-    /** @param isDirectReturn Select whether to return directly */
+    
     fun isDirectReturnSingle(isDirectReturn: Boolean): PictureSelectionModel {
         if (isDirectReturn) {
             selectionConfig.isFastSlidingSelect = false
@@ -91,25 +91,25 @@ class PictureSelectionModel(private val selector: PictureSelector, chooseMode: I
         return this
     }
 
-    /** Select the maximum video number of files */
+    
     fun setMaxVideoSelectNum(maxVideoSelectNum: Int): PictureSelectionModel {
         selectionConfig.maxVideoSelectNum = if (selectionConfig.chooseMode == SelectMimeType.ofVideo()) 0 else maxVideoSelectNum
         return this
     }
 
-    /** @param isGif Whether to open gif */
+    
     fun isGif(isGif: Boolean): PictureSelectionModel {
         selectionConfig.isGif = isGif
         return this
     }
 
-    /** Select original image to skip compression */
+    
     fun isOriginalSkipCompress(isOriginalSkipCompress: Boolean): PictureSelectionModel {
         selectionConfig.isOriginalSkipCompress = isOriginalSkipCompress
         return this
     }
 
-    /** Start PictureSelector with a result callback */
+    
     fun forResult(call: OnResultCallbackListener<LocalMedia>?) {
         if (!DoubleUtils.isFastDoubleClick()) {
             val activity = selector.getActivity()
@@ -130,7 +130,7 @@ class PictureSelectionModel(private val selector: PictureSelector, chooseMode: I
         }
     }
 
-    /** ActivityResultLauncher PictureSelector */
+    
     fun forResult(launcher: ActivityResultLauncher<Intent>?) {
         if (!DoubleUtils.isFastDoubleClick()) {
             val activity = selector.getActivity()

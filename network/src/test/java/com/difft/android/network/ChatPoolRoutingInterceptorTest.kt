@@ -15,17 +15,12 @@ import org.robolectric.RobolectricTestRunner
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
-/**
- * Per-request routing of [ChatPoolRoutingInterceptor] (#1396). The [UrlManager] is a stub, so the
- * rewrite is exercised without the Hilt graph; Robolectric is used only because routing logs via
- * [com.difft.android.base.log.lumberjack.L].
- *
- * Invariants under test:
- * - A request on THIS client's own origin host goes to the live host, however the client was built.
- * - The service path prefix is replaced only when the request path starts with it.
- * - NEVER touch absolute-URL requests to other hosts (CDN config/avatars): the regression that
- *   produced an SSL "Trust anchor not found" on the self-cert chat host (#948).
- */
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 class ChatPoolRoutingInterceptorTest {
 
@@ -61,7 +56,7 @@ class ChatPoolRoutingInterceptorTest {
         return captured.captured
     }
 
-    // T1 — a client built on host A routes to the live host and the live service path.
+    
     @Test
     fun `routes the own origin to the live host and the live service path`() {
         every { urlManager.servicePathFor(ChatService.CHAT) } returns "/chat2"
@@ -72,7 +67,7 @@ class ChatPoolRoutingInterceptorTest {
         assertEquals(RoutedHost(LIVE_HOST, ChatService.CHAT), request.tag(RoutedHost::class.java))
     }
 
-    // T1b — root-relative APIs on the chat client keep their path and are still routed.
+    
     @Test
     fun `a root relative path on the chat client keeps its path and is routed`() {
         every { urlManager.servicePathFor(ChatService.CHAT) } returns "/chat2"
@@ -104,7 +99,7 @@ class ChatPoolRoutingInterceptorTest {
         assertEquals("https://$LIVE_HOST/chatter/v1/foo", request.url.toString())
     }
 
-    // An absolute URL on another pool host (UrlManager.gifs) keeps its URL and is tagged for failover.
+    
     @Test
     fun `an absolute url on another pool host keeps its url and is tagged`() {
         val url = "https://$OTHER_POOL_HOST/gifs/v1/gifs/trending"
@@ -115,7 +110,7 @@ class ChatPoolRoutingInterceptorTest {
         assertEquals(OTHER_POOL_HOST, request.tag(RoutedHost::class.java)?.host)
     }
 
-    // T2 — an absolute CDN URL is neither rewritten nor tagged.
+    
     @Test
     fun `leaves an absolute url on another host untouched and untagged`() {
         val cdn = "d3repcs3hxhwgl.cloudfront.net"

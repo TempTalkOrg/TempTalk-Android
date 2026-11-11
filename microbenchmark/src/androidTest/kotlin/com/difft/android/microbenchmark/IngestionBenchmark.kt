@@ -19,20 +19,20 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/**
- * Bulk offline-message ingestion, L1 of issue #1166: write throughput on the real encrypted
- * WCDB under the production synchronous mode (NORMAL, the #971 fix — asserted in [setUp]).
- * The FULL-mode twins of the two fsync-sensitive cases live in
- * [IngestionSynchronousFullBenchmark]; the NORMAL/FULL ratio is the #971 quantification.
- *
- * Write strategies compared at the same corpus:
- * - perRowAutocommit — one implicit transaction per message (the pre-#971 ingestion shape)
- * - perRowSingleTransaction — same per-row statements inside one explicit transaction
- * - batchInsertObjects — WCDB's batched insert (one internal transaction, prepared statement)
- *
- * The corpus is rebuilt and tables wiped inside runWithTimingDisabled each iteration, so the
- * timed region is exactly "insert N fresh rows into empty tables".
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 @RunWith(AndroidJUnit4::class)
 class IngestionBenchmark {
 
@@ -46,15 +46,15 @@ class IngestionBenchmark {
     fun setUp() {
         context.deleteDatabase(WCDB.DATABASE_NAME)
         wcdb = WCDB(context, CoroutineScope(SupervisorJob()))
-        // WCDB's config registry is per-path and process-global, so a sibling benchmark
-        // class's synchronous override leaks into this class's fresh instance (observed on
-        // device). Pin NORMAL explicitly instead of relying on class order.
+        
+        
+        
         wcdb.db.setConfig(
             "bench_synchronous_pin",
             { handle -> handle.execute("PRAGMA synchronous=1") },
             Database.ConfigPriority.low,
         )
-        // The comparison is only honest if the mode really applies (SQLite: 1=NORMAL).
+        
         val mode = wcdb.db.getHandle(true).use { it.getValueFromSQL("PRAGMA synchronous")?.int }
         assertEquals("synchronous=NORMAL pin did not reach the write handle", 1, mode)
     }
@@ -65,7 +65,7 @@ class IngestionBenchmark {
         context.deleteDatabase(WCDB.DATABASE_NAME)
     }
 
-    /** Inverse of [seed] — every table seed() can populate must be wiped, or rows accumulate. */
+    
     private fun wipeAll(corpus: ChildRowCorpus) {
         wcdb.message.deleteObjects()
         if (corpus.attachments.isNotEmpty()) wcdb.attachment.deleteObjects()
@@ -80,7 +80,7 @@ class IngestionBenchmark {
         if (corpus.forwards.isNotEmpty()) wcdb.forward.deleteObjects()
     }
 
-    /** Timed region = [insert] on freshly wiped tables with a freshly built corpus. */
+    
     private fun measureIngestion(
         buildCorpus: () -> ChildRowCorpus,
         gcEvery: Int,
@@ -128,9 +128,9 @@ class IngestionBenchmark {
     @Test
     fun batchInsertObjects_rich1000() =
         measureIngestion({ uniformRichCorpus(1000) }, gcEvery = 5) { corpus ->
-            // seed() batch-inserts every populated child-table list — for this corpus that is
-            // 6 tables (message + attachment/reaction/quote/forwardContext/forward, 9000
-            // child rows); the other 5 child tables stay empty.
+            
+            
+            
             wcdb.seed(corpus)
         }
 }

@@ -8,11 +8,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * T-W1 / T-W2 — wire-compat conformance (design §5, §13). The real LocalSend app is the
- * conformance oracle: every JSON key must match protocol-spec.md §A byte-for-byte. These tests
- * fail in CI if a `@SerialName` is typo'd or a key is added/dropped — BEFORE it reaches a device.
- */
+
 class DtosConformanceTest {
 
     private val parser = Json { ignoreUnknownKeys = true }
@@ -21,7 +17,6 @@ class DtosConformanceTest {
     fun `T-W1 DeviceInfo emits exactly the §A2 key set`() {
         val info = DeviceInfo(alias = "Nice Orange", fingerprint = "abc123", deviceModel = "Samsung")
         val obj = parser.parseToJsonElement(P2pJson.encodeToString(info)) as JsonObject
-        // explicitNulls=false omits null deviceModel? No — deviceModel is set here, so present.
         assertEquals(
             setOf("alias", "version", "deviceModel", "deviceType", "fingerprint", "port", "protocol", "download", "announce"),
             obj.keys,
@@ -33,7 +28,7 @@ class DtosConformanceTest {
 
     @Test
     fun `T-W1 DeviceInfo omits null optionals (explicitNulls=false)`() {
-        val info = DeviceInfo(alias = "A", fingerprint = "fp") // deviceModel = null
+        val info = DeviceInfo(alias = "A", fingerprint = "fp") 
         val obj = parser.parseToJsonElement(P2pJson.encodeToString(info)) as JsonObject
         assertTrue("deviceModel must be omitted when null", "deviceModel" !in obj.keys)
     }
@@ -59,8 +54,7 @@ class DtosConformanceTest {
     fun `T-W1 QrPayload emits the §C2 key set and omits the null transferKey`() {
         val qr = QrPayload(ip = "192.168.1.23", fp = "ff", pin = "123456", alias = "Phone")
         val obj = parser.parseToJsonElement(P2pJson.encodeToString(qr)) as JsonObject
-        // transferKey is null here (plain file-transfer QR) → omitted by explicitNulls=false, so the
-        // file demo's QR is byte-identical to before the migration extension was added.
+        
         assertEquals(setOf("v", "ip", "port", "fp", "pin", "alias"), obj.keys)
         assertTrue("transferKey must be omitted when null", "transferKey" !in obj.keys)
         assertEquals("1", obj["v"].toString())
@@ -78,8 +72,7 @@ class DtosConformanceTest {
 
     @Test
     fun `I4 PrepareUploadRequest omits the null migration handshake (oracle byte-compat)`() {
-        // A generic file-transfer / real-LocalSend prepare-upload carries NO handshake → the `migration`
-        // key must be omitted (explicitNulls=false), so the request is byte-identical to before I4.
+        
         val info = DeviceInfo(alias = "S", fingerprint = "fp")
         val req = PrepareUploadRequest(info, mapOf("f1" to FileMetadata("f1", "a.bin", 3, "application/octet-stream")))
         val obj = parser.parseToJsonElement(P2pJson.encodeToString(req)) as JsonObject
@@ -160,20 +153,19 @@ class DtosConformanceTest {
 
     @Test
     fun `T-W1 register-reply and info DeviceInfo body never leaks the transient lastSeenIp`() {
-        // The register-reply (§A.3) POST body and the GET /info 200 body are both
-        // P2pJson.encodeToString(DeviceInfo). lastSeenIp is a transport-observed @Transient field;
-        // it MUST NOT serialize, or it would (a) break the §A.2 key set and (b) leak an IP on the wire.
+        
+        
         val info = DeviceInfo(alias = "Me", fingerprint = "fp", port = 49152, lastSeenIp = "192.168.1.9")
         val json = P2pJson.encodeToString(info)
         val obj = parser.parseToJsonElement(json) as JsonObject
         assertTrue("lastSeenIp must never appear on the wire", "lastSeenIp" !in obj.keys)
-        // deviceModel is null here → omitted by explicitNulls=false; the rest are the §A.2 keys.
+        
         assertEquals(
             setOf("alias", "version", "deviceType", "fingerprint", "port", "protocol", "download", "announce"),
             obj.keys,
         )
         assertEquals("49152", obj["port"].toString())
-        // And it round-trips back with lastSeenIp defaulting to null (the wire never carried it).
+        
         val back = P2pJson.decodeFromString<DeviceInfo>(json)
         assertEquals("Me", back.alias)
         assertNull(back.lastSeenIp)

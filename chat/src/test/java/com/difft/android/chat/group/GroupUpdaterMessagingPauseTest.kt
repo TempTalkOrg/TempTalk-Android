@@ -12,6 +12,7 @@ import com.difft.android.websocket.api.messages.SignalServiceDataClass
 import com.difft.android.websocket.api.messages.TTNotifyMessage
 import com.google.gson.Gson
 import difft.android.messageserialization.For
+import io.mockk.coVerify
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -40,16 +41,16 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 
-/**
- * #1382: a group notify is ACKed and handed to [GroupUpdater]'s 3 s batch queue before it is
- * stored. The receive ticket of the batch closes when the batch returns, so the queued item must
- * carry its own retained ticket, or the migration pause could snapshot before the notify message is
- * written.
- *
- * `appScope` runs on its own [TestScope] whose clock the test advances by hand, so the endless poll
- * loop never runs inside `runTest`. The version cache is pre-seeded so the consumer never reads a
- * WCDB `Table` (a relaxed `CppObject` mock would crash the host JVM).
- */
+
+
+
+
+
+
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -66,6 +67,7 @@ class GroupUpdaterMessagingPauseTest {
     private val loopScope = TestScope(StandardTestDispatcher())
     private var storedNotifies = 0
 
+    private val groupUtil = mockk<GroupUtil>(relaxed = true)
     private lateinit var updater: GroupUpdater
 
     @Before
@@ -87,7 +89,7 @@ class GroupUpdaterMessagingPauseTest {
             gson = Gson(),
             dbMessageStore = dbMessageStore,
             wcdb = wcdb,
-            groupUtil = mockk(relaxed = true),
+            groupUtil = groupUtil,
             groupCryptoRepo = mockk(relaxed = true),
             groupRepo = mockk(relaxed = true),
             httpClient = mockk(relaxed = true),
@@ -103,11 +105,31 @@ class GroupUpdaterMessagingPauseTest {
     }
 
     @Test
+    fun `notify clears immediately except upgrade and invalid types`() = runTest {
+        val admission = assertNotNull(TestMessagingPause().open().gate.tryAdmit(AdmissionKind.RECEIVE, "ws"))
+        try {
+            for (type in listOf(48, 999, 6, 49, 28)) {
+                val notification = notify().copy(data = notify().data?.copy(groupNotifyDetailedType = type))
+                updater.handleGroupNotifyMessage(notification, wrapper(), admission)
+            }
+            coVerify(exactly = 1) { groupUtil.clearExpiry(GROUP_ID, "notify:6") }
+            coVerify(exactly = 1) { groupUtil.clearExpiry(GROUP_ID, "notify:49") }
+            coVerify(exactly = 1) { groupUtil.clearExpiry(GROUP_ID, "notify:28") }
+            coVerify(exactly = 3) { groupUtil.clearExpiry(any(), any()) }
+        } finally {
+            admission.close()
+            every { wcdb.isDbInaccessible } returns true
+            loopScope.testScheduler.advanceTimeBy(3_001)
+            loopScope.testScheduler.runCurrent()
+        }
+    }
+
+    @Test
     fun `a queued group notify keeps the pause waiting until its notify message is stored`() = runTest {
         val messaging = TestMessagingPause().open()
         val batchTicket = assertNotNull(messaging.gate.tryAdmit(AdmissionKind.RECEIVE, "ws"))
         updater.handleGroupNotifyMessage(notify(), wrapper(), batchTicket)
-        // The batch ACKed the envelope, reported Success and closed its ticket.
+        
         batchTicket.close()
 
         messaging.pauseMessaging()

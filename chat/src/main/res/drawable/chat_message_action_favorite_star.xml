@@ -1,5 +1,4 @@
-<!-- Star outline for the "Add to Fav" message action. Stroke-only, 20 viewport.
-     Menu tints it uniformly; the declared color only applies outside the tinted menu. -->
+
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="20dp"
     android:height="20dp"

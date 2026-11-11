@@ -2,9 +2,9 @@ package com.difft.android.video.videoconverter.muxer
 
 import java.nio.ByteBuffer
 
-/**
- * Based on https://github.com/jcodec/jcodec/blob/master/src/main/java/org/jcodec/codecs/h264/H264Utils.java
- */
+
+
+
 object Utils {
 
     @JvmStatic

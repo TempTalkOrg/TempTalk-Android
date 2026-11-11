@@ -19,14 +19,14 @@ import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 
-/**
- * [RtmMessageHandler.toggleMute] must never drop its completion callback: a request that cannot
- * be sent (local participant, participant without an identity) reports `false` exactly once so the
- * caller can surface the failure instead of staying silent.
- */
+
+
+
+
+
 class RtmMessageHandlerToggleMuteTest {
 
-    // A Main that is never run: send()'s completion hop stays pending instead of reaching a real Main.
+    
     @get:Rule
     val dispatcherRule = TestDispatcherRule(StandardTestDispatcher())
 
@@ -39,15 +39,15 @@ class RtmMessageHandlerToggleMuteTest {
         decryptor = { _, _ -> null },
     )
 
-    /**
-     * send() finishes on Dispatchers.IO with a hop to Main. End it here, while this test's Main is still
-     * installed: left running, it touches Main after the rule resets it and the failure is reported as
-     * an uncaught exception in whichever coroutine test this JVM runs next.
-     */
+    
+
+
+
+
     @After
     fun tearDown() = runBlocking {
         sendJob.cancel()
-        // A hop already queued on the test Main completes (as cancelled) only once that Main runs it.
+        
         withTimeout(5_000) {
             while (sendJob.children.any()) {
                 dispatcherRule.testDispatcher.scheduler.advanceUntilIdle()
@@ -77,8 +77,8 @@ class RtmMessageHandlerToggleMuteTest {
         val remote = mockk<RemoteParticipant>(relaxed = true)
         every { remote.identity } returns Participant.Identity("+12312345678.1")
         val results = mutableListOf<Boolean>()
-        // A sendable target goes through send(), which completes asynchronously on Main; what this
-        // pins is that the synchronous early-exit branch is NOT taken for it.
+        
+        
         subject.toggleMute(remote) { results += it }
         assertEquals(emptyList<Boolean>(), results)
     }

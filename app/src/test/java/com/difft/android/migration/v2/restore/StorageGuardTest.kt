@@ -14,10 +14,10 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/**
- * Unit coverage for [StorageGuard] — T28-T30 of the symmetric-transport design: the `prepare-upload`
- * formula, the ENOSPC classification (including the cause walk) and the tightest-volume rule.
- */
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = android.app.Application::class, sdk = [33])
 class StorageGuardTest {
@@ -31,11 +31,11 @@ class StorageGuardTest {
         return StorageGuard(volumes) { byPath.getValue(it.absolutePath) }
     }
 
-    // ── T28 ────────────────────────────────────────────────────────────────────────────────────
+    
 
     @Test
     fun `a declared size requires twice itself plus the fixed overhead and the promote margin`() {
-        // 2 x 1 GiB + 128 MiB overhead + 256 MiB margin = 2 GiB + 384 MiB.
+        
         assertFalse(guardWith(2 * gb + 383 * mb).precheck(gb).sufficient, "one MiB short must be refused")
         assertTrue(guardWith(2 * gb + 385 * mb).precheck(gb).sufficient, "one MiB over must be accepted")
         assertEquals(2 * gb + 384 * mb, guardWith(0).precheck(gb).requiredBytes)
@@ -48,7 +48,7 @@ class StorageGuardTest {
         assertEquals(StorageGuard.UNKNOWN_SIZE_FLOOR_BYTES, guardWith(0).precheck(0).requiredBytes)
     }
 
-    // ── T29 ────────────────────────────────────────────────────────────────────────────────────
+    
 
     @Test
     fun `out-of-space is recognised by errno, by message and through the cause chain`() {
@@ -62,7 +62,7 @@ class StorageGuardTest {
         assertFalse(StorageGuard.isOutOfSpace(IOException("permission denied")))
     }
 
-    // ── T30 ────────────────────────────────────────────────────────────────────────────────────
+    
 
     @Test
     fun `the tightest volume decides`() {

@@ -6,8 +6,8 @@ import com.difft.android.base.log.lumberjack.L
 interface INewMessageContentEncryptor {
     companion object {
 
-        // [MIN..MAX] = decrypt range; CURRENT = encrypt version.
-        // Decoupled so receive can pre-bury newer versions before encrypt flips.
+        
+        
         const val MESSAGE_MINIMUM_SUPPORTED_VERSION = 2
         const val MESSAGE_MAX_SUPPORTED_VERSION = 3
         const val MESSAGE_CURRENT_VERSION = 2
@@ -22,28 +22,27 @@ interface INewMessageContentEncryptor {
 
     fun generateKey(): ByteArray
 
-//    fun encryptCallKey(pubKeys: Map<String, String>, mKey: String?): EncryptCallKeyResult
     fun encryptCallKey(pubKeys: Map<String, String>, mKey: ByteArray?): EncryptCallKeyResult
 
     fun decryptCallKey(eKey: String, eMKey: String): ByteArray?
 
-    /**
-     * Encrypts an RTM message using the provided keys
-     * @param message The message content to encrypt
-     * @param localPrivateKey The private key used for encryption
-     * @param aesKey The Call meeting encrypt key for symmetric encryption
-     * @param timestamp The message send time
-     * @return The encrypted message as a string
-     */
+    
+
+
+
+
+
+
+
     fun encryptRtmMessage(message: ByteArray, localPrivateKey: ByteArray, aesKey: ByteArray, timestamp: Long): String
 
-    /**
-     * Decrypts an RTM message using the provided keys
-     * @param cipherMessage The encrypted message content
-     * @param hisPublicKey The public key of the sender
-     * @param aesKey The Call meeting encrypt key for symmetric decryption
-     * @return The decrypted message or null if decryption fails
-     */
+    
+
+
+
+
+
+
     fun decryptRtmMessage(cipherMessage: ByteArray, hisPublicKey: String, aesKey: ByteArray): ByteArray
 }
 
@@ -56,15 +55,6 @@ data class RtmEncryptedMessage(
     val payload: String,
 )
 
-/**
- * data class DtEncryptedMessage (
- *     var `cipherText`: List<UByte>,
- *     var `signedEKey`: List<UByte>,
- *     var `eKey`: List<UByte>,
- *     var `identityKey`: List<UByte>,
- *     var `ermKeys`: Map<String, List<UByte>>?
- * ) {
- */
 
 data class EncryptResult(
     val cipherText: ByteArray,
@@ -99,11 +89,9 @@ data class EncryptResult(
 }
 
 fun ByteArray.paddedMessageBody(): ByteArray {
-    // From
-    // https://github.com/signalapp/TextSecure/blob/master/libtextsecure/src/main/java/org/whispersystems/textsecure/internal/push/PushTransportDetails.java#L55
-    // NOTE: This is dumb.  We have our own padding scheme, but so does the cipher.
-    // The +1 -1 here is to make sure the Cipher has room to add one padding byte,
-    // otherwise it'll add a full 16 extra bytes.
+    
+    
+    
     val paddedMessageLength = paddedMessageLength(this.size + 1) - 1
     val paddedMessage = ByteArray(paddedMessageLength)
     val paddingByte: Byte = 0x80.toByte()

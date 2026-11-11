@@ -21,13 +21,13 @@ import javax.net.ssl.SSLContext
 import javax.net.ssl.TrustManager
 import javax.net.ssl.X509TrustManager
 
-/**
- * A peer that stops sending without closing the socket must not be able to park a connection
- * forever. This is the shape a suspended iOS sender takes — the OS freezes the process on
- * backgrounding, so the socket stays open and simply goes quiet — and before the idle deadline the
- * receiver's body read blocked indefinitely, leaving the migration UI on a progress bar that could
- * never move again.
- */
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 class ReceiverIdleTimeoutTest {
 
@@ -49,7 +49,7 @@ class ReceiverIdleTimeoutTest {
             }
         }
 
-        // Connect, send a partial request line, then hold the socket open and say nothing more.
+        
         trustAllSocket(port).use { socket ->
             socket.getOutputStream().apply {
                 write("POST /api/localsend/v2/upload?sessionId=s&fileId=f&token=t HTTP/1.1\r\n".toByteArray())
@@ -73,14 +73,14 @@ class ReceiverIdleTimeoutTest {
             fileSink = CapturingFileSink(),
             requirePin = false,
             onEvent = onEvent,
-            // Short enough to keep the test quick; the production value is the same clock.
+            
             idleReadTimeoutMs = 300,
         )
         server = srv
         return srv.start(0)
     }
 
-    /** The pin is not the subject here — accept whatever cert the server presents. */
+    
     private fun trustAllSocket(port: Int): Socket {
         val trustAll = object : X509TrustManager {
             override fun checkClientTrusted(chain: Array<out java.security.cert.X509Certificate>?, authType: String?) = Unit

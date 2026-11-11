@@ -33,24 +33,18 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import javax.net.SocketFactory
 
-/**
- * A fake chat pool for failover tests (#1396): one [MockWebServer] per virtual host name, reached
- * through a fake [Dns] and a [SocketFactory] that sends every connect for host `x` to `x`'s server,
- * so the production hosts (`https://host/…`, port 443) can be used as they are.
- *
- * It also wires the REAL [UrlManager] and [DomainSpeedTestCoordinator] over a mocked config, so the
- * failover tests exercise host selection, marks and exhaustion end to end. The clock, the network
- * state and the probe launcher of the coordinator are fakes ([online], [probeLaunches]).
- *
- * [client] builds the production interceptor order: routing, optional normalization, failover, and
- * the exchange observer as a network interceptor.
- *
- * @param poolHosts the config chat pool, in order; the first is the startup host.
- * @param otherHosts hosts with a server that are not in the pool (a CDN, a redirect target).
- * @param tls serve and request over HTTPS, with hosts in [untrustedHosts] presenting a certificate
- * the client does not trust.
- * @param tunnelHosts the `proxy.tunnelDomains.chat` set; the proxy is on when non-null.
- */
+
+
+
+
+
+
+
+
+
+
+
+
 internal class ChatPoolFixture(
     val poolHosts: List<String>,
     otherHosts: List<String> = emptyList(),
@@ -143,12 +137,12 @@ internal class ChatPoolFixture(
     private val scheme = if (tls) "https" else "http"
     private val clients = mutableListOf<OkHttpClient>()
 
-    /** Makes DNS fail for [host]: a connect-stage failure (nothing reaches any server). */
+    
     fun failDns(host: String) {
         unresolvable += host
     }
 
-    /** Makes every new TCP connect to [host] fail with a [ConnectException]; pooled connections are untouched. */
+    
     fun refuseConnections(host: String) {
         refusing += host
     }
@@ -165,23 +159,23 @@ internal class ChatPoolFixture(
         server(host).enqueue(MockResponse.Builder().code(code).body(body).build())
     }
 
-    /** Hosts the coordinator would still offer for a retry, best first. */
+    
     fun eligibleHosts(): List<String> = coordinator.getAllHostsRanked()
 
-    /** The startup origin of a chat client: `scheme://firstHost/chat/`. */
+    
     val origin: String get() = "$scheme://${poolHosts.first()}/chat/"
 
-    /** A request to [host] (default: the startup host); [routed] tags it as the routing interceptor would. */
+    
     fun request(path: String = "/chat/v1/thing", host: String = poolHosts.first(), routed: Boolean = false): Request =
         Request.Builder().url("$scheme://$host$path").apply {
             if (routed) tag(RoutedHost::class.java, RoutedHost(host, ChatService.CHAT))
         }.build()
 
-    /**
-     * A client with the production interceptor order. [routing] false leaves routing out, for tests
-     * that tag the request themselves; [normalize] false leaves out [HttpClientInterceptor] to see
-     * raw exceptions and responses; [resend5xx] false is the Signal API client.
-     */
+    
+
+
+
+
     fun client(
         routing: Boolean = true,
         normalize: Boolean = true,
@@ -193,8 +187,8 @@ internal class ChatPoolFixture(
         configure: OkHttpClient.Builder.() -> Unit = {},
     ): OkHttpClient {
         val builder = OkHttpClient.Builder()
-            // The virtual hosts only exist behind the fake DNS: a developer machine's system proxy
-            // must not intercept them.
+            
+            
             .proxy(Proxy.NO_PROXY)
             .dns(fakeDns)
             .socketFactory(redirectingSocketFactory)

@@ -17,13 +17,13 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import com.difft.android.chat.mms.PartAuthority
 
-/**
- * Unit tests for [com.difft.android.chat.util.SaveAttachmentUtil].
- *
- * Tests focus on public API behavior — permission checks, null stream handling,
- * and batch logic. Full MediaStore integration (ContentProvider insert/query)
- * is not covered here as it requires Android instrumented tests.
- */
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [30])
 class SaveAttachmentUtilTest {
@@ -41,7 +41,7 @@ class SaveAttachmentUtilTest {
         unmockkAll()
     }
 
-    // region saveAttachment - permission check
+    
 
     @Test
     fun `saveAttachment returns WriteAccessFailure when no write permission`() = runTest {
@@ -61,9 +61,9 @@ class SaveAttachmentUtilTest {
         assertTrue(result is com.difft.android.chat.util.SaveAttachmentUtil.SaveResult.WriteAccessFailure)
     }
 
-    // endregion
+    
 
-    // region saveAttachment - null stream
+    
 
     @Test
     fun `saveAttachment returns Failure when input stream is null`() = runTest {
@@ -75,9 +75,9 @@ class SaveAttachmentUtilTest {
         assertTrue(result is com.difft.android.chat.util.SaveAttachmentUtil.SaveResult.Failure)
     }
 
-    // endregion
+    
 
-    // region saveAttachments - batch failure propagation
+    
 
     @Test
     fun `saveAttachments returns Failure when all streams are null`() = runTest {
@@ -98,14 +98,14 @@ class SaveAttachmentUtilTest {
 
         val result = _root_ide_package_.com.difft.android.chat.util.SaveAttachmentUtil.saveAttachments(context, emptyList())
 
-        // Empty list: loop doesn't execute, returns Success(null) since size != 1
+        
         assertTrue(result is com.difft.android.chat.util.SaveAttachmentUtil.SaveResult.Success)
         assertEquals(null, (result as com.difft.android.chat.util.SaveAttachmentUtil.SaveResult.Success).attachment)
     }
 
-    // endregion
+    
 
-    // region Attachment data class
+    
 
     @Test
     fun `Attachment defaults are correct`() {
@@ -140,9 +140,9 @@ class SaveAttachmentUtilTest {
         assertEquals(false, attachment.shouldShowToast)
     }
 
-    // endregion
+    
 
-    // region SaveResult sealed class
+    
 
     @Test
     fun `SaveResult Success holds attachment`() {
@@ -157,9 +157,9 @@ class SaveAttachmentUtilTest {
         assertEquals(null, result.attachment)
     }
 
-    // endregion
+    
 
-    // region helpers
+    
 
     private fun buildAttachment(
         uri: Uri = Uri.parse("content://test/attachment/${System.nanoTime()}"),
@@ -177,5 +177,5 @@ class SaveAttachmentUtilTest {
         shouldShowToast = shouldShowToast
     )
 
-    // endregion
+    
 }

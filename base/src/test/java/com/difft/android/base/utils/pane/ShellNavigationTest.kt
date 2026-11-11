@@ -19,7 +19,7 @@ import org.robolectric.Robolectric
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
-/** Outside a detail host, pages keep Activity behaviour: [ShellNavigation] and the view lifecycle. */
+
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [33])
 class ShellNavigationTest {

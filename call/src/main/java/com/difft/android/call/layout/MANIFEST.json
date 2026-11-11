@@ -1,17 +1,17 @@
 {
-  "specVersion": 25,
-  "commit": "bf6b84ecbe",
+  "specVersion": 28,
+  "commit": "2b090e9203",
   "files": {
-    "call/src/main/java/com/difft/android/call/layout/Types.kt": "f63eb15e688b0c1638bf0399bfed18e5243b3159ec3478de66283a1cc6f83424",
-    "call/src/main/java/com/difft/android/call/layout/Config.kt": "fbfd3e565da5b721fd9d2c946478a756434d194af05082d0a1c844ccb2c3c740",
-    "call/src/main/java/com/difft/android/call/layout/Geometry.kt": "082ca690743bc09e667306242de669023e62102beaece9e476a033acdf2bb9a0",
-    "call/src/main/java/com/difft/android/call/layout/Aspect.kt": "6314eee87ee826bde6f6188fec70585649ed765e9f8c26a603821722c9c2e7f3",
-    "call/src/main/java/com/difft/android/call/layout/Scheduler.kt": "8161eae05610ea20c39ccfeba32abd77176bb90616fd844eef9a7d219cbe5ae6",
-    "call/src/main/java/com/difft/android/call/layout/Layout.kt": "9e74b03380ced9dbf1fc222ff286d8cfdb48827586ec5a5e7c2538ce1c4936bc",
-    "call/src/main/java/com/difft/android/call/layout/Controller.kt": "5e647c90e7161d4a303dbbb3bc12cfa169ed7172ff58a49c76597bc369e0029d",
-    "call/src/test/java/com/difft/android/call/layout/ControllerGoldenTest.kt": "274148972f2def064fc94e50646352fad4830882baa3a81333f0f5e2754d215d",
-    "call/src/test/java/com/difft/android/call/layout/ControllerTest.kt": "f30a671c1d27ef4accef3a63211564073f5914e9c1d6aa5c35d2c5ff0d0a4456",
-    "call/src/test/java/com/difft/android/call/layout/ConfigEntries.kt": "9174bd3c6b42233e3cc674f886f3e0dc558a2451b6eb4d8a9a705ea075ef769a",
-    "call/src/test/resources/generated/call-layout-controller.v25.json": "622a9a9c934cc39e224096dc6797db3601ca8cc09ab44d93bcfc2b3c4c1553a8"
+    "call/src/main/java/com/difft/android/call/layout/Types.kt": "c53b5147a239b62dbd2c1a9f82027c696a44e122fdcbf93d89c6fdee84366557",
+    "call/src/main/java/com/difft/android/call/layout/Config.kt": "eddeb376ca3f8819deb0d3f708d6f21ea8ab44c201fb3582d3f1e73574b9e69c",
+    "call/src/main/java/com/difft/android/call/layout/Geometry.kt": "04ca0cf4d5b7b4b2268493fb0368261fdb8f6ab72ee53e335df3cbb62e5410bb",
+    "call/src/main/java/com/difft/android/call/layout/Aspect.kt": "8dc894f45c492670133be8fc3ae21c5f8bad1dc4d455b272fa3c7b54b7ef8cd8",
+    "call/src/main/java/com/difft/android/call/layout/Scheduler.kt": "926e250634e374423154a8c0ff1623b1cd0246c6db8c010043a21887070b8070",
+    "call/src/main/java/com/difft/android/call/layout/Layout.kt": "ef9dac7760277f91de47681e1cc5d1c2b7e6e23b01bf6f9dfd009a403a7e16f5",
+    "call/src/main/java/com/difft/android/call/layout/Controller.kt": "3da4777fae4de2388d0e01d53194fbfd89c4e9a06a3af770e7a0e169c6cc09ed",
+    "call/src/test/java/com/difft/android/call/layout/ControllerGoldenTest.kt": "1f41d0878f902eaa89bea6f75cd67a872d7e8af90268293ed6e1ba1a3d7fb49c",
+    "call/src/test/java/com/difft/android/call/layout/ControllerTest.kt": "0da2ff16f697e795cee498ec9b6248b1970ecce3a63e1b6593f7dad3ee9c54d4",
+    "call/src/test/java/com/difft/android/call/layout/ConfigEntries.kt": "60af29b19c067487f2aa9d8f673fc4e61411c20e2ee616da033ee01b1c1cdf14",
+    "call/src/test/resources/generated/call-layout-controller.v28.json": "5af72f58b0cd2cf07ad06db582b80a8a2a389e0db72f17c1f80ed60d8276159a"
   }
 }

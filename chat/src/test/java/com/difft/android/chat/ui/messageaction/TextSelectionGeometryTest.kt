@@ -29,15 +29,14 @@ import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/**
- * G3-G26 (#1294): selection-handle geometry that anchors the message action menu, against a real
- * TextView / overlay FrameLayout / [SelectionHandleView] tree. G4 and G19 are characterization
- * rows: they were written and run green against the pre-refactor `updateHandlePositions()`.
- *
- * Row formulas: `startRow(i) = (O.x, O.y+Lb(i)-Ks, O.x+W, O.y+Lb(i))` and
- * `endRow(j) = (O.x, O.y+Lt(j), O.x+W, O.y+Lt(j)+Ke)`, where O is the content origin in the
- * overlay, W the content width and Ks/Ke the handles' visual extents.
- */
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(application = TestScopeApplication::class, sdk = [34], qualifiers = "w480dp-h1400dp-mdpi")
@@ -58,10 +57,10 @@ class TextSelectionGeometryTest {
         controllers.forEach { runCatching { it.destroy() } }
     }
 
-    /**
-     * Root FrameLayout holding a bubble (optional quote + 10-line TextView with 8dp padding),
-     * an optional clip view, and the MATCH_PARENT overlay. Handles are overlay children 1 and 2.
-     */
+    
+
+
+
     private inner class Fixture(
         bubbleTop: Int = 0,
         quoteHeight: Int = 0,
@@ -109,7 +108,7 @@ class TextSelectionGeometryTest {
         val endHandle: SelectionHandleView get() = overlay.getChildAt(2) as SelectionHandleView
         val lastLine get() = textView.layout.lineCount - 1
 
-        /** Test-local copy of the origin arithmetic, independent of the production helper. */
+        
         fun origin(): Point {
             val tv = IntArray(2).also(textView::getLocationOnScreen)
             val c = IntArray(2).also(overlay::getLocationOnScreen)
@@ -132,7 +131,7 @@ class TextSelectionGeometryTest {
             return Rect(o.x, o.y + lineTop(j), o.x + contentWidth(), o.y + lineTop(j) + ke)
         }
 
-        /** Sizes the clip view to exactly cover lines [first]..[last] (overlay at root top). */
+        
         fun clipToLines(first: Int, last: Int) {
             clipView.layoutParams = clipView.layoutParams.apply { height = lineBottom(last) - lineTop(first) }
             settle()
@@ -170,7 +169,7 @@ class TextSelectionGeometryTest {
         event.recycle()
     }
 
-    /** DOWN at (0,0), one MOVE per entry of [moveYs] (absolute raw Y), then UP. */
+    
     private fun gesture(handle: View, vararg moveYs: Float, afterMove: (Int) -> Unit = {}) {
         touch(handle, MotionEvent.ACTION_DOWN, 0f, 0f)
         moveYs.forEachIndexed { index, y ->
@@ -218,7 +217,7 @@ class TextSelectionGeometryTest {
         assertEquals(VerticalClip(150, 550), VerticalClip.of(f.clipView, f.overlay))
     }
 
-    /** The clip view is a plain View here; a padded ViewGroup that clips to padding insets the clip. */
+    
     @Test
     fun `G24 a clip view that clips to padding insets the clip and the highlight`() {
         val f = Fixture()
@@ -243,10 +242,10 @@ class TextSelectionGeometryTest {
         assertEquals((paddedTop - textTop).coerceAtLeast(0), requireNotNull(highlight.clipBounds).top)
     }
 
-    /**
-     * A handle whose drawn part is above the clip is GONE even when its touch padding dips into the
-     * clip (it used to be drawn whole over the toolbar); one straddling the edge is cut at the edge.
-     */
+    
+
+
+
     @Test
     fun `G25 handle visibility follows the drawn part and straddling handles are cut at the clip edge`() {
         val f = Fixture()
@@ -258,13 +257,13 @@ class TextSelectionGeometryTest {
         val drawnTop = handleTop + h.visualTopInset.toInt()
         val drawnBottom = drawnTop + h.visualExtentPx.toInt()
 
-        // The start circle sits above its line, so the clip must start above the drawn part.
+        
         f.clipView.translationY = (drawnTop - 10).toFloat()
         f.manager.updateUIAfterScroll()
         assertEquals(View.VISIBLE, h.visibility)
         assertNull("fully inside the clip: no local clip", h.clipBounds)
 
-        // Clip top halfway through the drawn part: visible, cut at the clip edge.
+        
         val halfway = (drawnTop + drawnBottom) / 2
         f.clipView.translationY = halfway.toFloat()
         f.manager.updateUIAfterScroll()
@@ -274,7 +273,7 @@ class TextSelectionGeometryTest {
         assertEquals(0, cut.left)
         assertEquals(h.totalWidth.toInt(), cut.right)
 
-        // Clip top just below the drawn part: only the touch padding overlaps the clip -> GONE.
+        
         f.clipView.translationY = (drawnBottom + 1).toFloat()
         f.manager.updateUIAfterScroll()
         assertEquals(View.GONE, h.visibility)
@@ -494,7 +493,7 @@ class TextSelectionGeometryTest {
         f.manager.selectAll()
         val slop = ViewConfiguration.get(f.activity).scaledTouchSlop.toFloat()
 
-        // (a) beyond the slop: started once, on the first MOVE
+        
         val a = DragRecorder().also { f.manager.handleDragCallback = it }
         gesture(f.endHandle, 2 * slop, 2 * slop + 3) { index ->
             if (index == 0) assertEquals(listOf(false), a.started)
@@ -503,14 +502,14 @@ class TextSelectionGeometryTest {
         assertEquals(2, a.drags)
         assertEquals(1, a.ends)
 
-        // (b) plain tap
+        
         val b = DragRecorder().also { f.manager.handleDragCallback = it }
         gesture(f.endHandle)
         assertTrue(b.started.isEmpty())
         assertEquals(0, b.drags)
         assertEquals(1, b.ends)
 
-        // (c) jitter inside the slop
+        
         val c = DragRecorder().also { f.manager.handleDragCallback = it }
         gesture(f.endHandle, slop - 1, 0f)
         assertTrue(c.started.isEmpty())

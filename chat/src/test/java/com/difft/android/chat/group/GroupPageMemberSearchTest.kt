@@ -26,7 +26,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
 
-/** Member search matches the displayed name, the raw contact names and the uid (PR #1461 review). */
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33])
 class GroupPageMemberSearchTest {

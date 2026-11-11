@@ -1,5 +1,6 @@
 package com.difft.android.selector.widget
 
+import com.difft.android.base.utils.avoidCornerCutout
 import android.content.Context
 import android.util.AttributeSet
 import android.view.View
@@ -48,6 +49,8 @@ open class BottomNavBar : RelativeLayout, View.OnClickListener {
         tvPreview.setOnClickListener(this)
         tvImageEditor.visibility = View.GONE
         setBackgroundColor(ContextCompat.getColor(context, com.difft.android.base.R.color.bg))
+        
+        avoidCornerCutout()
         originalCheckbox.isChecked = config.isCheckOriginalImage
         originalCheckbox.setOnCheckedChangeListener { _, isChecked ->
             config.isCheckOriginalImage = isChecked
@@ -173,7 +176,7 @@ open class BottomNavBar : RelativeLayout, View.OnClickListener {
             if (StyleUtils.checkStyleValidity(previewSelectTextColor)) {
                 tvPreview.setTextColor(previewSelectTextColor)
             } else {
-                tvPreview.setTextColor(ContextCompat.getColor(context, com.difft.android.base.R.color.t_info))
+                tvPreview.setTextColor(ContextCompat.getColor(context, com.difft.android.base.R.color.primary))
             }
             val previewSelectText = if (StyleUtils.checkStyleValidity(bottomBarStyle.bottomPreviewSelectTextResId))
                 context.getString(bottomBarStyle.bottomPreviewSelectTextResId) else bottomBarStyle.bottomPreviewSelectText

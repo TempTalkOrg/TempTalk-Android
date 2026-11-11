@@ -23,7 +23,7 @@
         android:minWidth="14dp"
         android:minHeight="14dp"
         android:paddingHorizontal="5dp"
-        android:textColor="@color/primary"
+        android:textColor="@color/on_primary"
         android:textSize="9sp"
         android:visibility="gone"
         app:layout_constraintBottom_toBottomOf="@+id/iv_avatar"

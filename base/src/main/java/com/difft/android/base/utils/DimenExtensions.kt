@@ -2,8 +2,10 @@
 
 package com.difft.android.base.utils
 
+import com.difft.android.base.utils.density.UiDensity
+
 val Int.dp: Int
-    inline get() = (this * application.resources.displayMetrics.density).toInt()
+    inline get() = (this * UiDensity.density).toInt()
 
 val Float.dp: Float
-    inline get() = this * application.resources.displayMetrics.density
+    inline get() = this * UiDensity.density

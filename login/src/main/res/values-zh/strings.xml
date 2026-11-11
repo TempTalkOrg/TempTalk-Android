@@ -15,7 +15,7 @@
     <string name="login_restore_sign_in_again">数据已导入，请重新验证账号以完成登录。</string>
     <string name="login_error_too_many_attempts">尝试次数过多，请稍后再试。</string>
 
-    <!-- Screen Lock Strings -->
+    
     <string name="settings_passcode_submit">确认</string>
     <string name="settings_enter_passcode">输入数字密码</string>
     <string name="settings_switch_to_pattern">切换到手势密码</string>
@@ -55,7 +55,7 @@
     <string name="login_different_dialog_ok_text">删除并重新登录</string>
     <string name="login_different_dialog_cancel_text">取消</string>
 
-    <!-- Register Intro / Onboarding -->
+    
     <string name="register_intro_skip">跳过</string>
     <string name="register_intro_next">下一步</string>
     <string name="register_intro_page1_title">消息会消失</string>
@@ -64,13 +64,12 @@
     <string name="register_intro_page2_body">端到端加密。除你和对方之外，任何人都无法查看聊天内容。</string>
     <string name="login_use_proxy">使用代理</string>
 
-    <!-- 数据迁移 v2 (A5) — 登录时导入弹窗 -->
+    
     <string name="login_import_backup_title">是否导入备份?</string>
     <string name="login_import_backup_message">在登录前从备份文件恢复你的聊天记录。若跳过,本设备将不包含历史记录。</string>
     <string name="login_import_backup_confirm">导入</string>
     <string name="login_import_backup_decline">跳过</string>
-    <!-- I4 — 导入方式选择 (P2P / 文件) + 同设备仅文件 -->
-    <!-- 折叠自旧前置弹窗的引导文案,合并进单一组合选择弹窗 -->
+    
 
     <string name="profile_avatar_reselect">所选图片已不可用，请重新选择。</string>
 </resources>

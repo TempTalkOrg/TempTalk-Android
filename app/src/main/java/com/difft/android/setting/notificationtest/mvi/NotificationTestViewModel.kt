@@ -49,7 +49,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import java.util.UUID
 import javax.inject.Inject
 
-/** One leased run, retained across view recreation but never resumed after process death. */
+
 @HiltViewModel
 class NotificationTestViewModel internal constructor(
     private val repository: NotificationTestRepository,
@@ -290,7 +290,7 @@ class NotificationTestViewModel internal constructor(
         }
     }
 
-    /** One line per finished run; [degraded] marks a result the system, not the user, decided. */
+    
     private fun logResult(kind: NotificationTestKind, outcome: String, reason: String, degraded: Boolean = false) {
         val line = { "[NotificationTest] result kind=${kind.logName} outcome=$outcome reason=$reason brand=${OemBrand.current()}" }
         if (degraded) L.w(line) else L.i(line)

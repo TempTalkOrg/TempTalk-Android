@@ -83,7 +83,7 @@ class AccountMutationRepository @Inject constructor(
         }.await()
     }
 
-    /** The original page's claim is synchronously released on Main immediately before logout. */
+    
     suspend fun logout(beforeLogout: () -> Unit): AccountMutationResult =
         endSession(deleteAccount = false, beforeLogout = beforeLogout)
 

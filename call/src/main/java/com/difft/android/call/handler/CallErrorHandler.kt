@@ -13,14 +13,14 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-/**
- * The call session's handling of a room error: an app toast naming the failure, then the end of the
- * call ([onEndCall]). Start, server and disconnect errors end at once; any other error ends after
- * [GENERIC_ERROR_DELAY_MS], and a later error replaces it. Nothing is done while the call is not
- * live ([isLive]: ended or ending), checked again when the delayed end fires.
- *
- * Main-confined: [handleError] and [cancelPending] run on main, the delayed end on [scope].
- */
+
+
+
+
+
+
+
+
 class CallErrorHandler(
     private val scope: CoroutineScope,
     private val isStartAction: Boolean,
@@ -70,7 +70,7 @@ class CallErrorHandler(
         }
     }
 
-    /** Drops a pending delayed end; the session's end calls it. */
+    
     fun cancelPending() {
         pendingErrorJob?.cancel()
         pendingErrorJob = null

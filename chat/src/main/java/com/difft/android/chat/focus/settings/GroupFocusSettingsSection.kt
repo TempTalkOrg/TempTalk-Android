@@ -18,10 +18,10 @@ import com.difft.android.chat.R
 import com.difft.android.chat.focus.settings.GroupFocusSettingsContract.Intent
 import com.difft.android.chat.focus.settings.GroupFocusSettingsContract.State
 
-/**
- * The notification section of the group settings page, stateless: the focus card (when the server
- * feature is on), then the Mute / Notifications / Sound card with its takeover caption.
- */
+
+
+
+
 @Composable
 fun GroupFocusSettingsSection(state: State, onIntent: (Intent) -> Unit) {
     Column(Modifier.fillMaxWidth()) {

@@ -31,11 +31,11 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/**
- * Manual server-switch rejection toast as session UI output: the session graph's own
- * [CallConnectionCoordinator] observed with the graph's `showToast` binding, as Phase B wires it.
- * Row: T3-21.
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [33])
 @OptIn(ExperimentalCoroutinesApi::class)

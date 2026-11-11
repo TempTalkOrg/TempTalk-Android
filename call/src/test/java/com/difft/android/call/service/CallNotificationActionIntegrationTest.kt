@@ -44,19 +44,19 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ServiceController
 import org.robolectric.annotation.Config
 
-/**
- * Out-of-page events around the ongoing-call service.
- *
- * T4-10: the ongoing-call notification's hang-up is an immutable, explicit-component broadcast
- * `PendingIntent` to the manifest-declared, non-exported [CallNotificationActionReceiver], whose
- * `onReceive` hangs the call up through [CallSessionCommands]. AOSP grants an own-uid
- * `PendingIntent` broadcast to a non-exported receiver of the same app
- * (`ActivityManager.checkComponentPermission` checks `UserHandle.isSameApp` before `exported`).
- *
- * T4-11: a task swipe (`onTaskRemoved`), with an `ACTION_MAIN` root intent (the main app task),
- * another one or none, leaves the live call alone: nothing reaches it through the real facade and
- * no broadcast is sent.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
 @RunWith(org.robolectric.RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [33])
 class CallNotificationActionIntegrationTest {
@@ -138,7 +138,7 @@ class CallNotificationActionIntegrationTest {
         assertTrue("no broadcast", shadowOf(app).broadcastIntents.isEmpty())
     }
 
-    /** A holder whose current session is a recording mock; [commands] is the real facade on main. */
+    
     private fun liveSession(): CallSession {
         val session = mockk<CallSession>(relaxed = true) { every { start() } returns true }
         val holder = CallSessionHolder(mockk { every { create(any(), any()) } returns session })
@@ -161,14 +161,14 @@ class CallNotificationActionIntegrationTest {
     private fun createService(): ForegroundService =
         Robolectric.buildService(ForegroundService::class.java).also { controller = it }.create().get()
 
-    /** Created, foreground-started for a live session; the state collector then posts the ongoing-call notification. */
+    
     private fun startService() {
         ForegroundService.ownerSessionId = 1L
         Robolectric.buildService(ForegroundService::class.java).also { controller = it }.create().startCommand(0, 0)
         shadowOf(Looper.getMainLooper()).idle()
     }
 
-    /** CallStyle keeps its hang-up intent in the extras; the vendor-template path adds it as an action. */
+    
     private fun hangUpIntent(notification: Notification): PendingIntent {
         @Suppress("DEPRECATION")
         val fromStyle = notification.extras.getParcelable<PendingIntent>(Notification.EXTRA_HANG_UP_INTENT)

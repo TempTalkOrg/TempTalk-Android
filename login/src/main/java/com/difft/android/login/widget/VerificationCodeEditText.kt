@@ -14,97 +14,77 @@ import androidx.appcompat.widget.AppCompatEditText
 import androidx.core.graphics.createBitmap
 import com.difft.android.login.R
 
-/**
- * Verification code input field with individual box style.
- *
- * Replaces the MNPasswordEditText library to fix the security issue of using reflection
- * to access private field `mMax` for getting maxLength.
- * Only implements features currently used: individual box style + original text display.
- *
- * Usage in XML:
- * ```xml
- * <com.difft.android.login.widget.VerificationCodeEditText
- *     android:layout_width="304dp"
- *     android:layout_height="44dp"
- *     android:inputType="number"
- *     android:maxLength="6"
- *     app:psw_show_cursor="true"
- *     app:psw_text_color="@color/t.primary"
- *     app:psw_background_color="@android:color/transparent"
- *     app:psw_border_color="@color/line"
- *     app:psw_border_selected_color="@color/t.info"
- *     app:psw_border_width="1dp"
- *     app:psw_border_radius="8dp"
- *     app:psw_item_margin="8dp" />
- * ```
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 class VerificationCodeEditText @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
     defStyleAttr: Int = android.R.attr.editTextStyle
 ) : AppCompatEditText(context, attrs, defStyleAttr) {
 
-    // Number of boxes (verification code length)
     private var boxCount: Int = 6
 
-    // Text color
     private var codeTextColor: Int = Color.BLACK
 
-    // Box background color
     private var boxBackgroundColor: Int = Color.WHITE
 
-    // Border color
     private var borderColor: Int = Color.GRAY
 
-    // Border color when selected
     private var borderSelectedColor: Int = Color.BLUE
 
-    // Border corner radius
     private var borderRadius: Float = dpToPx(6f)
 
-    // Border stroke width
     private var borderWidth: Float = dpToPx(1f)
 
-    // Margin between boxes
     private var itemMargin: Float = dpToPx(10f)
 
-    // Whether to show cursor
     private var showCursor: Boolean = false
 
-    // Cursor color
     private var cursorColor: Int = Color.BLUE
 
-    // Cursor width
     private var cursorWidth: Float = dpToPx(2f)
 
-    // Cursor height (0 means auto-calculate)
+    
     private var cursorHeight: Float = 0f
 
-    // Paint for text
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
     }
 
-    // Paint for drawing bitmaps
     private val bitmapPaint = Paint(Paint.ANTI_ALIAS_FLAG)
 
-    // Paint for cursor
     private val cursorPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
     }
 
-    // GradientDrawable for box background with border
     private val boxDrawable = GradientDrawable()
 
-    // Reused per draw to avoid Rect allocation churn from canvas.clipBounds (cursor blinks at 2 Hz).
+    
     private val reusableClipBounds = Rect()
 
-    // Cursor blink related
     private var cursorVisible = true
     private var blinkRunnable: Runnable? = null
     private var isBlinkCancelled = false
 
-    // Text change listener
     private var onTextChangeListener: OnTextChangeListener? = null
 
     init {
@@ -165,7 +145,7 @@ class VerificationCodeEditText @JvmOverloads constructor(
                 R.styleable.VerificationCodeEditText_psw_cursor_height,
                 0f
             )
-            // Prefer custom attribute for box count
+            
             boxCount = typedArray.getInt(
                 R.styleable.VerificationCodeEditText_psw_box_count,
                 0
@@ -174,21 +154,20 @@ class VerificationCodeEditText @JvmOverloads constructor(
             typedArray.recycle()
         }
 
-        // If custom attribute not set, get from maxLength (safe way)
+        
         if (boxCount <= 0) {
             boxCount = getMaxLengthSafely()
         }
 
-        // Ensure at least 1 box
         if (boxCount <= 0) {
-            boxCount = 6 // Default 6-digit verification code
+            boxCount = 6
         }
     }
 
-    /**
-     * Safely get maxLength without using reflection.
-     * Iterates through InputFilters and checks type directly.
-     */
+    
+
+
+
     private fun getMaxLengthSafely(): Int {
         val filters = filters ?: return 0
         for (filter in filters) {
@@ -200,18 +179,14 @@ class VerificationCodeEditText @JvmOverloads constructor(
     }
 
     private fun initView() {
-        // Hide native cursor
         isCursorVisible = false
-        // Set text color to transparent (we draw text ourselves)
+        
         setTextColor(Color.TRANSPARENT)
-        // Enable focus on touch
         isFocusableInTouchMode = true
-        // Disable long press (avoid clipboard menu)
+        
         setOnLongClickListener { true }
-        // Set background to transparent
         background = null
 
-        // Initialize paints
         textPaint.color = codeTextColor
         textPaint.textSize = textSize
 
@@ -221,32 +196,26 @@ class VerificationCodeEditText @JvmOverloads constructor(
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
 
-        // Get view dimensions
         val viewWidth = measuredWidth
         val viewHeight = measuredHeight
 
-        // Get the canvas clip bounds to know the actual visible area.
-        // getClipBounds(rect) returns false when the clip is empty — nothing visible,
-        // so skip the rest (matches the prior canvas.clipBounds → (0,0,0,0) → zero
-        // visible-height short-circuit; avoids allocating bitmaps for invisible draws).
+        
         if (!canvas.getClipBounds(reusableClipBounds)) return
         val visibleTop = reusableClipBounds.top.toFloat()
         val visibleHeight = (reusableClipBounds.bottom - reusableClipBounds.top).toFloat()
 
-        // Calculate box dimensions to fit within visible area
         val boxWidth = (viewWidth - itemMargin * (boxCount - 1)) / boxCount
-        val boxHeight = visibleHeight - borderWidth // Leave space for border
+        val boxHeight = visibleHeight - borderWidth
 
-        // Skip drawing when the visible area is too small to render a meaningful box
-        // (e.g. view is partially scrolled in / out — only a few px visible). Without
-        // this guard, drawableToBitmap below would call Bitmap.createBitmap with a
-        // non-positive height, throwing IllegalArgumentException.
+        
+        
+        
+        
         if (boxWidth <= 0f || boxHeight <= 0f) return
 
         val currentTextLength = text?.length ?: 0
         val currentText = text?.toString() ?: ""
 
-        // Create box bitmaps using GradientDrawable
         boxDrawable.setStroke(borderWidth.toInt(), borderColor)
         boxDrawable.cornerRadius = borderRadius
         boxDrawable.setColor(boxBackgroundColor)
@@ -258,18 +227,16 @@ class VerificationCodeEditText @JvmOverloads constructor(
             selectedBitmap = drawableToBitmap(boxDrawable, boxWidth.toInt(), boxHeight.toInt())
         }
 
-        // Draw each box - use visibleTop + offset to stay within clip bounds
+        
         val drawTop = visibleTop + borderWidth / 2
 
         for (i in 0 until boxCount) {
             val left = boxWidth * i + itemMargin * i
 
-            // Use selected bitmap for current input position
             val isSelected = (currentTextLength == i)
             val bitmap = if (isSelected && selectedBitmap != null) selectedBitmap else normalBitmap
             canvas.drawBitmap(bitmap, left, drawTop, bitmapPaint)
 
-            // Draw text (centered vertically in the visible area)
             if (i < currentTextLength) {
                 val char = currentText[i].toString()
                 val charWidth = getTextWidth(textPaint, char)
@@ -281,7 +248,6 @@ class VerificationCodeEditText @JvmOverloads constructor(
             }
         }
 
-        // Draw cursor
         if (showCursor && cursorVisible && hasFocus() && currentTextLength < boxCount) {
             val actualCursorHeight = if (cursorHeight > 0 && cursorHeight <= visibleHeight) {
                 cursorHeight
@@ -381,16 +347,10 @@ class VerificationCodeEditText @JvmOverloads constructor(
         cursorVisible = true
     }
 
-    /**
-     * Set text change listener.
-     */
     fun setOnTextChangeListener(listener: OnTextChangeListener?) {
         this.onTextChangeListener = listener
     }
 
-    /**
-     * Set text change listener (lambda version).
-     */
     fun setOnTextChangeListener(listener: (text: String, isComplete: Boolean) -> Unit) {
         this.onTextChangeListener = object : OnTextChangeListener {
             override fun onTextChange(text: String, isComplete: Boolean) {
@@ -399,12 +359,8 @@ class VerificationCodeEditText @JvmOverloads constructor(
         }
     }
 
-    /**
-     * Get current box count.
-     */
     fun getBoxCount(): Int = boxCount
 
-    // Utility methods
     private fun dpToPx(dp: Float): Float {
         return dp * context.resources.displayMetrics.density
     }
@@ -421,19 +377,16 @@ class VerificationCodeEditText @JvmOverloads constructor(
         return rect.height().toFloat()
     }
 
-    /**
-     * Text change listener interface.
-     */
     interface OnTextChangeListener {
-        /**
-         * Called when input text changes.
-         * @param text Current input text
-         * @param isComplete Whether input is complete (reached max length)
-         */
+        
+
+
+
+
         fun onTextChange(text: String, isComplete: Boolean)
     }
 
     companion object {
-        private const val BLINK_INTERVAL = 500L // Cursor blink interval (milliseconds)
+        private const val BLINK_INTERVAL = 500L 
     }
 }

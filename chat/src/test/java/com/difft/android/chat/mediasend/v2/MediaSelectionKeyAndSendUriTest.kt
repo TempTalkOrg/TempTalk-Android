@@ -18,6 +18,7 @@ import com.difft.android.test.harness.ContentSourceHarness
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -30,16 +31,16 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import java.io.File
 
-/**
- * T4 / T5 / T25 / T26 / T27 — editor-state key identity and send-URI resolution.
- *
- * All rows but T27 stay at the pure-function layer on purpose: `Store.update` dispatches onto
- * `Dispatchers.Default`, which no test dispatcher rule replaces, so asserting on state right after
- * a view model call would be intermittently wrong. T27 does need the real view model, and polls
- * through the public accessor with a bounded wait rather than assuming the update already ran.
- *
- * Run: :chat:testDebugUnitTest
- */
+
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [33])
 class MediaSelectionKeyAndSendUriTest {
@@ -55,7 +56,7 @@ class MediaSelectionKeyAndSendUriTest {
         harness = ContentSourceHarness(context)
     }
 
-    /** Rewrites `realPath` to its output and returns the same instance, as the real transforms do. */
+    
     private class RewritingTransform(private val outputPath: String) : MediaTransform {
         var invocations: Int = 0
         override fun transform(context: Context, media: LocalMedia): LocalMedia {
@@ -65,10 +66,10 @@ class MediaSelectionKeyAndSendUriTest {
         }
     }
 
-    /**
-     * Runs but keeps the original media, which is what three production branches do: transcode not
-     * required, fast remux failed, and nothing to render.
-     */
+    
+
+
+
     private class NoOpTransform : MediaTransform {
         var invocations: Int = 0
         override fun transform(context: Context, media: LocalMedia): LocalMedia {
@@ -77,13 +78,13 @@ class MediaSelectionKeyAndSendUriTest {
         }
     }
 
-    // ---------------------------------------------------------------- T4
+    
 
-    /**
-     * T4 — the state map written under a media key is found again by the repository. If the lookup
-     * still went through the bare `realPath`, this map would miss and the user's trim would be
-     * dropped without a trace.
-     */
+    
+
+
+
+
     @Test
     fun `state map lookup hits for the key the item derives`() {
         val video = LocalMediaBuilder.gallery(
@@ -101,13 +102,13 @@ class MediaSelectionKeyAndSendUriTest {
         assertTrue(models[video].toString(), models[video] is VideoTrimTransform)
     }
 
-    // ---------------------------------------------------------------- T5
+    
 
-    /**
-     * T5 — the key written on the view-model side is the same key each of the three readers looks
-     * up: `MediaSelectionState` (timeline / size hint), the page-fragment side whose key comes from
-     * ARG_URI, and the repository at the send boundary.
-     */
+    
+
+
+
+
     @Test
     fun `key written on the selection side is found by every reader`() {
         val video = LocalMediaBuilder.gallery(
@@ -123,7 +124,7 @@ class MediaSelectionKeyAndSendUriTest {
             realPath = "/storage/emulated/0/DCIM/i.jpg",
         )
         val trim = VideoTrimData(true, 8_000_000L, 1_000_000L, 5_000_000L)
-        // Exactly the derivation addMedia / onEditVideoDuration use when writing the map.
+        
         val written = mapOf<MediaKey, Any>(
             video.mediaKey() to trim,
             image.mediaKey() to ImageEditorFragment.Data(),
@@ -135,26 +136,26 @@ class MediaSelectionKeyAndSendUriTest {
             editorStateMap = written,
         )
 
-        // Reader 1: state, keyed from the media itself.
+        
         assertEquals(trim, state.getOrCreateVideoTrimData(video.mediaKey()))
-        // Reader 2: the page-fragment side, keyed from the URI the pager put into ARG_URI.
+        
         assertEquals(trim, state.getOrCreateVideoTrimData(MediaKey(video.readableUri())))
-        // Reader 3: the repository at the send boundary.
+        
         val models = repository.buildModelsToTransform(listOf(video, image), written, SentMediaQuality.HIGH)
         assertTrue(models[video].toString(), models[video] is VideoTrimTransform)
         assertTrue(models[image].toString(), models[image] is ImageEditorModelRenderMediaTransform)
     }
 
-    // ---------------------------------------------------------------- T25
+    
 
-    /**
-     * T25 — a transform that wrote new bytes must be sent from those bytes, never from the source.
-     *
-     * This is the row that pins the whole point of resolving the send URI at the transform
-     * boundary: `readableUri()` after a transform still returns the *pre-edit* content URI,
-     * because no transform rewrites `path`. Re-deriving it downstream would silently send the
-     * unedited original for every cropped, drawn-on or trimmed item.
-     */
+    
+
+
+
+
+
+
+
     @Test
     fun `send uri points at the transform output and not at the source`() {
         val edited = LocalMediaBuilder.gallery(
@@ -170,7 +171,7 @@ class MediaSelectionKeyAndSendUriTest {
             realPath = "/storage/emulated/0/DCIM/b.jpg",
         )
         val sourceUriOfEdited = edited.readableUri()
-        // The untouched item is read for real at the transform boundary, so it has to be readable.
+        
         harness.registerReadable(untouched.readableUri(), ByteArray(4))
         val outputPath = "/data/user/0/com.difft.android/files/draft_attachments/out.jpg"
         val transform = RewritingTransform(outputPath)
@@ -183,6 +184,9 @@ class MediaSelectionKeyAndSendUriTest {
 
         assertEquals(1, transform.invocations)
         assertEquals(listOf(edited, untouched), result.updated.keys.toList())
+        assertSame(edited, result.updated.keys.first())
+        assertNotSame(edited, result.updated.getValue(edited).media)
+        assertEquals("/storage/emulated/0/DCIM/a.jpg", edited.realPath)
 
         val editedSendUri = requireNotNull(result.updated[edited]).sendUri
         assertEquals(Uri.fromFile(File(outputPath)), editedSendUri)
@@ -194,13 +198,13 @@ class MediaSelectionKeyAndSendUriTest {
         assertSame(untouched, requireNotNull(result.updated[untouched]).media)
     }
 
-    // ---------------------------------------------------------------- T26
+    
 
-    /**
-     * T26 — a transform that ran but kept the original media falls back to the normalized source
-     * URI. Falling back to a file URI over the bare `realPath` here is exactly the unreadable
-     * shape under scoped storage, so this branch would keep failing on the reporting devices.
-     */
+    
+
+
+
+
     @Test
     fun `send uri falls back to the source content uri when the transform kept the original`() {
         val media = LocalMediaBuilder.gallery(
@@ -215,18 +219,68 @@ class MediaSelectionKeyAndSendUriTest {
 
         val sendUri = requireNotNull(result.updated[media]).sendUri
         assertEquals(1, transform.invocations)
+        assertSame(media, result.updated.keys.single())
+        assertNotSame(media, result.updated.getValue(media).media)
         assertEquals(Uri.parse("content://media/external/video/media/7"), sendUri)
         assertEquals("content", sendUri.scheme)
         assertNotEquals(Uri.fromFile(File("/storage/emulated/0/Movies/keep.mp4")), sendUri)
     }
 
-    // ---------------------------------------------------------------- T27
+    @Test
+    fun `sandbox transform keeps the selected source and its editor key unchanged`() {
+        val media = LocalMediaBuilder.sandbox("/data/user/0/com.difft.android/files/source.png", "image/png")
+        val sourceKey = media.mediaKey()
+        val outputPath = "/data/user/0/com.difft.android/files/draft_blobs/output.jpg"
+        val transform = RewritingTransform(outputPath)
 
-    /**
-     * T27 — removal drops the entry under the same key it was written with, and leaves the other
-     * item's editor state alone. The only deletion site in the key domain, and the one the design
-     * flags as easy to leave behind.
-     */
+        val result = repository.transformMediaSync(context, listOf(media), mapOf(media to transform))
+
+        assertTrue(result.failures.isEmpty())
+        assertSame(media, result.updated.keys.single())
+        assertNotSame(media, result.updated.getValue(media).media)
+        assertEquals(outputPath, result.updated.getValue(media).media.realPath)
+        assertEquals(Uri.fromFile(File(outputPath)), result.updated.getValue(media).sendUri)
+        assertEquals("/data/user/0/com.difft.android/files/source.png", media.realPath)
+        assertEquals(sourceKey, media.mediaKey())
+    }
+
+    @Test
+    fun `transform failure after mutation leaves source metadata available for retry`() {
+        val media = LocalMediaBuilder.gallery(mime = "image/png", realPath = "/gallery/source.png")
+        val sourceUri = media.readableUri()
+        harness.registerReadable(sourceUri, ByteArray(4))
+        val transform = object : MediaTransform {
+            override fun transform(context: Context, media: LocalMedia): LocalMedia {
+                media.path = "content://attempt/output"
+                media.realPath = "/output/failed.jpg"
+                media.mimeType = "image/jpeg"
+                media.fileName = "failed.jpg"
+                throw IllegalStateException("transform failed")
+            }
+        }
+
+        val failed = repository.transformMediaSync(context, listOf(media), mapOf(media to transform))
+
+        assertTrue(failed.updated.isEmpty())
+        assertEquals(1, failed.failures.size)
+        assertEquals(sourceUri, media.readableUri())
+        assertEquals("/gallery/source.png", media.realPath)
+        assertEquals("image/png", media.mimeType)
+        assertEquals("source.png", media.fileName)
+        val retry = repository.transformMediaSync(context, listOf(media), mapOf(media to NoOpTransform()))
+        assertTrue(retry.failures.isEmpty())
+        assertEquals(sourceUri, retry.updated.getValue(media).sendUri)
+        assertEquals("image/png", retry.updated.getValue(media).media.mimeType)
+        assertEquals("source.png", retry.updated.getValue(media).media.fileName)
+    }
+
+    
+
+    
+
+
+
+
     @Test
     fun `removeMedia drops the editor state under the media key`() {
         val kept = LocalMediaBuilder.gallery(
@@ -242,7 +296,7 @@ class MediaSelectionKeyAndSendUriTest {
             realPath = "/storage/emulated/0/DCIM/drop.jpg",
         )
         val viewModel = MediaSelectionViewModel(listOf(kept, removed), repository)
-        // Store.update runs on Dispatchers.Default, which no dispatcher rule replaces.
+        
         awaitUntil("initial editor states") {
             viewModel.getEditorState(kept.mediaKey()) != null &&
                 viewModel.getEditorState(removed.mediaKey()) != null

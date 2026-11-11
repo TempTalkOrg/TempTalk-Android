@@ -19,14 +19,14 @@ import com.difft.android.chat.R as ChatR
 
 internal const val TAG_ROW_CALL_CATEGORY = "row_call_category"
 
-/** Actions of the Calls and Critical Alerts pages. */
+
 internal class NotificationSubpageActions(
     val onFix: (NotificationFix) -> Unit,
     val onGuide: () -> Unit,
     val onBackgroundConnection: () -> Unit = {},
 )
 
-/** The Calls page: what an incoming call depends on, the category first, then the lock-screen permissions. */
+
 @Composable
 internal fun CallNotificationSettingsContent(
     state: NotificationSettingsUiState?,

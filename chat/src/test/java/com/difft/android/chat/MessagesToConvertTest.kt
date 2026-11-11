@@ -4,15 +4,15 @@ import org.difft.app.database.test.builders.buildMessageSequence
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/**
- * Case #35 — `ChatMessageListBehavior.messagesToConvert()`, the single owner of the set of messages
- * an emission needs child-table data for (window + both invisible anchors).
- *
- * Why the anchors must be in it: they are converted by `generateMessageTwo` too (they drive the
- * first row's day header / name and the last row's time), so an anchor missing from the hydration
- * `IN` set would be decorated from empty sub-data — a forwarded anchor would compare unequal to the
- * same row rendered inside the window and DiffUtil would rebind the whole edge.
- */
+
+
+
+
+
+
+
+
+
 class MessagesToConvertTest {
 
     @Test

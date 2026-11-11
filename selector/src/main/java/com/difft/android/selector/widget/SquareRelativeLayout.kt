@@ -17,7 +17,7 @@ class SquareRelativeLayout : RelativeLayout {
         super(context, attrs, defStyleAttr, defStyleRes)
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
-        // Set a square layout.
+        
         super.onMeasure(widthMeasureSpec, widthMeasureSpec)
     }
 }

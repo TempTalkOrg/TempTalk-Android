@@ -6,9 +6,7 @@ import java.io.File
 
 internal object DebuggerDetector {
 
-    /**
-     * 读取 /proc/self/status 中的 TracerPid，非 0 代表被 trace/debug.
-     */
+    
     fun isTracerPidDetected(): Boolean {
         val statusFile = File("/proc/self/status")
         if (!statusFile.exists()) {
@@ -32,9 +30,7 @@ internal object DebuggerDetector {
         return detected
     }
 
-    /**
-     * 检测 Java 调试器是否连接。
-     */
+    
     fun isDebuggerConnected(): Boolean {
         val isDebuggerConnected = Debug.isDebuggerConnected()
         L.i { "[security] DebuggerDetector isDebuggerConnected=$isDebuggerConnected" }

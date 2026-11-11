@@ -1,5 +1,5 @@
-// Synced from call-layout bf6b84ecbe, ports/kotlin/src/test/kotlin/org/difft/calllayout/ControllerGoldenTest.kt (spec v25), by scripts/sync-apps.ts.
-// Do not edit here: change call-layout and sync again.
+
+
 
 package com.difft.android.call.layout
 
@@ -20,10 +20,10 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.math.abs
 
-// Replays golden/call-layout-controller.v19.json (a test resource here) on the port's controller, as the
-// last test of test/controller.test.ts does on the reference: each script is a series of timed calls
-// with a fake clock, and after every call the published state is compared, rects within
-// tolerance.rect and everything else exactly. A step whose expect is null keeps the last one.
+
+
+
+
 class ControllerGoldenTest {
     private val golden: JsonObject by lazy {
         val text = ControllerGoldenTest::class.java.getResource("/generated/call-layout-controller.v$LAYOUT_SPEC_VERSION.json")!!.readText()
@@ -108,6 +108,8 @@ class ControllerGoldenTest {
         assertEquals(where, want.getValue("animated").jsonPrimitive.boolean, got.animated)
         assertEquals(where, want.getValue("hidden").jsonPrimitive.boolean, got.controlsHidden)
         assertEquals(where, want.getValue("focus").takeUnless { it == JsonNull }?.jsonPrimitive?.content, got.focus)
+        
+        assertEquals("$where speaker", want.getValue("speaker").takeUnless { it == JsonNull }?.jsonPrimitive?.content, got.speaker)
         val wantPager = want.getValue("pager")
         assertEquals(where, wantPager != JsonNull, got.pager != null)
         got.pager?.let { g ->

@@ -5,11 +5,11 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos.Mode
 
-/**
- * Decision table for the burns a confidential viewer owes when recreation closes it (#1440). It
- * must match the close handlers: voice/text burn only once revealed, an attachment once opened,
- * never an own or non-confidential message.
- */
+
+
+
+
+
 class ConfidentialPendingBurnTest {
 
     private fun message(id: String, isMine: Boolean, confidential: Boolean) = TextChatMessage().apply {

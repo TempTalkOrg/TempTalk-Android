@@ -26,9 +26,9 @@ import java.util.Collections
 import kotlin.math.max
 import kotlin.time.Duration.Companion.seconds
 
-/**
- * ViewModel which maintains the list of selected media and other shared values.
- */
+
+
+
 class MediaSelectionViewModel(
     initialMedia: List<LocalMedia>,
     private val repository: MediaSelectionRepository,
@@ -84,9 +84,9 @@ class MediaSelectionViewModel(
         }.toList()
 
         store.update {
-            // Initialize VideoTrimData for videos that don't have editor state yet
-            // Note: We initialize with totalInputDurationUs=0, and the accurate duration will be set
-            // when onEditVideoDuration is called with the precise value from MediaExtractor
+            
+            
+            
             val initializedVideoEditorStates = newSelectionList
                 .filterNot { media -> it.editorStateMap.containsKey(media.mediaKey()) }
                 .filter { media -> MediaUtil.isVideoType(media.mimeType) }
@@ -94,7 +94,7 @@ class MediaSelectionViewModel(
                     media.mediaKey() to VideoTrimData()
                 }
 
-            // For images, preserve existing editor states (e.g., drawings, stickers)
+            
             val initializedImageEditorStates = newSelectionList
                 .filterNot { media -> it.editorStateMap.containsKey(media.mediaKey()) }
                 .filter { media -> MediaUtil.isImageAndNotGif(media.mimeType) }
@@ -182,8 +182,8 @@ class MediaSelectionViewModel(
         }
 
         selectedMediaSubject.tryEmit(newMediaList)
-        // Snapshotted before the coroutine starts so the deletion set is fixed at the moment of
-        // removal. deleteBlobs canonicalizes paths, which is IO and must not run on this thread.
+        
+        
         val removed = listOf(media)
         viewModelScope.launch(Dispatchers.IO) { repository.deleteBlobs(removed) }
     }
@@ -225,15 +225,15 @@ class MediaSelectionViewModel(
 
             val unedited = !data.isDurationEdited
 
-            // Check if this is the initial duration sync:
-            // 1. Video not yet edited (unedited=true)
-            // 2. Start time is 0 (no trim from start)
-            // 3. Either data.totalInputDurationUs is 0 (not yet initialized), or endTimeUs covers full duration
+            
+            
+            
+            
             val isInitialDurationSync = unedited &&
                 clampedStartTime == 0L &&
                 (data.totalInputDurationUs == 0L || endTimeUs == totalDurationUs)
 
-            // On initial sync, use the accurate totalDurationUs as endTimeUs
+            
             val effectiveEndTimeUs = if (isInitialDurationSync) totalDurationUs else endTimeUs
 
             val durationEdited = clampedStartTime > 0 || effectiveEndTimeUs < totalDurationUs

@@ -40,13 +40,13 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/**
- * [CallSessionLauncher], the call's entry point: the page launch comes first, then the session
- * start, with the launch tagged by the session's key; a live call refuses the launch; a page launch
- * that throws or a session that fails to start reports false and leaves no session; an accepted
- * call stops the incoming-call service; the session's app-lock requirement and wait-dialog claim
- * come from the entry point. Robolectric for the real `Intent` extras.
- */
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [33])
 class CallSessionLauncherTest {

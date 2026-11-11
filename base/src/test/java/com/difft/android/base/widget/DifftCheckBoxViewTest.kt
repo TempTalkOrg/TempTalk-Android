@@ -11,11 +11,11 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/**
- * [DifftCheckBoxView]-specific behaviour (issue #1203): wrap_content keeps the AppCompat 32dp
- * footprint while an explicit size wins. The shared [DifftToggleView] contract comes from
- * [DifftToggleViewContractTest].
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34])
@@ -42,7 +42,7 @@ class DifftCheckBoxViewTest : DifftToggleViewContractTest() {
         assertEquals(px24, view.measuredWidth)
         assertEquals(px24, view.measuredHeight)
 
-        // wrap_content inside a real parent arrives as AT_MOST: must stay 32dp, never fill the parent.
+        
         val px1000 = (1000 * density).toInt()
         view.measure(MeasureSpec.makeMeasureSpec(px1000, MeasureSpec.AT_MOST), MeasureSpec.makeMeasureSpec(px1000, MeasureSpec.AT_MOST))
         assertEquals((32 * density).toInt(), view.measuredWidth)

@@ -12,10 +12,10 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/**
- * [CallRingtoneSource.channelSoundPolicy] decides whether the app plays its own ringtone for an
- * incoming call or defers to the sound the user assigned to the call notification channel.
- */
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class CallRingtoneSourceChannelPolicyTest {

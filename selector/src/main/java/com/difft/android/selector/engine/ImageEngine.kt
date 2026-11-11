@@ -12,9 +12,9 @@ interface ImageEngine {
 
     fun loadGridImage(context: Context, url: String?, imageView: ImageView)
 
-    /** Pause resource loading while the RecyclerView is scrolling fast. */
+    
     fun pauseRequests(context: Context)
 
-    /** Resume resource loading when scrolling slows or stops. */
+    
     fun resumeRequests(context: Context)
 }

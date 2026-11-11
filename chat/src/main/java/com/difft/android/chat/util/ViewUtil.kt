@@ -1,5 +1,6 @@
 package com.difft.android.chat.util
 
+import com.difft.android.base.utils.safeTopInset
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
@@ -23,6 +24,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.interpolator.view.animation.FastOutSlowInInterpolator
 import androidx.lifecycle.Lifecycle
+import com.difft.android.base.utils.density.UiDensity
 import com.difft.android.chat.util.concurrent.ListenableFuture
 import com.difft.android.chat.util.concurrent.SettableFuture
 import com.difft.android.chat.util.views.Stub
@@ -169,7 +171,7 @@ object ViewUtil {
 
     @JvmStatic
     fun pxToDp(px: Float): Float {
-        return px / Resources.getSystem().displayMetrics.density
+        return px / UiDensity.density
     }
 
     @JvmStatic
@@ -179,12 +181,12 @@ object ViewUtil {
 
     @JvmStatic
     fun dpToPx(dp: Int): Int {
-        return Math.round(dp * Resources.getSystem().displayMetrics.density)
+        return Math.round(dp * UiDensity.density)
     }
 
     @JvmStatic
     fun spToPx(sp: Float): Int {
-        return TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, sp, Resources.getSystem().displayMetrics).toInt()
+        return (TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, sp, Resources.getSystem().displayMetrics) * UiDensity.scale).toInt()
     }
 
     @JvmStatic
@@ -251,15 +253,15 @@ object ViewUtil {
             y > viewY && y < viewY + view.height
     }
 
-    // Pre-API-30 fallback uses the framework's internal "status_bar_height" /
-    // "navigation_bar_height" dimen resource; getIdentifier() is necessary
-    // because these are platform resources, not app resources (R.* doesn't expose them).
+    
+    
+    
     @SuppressLint("DiscouragedApi")
     @JvmStatic
     fun getStatusBarHeight(view: View): Int {
         val rootWindowInsets = ViewCompat.getRootWindowInsets(view)
-        return if (Build.VERSION.SDK_INT > 29 && rootWindowInsets != null) {
-            rootWindowInsets.getInsets(WindowInsetsCompat.Type.statusBars()).top
+        return if (rootWindowInsets != null) {
+            view.safeTopInset(rootWindowInsets)
         } else {
             var result = 0
             val resourceId = view.resources.getIdentifier("status_bar_height", "dimen", "android")
@@ -292,9 +294,9 @@ object ViewUtil {
         inputManager.hideSoftInputFromWindow(view.windowToken, 0)
     }
 
-    /**
-     * Enables or disables a view and all child views recursively.
-     */
+    
+
+
     @JvmStatic
     fun setEnabledRecursive(view: View, enabled: Boolean) {
         view.isEnabled = enabled

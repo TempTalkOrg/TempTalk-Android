@@ -1,55 +1,46 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 合并转发消息的内容布局（独立 ViewType） -->
+
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
-    android:layout_width="wrap_content"
-    android:layout_height="wrap_content">
+    android:layout_width="280dp"
+    android:layout_height="wrap_content"
+    android:tag="time_below">
 
     <LinearLayout
         android:id="@+id/ll_content"
-        android:layout_width="wrap_content"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:paddingHorizontal="8dp"
-        android:paddingVertical="8dp"
-        android:minWidth="200dp"
+        android:layout_marginHorizontal="12dp"
+        android:layout_marginTop="10dp"
+        android:layout_marginBottom="10dp"
+        android:background="@drawable/chat_quote_block_bg"
         android:orientation="vertical"
+        android:paddingHorizontal="10dp"
+        android:paddingVertical="6dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent">
 
         <androidx.appcompat.widget.AppCompatTextView
             android:id="@+id/tv_multi_title"
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textColor="@color/t.secondary"
-            android:textSize="14sp"
-            tools:text="xxx的聊天记录" />
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textSize="16sp"
+            app:lineHeight="24sp"
+            tools:text="Chat History for Manta" />
 
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/rv_forward_history"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="5dp"
-            android:nestedScrollingEnabled="false"
-            android:overScrollMode="never" />
-
-        <View
             android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:layout_marginTop="5dp"
-            android:background="@color/line" />
-
-        <androidx.appcompat.widget.AppCompatTextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="5dp"
-            android:text="@string/chat_history"
-            android:textColor="@color/t.third"
-            android:textSize="12sp" />
+            android:layout_height="wrap_content" />
 
     </LinearLayout>
 
-    <!-- 机密消息遮罩（约束到 ll_content 边界，不撑大父容器） -->
+    
     <View
         android:id="@+id/v_cover"
         android:layout_width="0dp"

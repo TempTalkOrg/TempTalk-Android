@@ -8,7 +8,7 @@ import okio.Buffer
 import okio.Sink
 import okio.Source
 
-/** In-memory [FileSource] over a byte array — for pure-JVM engine tests. */
+
 class ByteArrayFileSource(
     private val bytes: ByteArray,
     override val fileName: String = "test.bin",
@@ -19,10 +19,10 @@ class ByteArrayFileSource(
     override fun openRead(): Source = Buffer().apply { write(bytes) }
 }
 
-/**
- * In-memory [FileSink] capturing written bytes — for pure-JVM engine tests. Recomputes the
- * SHA-256 on finalize (defense-in-depth, like the real DiskFileSink) and fails on mismatch.
- */
+
+
+
+
 class CapturingFileSink : FileSink {
     val buffers = HashMap<String, Buffer>()
     var finalized: String? = null

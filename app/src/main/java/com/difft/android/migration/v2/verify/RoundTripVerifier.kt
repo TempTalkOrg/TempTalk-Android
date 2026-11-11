@@ -6,22 +6,22 @@ import com.difft.android.migration.v2.model.NeutralGroupKey
 import com.difft.android.migration.v2.model.NeutralMessage
 import com.difft.android.migration.v2.model.NeutralRecord
 
-/**
- * Compares two neutral record sets — the source exported from the seed DB against the set re-exported
- * from the target DB after a full round-trip — per entity and per field, reporting a structured diff.
- *
- * It compares neutral records rather than DB rows because local autoincrement PKs are absent from the
- * neutral model, which makes the comparison PK-agnostic: it keys on portable stableId and composite
- * identity, exactly the invariant the migration must preserve. FK links remapped during import
- * re-project into the same shape, so a faithful remap yields identical neutral records and any field
- * that does not round-trip surfaces as a [FieldMismatch].
- *
- * Attachment bytes are not compared here, since they are not part of the metadata record; the
- * round-trip test hashes the restored bytes separately.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
 object RoundTripVerifier {
 
-    /** One field that differed between source and imported. */
+    
     data class FieldMismatch(
         val entity: String,
         val stableId: String,
@@ -33,12 +33,12 @@ object RoundTripVerifier {
             "[$entity:$stableId] $field: source=$source imported=$imported"
     }
 
-    /** Structured result. [pass] is true iff there are no mismatches and no missing/extra records. */
+    
     data class Result(
         val pass: Boolean,
         val mismatches: List<FieldMismatch>,
-        val missing: List<String>,   // present in source, absent in imported
-        val extra: List<String>,     // present in imported, absent in source
+        val missing: List<String>,   
+        val extra: List<String>,     
     ) {
         fun report(): String = buildString {
             appendLine(if (pass) "ROUND-TRIP PASS" else "ROUND-TRIP FAIL")
@@ -48,12 +48,12 @@ object RoundTripVerifier {
         }
     }
 
-    /**
-     * Verify [source] round-trips to [imported]. Records are keyed by `<entityKind>:<stableId>` so
-     * order is irrelevant (the importer may re-emit in a different order than the source). Reactions
-     * / mentions / quote / forward are compared as part of their owning message (set-equality on the
-     * unordered sub-lists, since row order is not portable).
-     */
+    
+
+
+
+
+
     fun verify(source: List<NeutralRecord>, imported: List<NeutralRecord>): Result {
         val srcMap = source.associateBy { keyOf(it) }
         val impMap = imported.associateBy { keyOf(it) }
@@ -80,12 +80,12 @@ object RoundTripVerifier {
         is NeutralRecord.Attachment -> "attachment:${r.value.stableId}"
         is NeutralRecord.ConversationLocal -> "conversation:${r.value.conversationRef}"
         is NeutralRecord.GroupKey -> "groupKey:${r.value.groupId}"
-        // Identity is NOT a DB entity — it is installed into secure storage by the restore
-        // orchestrator and never lands in the staging DB, so it can never appear on the imported
-        // side of a re-projection. At most one per container, hence a constant key.
+        
+        
+        
         is NeutralRecord.Identity -> "identity"
-        // Same as Identity: memory-sink only, never a staging row, at most one per container — and
-        // it only ever exists on a same-device handoff container, which this verifier never sees.
+        
+        
         is NeutralRecord.Credential -> "credential"
         is NeutralRecord.PendingEnvelope -> "pendingEnvelope:${r.value.messageId}"
     }
@@ -125,12 +125,12 @@ object RoundTripVerifier {
         cmp("criticalAlertType", s.criticalAlertType, i.criticalAlertType)
         cmp("quote", s.quote, i.quote)
         cmp("forwardContext", s.forwardContext, i.forwardContext)
-        // Sub-lists compared as multisets (order not portable across re-export).
+        
         cmp("mentions", s.mentions.toSet(), i.mentions.toSet())
         cmp("reactions", s.reactions.toSet(), i.reactions.toSet())
-        // Compared as a multiset, since row order is not portable. Each contact's `phones` stays an
-        // ordered list, so a phone-order change surfaces — acceptable, as the autoincrement phone PK
-        // preserves that order.
+        
+        
+        
         cmp("sharedContacts", s.sharedContacts.toSet(), i.sharedContacts.toSet())
         cmp("attachmentRefs", s.attachmentRefs.toSet(), i.attachmentRefs.toSet())
         cmp("platformExtras", s.platformExtras, i.platformExtras)
@@ -155,7 +155,7 @@ object RoundTripVerifier {
         cmp("serverAttachmentId", s.serverAttachmentId, i.serverAttachmentId)
         cmp("encryptionKey", s.encryptionKey, i.encryptionKey)
         cmp("pointerOnly", s.pointerOnly, i.pointerOnly)
-        // Owner kind plus the portable {author, sentAt} of a forward-owned attachment.
+        
         cmp("owner", s.owner, i.owner)
         cmp("ownerAuthor", s.ownerAuthor, i.ownerAuthor)
         cmp("ownerSentAt", s.ownerSentAt, i.ownerSentAt)
@@ -165,12 +165,12 @@ object RoundTripVerifier {
     private fun diffConversation(s: NeutralConversationLocal, i: NeutralConversationLocal): List<FieldMismatch> {
         val id = s.conversationRef
         val m = ArrayList<FieldMismatch>()
-        // roomType is intrinsic and carried; a regression that drops it surfaces here.
+        
         if (s.roomType != i.roomType) m += FieldMismatch("conversation", id, "roomType", s.roomType, i.roomType)
         if (s.pinnedTime != i.pinnedTime) m += FieldMismatch("conversation", id, "pinnedTime", s.pinnedTime, i.pinnedTime)
         if (s.readPosition != i.readPosition) m += FieldMismatch("conversation", id, "readPosition", s.readPosition, i.readPosition)
-        // Compared as a multiset: read_info row order is not portable, since its PK is the composite
-        // {roomId, uid} rather than an autoincrement.
+        
+        
         if (s.participantReadPositions.toSet() != i.participantReadPositions.toSet()) {
             m += FieldMismatch("conversation", id, "participantReadPositions", s.participantReadPositions.toSet(), i.participantReadPositions.toSet())
         }

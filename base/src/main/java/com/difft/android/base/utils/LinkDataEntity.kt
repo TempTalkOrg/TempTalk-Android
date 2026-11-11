@@ -2,9 +2,9 @@ package com.difft.android.base.utils
 
 import android.net.Uri
 
-/**
- * Data entity for deeplink/navigation information passed via Intent.
- */
+
+
+
 data class LinkDataEntity(
     var category: Int,
     val gid: String?,

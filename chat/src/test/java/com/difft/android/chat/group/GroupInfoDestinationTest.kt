@@ -13,11 +13,11 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
-/**
- * Group info as a destination: in the home stack it is a [GroupInfoFragment] for the group;
- * outside it (group chat shell, popup) the push starts the [GroupInfoActivity] shell with
- * [KEY_GROUP_ID], as the Activity launch did before.
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33], application = Application::class)
 class GroupInfoDestinationTest {

@@ -8,16 +8,16 @@ import org.junit.Test
 import java.util.Calendar
 import java.util.TimeZone
 
-/**
- * The 12/24-hour setting is cached but re-read by [TimeFormatter.refreshHourFormat] on each app
- * foreground, so a change made in system settings applies in a long-lived process (#1395).
- */
+
+
+
+
 class TimeFormatterHourFormatTest {
 
     private val defaultReader = TimeFormatter.hourFormatReader
     private var systemIs24Hour = false
 
-    // 13:05 in the default time zone, which formatMessageTime also uses.
+    
     private val afternoon: Long = Calendar.getInstance().apply {
         set(2026, Calendar.OCTOBER, 26, 13, 5, 0)
     }.timeInMillis
@@ -39,7 +39,7 @@ class TimeFormatterHourFormatTest {
         assertEquals("01:05 PM", TimeFormatter.formatMessageTime("en", afternoon))
 
         systemIs24Hour = true
-        // Still cached until the app comes back to the foreground.
+        
         assertEquals("01:05 PM", TimeFormatter.formatMessageTime("en", afternoon))
 
         TimeFormatter.refreshHourFormat()

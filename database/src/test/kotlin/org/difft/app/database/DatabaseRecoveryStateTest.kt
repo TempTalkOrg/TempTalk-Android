@@ -10,12 +10,12 @@ import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/**
- * Tests for the recovery circuit-breaker ([DatabaseRecoveryState]) re-introduced to
- * bound consecutive recovery attempts (design `tmp/db-recovery-redesign/design.md` §6 /
- * ARCH-CRIT-1 terminal state). Pure SharedPreferences logic — no native WCDB, fully
- * runnable on the JVM host via Robolectric.
- */
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33])
 class DatabaseRecoveryStateTest {
@@ -26,7 +26,7 @@ class DatabaseRecoveryStateTest {
     @Before
     fun setUp() {
         ctx = ApplicationProvider.getApplicationContext()
-        // Fresh prefs per test: clear the dedicated file.
+        
         ctx.getSharedPreferences("db_recovery_state", Context.MODE_PRIVATE)
             .edit().clear().commit()
         state = DatabaseRecoveryState(ctx)
@@ -51,14 +51,14 @@ class DatabaseRecoveryStateTest {
     fun `count persists across instances backed by the same prefs file`() {
         state.incrementAndGet()
         state.incrementAndGet()
-        // Simulate a process restart: a brand-new instance over the same file.
+        
         val reloaded = DatabaseRecoveryState(ctx)
         assertEquals(3, reloaded.incrementAndGet(), "The count must survive a restart (persisted)")
     }
 
     @Test
     fun `breaker trips only after MAX_RECOVERY_ATTEMPTS exceeded`() {
-        // Attempts 1..MAX are allowed; the first value that EXCEEDS MAX is the terminal trip.
+        
         repeat(DatabaseRecoveryState.MAX_RECOVERY_ATTEMPTS) {
             val n = state.incrementAndGet()
             assertTrue(

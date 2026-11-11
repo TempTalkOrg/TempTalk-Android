@@ -3,14 +3,14 @@ package com.difft.android.chat.util.fragments
 import androidx.fragment.app.Fragment
 
 
-/**
- * Given an input type [T], find an instance of it first looking through all parents,
- * and then the activity.
- *
- * @return First instance found of type [T]
- * @throws ListenerNotFoundException with the hierarchy searched.
- *
- */
+
+
+
+
+
+
+
+
 inline fun <reified T> Fragment.requireListener(): T {
   val hierarchy = mutableListOf<String>()
   try {

@@ -1,33 +1,46 @@
 package com.difft.android.call.ui.layout
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.dp
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.call.LCallManager
+import com.difft.android.call.LCallToChatController
 import com.difft.android.call.LCallViewModel
 import com.difft.android.call.R
 import com.difft.android.call.core.callMemberId
@@ -36,7 +49,9 @@ import com.difft.android.call.ui.video.FrameSizeListener
 import com.difft.android.call.ui.video.ScaleType
 import com.difft.android.call.data.CallStatus
 import com.difft.android.call.data.CallUserDisplayInfo
-import com.difft.android.call.ui.PARTICIPANT_NAME_MAX_LENGTH
+import com.difft.android.call.layout.Posture
+import com.difft.android.call.ui.NAME_MEASURE_CAP
+import com.difft.android.call.ui.NameWithSuffix
 import com.difft.android.call.ui.ShowSpeakerStatusView
 import com.difft.android.call.ui.participantDisplayName
 import com.difft.android.call.ui.screenshare.ScreenSharingView
@@ -45,19 +60,20 @@ import dagger.hilt.android.EntryPointAccessors
 import io.livekit.android.room.Room
 import io.livekit.android.room.participant.Participant
 import io.livekit.android.room.participant.RemoteParticipant
+import kotlinx.coroutines.delay
 
-/** The callee's avatar on the ringing screen; smaller in picture in picture. */
+
 private val RING_AVATAR = 96.dp
 private val RING_AVATAR_PIP = 48.dp
 private val PIP_LABEL_INSET = 6.dp
 
-/**
- * The shared screen in the share tile, scaled by the plan's [contentMode]. A double tap switches
- * between the whole share and filling the window (the controller's share zoom), a tap toggles the
- * bars; while it fills, a drag looks around within [panSlack] (px it reaches past the window on
- * each side). A zoom change or picture in picture resets pinch and pan (design §4.3). Its frame
- * sizes go to the layout, which sizes the share from them.
- */
+
+
+
+
+
+
+
 @Composable
 internal fun CallShareTile(
     viewModel: LCallViewModel,
@@ -73,10 +89,11 @@ internal fun CallShareTile(
     val onFrameSize: FrameSizeListener = remember(sharerId) {
         { width, height, _ -> viewModel.layoutInputs.onShareFrameSize(sharerId, width, height) }
     }
+    var zoomResets by remember { mutableIntStateOf(0) }
     Box(
         Modifier
             .fillMaxSize()
-            // Kept to the region the plan used: a filling share never runs over the fold or the dock.
+            
             .then(
                 frame.clip?.let { clip ->
                     Modifier.drawWithContent {
@@ -88,7 +105,7 @@ internal fun CallShareTile(
             )
             .pointerInput(Unit) {
                 detectTapGestures(
-                    onDoubleTap = { viewModel.layout.toggleShareZoom() },
+                    onDoubleTap = { zoomResets++ },
                     onTap = { viewModel.callUiController.toggleOverlays() },
                 )
             },
@@ -98,6 +115,7 @@ internal fun CallShareTile(
             participant = sharer,
             reconnectCount = reconnectCount,
             zoomResetKey = inPip to contentMode,
+            zoomResetRequest = zoomResets,
             scaleType = if (contentMode == ContentMode.FILL) ScaleType.Fill else ScaleType.FitInside,
             onFrameSize = onFrameSize,
             panSlack = frame.panSlack,
@@ -106,36 +124,116 @@ internal fun CallShareTile(
     LaunchedEffect(sharer.sid) { viewModel.updateScreenShareFallback(sharer) }
 }
 
-/**
- * A 1on1 before the other person is in the room: the callee's avatar over the call, with the name
- * on the call screen (its title shows the status) or the status in picture in picture (design §4.6).
- */
+
+
+
+
+
+
+
+
 @Composable
 internal fun CallRingOverlay(
     viewModel: LCallViewModel,
     calleeUid: String,
     displayInfo: CallUserDisplayInfo?,
     inPip: Boolean,
-    // False over your own camera, which stays visible under the callee's name.
+    
     opaque: Boolean = true,
+    placement: RingPlacement = RingPlacement(null, null),
 ) {
     val callStatus by viewModel.callStatus.collectAsState()
     val controller = remember {
         EntryPointAccessors.fromApplication<LCallManager.EntryPoint>(ApplicationHelper.instance).callToChatController
     }
     val text = if (inPip) {
-        stringResource(if (callStatus == CallStatus.CALLING) R.string.call_status_calling else R.string.call_connecting_title)
+        stringResource(ringPipLabel(callStatus))
     } else {
-        StringUtil.truncateWithEllipsis(participantDisplayName(calleeUid, displayInfo?.name), PARTICIPANT_NAME_MAX_LENGTH)
+        StringUtil.truncateWithEllipsis(participantDisplayName(calleeUid, displayInfo?.name), NAME_MEASURE_CAP)
     }
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .testTag("call_ring_overlay")
-            .then(if (opaque) Modifier.background(DifftTheme.colors.background) else Modifier),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
+    val background = if (opaque) Modifier.background(DifftTheme.colors.background) else Modifier
+    RingGate(placement, inPip, LocalCallSettledPosture.current, background) {
+        RingCallee(controller, displayInfo, text, inPip)
+    }
+}
+
+
+
+
+
+
+@Composable
+internal fun RingGate(
+    placement: RingPlacement,
+    inPip: Boolean,
+    settled: Posture?,
+    background: Modifier = Modifier,
+    callee: @Composable () -> Unit,
+) {
+    var waited by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        delay(RING_SETTLE_MAX_MS)
+        waited = true
+    }
+    val drawn = remember { BooleanArray(1) }
+    drawn[0] = drawn[0] || inPip || waited || ringReady(placement, settled)
+    
+    
+    val showCallee = drawn[0]
+    RingFrame(area = placement.area.takeUnless { inPip }, modifier = Modifier.testTag("call_ring_overlay").then(background)) {
+        if (showCallee) callee()
+    }
+}
+
+
+
+
+
+
+
+@Composable
+internal fun RingFrame(area: IntRect?, modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+    val density = LocalDensity.current
+    val placed = if (area == null) {
+        Modifier.fillMaxSize()
+    } else {
+        Modifier
+            .absoluteOffset { IntOffset(area.left, area.top) }
+            .size(with(density) { DpSize(area.width.toDp(), area.height.toDp()) })
+    }
+    Box(modifier = modifier.fillMaxSize(), contentAlignment = AbsoluteAlignment.TopLeft) {
+        Column(
+            modifier = placed,
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally,
+            content = content,
+        )
+    }
+}
+
+
+
+
+
+@StringRes
+internal fun ringPipLabel(callStatus: CallStatus): Int =
+    if (callStatus == CallStatus.CALLING || callStatus == CallStatus.DISCONNECTED) {
+        R.string.call_status_calling
+    } else {
+        R.string.call_connecting_title
+    }
+
+
+internal const val RING_SETTLE_MAX_MS = 500L
+
+@Composable
+private fun RingCallee(
+    controller: LCallToChatController,
+    displayInfo: CallUserDisplayInfo?,
+    text: String,
+    inPip: Boolean,
+) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
         displayInfo?.avatarData?.let { data ->
             controller.Avatar(data = data, size = if (inPip) RING_AVATAR_PIP else RING_AVATAR)
         }
@@ -150,10 +248,10 @@ internal fun CallRingOverlay(
     }
 }
 
-/**
- * What picture in picture writes over its one view (guide §5.3): the name and mic bottom left (for a
- * share, "<name>'s screen") and the call duration top right.
- */
+
+
+
+
 @Composable
 internal fun CallPipOverlay(
     viewModel: LCallViewModel,
@@ -173,13 +271,11 @@ internal fun CallPipOverlay(
         val bottomStart = Modifier.align(Alignment.BottomStart)
         when {
             sharerName != null -> PipLabel(bottomStart) {
-                Text(
-                    text = StringUtil.truncateWithEllipsis(sharerName, PARTICIPANT_NAME_MAX_LENGTH) +
-                        stringResource(R.string.call_screen_sharing_title),
+                NameWithSuffix(
+                    name = sharerName,
+                    suffix = stringResource(R.string.call_screen_sharing_title),
                     style = DifftTheme.typography.p5,
                     color = DifftTheme.colors.textPrimary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
                 )
             }
             focus != null -> PipLabel(bottomStart) { ShowSpeakerStatusView(focus, focusName, speakingEnabled = speakingEnabled) }

@@ -9,12 +9,12 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import kotlin.test.assertNotNull
 
-/**
- * Guards the AndroidManifest registration of the P2P migration Activities that graduated from the
- * debug-only manifest to `app/src/main/AndroidManifest.xml`. Robolectric resolves against the real
- * merged manifest, so a missing <activity> entry — which crashes on device with
- * ActivityNotFoundException — fails here at build time.
- */
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 class MigrationP2pManifestTest {
 
@@ -67,8 +67,8 @@ class MigrationP2pManifestTest {
             info,
             "MigrationStatusProvider is not declared at $authority (or PeerApps names a different suffix)",
         )
-        // Exported with no permission is deliberate — the caller check lives in code — so a future
-        // manifest edit that flips either of these silently changes the security model.
+        
+        
         kotlin.test.assertTrue(info!!.exported, "the status provider must stay exported")
         kotlin.test.assertFalse(info.grantUriPermissions, "the status provider serves no URIs")
     }
@@ -76,8 +76,8 @@ class MigrationP2pManifestTest {
     @Test
     fun `MigrationHandoffEntryActivity is declared in the merged manifest under the name the trampoline uses`() {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
-        // Addressed by class NAME across packages (the retiring family does not build this screen),
-        // so the pin asserts the manifest AND that PeerApps still names the right class.
+        
+        
         val intent = Intent().setClassName(
             context.packageName,
             com.difft.android.base.migration.PeerApps.HANDOFF_ENTRY_ACTIVITY,

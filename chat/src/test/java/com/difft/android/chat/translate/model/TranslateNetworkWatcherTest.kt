@@ -14,19 +14,19 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/**
- * Registration idempotence of the translate model-download network watcher.
- *
- * `ConnectivityManager.unregisterNetworkCallback` throws `IllegalArgumentException` for a callback
- * that is not registered, so a double unregister — which the store can genuinely produce
- * (`onBackground()` + `clearOnLogout()`) — must be a no-op rather than an exception.
- *
- * Robolectric only for `Build.VERSION.SDK_INT` (a plain JVM unit test reads 0 and would take the
- * pre-28 branch); the ConnectivityManager itself is a MockK so the system calls can be counted.
- *
- * What each case asserts:
- *  - T54b register x2 -> unregister x2 calls each system API exactly once and never throws
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class TranslateNetworkWatcherTest {
@@ -46,7 +46,7 @@ class TranslateNetworkWatcherTest {
         unmockkAll()
     }
 
-    // --- T54b ---------------------------------------------------------------
+    
 
     @Test
     fun `T54b register and unregister are idempotent`() {

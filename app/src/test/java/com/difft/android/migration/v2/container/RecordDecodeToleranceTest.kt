@@ -8,7 +8,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
-/** Per-record decode faults are local: an optional Long tolerates a bad value, a bad record is skipped. */
+
 class RecordDecodeToleranceTest {
 
     private val codec = RecordJsonCodec()
@@ -56,8 +56,8 @@ class RecordDecodeToleranceTest {
 
     @Test
     fun `a retired nonFriendRemark record is skipped like any unknown type`() {
-        // The record type left the contract; a container written before that still parses, with the
-        // remark line dropped rather than failing the import.
+        
+        
         val decoded = assertIs<RecordJsonCodec.Decoded.Skipped>(codec.decode("""{"type":"nonFriendRemark","value":{}}"""))
         assertEquals("nonFriendRemark", decoded.tag)
         assertTrue(!decoded.undecodable, "a retired type is unknown, not corrupt")

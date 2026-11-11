@@ -5,9 +5,9 @@ import android.util.Log
 import com.difft.android.base.log.lumberjack.data.StackData
 import kotlin.math.min
 
-/**
- * Created by flisar on 17.01.2019.
- */
+
+
+
 
 class ConsoleTree(
     private val appendClickableLink: Boolean = true,
@@ -36,7 +36,7 @@ class ConsoleTree(
             return
         }
 
-        // Split by line, then ensure each line can fit into Log's maximum length.
+        
         var i = 0
         val length = fullMessage.length
         while (i < length) {

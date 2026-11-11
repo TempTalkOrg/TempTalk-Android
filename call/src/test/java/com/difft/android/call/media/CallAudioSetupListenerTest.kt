@@ -25,15 +25,15 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/**
- * Device-change listener wiring in [CallAudioSetup] (design inventory rows #24 and #25).
- *
- * `start()` registers from `Dispatchers.IO`, which no test scheduler controls, so registration is
- * awaited with a MockK verification timeout rather than by advancing virtual time.
- *
- * Robolectric rather than plain JVM: mocking `AudioPipelineProcessor` runs its class initializer,
- * which calls `android.util.Log` — unmocked in the plain android.jar stub.
- */
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33])
 class CallAudioSetupListenerTest {
@@ -73,7 +73,7 @@ class CallAudioSetupListenerTest {
         return listener.captured
     }
 
-    // ── #24 ─────────────────────────────────────────────────────────────────────
+    
     @Test
     fun `the listener forwards the whole device list, not just the selection`() {
         val bt = btDevice()
@@ -87,14 +87,14 @@ class CallAudioSetupListenerTest {
         assertEquals(2, devices.captured.size)
     }
 
-    // ── #25 ─────────────────────────────────────────────────────────────────────
+    
     @Test
     fun `a null selection does not recompute denoise`() {
         val listener = startAndCaptureListener()
 
         listener.invoke(listOf(btDevice()), null)
 
-        // The null half of every retry round's selectDevice round trip must not flap denoise.
+        
         verify(exactly = 0) { audioProcessor.setDenoiseEnabled(any()) }
         verify(exactly = 1) { audioDeviceManager.onLibraryDevicesChanged(any(), null) }
     }

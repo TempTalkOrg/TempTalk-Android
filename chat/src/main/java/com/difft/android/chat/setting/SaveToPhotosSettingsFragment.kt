@@ -34,10 +34,10 @@ import dagger.hilt.android.lifecycle.withCreationCallback
 import difft.android.messageserialization.For
 import javax.inject.Inject
 
-/**
- * Conversation-level save to photos: default (follow the global setting), always, never. A page
- * of the home detail stack or its shell.
- */
+
+
+
+
 @AndroidEntryPoint
 class SaveToPhotosSettingsFragment : Fragment(), SettingsIdiomPage {
 
@@ -94,7 +94,7 @@ class SaveToPhotosSettingsFragment : Fragment(), SettingsIdiomPage {
         }
     }
 
-    /** Label of the "follow the global setting" option, carrying that setting's current state. */
+    
     private fun defaultOptionLabel(): String {
         val globalEnabled = userManager.getUserData()?.saveToPhotos == true
         val statusText = getString(if (globalEnabled) R.string.save_to_photos_on else R.string.save_to_photos_off)
@@ -107,7 +107,7 @@ class SaveToPhotosSettingsFragment : Fragment(), SettingsIdiomPage {
     }
 }
 
-/** Save to photos as a detail destination (home detail stack, or its shell Activity). */
+
 class SaveToPhotosSettingsDestination(private val target: For) : DetailDestination {
     override fun newFragment(): Fragment = SaveToPhotosSettingsFragment.newInstance(target)
     override fun shellIntent(context: Context): Intent = SaveToPhotosSettingsActivity.intent(context, target)

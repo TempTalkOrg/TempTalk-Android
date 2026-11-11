@@ -1,8 +1,4 @@
-<!-- Info (circled "i") message action icon. Stroke-only. The Figma export was the inner
-     16.6666-unit vector group WITHOUT its 20x20 icon frame, so the glyph must sit on a
-     20-unit viewport with (20-16.6666)/2 padding — rendering the raw group at the menu's
-     20dp icon size scales the circle ~20% larger than every sibling icon.
-     Menu tints it uniformly; the declared color only applies outside the tinted menu. -->
+
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="20dp"
     android:height="20dp"

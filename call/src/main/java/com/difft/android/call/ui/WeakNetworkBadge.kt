@@ -20,27 +20,25 @@ import com.difft.android.call.R
 import com.difft.android.call.core.CallUiController
 import com.difft.android.call.network.resolveBadge
 
-/** Figma 17277:1367 — a 20dp badge box whose 14dp icon frame sits at (3,3), i.e. centred. */
+
 private val BADGE_BOX = 20.dp
 private val BADGE_ICON = 14.dp
 private val BADGE_CORNER = 4.dp
 
-/**
- * Weak-network badge for one participant tile. Renders only the BAD tier (the design draws no
- * good/excellent state); the verdict, both suppression rules, the local-tile exclusion and the
- * two-person hand-off to the top banner are all applied in [resolveBadge] — this composable never
- * re-derives them.
- *
- * Collects [CallUiController.networkQuality] HERE rather than in the call tile: a collector in the
- * tile's own scope would recompose the whole card (and its AndroidView video renderer) on every
- * quality change, for every participant.
- *
- * @param localIdentity the local user's uid (`globalServices.myId`) — the SAME string the local tile
- *   passes as [identity]. Never the SDK identity: the local tile's uid is the bare uid, so a suffixed
- *   identity would make the equality probe miss and badge the local tile after all.
- * @param identity this tile's uid — bare uid for the local tile, `identity.value` for a remote.
- * @param participantCount local + the remotes currently in the room; see [resolveBadge].
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 @Composable
 internal fun ParticipantWeakNetworkBadge(
     controller: CallUiController,
@@ -61,12 +59,10 @@ internal fun ParticipantWeakNetworkBadge(
     ) {
         Icon(
             painter = painterResource(id = R.drawable.call_ic_wifi_x),
-            // The glyph carries no text, so screen readers get the peer-side copy the banner would
-            // have spoken in a two-person call.
+            
+            
             contentDescription = stringResource(id = R.string.call_other_network_poor_tip),
-            // Literal white, not textPrimary: the design fills this glyph pure #FFFFFF while
-            // textPrimary is #EAECEF. Same convention (and same forced-dark subtree) as
-            // MainPageWithTopStatusView's literal Color.White icons.
+            
             tint = Color.White,
             modifier = Modifier.size(BADGE_ICON),
         )

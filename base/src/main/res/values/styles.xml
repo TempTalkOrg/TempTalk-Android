@@ -1,7 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- Base application theme (Theme.Chative) is defined in themes.xml (light) and values-night/themes.xml (dark). -->
+    
+
+    
+    <style name="Animation.Chative.Activity" parent="@android:style/Animation.Activity">
+        <item name="android:activityOpenEnterAnimation">@anim/page_push_enter</item>
+        <item name="android:activityOpenExitAnimation">@anim/page_push_exit</item>
+        <item name="android:activityCloseEnterAnimation">@anim/page_pop_enter</item>
+        <item name="android:activityCloseExitAnimation">@anim/page_pop_exit</item>
+    </style>
 
     <style name="CustomBottomSheetDialogTheme" parent="Theme.Design.Light.BottomSheetDialog">
         <item name="bottomSheetStyle">@style/CustomBottomSheetStyle</item>

@@ -11,7 +11,7 @@ import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** The notification test results in app_state, one key per test (#1350). Malformed values read as absent. */
+
 @Singleton
 class NotificationTestStore @Inject constructor(
     @param:AppStateDataStore private val dataStore: DataStore<Preferences>,
@@ -40,7 +40,7 @@ class NotificationTestStore @Inject constructor(
         dataStore.edit { it[AppStateKeys.NOTIF_TEST_CALL_TICKET] = ticket.encode() }
     }
 
-    /** The condition and result update share the durable transaction, including after process death. */
+    
     suspend fun updateCall(runId: String, nowMs: Long, shown: Boolean): NotificationTestCallUpdate {
         var result = NotificationTestCallUpdate.REJECTED
         dataStore.edit { prefs ->
@@ -82,7 +82,7 @@ class NotificationTestStore @Inject constructor(
         return ticket
     }
 
-    /** Channel ids the user opened the system settings page of; empty when unreadable. */
+    
     suspend fun readSeenCategories(): Set<String> = try {
         dataStore.data.first()[AppStateKeys.NOTIF_CATEGORY_SEEN].orEmpty()
     } catch (e: IOException) {

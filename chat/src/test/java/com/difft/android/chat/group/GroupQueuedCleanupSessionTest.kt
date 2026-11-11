@@ -27,7 +27,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/** Real deferred message cleanup uses the authorizing session again when its queued work runs. */
+
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -44,8 +44,8 @@ class GroupQueuedCleanupSessionTest {
         every { appScope } returns scope
         mockkStatic("org.difft.app.database.WCDBExtensionsKt")
         every { wcdb } returns database
-        // Host tests cannot load WCDB's native Table. An authorized deletion reaches this storage
-        // guard; a stale one must return before any access, including this property.
+        
+        
         every { database.isDbInaccessible } returns true
         every { userManager.getUserData() } answers { user }
         mockkObject(RoomChangeTracker)
@@ -108,7 +108,7 @@ class GroupQueuedCleanupSessionTest {
         store.removeRoomAndMessages("legacy-then-guarded") { original.isCurrent(userManager) }
         user = UserData(account = "owner", baseAuth = "fixture-b")
         scope.runCurrent()
-        // The stale in-flight loop returns before storage; only the re-driven legacy redelete reaches it.
+        
         verify(exactly = 1) { database.isDbInaccessible }
     }
 

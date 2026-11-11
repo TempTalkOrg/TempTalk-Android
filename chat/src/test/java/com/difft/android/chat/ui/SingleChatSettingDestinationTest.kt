@@ -14,11 +14,11 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
-/**
- * The 1:1 chat settings destination: in the home stack it becomes a [SingleChatSettingFragment]
- * for the contact; outside it (chat shell, popup, contact card Activity) the push starts the
- * [SingleChatSettingActivity] shell with today's "id" extra.
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33], application = Application::class)
 class SingleChatSettingDestinationTest {

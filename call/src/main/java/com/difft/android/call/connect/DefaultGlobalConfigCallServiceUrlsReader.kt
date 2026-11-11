@@ -7,9 +7,9 @@ import com.difft.android.base.log.lumberjack.L
 import org.json.JSONArray
 import org.json.JSONObject
 
-/**
- * Parses `data.call.callServers.serviceUrls` from the assets [DEFAULT_GLOBAL_CONFIG] file.
- */
+
+
+
 object DefaultGlobalConfigCallServiceUrlsReader {
 
     private const val DEFAULT_GLOBAL_CONFIG = "default_global_config.json"

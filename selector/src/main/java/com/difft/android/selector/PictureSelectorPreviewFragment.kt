@@ -36,8 +36,10 @@ import androidx.recyclerview.widget.SimpleItemAnimator
 import androidx.viewpager2.widget.MarginPageTransformer
 import androidx.viewpager2.widget.ViewPager2
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.utils.SharedUriGuard
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
+import com.difft.android.base.widget.floatAsTopBarButton
 import com.difft.android.selector.adapter.PicturePreviewAdapter
 import com.difft.android.selector.adapter.holder.BasePreviewHolder
 import com.difft.android.selector.adapter.holder.PreviewGalleryAdapter
@@ -79,9 +81,6 @@ import com.difft.android.selector.widget.TitleBar
 import java.io.File
 import java.util.Collections
 
-/**
- * 1:1 Java→Kotlin port (issue #1077); structural split deferred — see #1077 future work.
- */
 @Suppress("LargeClass")
 open class PictureSelectorPreviewFragment : PictureCommonFragment() {
 
@@ -95,14 +94,11 @@ open class PictureSelectorPreviewFragment : PictureCommonFragment() {
 
     protected lateinit var bottomNarBar: PreviewBottomNavBar
 
-    /** Bottom-centre exit for the external (message) preview; GONE (absent) for the picker's own preview. */
+    
     private lateinit var bottomCloseButton: View
 
     protected lateinit var titleBar: PreviewTitleBar
 
-    /**
-     * if there more
-     */
     protected var isHasMore = true
 
     protected var curPosition = 0
@@ -111,24 +107,12 @@ open class PictureSelectorPreviewFragment : PictureCommonFragment() {
 
     protected var isSaveInstanceState = false
 
-    /**
-     * 当前相册
-     */
     protected var currentAlbum: String? = null
 
-    /**
-     * 是否显示了拍照入口
-     */
     protected var isShowCamera = false
 
-    /**
-     * 是否外部预览进来
-     */
     protected var isExternalPreview = false
 
-    /**
-     * 外部预览是否支持删除
-     */
     protected var isDisplayDelete = false
 
     protected var isAnimationStart = false
@@ -164,18 +148,18 @@ open class PictureSelectorPreviewFragment : PictureCommonFragment() {
 
     override fun getFragmentTag(): String = TAG
 
-    /**
-     * 内部预览
-     *
-     * @param isBottomPreview  是否顶部预览进来的
-     * @param currentAlbumName 当前预览的目录
-     * @param isShowCamera     是否有显示拍照图标
-     * @param position         预览下标
-     * @param totalNum         当前预览总数
-     * @param page             当前页码
-     * @param currentBucketId  当前相册目录id
-     * @param data             预览数据源
-     */
+    
+
+
+
+
+
+
+
+
+
+
+
     fun setInternalPreviewData(
         isBottomPreview: Boolean, currentAlbumName: String?, isShowCamera: Boolean,
         position: Int, totalNum: Int, page: Int, currentBucketId: Long,
@@ -191,14 +175,14 @@ open class PictureSelectorPreviewFragment : PictureCommonFragment() {
         this.isInternalBottomPreview = isBottomPreview
     }
 
-    /**
-     * 外部预览
-     *
-     * @param position        预览下标
-     * @param totalNum        当前预览总数
-     * @param data            预览数据源
-     * @param isDisplayDelete 是否显示删除按钮
-     */
+    
+
+
+
+
+
+
+
     fun setExternalPreviewData(position: Int, totalNum: Int, data: ArrayList<LocalMedia>, isDisplayDelete: Boolean) {
         this.mData = data
         this.totalNum = totalNum
@@ -216,7 +200,6 @@ open class PictureSelectorPreviewFragment : PictureCommonFragment() {
     }
 
     override fun onSelectedChange(isAddRemove: Boolean, currentMedia: LocalMedia) {
-        // 更新TitleBar和BottomNarBar选择态
         tvSelected.isSelected = selectorConfig.selectedResult.contains(currentMedia)
         bottomNarBar.setSelectedChange()
         completeSelectView.setSelectedChange(true)
@@ -239,6 +222,7 @@ open class PictureSelectorPreviewFragment : PictureCommonFragment() {
         tvSelectedWord = view.findViewById(R.id.ps_tv_selected_word)
         selectClickArea = view.findViewById(R.id.select_click_area)
         ivShare = view.findViewById(R.id.ps_iv_share)
+        ivShare.floatAsTopBarButton(leading = false)
         completeSelectView = view.findViewById(R.id.ps_complete_select)
         magicalView = view.findViewById(R.id.magical)
         viewPager = ViewPager2(requireContext())
@@ -261,9 +245,6 @@ open class PictureSelectorPreviewFragment : PictureCommonFragment() {
         iniMagicalView()
     }
 
-    /**
-     * addAminViews
-     */
     fun addAminViews(vararg views: View) {
         Collections.addAll(mAnimViews, *views)
     }
@@ -304,9 +285,6 @@ open class PictureSelectorPreviewFragment : PictureCommonFragment() {
         onKeyDownBackToMin()
     }
 
-    /**
-     * 设置MagicalView
-     */
     private fun iniMagicalView() {
         if (isHasMagicalEffect()) {
             val alpha = if (isSaveInstanceState) 1.0f else 0.0f
@@ -326,9 +304,6 @@ open class PictureSelectorPreviewFragment : PictureCommonFragment() {
         return !isInternalBottomPreview && selectorConfig.isPreviewZoomEffect
     }
 
-    /**
-     * 设置MagicalView监听器
-     */
     protected fun setMagicalViewAction() {
         if (isHasMagicalEffect()) {
             magicalView.setOnMojitoViewCallback(object : OnMagicalViewCallback {
@@ -355,9 +330,6 @@ open class PictureSelectorPreviewFragment : PictureCommonFragment() {
         }
     }
 
-    /**
-     * 开始准备执行缩放动画
-     */
     protected fun onMojitoBeginBackMinAnim() {
         val currentHolder = viewPageAdapter.getCurrentHolder(viewPager.currentItem) ?: return
         if (currentHolder.coverImageView!!.visibility == View.GONE) {
@@ -370,9 +342,6 @@ open class PictureSelectorPreviewFragment : PictureCommonFragment() {
         }
     }
 
-    /**
-     * 关闭缩放动画执行完成后关闭页面
-     */
     protected fun onMojitoMagicalViewFinish() {
         if (isExternalPreview && isNormalDefaultEnter() && isHasMagicalEffect()) {
             onExitPictureSelector()
@@ -381,9 +350,6 @@ open class PictureSelectorPreviewFragment : PictureCommonFragment() {
         }
     }
 
-    /**
-     * 缩放动画执行时透明度跟随变化
-     */
     protected fun onMojitoBackgroundAlpha(alpha: Float) {
         for (i in mAnimViews.indices) {
             if (mAnimViews[i] is TitleBar) {
@@ -393,9 +359,6 @@ open class PictureSelectorPreviewFragment : PictureCommonFragment() {
         }
     }
 
-    /**
-     * 关闭缩放动画执行完成
-     */
     protected fun onMojitoBeginBackMinFinish(isResetSize: Boolean) {
         val itemViewParams = BuildRecycleItemViewParams.getItemViewParams(if (isShowCamera) curPosition + 1 else curPosition) ?: return
         val currentHolder = viewPageAdapter.getCurrentHolder(viewPager.currentItem) ?: return
@@ -404,9 +367,6 @@ open class PictureSelectorPreviewFragment : PictureCommonFragment() {
         currentHolder.coverImageView!!.scaleType = ImageView.ScaleType.CENTER_CROP
     }
 
-    /**
-     * 缩放动画执行完成
-     */
     protected fun onMojitoBeginAnimComplete(mojitoView: MagicalView, showImmediately: Boolean) {
         val currentHolder = viewPageAdapter.getCurrentHolder(viewPager.currentItem) ?: return
         val media = mData[viewPager.currentItem]
@@ -453,7 +413,6 @@ open class PictureSelectorPreviewFragment : PictureCommonFragment() {
 
     override fun onCreateAnimation(transit: Int, enter: Boolean, nextAnim: Int): Animation? {
         if (isHasMagicalEffect()) {
-            // config.isPreviewZoomEffect模式下使用缩放动画
             return null
         }
         val windowAnimationStyle = selectorConfig.selectorStyle.windowAnimationStyle!!
@@ -533,9 +492,6 @@ open class PictureSelectorPreviewFragment : PictureCommonFragment() {
         }
     }
 
-    /**
-     * 加载更多
-     */
     private fun loadMoreData() {
         mPage++
         val engine = selectorConfig.loaderDataEngine
@@ -687,9 +643,9 @@ open class PictureSelectorPreviewFragment : PictureCommonFragment() {
                 val availablePath = currentMedia.availablePath
                 val uri: Uri
                 if (PictureMimeType.isContent(availablePath)) {
-                    // Encrypted-at-rest attachment: the media is backed by a decrypting content uri
-                    // and the plaintext realPath does not exist on disk — share the content uri
-                    // directly so the receiver reads decrypted bytes (no FileProvider/ENOENT).
+                    
+                    
+                    
                     uri = Uri.parse(availablePath)
                 } else {
                     val file = File(currentMedia.realPath)
@@ -698,11 +654,12 @@ open class PictureSelectorPreviewFragment : PictureCommonFragment() {
                 val intent = Intent(Intent.ACTION_SEND)
                 intent.type = currentMedia.mimeType
                 intent.putExtra(Intent.EXTRA_STREAM, uri)
-                // clipData carries the grant reliably across the chooser to the resolved target.
+                
                 intent.clipData = ClipData.newRawUri(currentMedia.fileName, uri)
                 intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
 
-                requireActivity().startActivity(Intent.createChooser(intent, currentMedia.fileName))
+                val chooser = Intent.createChooser(intent, currentMedia.fileName)
+                requireActivity().startActivity(SharedUriGuard.excludeOwnTargets(requireContext(), chooser))
             } catch (e: Exception) {
                 L.w(e) { "Share: share File error" }
             }
@@ -775,7 +732,7 @@ open class PictureSelectorPreviewFragment : PictureCommonFragment() {
                             return
                         }
                         if (viewPager.adapter != null) {
-                            // 这里清空一下重新设置，发现频繁调用setCurrentItem会出现页面闪现之前图片
+                            
                             viewPager.adapter = null
                             viewPager.adapter = viewPageAdapter
                         }
@@ -810,9 +767,7 @@ open class PictureSelectorPreviewFragment : PictureCommonFragment() {
 
                 override fun onMove(recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder, target: RecyclerView.ViewHolder): Boolean {
                     try {
-                        //得到item原来的position
                         val fromPosition = viewHolder.absoluteAdapterPosition
-                        //得到目标position
                         val toPosition = target.absoluteAdapterPosition
                         val galleryData = mGalleryAdapter!!.getData() as MutableList<LocalMedia>
                         if (fromPosition < toPosition) {
@@ -930,9 +885,6 @@ open class PictureSelectorPreviewFragment : PictureCommonFragment() {
         }
     }
 
-    /**
-     * 刷新画廊数据选中状态
-     */
     private fun notifyGallerySelectMedia(currentMedia: LocalMedia) {
         val galleryAdapter = mGalleryAdapter
         if (galleryAdapter != null && selectorConfig.selectorStyle.selectMainStyle!!.isPreviewDisplaySelectGallery) {
@@ -940,9 +892,6 @@ open class PictureSelectorPreviewFragment : PictureCommonFragment() {
         }
     }
 
-    /**
-     * 刷新画廊数据
-     */
     private fun notifyPreviewGalleryData(isAddRemove: Boolean, currentMedia: LocalMedia) {
         val galleryAdapter = mGalleryAdapter
         if (galleryAdapter != null && selectorConfig.selectorStyle.selectMainStyle!!.isPreviewDisplaySelectGallery) {
@@ -964,9 +913,6 @@ open class PictureSelectorPreviewFragment : PictureCommonFragment() {
         }
     }
 
-    /**
-     * 调用了startPreview预览逻辑
-     */
     @SuppressLint("NotifyDataSetChanged")
     private fun deletePreview() {
         if (isDisplayDelete) {
@@ -991,9 +937,6 @@ open class PictureSelectorPreviewFragment : PictureCommonFragment() {
         }
     }
 
-    /**
-     * 处理外部预览返回处理
-     */
     private fun handleExternalPreviewBack() {
         if (!ActivityCompatHelper.isDestroy(activity)) {
             if (selectorConfig.isPreviewFullScreenMode) {
@@ -1030,7 +973,7 @@ open class PictureSelectorPreviewFragment : PictureCommonFragment() {
         })
     }
 
-    /** Shared exit path of the title-bar back arrow and the bottom close button. */
+    
     private fun closePreview() {
         if (isExternalPreview) {
             if (selectorConfig.isPreviewZoomEffect) {
@@ -1047,9 +990,6 @@ open class PictureSelectorPreviewFragment : PictureCommonFragment() {
         }
     }
 
-    /**
-     * 外部预览的样式
-     */
     private fun externalPreviewStyle() {
         titleBar.getImageDelete().visibility = if (isDisplayDelete) View.VISIBLE else View.GONE
         tvSelected.visibility = View.GONE
@@ -1057,7 +997,7 @@ open class PictureSelectorPreviewFragment : PictureCommonFragment() {
         completeSelectView.visibility = View.GONE
         ivShare.visibility = if (selectorConfig.isHidePreviewShare) View.GONE else View.VISIBLE
 
-        // GONE doubles as "this page has no bottom close button" for setBottomCloseYieldingToControls.
+        
         bottomCloseButton.visibility = if (selectorConfig.isHideBottomClose) View.GONE else View.VISIBLE
         bottomCloseButton.setOnClickListener { closePreview() }
 
@@ -1065,7 +1005,7 @@ open class PictureSelectorPreviewFragment : PictureCommonFragment() {
             addConfidentialTipView()
         }
 
-        // Default to fullscreen mode with titlebar hidden
+        
         if (selectorConfig.isPreviewFullScreenMode) {
             initHiddenTitleBar()
         }
@@ -1091,22 +1031,19 @@ open class PictureSelectorPreviewFragment : PictureCommonFragment() {
         parent.addView(tipView, params)
     }
 
-    /**
-     * Video pages: the media3 control bar shares the bottom edge with the close button, so the
-     * button yields while the bar is up and returns when the bar hides (auto-hide or the next tap,
-     * which also toggles the title bar). GONE means the page has no bottom close button at all.
-     */
+    
+
+
+
+
     private fun setBottomCloseYieldingToControls(controlsVisible: Boolean) {
         if (bottomCloseButton.visibility == View.GONE) return
         bottomCloseButton.visibility = if (controlsVisible) View.INVISIBLE else View.VISIBLE
     }
 
-    /**
-     * Initialize titlebar as hidden for fullscreen preview mode
-     */
     private fun initHiddenTitleBar() {
         titleBar.post {
-            // Set initial state: titlebar hidden (translated up by its height)
+            
             titleBar.translationY = -titleBar.height.toFloat()
             for (view in mAnimViews) {
                 view.alpha = 0.0f
@@ -1143,9 +1080,6 @@ open class PictureSelectorPreviewFragment : PictureCommonFragment() {
         startZoomEffect(media)
     }
 
-    /**
-     * 启动预览缩放特效
-     */
     protected fun startZoomEffect(media: LocalMedia) {
         if (isSaveInstanceState || isInternalBottomPreview) {
             return
@@ -1170,9 +1104,6 @@ open class PictureSelectorPreviewFragment : PictureCommonFragment() {
         }
     }
 
-    /**
-     * start magical
-     */
     private fun start(size: IntArray) {
         magicalView.changeRealScreenHeight(size[0], size[1], false)
         val viewParams = BuildRecycleItemViewParams.getItemViewParams(if (isShowCamera) curPosition + 1 else curPosition)
@@ -1191,9 +1122,6 @@ open class PictureSelectorPreviewFragment : PictureCommonFragment() {
         ObjectAnimator.ofFloat(viewPager, "alpha", 0.0f, 1.0f).setDuration(50).start()
     }
 
-    /**
-     * ViewPageAdapter回调事件处理
-     */
     private inner class MyOnPreviewEventListener : BasePreviewHolder.OnPreviewEventListener {
 
         override fun onBackPressed() {
@@ -1238,9 +1166,6 @@ open class PictureSelectorPreviewFragment : PictureCommonFragment() {
         }
     }
 
-    /**
-     * 回到初始位置
-     */
     private fun onKeyDownBackToMin() {
         if (!ActivityCompatHelper.isDestroy(activity)) {
             if (isExternalPreview) {
@@ -1259,9 +1184,6 @@ open class PictureSelectorPreviewFragment : PictureCommonFragment() {
         }
     }
 
-    /**
-     * 预览全屏模式
-     */
     private fun previewFullScreenMode() {
         if (isAnimationStart) {
             return
@@ -1295,9 +1217,6 @@ open class PictureSelectorPreviewFragment : PictureCommonFragment() {
         }
     }
 
-    /**
-     * 全屏模式
-     */
     private fun showFullScreenStatusBar() {
         for (i in mAnimViews.indices) {
             mAnimViews[i].isEnabled = false
@@ -1305,9 +1224,6 @@ open class PictureSelectorPreviewFragment : PictureCommonFragment() {
         bottomNarBar.getEditor().isEnabled = false
     }
 
-    /**
-     * 隐藏全屏模式
-     */
     private fun hideFullScreenStatusBar() {
         for (i in mAnimViews.indices) {
             mAnimViews[i].isEnabled = true
@@ -1315,9 +1231,6 @@ open class PictureSelectorPreviewFragment : PictureCommonFragment() {
         bottomNarBar.getEditor().isEnabled = true
     }
 
-    /**
-     * 外部预览长按下载
-     */
     private fun onExternalLongPressDownload(media: LocalMedia) {
         val listener = selectorConfig.onExternalPreviewEventListener ?: return
         if (!listener.onLongPressDownload(context, media)) {
@@ -1384,7 +1297,7 @@ open class PictureSelectorPreviewFragment : PictureCommonFragment() {
             if (mData.size > position) {
                 val currentMedia = mData[position]
                 notifySelectNumberStyle(currentMedia)
-                // A newly selected video page (re)starts with its control bar hidden; images have none.
+                
                 setBottomCloseYieldingToControls(false)
                 if (isHasMagicalEffect()) {
                     changeMagicalViewParams(position)
@@ -1419,18 +1332,12 @@ open class PictureSelectorPreviewFragment : PictureCommonFragment() {
         }
     }
 
-    /**
-     * 自动播放视频
-     */
     private fun startAutoVideoPlay(position: Int) {
         viewPager.post {
             viewPageAdapter.startAutoVideoPlay(position)
         }
     }
 
-    /**
-     * 更新MagicalView ViewParams 参数
-     */
     private fun changeMagicalViewParams(position: Int) {
         val media = mData[position]
         if (PictureMimeType.isHasVideo(media.mimeType)) {
@@ -1448,9 +1355,6 @@ open class PictureSelectorPreviewFragment : PictureCommonFragment() {
         }
     }
 
-    /**
-     * setMagicalViewParams
-     */
     private fun setMagicalViewParams(imageWidth: Int, imageHeight: Int, position: Int) {
         magicalView.changeRealScreenHeight(imageWidth, imageHeight, true)
         val viewParams = BuildRecycleItemViewParams.getItemViewParams(if (isShowCamera) position + 1 else position)
@@ -1461,9 +1365,6 @@ open class PictureSelectorPreviewFragment : PictureCommonFragment() {
         }
     }
 
-    /**
-     * 获取图片Media的真实大小
-     */
     private fun getImageRealSizeFromMedia(media: LocalMedia, resize: Boolean, call: OnCallbackListener<IntArray>) {
         var realWidth: Int
         var realHeight: Int
@@ -1478,7 +1379,7 @@ open class PictureSelectorPreviewFragment : PictureCommonFragment() {
                 if ((realWidth <= 0 || realHeight <= 0) || (realWidth > realHeight)) {
                     if (selectorConfig.isSyncWidthAndHeight) {
                         isReturnNow = false
-                        // 先不展现内容，异步获取可能耗时会导致界面先出现图片而后在放大出现
+                        
                         viewPager.alpha = 0f
                         MediaUtils.getImageSize(requireContext(), media.availablePath, object : OnCallbackListener<MediaExtraInfo> {
                             override fun onCall(data: MediaExtraInfo?) {
@@ -1504,16 +1405,13 @@ open class PictureSelectorPreviewFragment : PictureCommonFragment() {
         }
     }
 
-    /**
-     * 获取视频Media的真实大小
-     */
     private fun getVideoRealSizeFromMedia(media: LocalMedia, resize: Boolean, call: OnCallbackListener<IntArray>) {
         var isReturnNow = true
         if (resize) {
             if ((media.width <= 0 || media.height <= 0) || (media.width > media.height)) {
                 if (selectorConfig.isSyncWidthAndHeight) {
                     isReturnNow = false
-                    // 先不展现内容，异步获取可能耗时会导致界面先出现图片而后在放大出现
+                    
                     viewPager.alpha = 0f
                     MediaUtils.getVideoSize(requireContext(), media.availablePath, object : OnCallbackListener<MediaExtraInfo> {
                         override fun onCall(data: MediaExtraInfo?) {
@@ -1534,9 +1432,6 @@ open class PictureSelectorPreviewFragment : PictureCommonFragment() {
         }
     }
 
-    /**
-     * 对选择数量进行编号排序
-     */
     fun notifySelectNumberStyle(currentMedia: LocalMedia) {
         if (selectorConfig.selectorStyle.selectMainStyle!!.isPreviewSelectNumberStyle) {
             if (selectorConfig.selectorStyle.selectMainStyle!!.isSelectNumberStyle) {
@@ -1553,9 +1448,6 @@ open class PictureSelectorPreviewFragment : PictureCommonFragment() {
         }
     }
 
-    /**
-     * 当前图片是否选中
-     */
     protected fun isSelected(media: LocalMedia): Boolean {
         return selectorConfig.selectedResult.contains(media)
     }

@@ -10,11 +10,11 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
-/**
- * A pending envelope (#1382) lands in the target's `pending_message_new` exactly as the source held
- * it, in its own transaction, and a row that cannot be stored fails the import rather than being
- * counted and skipped like other records.
- */
+
+
+
+
+
 class PendingEnvelopeImportTest {
 
     private val bytes = byteArrayOf(8, 1, 16, 42)

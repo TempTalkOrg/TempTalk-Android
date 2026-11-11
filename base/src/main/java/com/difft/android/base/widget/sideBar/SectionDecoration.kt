@@ -16,13 +16,11 @@ import com.difft.android.base.R
 import com.difft.android.base.utils.dp
 import java.util.Locale
 
-/**
- * Sticky group-header band for letter-indexed lists.
- *
- * [bandColor] should be the host surface's own colour so the band reads as part of the page
- * (the contacts page passes its page colour, matching iOS). The default is `bg3`, which stays
- * visible on `bg.popup` sheet grounds where `bg2` would merge with the sheet in dark mode.
- */
+
+
+
+
+
 class SectionDecoration(
     context: Context,
     private val callback: DecorationCallback,
@@ -52,7 +50,7 @@ class SectionDecoration(
             return
         }
         if (groupId == 0L || isFirstInGroup(index)) {
-            //同组的第一个才添加padding
+            
             outRect.top = topGap
         } else {
             outRect.top = 0
@@ -61,26 +59,6 @@ class SectionDecoration(
 
     override fun onDraw(c: Canvas, parent: RecyclerView, state: RecyclerView.State) {
         super.onDraw(c, parent, state)
-        //        int left = parent.getPaddingLeft();
-//        int right = parent.getWidth() - parent.getPaddingRight();
-//
-//        int count = parent.getChildCount();
-//        for (int i = 0; i < count; i++) {
-//            View view = parent.getChildAt(i);
-//            int index = parent.getChildAdapterPosition(view);
-//            long groupId = callback.getGroupId(index);
-//            if (groupId < 0) {
-//                return;
-//            }
-//
-//            String textLine = callback.getGroupFirstLine(index).toUpperCase();
-//            if (index == 0 || isFirstInGroup(index)) {
-//                int top = view.getTop() - topGap;
-//                int bottom = view.getTop();
-//                c.drawRect(left, top, right, bottom, paint);
-//                c.drawText(textLine, left, bottom, textPaint);
-//            }
-//        }
     }
 
     private fun isFirstInGroup(pos: Int): Boolean {
@@ -97,7 +75,7 @@ class SectionDecoration(
         super.onDrawOver(c, parent, state)
         val itemCount = state.itemCount
         val childCount = parent.childCount
-        // Keep the band clear of the scrollbar thumb, which sits on the left in RTL layouts.
+        
         val scrollbarOnLeft = when (parent.verticalScrollbarPosition) {
             View.SCROLLBAR_POSITION_LEFT -> true
             View.SCROLLBAR_POSITION_RIGHT -> false
@@ -117,20 +95,20 @@ class SectionDecoration(
             if (groupId < 0 || lastGroupId == groupId) {
                 continue
             }
-            // Single-letter section headers are shown uppercase; multi-char group titles
-            // (e.g. a pending-removal group) keep their original casing.
+            
+            
             val rawLine = callback.getGroupFirstLine(position)
             val textLine = if (rawLine.length == 1) rawLine.uppercase(Locale.getDefault()) else rawLine
             if (TextUtils.isEmpty(textLine)) {
                 continue
             }
             val viewBottom = view.bottom
-            var textY = Math.max(topGap, view.top).toFloat()
+            
+            var textY = Math.max(parent.paddingTop + topGap, view.top).toFloat()
             if (position + 1 < itemCount) {
-                //下一个和当前不一样，移动当前
+                
                 val nextGroupId = callback.getGroupId(position + 1)
                 if (nextGroupId != groupId && viewBottom < textY) {
-                    //组内最后一个view进入了header
                     textY = viewBottom.toFloat()
                 }
             }
@@ -138,14 +116,14 @@ class SectionDecoration(
             val baseline = textY - 10.dp
             val icon = callback.getGroupIcon(position)
             if (icon != null) {
-                // 14dp square icon at left=16dp, vertically centered on the text's visual center.
+                
                 val iconSize = 14.dp
                 val iconLeft = 16.dp
                 val textCenterY = baseline + (fontMetrics.ascent + fontMetrics.descent) / 2f
                 val iconTop = (textCenterY - iconSize / 2f).toInt()
                 icon.setBounds(iconLeft, iconTop, iconLeft + iconSize, iconTop + iconSize)
                 icon.draw(c)
-                // Shift text right by icon width + 6dp gap.
+                
                 c.drawText(textLine, (iconLeft + iconSize + 6.dp).toFloat(), baseline, textPaint)
             } else {
                 c.drawText(textLine, 16.dp.toFloat(), baseline, textPaint)
@@ -157,7 +135,7 @@ class SectionDecoration(
         fun getGroupId(position: Int): Long
         fun getGroupFirstLine(position: Int): String
 
-        /** Optional leading icon drawn before the header text; null (default) draws text only. */
+        
         fun getGroupIcon(position: Int): Drawable? = null
     }
 }

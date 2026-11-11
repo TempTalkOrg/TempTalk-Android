@@ -13,14 +13,14 @@ import org.junit.Test
 import timber.log.Timber
 import java.util.concurrent.CopyOnWriteArrayList
 
-/**
- * The per-loader breakdown on the hydrator's exit line.
- *
- * The point of the breakdown is to split hydration cost into fixed and per-row parts, which a single
- * total cannot show. It rides on the ONE existing summary line — the assertions below pin both the
- * breakdown's shape (loader, key count, elapsed ms) and the fact that it did not become a second
- * line per emission.
- */
+
+
+
+
+
+
+
+
 class MessageHydratorLoaderTimingTest {
 
     @Test
@@ -31,9 +31,9 @@ class MessageHydratorLoaderTimingTest {
 
         assertTrue(summary, summary.contains("msgs=${corpus.messages.size} queries="))
         val breakdown = breakdownOf(summary)
-        // Key counts of the loaders whose key set is fully determined by the corpus: the six
-        // message-keyed loaders take every message id, phones take the shared-contact rows those
-        // messages produced, and quote / forward-context loaders take the distinct child ids.
+        
+        
+        
         val expectedKeys = mapOf(
             "att" to corpus.messages.size,
             "mention" to corpus.messages.size,
@@ -50,8 +50,8 @@ class MessageHydratorLoaderTimingTest {
         expectedKeys.forEach { (loader, keys) ->
             assertEquals("$loader keys in $summary", keys, breakdown[loader]?.keys)
         }
-        // The nested-forward loaders run per BFS level, so their key totals are not a fixed number —
-        // what matters is that the levels were accounted for at all.
+        
+        
         listOf("fwdChild", "fwdAtt", "fwdMention").forEach { loader ->
             assertTrue("$loader missing from $summary", breakdown.containsKey(loader))
         }
@@ -63,8 +63,8 @@ class MessageHydratorLoaderTimingTest {
 
         val summary = summaryLineFor(ChildRowCorpus(), messages)
 
-        // Only the six message-keyed loaders have a non-empty key set here; every other loader is
-        // keyed off child rows that do not exist, and an empty key set issues no query.
+        
+        
         assertEquals(
             setOf("att", "mention", "reaction", "translate", "stt", "contact"),
             breakdownOf(summary).keys,
@@ -72,11 +72,11 @@ class MessageHydratorLoaderTimingTest {
         assertTrue(summary, summary.contains("queries=6 "))
     }
 
-    // --- helpers ---
+    
 
     private class LoaderCost(val keys: Int, val costMs: Long)
 
-    /** Parses `detail=att:12/0ms,quote:3/0ms` back into a map, asserting each entry's shape. */
+    
     private fun breakdownOf(summary: String): Map<String, LoaderCost> {
         val detail = summary.substringAfter("detail=", missingDelimiterValue = "")
         assertTrue("no detail= in $summary", detail.isNotEmpty())
@@ -90,12 +90,12 @@ class MessageHydratorLoaderTimingTest {
         }
     }
 
-    /**
-     * Hydrates and returns the exit line.
-     *
-     * `L.i` is `@JvmStatic` and delivers over L's own single-thread channel, so the only way to see
-     * the line is to plant a real tree and wait for it — the same technique the chat suites use.
-     */
+    
+
+
+
+
+
     private fun summaryLineFor(corpus: ChildRowCorpus, messages: List<MessageModel>): String {
         val captured = CopyOnWriteArrayList<String>()
         val tree = object : Timber.Tree() {

@@ -11,19 +11,19 @@ import androidx.core.view.WindowInsetsCompat
 import com.difft.android.base.R
 import com.difft.android.base.storage.KeyboardHeightCache
 
-/**
- * A ConstraintLayout that automatically manages system window insets (status bar, navigation bar,
- * keyboard) via bottom padding and optional guidelines.
- *
- * Keyboard offset is applied as bottom padding so the entire constraint area shrinks together,
- * ensuring all children (message list, input, etc.) move in sync.
- *
- * Supports smooth keyboard animation via [WindowInsetsAnimationCompat.Callback] when
- * [R.styleable.InsetAwareConstraintLayout_animateKeyboardChanges] is enabled.
- *
- * Use [setUseWindowTypes] to control whether system bars insets are applied (disable only
- * under a host that already pads the system bars; the home screen's panes do not).
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
 class InsetAwareConstraintLayout @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
@@ -78,9 +78,9 @@ class InsetAwareConstraintLayout @JvmOverloads constructor(
             insets
         }
 
-        // WindowInsetsAnimationCompat only works reliably on API 30+.
-        // On older APIs, the compat fallback relies on window resize to detect IME,
-        // which doesn't work with adjustNothing. Fall back to instant setPadding via applyInsets.
+        
+        
+        
         if (animateKeyboardChanges && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
             ViewCompat.setWindowInsetsAnimationCallback(this, KeyboardInsetAnimator())
         }
@@ -94,11 +94,11 @@ class InsetAwareConstraintLayout @JvmOverloads constructor(
         ViewCompat.setWindowInsetsAnimationCallback(this, null)
     }
 
-    /**
-     * Control whether system bars (status bar, navigation bar, side insets) are applied.
-     * Set to false in dual-pane mode where the host Activity already handles system bars.
-     * Keyboard padding is always updated regardless of this setting.
-     */
+    
+
+
+
+
     fun setUseWindowTypes(use: Boolean) {
         if (useWindowTypes != use) {
             useWindowTypes = use
@@ -114,10 +114,10 @@ class InsetAwareConstraintLayout @JvmOverloads constructor(
         keyboardStateListeners.remove(listener)
     }
 
-    /**
-     * Defer listener dispatch one frame so listener bodies can mutate the view tree
-     * without racing this inset/animation callback. See Crashlytics issue 32a90db4.
-     */
+    
+
+
+
     private fun dispatchKeyboardListeners(action: (KeyboardStateListener) -> Unit) {
         val snapshot = keyboardStateListeners.toList()
         post {
@@ -126,24 +126,24 @@ class InsetAwareConstraintLayout @JvmOverloads constructor(
         }
     }
 
-    /**
-     * Freeze keyboard padding and immediately set it to the non-IME value (navigation bar only).
-     * Use when switching from keyboard to a custom panel — the panel provides the height that
-     * the keyboard was occupying, so the layout stays in place while the keyboard closes behind
-     * the scenes.
-     *
-     * Call [releaseKeyboardPaddingFreeze] when switching back to keyboard or closing the panel.
-     */
+    
+
+
+
+
+
+
+
     fun freezeKeyboardPadding() {
         isKeyboardPaddingFrozen = true
         val navBottom = if (useWindowTypes) lastNavigationBarBottom else 0
         setPadding(paddingLeft, paddingTop, paddingRight, navBottom)
     }
 
-    /**
-     * Release the keyboard padding freeze. Immediately applies the pending padding value
-     * to avoid a 1-frame flicker when hiding a panel simultaneously.
-     */
+    
+
+
+
     fun releaseKeyboardPaddingFreeze() {
         isKeyboardPaddingFrozen = false
         pendingKeyboardBottom?.let {
@@ -174,9 +174,9 @@ class InsetAwareConstraintLayout @JvmOverloads constructor(
             )
         }
 
-        // Keyboard offset applied as bottom padding. During animation, onProgress handles it.
-        // When frozen (switching to custom panel), skip padding updates.
-        // When useWindowTypes=false (dual-pane), subtract nav bar to avoid double padding.
+        
+        
+        
         val keyboardBottom = if (useWindowTypes) {
             if (isImeVisible) imeInsets.bottom else navigationBarInsets.bottom
         } else {
@@ -197,24 +197,24 @@ class InsetAwareConstraintLayout @JvmOverloads constructor(
             dispatchKeyboardListeners { it.onKeyboardHidden() }
         }
 
-        // Only settled values: onEnd re-applies insets once the IME animation is over, so a frame
-        // observed mid-animation is never the one stored. The cache dedupes process-wide; a per-view
-        // guard here could skip a write the cache still needs after another screen stored a
-        // different height.
+        
+        
+        
+        
         if (isImeVisible && imeInsets.bottom > 0 && !isKeyboardAnimating) {
             KeyboardHeightCache.save(context, imeInsets.bottom - navigationBarInsets.bottom)
         }
     }
 
-    /**
-     * Animates keyboard padding frame-by-frame.
-     *
-     * [isKeyboardAnimating] is set in [onPrepare] because the system dispatches final insets
-     * between onPrepare and onStart — without this, [applyInsets] would jump to the final value.
-     *
-     * [onProgress] uses insets directly (no manual interpolation) because the system already
-     * provides interpolated values at each frame.
-     */
+    
+
+
+
+
+
+
+
+
     private inner class KeyboardInsetAnimator : WindowInsetsAnimationCompat.Callback(
         DISPATCH_MODE_STOP
     ) {
@@ -255,7 +255,7 @@ class InsetAwareConstraintLayout @JvmOverloads constructor(
             super.onEnd(animation)
             if (animation.typeMask and WindowInsetsCompat.Type.ime() != 0) {
                 isKeyboardAnimating = false
-                // Snapshot before requestApplyInsets — it may synchronously mutate isKeyboardVisible.
+                
                 val visibleAtAnimationEnd = isKeyboardVisible
                 requestApplyInsets()
                 dispatchKeyboardListeners { it.onKeyboardAnimationEnded(visibleAtAnimationEnd) }
@@ -264,7 +264,7 @@ class InsetAwareConstraintLayout @JvmOverloads constructor(
     }
 
     companion object {
-        /** Main-thread-safe read for layout-init paths; 0 when no keyboard has been measured yet. */
+        
         fun getKeyboardHeight(context: Context): Int = KeyboardHeightCache.get(context)
     }
 }

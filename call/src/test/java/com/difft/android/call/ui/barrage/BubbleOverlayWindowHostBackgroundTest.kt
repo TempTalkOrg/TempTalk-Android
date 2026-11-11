@@ -20,23 +20,12 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import kotlin.test.assertSame
 
-/**
- * Regression pin (family K): asserts BubbleOverlayWindowHost's literal composable shape
- * (DifftTheme(darkTheme = true, applyWindowBackground = false) { BubbleOverlayLayer(...) },
- * BubbleOverlayWindowHost.kt:85-90) never writes the host window background — mirroring
- * M9/M12/M21's composable-direct-call + sentinel pattern.
- *
- * Deliberately does NOT mount the real CallContent: CallContent.kt:81's
- * viewModel.callType.collectAsState() is driven by CallTypeCoordinator's async room-metadata
- * flow, so an independent recomposition of CallContent's own unmodified DifftTheme (whose
- * applyWindowBackground defaults true) would reallocate a new ColorDrawable for a reason
- * unrelated to this test — breaking reference-identity assertions on the window background.
- *
- * Also deliberately does NOT go through BubbleOverlayWindowHost's own
- * WindowManager.addView(TYPE_APPLICATION_PANEL) path (:118): this codebase's own
- * BubbleOverlayDeferralIntegrationTest.kt documents that path as "not reasonably testable in
- * Robolectric" and never exercises it directly either.
- */
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34])
@@ -63,11 +52,11 @@ class BubbleOverlayWindowHostBackgroundTest {
             }
         }
         composeTestRule.waitForIdle()
-        assertSame(sentinel, composeTestRule.activity.window.decorView.background) // M19
+        assertSame(sentinel, composeTestRule.activity.window.decorView.background)
 
-        // Simulates BubbleOverlayWindowHost's DisposableEffect.onDispose (:149-152).
+        
         mounted = false
         composeTestRule.waitForIdle()
-        assertSame(sentinel, composeTestRule.activity.window.decorView.background) // M20
+        assertSame(sentinel, composeTestRule.activity.window.decorView.background)
     }
 }

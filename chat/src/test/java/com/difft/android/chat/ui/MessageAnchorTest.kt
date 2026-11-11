@@ -8,7 +8,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/** The conversation viewport anchor saved across a fold/unfold recreation. */
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33])
 class MessageAnchorTest {

@@ -68,7 +68,7 @@ data class OutgoingPushMessage(
         @JsonProperty val passthrough: String? = null,
         @JsonProperty val mentionedPersons: Array<String>? = null
     ) {
-        fun toNewArgs() = NewOutgoingPushMessage.Args(gid, collapseId, passthrough)
+        fun toNewArgs() = NewOutgoingPushMessage.Args(gid, collapseId, passthrough, mentionedPersons?.toList())
     }
 
     data class Notification(
@@ -105,14 +105,10 @@ data class OutgoingPushMessage(
         @JsonProperty val sequenceId: Long,
         @JsonProperty val notifySequenceId: Long
     )
-    /**
-     * "reactionInfo":{
-     * "content":"xxx",//reaction消息内容
-     * "remove":false,//是否remove
-     * "originTimestamp":111231231231 //为remove时，reaction原始消息(被移除的那个表情)的时间戳
-     * }
-     *
-     */
+    
+
+
+
     data class ReactionInfo(
         @JsonProperty val content: String,
         @JsonProperty val remove: Boolean,

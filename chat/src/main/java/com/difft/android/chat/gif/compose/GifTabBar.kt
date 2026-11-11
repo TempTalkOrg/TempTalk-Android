@@ -23,19 +23,13 @@ import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.chat.R
 import com.difft.android.chat.gif.GifPanelContract.GifTab
 
-/** A single tab spec: icon + which [GifTab] it maps to + enabled flag. */
+
 private data class TabSpec(val tab: GifTab, val iconRes: Int, val enabled: Boolean)
 
-/**
- * GIF panel tab bar (Figma 16746:14115): 5 tabs, centered, gap 24dp.
- * Selected tab icon sits in a 38x38 / radius 8 / backgroundTertiary rounded square.
- * Selected icon tint = icon (#474D57), unselected = textTertiary (#848E9C),
- * disabled (mood + M1-inert favorites) = textDisabled (#B7BDC6).
- *
- * Height is the 38dp selected-container with NO vertical padding (Issue 2): the only top inset to
- * the tab bar comes from GifInlinePanel's 16dp Column top, so the input row -> tab bar gap is
- * exactly 16dp. (The earlier 56dp + 8dp vertical padding added ~10dp on top of the 16dp.)
- */
+
+
+
+
 @Composable
 fun GifTabBar(
     selectedTab: GifTab,

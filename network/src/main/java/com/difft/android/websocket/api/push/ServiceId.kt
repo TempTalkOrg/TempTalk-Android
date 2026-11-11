@@ -5,14 +5,14 @@ import com.google.protobuf.ByteString
 import org.signal.libsignal.protocol.SignalProtocolAddress
 import java.util.UUID
 
-/**
- * A wrapper around a UUID that represents an identifier for an account. Today, that is either an [ACI].
- * However, that doesn't mean every [ServiceId] is an *instance* of one of those classes. In reality, we often
- * do not know which we have. And it shouldn't really matter.
- *
- * The only times you truly know, and the only times you should actually care, is during CDS refreshes or specific
- * inbound messages that link them together.
- */
+
+
+
+
+
+
+
+
 open class ServiceId protected constructor(protected val rawUuid: UUID) {
 
     fun uuid(): UUID = rawUuid

@@ -23,9 +23,9 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
-/**
- * Allows the scheduling of durable jobs that will be run as early as possible.
- */
+
+
+
 class JobManager(
     private val application: Application,
     private val configuration: Configuration
@@ -40,8 +40,8 @@ class JobManager(
     private val initDeferred = CompletableDeferred<Unit>()
 
     init {
-        // The scheduler that survives process death, kept separately so the drained-queue cancel
-        // can target it without fanning out to the in-process timer the composite also carries.
+        
+        
         val persistentScheduler: Scheduler =
             if (Build.VERSION.SDK_INT < 26) AlarmManagerScheduler(application)
             else JobSchedulerScheduler(application)
@@ -62,7 +62,7 @@ class JobManager(
             configuration.loginTag,
         )
 
-        // A lifted hold leaves the runners parked on an unchanged queue; wake them to re-scan.
+        
         scope.launch {
             configuration.executionHold.released.collect {
                 L.i { "[JobManager] event=hold_released" }
@@ -84,8 +84,8 @@ class JobManager(
                 L.e { "Failed to initialize JobManager: ${e.message}" }
             }
             try {
-                // Before initDeferred completes, so no job is dispatched, added or cancelled first.
-                // Not over a storage that failed to load: it would see no jobs and record its work done.
+                
+                
                 if (storageReady) {
                     configuration.startupTask.run(jobController)
                 } else {
@@ -101,9 +101,9 @@ class JobManager(
         }
     }
 
-    /**
-     * Begins the execution of jobs.
-     */
+    
+
+
     fun beginJobLoop() {
         scope.launch(managementDispatcher) {
             initDeferred.await()
@@ -122,39 +122,39 @@ class JobManager(
         }
     }
 
-    /**
-     * Convenience method for [addListener] that takes in an ID to filter on.
-     */
+    
+
+
     fun addListener(id: String, listener: JobTracker.JobListener) {
         jobTracker.addListener(JobIdFilter(id), listener)
     }
 
-    /**
-     * Add a listener to subscribe to job state updates. Listeners will be invoked on an arbitrary
-     * background thread. You must eventually call [removeListener] to avoid
-     * memory leaks.
-     */
+    
+
+
+
+
     fun addListener(filter: JobTracker.JobFilter, listener: JobTracker.JobListener) {
         jobTracker.addListener(filter, listener)
     }
 
-    /**
-     * Unsubscribe the provided listener from all job updates.
-     */
+    
+
+
     fun removeListener(listener: JobTracker.JobListener) {
         jobTracker.removeListener(listener)
     }
 
-    /**
-     * Enqueues a single job to be run. The job is tagged with the signed-in login here, on the
-     * caller's thread, so it belongs to the login that created it (#1382 A04). Before the login
-     * has loaded, the job is tagged with the login [JobLoginTag.awaitFirstLoad] captured and is
-     * only stored after that load; a process death before it loses the job (accepted: the wait
-     * is the bounded user-data warm-up at start).
-     */
+    
+
+
+
+
+
+
     fun add(job: Job) {
         val loginTag = configuration.loginTag
-        // Loaded first: the login is published before it is marked loaded, so a loaded read sees it.
+        
         val loadedAtAdd = loginTag.loaded()
         if (loadedAtAdd) job.creatorLogin = loginTag.current()
         scope.launch(managementDispatcher) {
@@ -166,14 +166,14 @@ class JobManager(
         }
     }
 
-    /** Awaitable durable admission; cancellation of the UI waiter does not cancel submission. */
+    
     suspend fun enqueuePersisted(job: Job): QueueAdmission {
         val tag = configuration.loginTag
         val captured = if (tag.loaded()) CompletableDeferred(tag.current()) else scope.async { tag.awaitFirstLoad() }
         return enqueueWithCreator(job) { captured.await() }
     }
 
-    /** Uses the login that authorized the whole operation, even after an earlier recipient awaited. */
+    
     suspend fun enqueuePersisted(job: Job, creatorLogin: String): QueueAdmission =
         enqueueWithCreator(job) { creatorLogin }
 
@@ -198,14 +198,14 @@ class JobManager(
             }
         }.await()
 
-    /**
-     * Attempts to cancel a job. This is best-effort and may not actually prevent a job from
-     * completing if it was already running. If this job is running, this can only stop jobs that
-     * bother to check [Job.isCanceled].
-     *
-     * When a job is canceled, [Job.onFailure] will be triggered at the earliest possible
-     * moment.
-     */
+    
+
+
+
+
+
+
+
     fun cancel(id: String) {
         scope.launch(managementDispatcher) {
             initDeferred.await()
@@ -213,9 +213,9 @@ class JobManager(
         }
     }
 
-    /**
-     * Cancels all jobs in the specified queue. See [cancel] for details.
-     */
+    
+
+
     fun cancelAllInQueue(queue: String) {
         scope.launch(managementDispatcher) {
             initDeferred.await()
@@ -223,34 +223,34 @@ class JobManager(
         }
     }
 
-    /**
-     * Cancels every pending or running job [predicate] matches (see [cancel]) and returns once the
-     * cancels are applied, with how many matched. [predicate] is given the job's stored
-     * [Job.creatorLogin].
-     */
+    
+
+
+
+
     suspend fun cancelMatching(predicate: (spec: JobSpec, creatorLogin: String?) -> Boolean): Int =
         withContext(managementDispatcher) {
             initDeferred.await()
             jobController.failMatching(predicate)
         }
 
-    /**
-     * Snapshot of pending+running jobs in [queue], sorted by createTime ascending.
-     * The framework does NOT provide RMW atomicity across `find → cancel → add`; callers
-     * that need it must layer their own serialization (e.g. a business-side Mutex).
-     */
+    
+
+
+
+
     suspend fun findJobsInQueue(queue: String): List<JobSpec> =
         withContext(managementDispatcher) {
             initDeferred.await()
             jobController.findJobsInQueue(queue)
         }
 
-    /**
-     * Retrieves a string representing the state of the job queue. Intended for debugging.
-     */
-    // @WorkerThread contract on getDebugInfo + flush: production callers are
-    // test-only. runBlocking bridges async job completion to non-suspend API
-    // for debug/diagnostic surface.
+    
+
+
+    
+    
+    
     @Suppress("BanRunBlockingOutsideTests")
     @WorkerThread
     fun getDebugInfo(): String {
@@ -272,9 +272,9 @@ class JobManager(
         wakeUp()
     }
 
-    /**
-     * Blocks until all pending operations are finished.
-     */
+    
+
+
     @Suppress("BanRunBlockingOutsideTests")
     @WorkerThread
     fun flush() {
@@ -295,9 +295,9 @@ class JobManager(
         }
     }
 
-    /**
-     * Pokes the system to take another pass at the job queue.
-     */
+    
+
+
     internal fun wakeUp() {
         scope.launch(managementDispatcher) {
             initDeferred.await()
@@ -305,11 +305,11 @@ class JobManager(
         }
     }
 
-    /**
-     * Signals the job runners on behalf of a persisted wake-up the system started.
-     *
-     * Suspends until the signal is delivered, so the caller can hold its wake lock until then.
-     */
+    
+
+
+
+
     internal suspend fun wakeUpFromSystem() = withContext(managementDispatcher) {
         initDeferred.await()
         jobController.wakeUp()
@@ -363,19 +363,19 @@ class JobManager(
                 return this
             }
 
-            /** Jobs [hold] matches stay queued until it releases them. */
+            
             fun setExecutionHold(hold: JobExecutionHold): Builder {
                 this.executionHold = hold
                 return this
             }
 
-            /** The login every added job is tagged with; see [JobLoginTag]. */
+            
             fun setLoginTag(loginTag: JobLoginTag): Builder {
                 this.loginTag = loginTag
                 return this
             }
 
-            /** Runs before the first job is dispatched; see [JobStartupTask]. */
+            
             fun setStartupTask(startupTask: JobStartupTask): Builder {
                 this.startupTask = startupTask
                 return this

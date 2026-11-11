@@ -14,15 +14,10 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import kotlin.test.assertEquals
 
-/**
- * M1/M2 (issue #1127): [DifftTheme]'s `applyWindowBackground` parameter gates the
- * window-background `SideEffect`. M1 pins the default path (`applyWindowBackground` not
- * passed, resolves to `true`) as byte-for-byte unchanged from pre-#1127 behavior — this is
- * the zero-regression guarantee all 16 existing family-A/A' root-mount call sites depend on.
- * M2 proves `applyWindowBackground = false` is a true no-op skip (the window is never
- * touched at all), not a write-then-restore — the primitive every commit-2/3 call-site
- * migration in this PR relies on being correct.
- */
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34])

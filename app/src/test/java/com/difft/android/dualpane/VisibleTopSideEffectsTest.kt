@@ -25,18 +25,16 @@ import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import java.util.concurrent.TimeUnit
 
-/**
- * A covered conversation root does not mark read or seen (design §3.16): the message list (a
- * child of the conversation page) checks [isVisibleTopNow] when a deferred read runs, so work
- * queued before a push sends nothing; whenever the page becomes the visible top, [onVisibleTopAgain]
- * catches up once after layout. ChatMessageListFragment's use of both is pinned by
- * HostedConversationSourceGuardTest.
- */
+
+
+
+
+
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [33], qualifiers = "w840dp-h900dp")
 class VisibleTopSideEffectsTest {
 
-    /** Stands in for the message list inside a conversation page. */
+    
     class ListPart : Fragment() {
         var catchUps = 0
 
@@ -53,7 +51,7 @@ class VisibleTopSideEffectsTest {
         val list: ListPart get() = childFragmentManager.findFragmentByTag("list") as ListPart
 
         override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View =
-            FrameLayout(inflater.context).apply { id = android.R.id.custom } // stable: the list restores into it
+            FrameLayout(inflater.context).apply { id = android.R.id.custom } 
 
         override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
             super.onViewCreated(view, savedInstanceState)
@@ -87,7 +85,7 @@ class VisibleTopSideEffectsTest {
         val shown = list.catchUps
         var sawVisible: Boolean? = null
 
-        // Like the list's posted read after a render: it runs after the push landed.
+        
         list.requireView().postDelayed({ sawVisible = list.isVisibleTopNow() }, 50)
         nav.push(TAB_CHATS, StackPageFragment.newInstance("info"))
         settle()
@@ -116,7 +114,7 @@ class VisibleTopSideEffectsTest {
         nav.push(TAB_CHATS, StackPageFragment.newInstance("group info"))
         settle()
 
-        controller!!.recreate() // fold: the conversation is restored covered, with a new list view
+        controller!!.recreate() 
         settle()
         val restored = (host.host(TAB_CHATS)!!.rootPage() as ConversationPage).list
         assertFalse(restored.isVisibleTopNow())

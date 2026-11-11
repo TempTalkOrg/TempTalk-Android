@@ -62,22 +62,22 @@ internal class ElementScaleEditSession private constructor(
 
         private fun angle(a: PointF, b: PointF): Double = atan2((a.y - b.y).toDouble(), (a.x - b.x).toDouble())
 
-        /**
-         * Find relative distance between an old and new set of Points.
-         *
-         * @param from Pair of points.
-         * @param to   New pair of points.
-         * @return Scale
-         */
+        
+
+
+
+
+
+
         private fun findScale(from: Array<PointF>, to: Array<PointF>): Double {
             val originalD2 = getDistanceSquared(from[0], from[1])
             val newD2 = getDistanceSquared(to[0], to[1])
             return sqrt((newD2 / originalD2).toDouble())
         }
 
-        /**
-         * Distance between two points squared.
-         */
+        
+
+
         private fun getDistanceSquared(a: PointF, b: PointF): Float {
             val dx = a.x - b.x
             val dy = a.y - b.y

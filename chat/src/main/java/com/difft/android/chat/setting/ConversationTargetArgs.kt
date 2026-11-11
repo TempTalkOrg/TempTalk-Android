@@ -5,10 +5,10 @@ import android.os.Bundle
 import androidx.fragment.app.Fragment
 import difft.android.messageserialization.For
 
-/**
- * The conversation a per-conversation settings page is for, as fragment arguments and as the
- * shell Activity's intent extras (same keys, so the shell hands its extras to the page).
- */
+
+
+
+
 internal object ConversationTargetArgs {
     const val KEY_TARGET_ID = "EXTRA_KEY_TARGET_ID"
     const val KEY_IS_GROUP = "EXTRA_KEY_IS_GROUP"
@@ -27,5 +27,5 @@ internal object ConversationTargetArgs {
     fun read(intent: Intent): For? = read(intent.extras)
 }
 
-/** The conversation in this page's arguments, or null when it was built without one. */
+
 internal fun Fragment.conversationTargetArg(): For? = ConversationTargetArgs.read(arguments)

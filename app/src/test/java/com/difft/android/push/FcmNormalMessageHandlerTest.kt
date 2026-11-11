@@ -29,10 +29,10 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 
-/**
- * G-R7 (#1382): the coroutine a normal FCM push launches acquires its own receive ticket as its
- * first statement and closes it after processing (T26).
- */
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class FcmNormalMessageHandlerTest {
 

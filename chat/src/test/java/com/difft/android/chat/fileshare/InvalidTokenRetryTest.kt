@@ -12,13 +12,13 @@ import java.io.IOException
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
-/**
- * The body-token retry the fileshare routes wrap their `Call.execute()` in: a rejected token is
- * refreshed and the block re-run exactly once, and nothing else is retried (issue #1235).
- *
- * Pure `runTest` — the provider is a hand-written fake and the block is a lambda over a counter, so
- * no Retrofit or OkHttp is involved.
- */
+
+
+
+
+
+
+
 class InvalidTokenRetryTest {
 
     private class FakeProvider(
@@ -39,7 +39,7 @@ class InvalidTokenRetryTest {
     private fun ok(tag: String) = BaseResponse(ver = 1, status = 0, reason = null, data = tag)
     private fun rejected() = BaseResponse<String>(ver = 1, status = AuthStatus.INVALID_TOKEN, reason = null, data = null)
 
-    // T15 — envelope status 5 then success: one retry, with the refreshed token.
+    
     @Test
     fun `status 5 is refreshed and retried once`() = runTest {
         val provider = FakeProvider(first = STALE, refreshed = FRESH)
@@ -55,7 +55,7 @@ class InvalidTokenRetryTest {
         assertEquals(1, provider.refreshCalls)
     }
 
-    // T16 — a bare HTTP 401 is the same rejection, arriving as an exception.
+    
     @Test
     fun `a thrown 401 is refreshed and retried once`() = runTest {
         val provider = FakeProvider(first = STALE, refreshed = FRESH)
@@ -71,7 +71,7 @@ class InvalidTokenRetryTest {
         assertEquals(1, provider.refreshCalls)
     }
 
-    // T17 — rejected twice is terminal, with no third attempt.
+    
     @Test
     fun `a persistent rejection throws after exactly two attempts`() = runTest {
         val provider = FakeProvider(first = STALE, refreshed = FRESH)
@@ -88,7 +88,7 @@ class InvalidTokenRetryTest {
         assertEquals(1, provider.refreshCalls)
     }
 
-    // T18 — without a fresh token there is nothing to retry with.
+    
     @Test
     fun `no retry when the refresh yields no token`() = runTest {
         val provider = FakeProvider(first = STALE, refreshed = "")
@@ -104,7 +104,7 @@ class InvalidTokenRetryTest {
         assertEquals(1, attempts)
     }
 
-    // T19 — a transport failure is not a token rejection.
+    
     @Test
     fun `a non rejection failure propagates unretried`() = runTest {
         val provider = FakeProvider(first = STALE, refreshed = FRESH)
@@ -122,7 +122,7 @@ class InvalidTokenRetryTest {
         assertEquals(0, provider.refreshCalls)
     }
 
-    // T20 — only status 5 means "the token you sent is not usable".
+    
     @Test
     fun `another business status is returned as is`() = runTest {
         val provider = FakeProvider(first = STALE, refreshed = FRESH)

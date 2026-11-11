@@ -35,16 +35,16 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import java.util.Collections
 
-/**
- * The outgoing START entry point ([LChatToCallControllerImpl.startCall]) on a double tap: both
- * starts share the screen's wait dialog; the launcher accepts the first and refuses the second,
- * and the refused start releases only its own share, so the first start's dialog stays up for its
- * call page. Real wait-dialog slot on a Robolectric Activity; the start runs on the real `appScope`
- * and main Looper, so the test idles the Looper until both starts report back.
- *
- * Each start reads one call-config snapshot: a server flip of `createCallMsg` in a warm process
- * reaches the next start, and the envelope and the session launch share the snapshot (#1395).
- */
+
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = CallJoinStarterTest.TestApplication::class, sdk = [33])
 class LChatToCallControllerStartTest {
@@ -60,8 +60,8 @@ class LChatToCallControllerStartTest {
         mockkObject(LCallEngine, LCallManager, CallWaitDialogUtil)
         every { LCallEngine.isNetworkAvailable() } returns true
         coEvery { LCallManager.checkQuicFeatureGrayStatus() } just runs
-        // The real slot with a static layout: the default spinner is an infinite animation, and
-        // idling the Robolectric main looper runs its frames without end, filling the worker heap.
+        
+        
         every { CallWaitDialogUtil.show(any()) } answers {
             ComposeDialogManager.showWait(firstArg(), layoutId = android.R.layout.simple_list_item_1)
         }
@@ -167,7 +167,7 @@ class LChatToCallControllerStartTest {
         sessionLauncher = { launcher },
     )
 
-    /** Runs main-Looper work until [done]; the starts hop through the real IO dispatcher. */
+    
     private fun idleUntil(done: () -> Boolean) {
         val deadline = System.currentTimeMillis() + TIMEOUT_MS
         while (!done()) {

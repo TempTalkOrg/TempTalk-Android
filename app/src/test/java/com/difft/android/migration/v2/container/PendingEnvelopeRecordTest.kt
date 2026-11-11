@@ -23,10 +23,10 @@ import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
-/**
- * The `pendingEnvelope` record (#1382): its frozen wire shape, the strict decode, and the reader
- * failing the import instead of skipping a pending envelope that does not decode.
- */
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = android.app.Application::class, sdk = [33])
 class PendingEnvelopeRecordTest {
@@ -74,7 +74,7 @@ class PendingEnvelopeRecordTest {
             val skipped = assertIs<RecordJsonCodec.Decoded.Skipped>(decoded, value)
             assertTrue(skipped.mustNotSkip, value)
         }
-        // Other records keep their tolerance.
+        
         val other = codec.decode("""{"type":"groupKey","value":"not an object"}""")
         assertFalse(assertIs<RecordJsonCodec.Decoded.Skipped>(other).mustNotSkip)
     }

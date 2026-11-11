@@ -27,17 +27,17 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import java.time.Duration
 
-/**
- * G10, G11, S4, S4b — [PopupChatSheetController] driven through its REAL
- * `OnApplyWindowInsetsListener` with real [WindowInsetsCompat] values.
- *
- * The rows above this one exercise [PopupKeyboardPanelController] directly; these exist because the
- * listener is where the wiring can go wrong without the controller noticing: the `imeHeight > 0`
- * fold, the per-pass `maxHeightPx` refresh, and the maximize seam's keyboard source.
- *
- * The Activity is mocked (it is `@AndroidEntryPoint`, and no Hilt test harness exists in this
- * repository); the sheet, scrim, root and [BottomSheetBehavior] are all real.
- */
+
+
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 class PopupChatSheetControllerInsetsTest {
 
@@ -70,7 +70,7 @@ class PopupChatSheetControllerInsetsTest {
     fun setUp() {
         mockkObject(WindowSizeClassUtil)
         every { WindowSizeClassUtil.getWindowHeightPx(any()) } returns WINDOW_HEIGHT
-        // maximize() hides the keyboard through the focused view; there is none in this harness.
+        
         every { activity.currentFocus } returns null
 
         val host = Robolectric.buildActivity(Activity::class.java).setup().get()
@@ -133,7 +133,7 @@ class PopupChatSheetControllerInsetsTest {
 
     private fun behavior() = BottomSheetBehavior.from(sheet)
 
-    /** G10 — the rewired listener produces the same three values the old inline branch did. */
+    
     @Test
     fun `G10 a visible IME through the real insets listener lifts the sheet`() {
         layoutRoot(WINDOW_HEIGHT)
@@ -141,16 +141,16 @@ class PopupChatSheetControllerInsetsTest {
         dispatchInsets(imeVisible = true, imeHeight = KB)
 
         assertEquals(BASE + KB, sheet.layoutParams.height)
-        assertEquals(KB, sheet.paddingBottom)
+        assertEquals(KB, sheet.bottomClearance())
         assertEquals(BASE + KB, behavior().peekHeight)
     }
 
-    /**
-     * G10's second half — an IME reported visible with a zero height must keep taking the resting
-     * branch for GEOMETRY, exactly as the `isImeVisible && imeHeight > 0` guard did before the
-     * rewiring. The fold now lives inside the controller and covers geometry only; the dispatch half
-     * of the same frame is the row below.
-     */
+    
+
+
+
+
+
     @Test
     fun `G10 an IME reported visible with zero height takes the resting branch`() {
         layoutRoot(WINDOW_HEIGHT)
@@ -158,17 +158,17 @@ class PopupChatSheetControllerInsetsTest {
         dispatchInsets(imeVisible = true, imeHeight = 0)
 
         assertEquals(BASE, sheet.layoutParams.height)
-        assertEquals(NAV_BAR, sheet.paddingBottom)
+        assertEquals(NAV_BAR, sheet.bottomClearance())
     }
 
-    /**
-     * G10c — the raw/folded split. `InsetAwareConstraintLayout` (the full-screen path) latches
-     * `onKeyboardShown` on the RAW `isVisible(ime())`, so the popup must too: on the frames where the
-     * system reports the IME visible with `bottom == 0` (floating/split keyboards, transient frames)
-     * a full-screen chat dismisses its open action panel, and a popup that folded the height into the
-     * dispatch would stay silent and leave the panel stacked behind the keyboard. Geometry keeps the
-     * fold and stays at rest in the same frame.
-     */
+    
+
+
+
+
+
+
+
     @Test
     fun `G10c an IME visible with zero height dispatches keyboard shown while geometry rests`() {
         layoutRoot(WINDOW_HEIGHT)
@@ -180,19 +180,19 @@ class PopupChatSheetControllerInsetsTest {
 
         assertEquals(listOf("shown", "ended(true)"), listener.events)
         assertEquals("geometry must keep the height fold", BASE, sheet.layoutParams.height)
-        assertEquals(NAV_BAR, sheet.paddingBottom)
+        assertEquals(NAV_BAR, sheet.bottomClearance())
     }
 
-    /**
-     * G11 — `maxHeightPx` is recomputed on every pass. The first pass runs before the root is laid
-     * out, so a once-only computation would fall back to the full window height and the clamp would
-     * never engage again. Here the root is then laid out SHORTER than the window (multi-window), and
-     * the clamp must follow the current root, not the value the first pass saw.
-     */
+    
+
+
+
+
+
     @Test
     fun `G11 the clamp follows the current root height rather than the first pass`() {
-        // Pass 1: the root has no height yet, as on the first dispatch of a real popup, so the
-        // ceiling falls back to the window height (2400 - 100 = 2300) and nothing is clamped.
+        
+        
         root.layout(0, 0, 1080, 0)
         assertEquals(0, root.height)
         dispatchInsets(imeVisible = false, imeHeight = 0)
@@ -200,48 +200,48 @@ class PopupChatSheetControllerInsetsTest {
         layoutRoot(1600)
         dispatchInsets(imeVisible = true, imeHeight = KB)
 
-        // Unclamped this would be BASE + KB == 2100; the refreshed ceiling is 1600 - STATUS_BAR.
+        
         assertEquals(1600 - STATUS_BAR, sheet.layoutParams.height)
     }
 
-    /**
-     * S4 — the maximize seam. The keyboard was shown earlier and is now gone, so the sheet is still
-     * held above `baseHeight`. The old `currentHeight > baseHeight` inference read that as "keyboard
-     * visible" and animated the navigation-bar padding away for no reason; the real IME state says
-     * otherwise, so the padding is left alone.
-     */
+    
+
+
+
+
+
     @Test
     fun `S4 maximize with no keyboard leaves the padding alone`() {
         layoutRoot(WINDOW_HEIGHT)
         dispatchInsets(imeVisible = true, imeHeight = KB)
         dispatchInsets(imeVisible = false, imeHeight = 0)
         assertEquals("the lift must still be held", BASE + KB, sheet.layoutParams.height)
-        assertEquals(NAV_BAR, sheet.paddingBottom)
+        assertEquals(NAV_BAR, sheet.bottomClearance())
 
         var onEndCount = 0
         controller.maximize { onEndCount++ }
         settleAnimation()
 
         assertEquals(WINDOW_HEIGHT - STATUS_BAR, sheet.layoutParams.height)
-        assertEquals("padding must not be ramped out without a keyboard", NAV_BAR, sheet.paddingBottom)
+        assertEquals("padding must not be ramped out without a keyboard", NAV_BAR, sheet.bottomClearance())
         assertEquals(1, onEndCount)
     }
 
-    /** S4b — with the keyboard actually up, the padding it consumed is still animated back out. */
+    
     @Test
     fun `S4b maximize with the keyboard visible animates its padding out`() {
         layoutRoot(WINDOW_HEIGHT)
         dispatchInsets(imeVisible = true, imeHeight = KB)
-        assertEquals(KB, sheet.paddingBottom)
+        assertEquals(KB, sheet.bottomClearance())
 
         controller.maximize { }
         settleAnimation()
 
         assertEquals(WINDOW_HEIGHT - STATUS_BAR, sheet.layoutParams.height)
-        assertEquals(0, sheet.paddingBottom)
+        assertEquals(0, sheet.bottomClearance())
     }
 
-    /** The double-tap guard still runs exactly one maximize, now from inside the controller. */
+    
     @Test
     fun `a second maximize call is ignored`() {
         layoutRoot(WINDOW_HEIGHT)
@@ -255,7 +255,24 @@ class PopupChatSheetControllerInsetsTest {
         assertEquals(1, onEndCount)
     }
 
-    /** Once maximize owns the sheet, a late insets pass must not write geometry underneath it. */
+    
+    @Test
+    fun `a detail-pane hand-off runs once without growing the sheet`() {
+        layoutRoot(WINDOW_HEIGHT)
+        dispatchInsets(imeVisible = false, imeHeight = 0)
+        val restingHeight = sheet.layoutParams.height
+
+        var onEndCount = 0
+        controller.handOffToDetailPane { onEndCount++ }
+        controller.handOffToDetailPane { onEndCount++ }
+        controller.maximize { onEndCount++ }
+        settleAnimation()
+
+        assertEquals(1, onEndCount)
+        assertEquals(restingHeight, sheet.layoutParams.height)
+    }
+
+    
     @Test
     fun `insets arriving during the maximize animation do not move the sheet`() {
         layoutRoot(WINDOW_HEIGHT)

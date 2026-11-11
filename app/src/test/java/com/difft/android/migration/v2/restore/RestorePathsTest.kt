@@ -16,12 +16,12 @@ import kotlin.coroutines.CoroutineContext
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
 
-/**
- * Promote's P3 moves the staged attachments onto the real attachment dir. `renameTo` only succeeds
- * within one mount, so staging has to sit under the same root the real attachment dir is derived
- * from — otherwise P3 silently degrades to copying the whole attachment set (GB-scale, tens of
- * seconds). The private staging DB and the container copy stay under `filesDir`.
- */
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = RestorePathsTestApplication::class, sdk = [33])
 class RestorePathsTest {
@@ -44,9 +44,9 @@ class RestorePathsTest {
     fun `the receive spool sits on the attachment mount, away from the staging db`() {
         val paths = RestorePaths.forContext(context)
 
-        // The commit tail reclaims this directory and nothing else. It must therefore hold no staging
-        // artifact: if it shared the work dir with the staging database, that reclaim would delete the
-        // one file a cold-start resume needs to finish the promote.
+        
+        
+        
         assertEquals(
             File(FilePathManager.getBaseDirFile(), RestorePaths.WORK_DIR_NAME),
             File(paths.spoolDir).parentFile,
@@ -65,7 +65,7 @@ class RestorePathsTest {
     }
 }
 
-/** [FilePathManager] reads the `application` global, which only a [ScopeApplication] can supply. */
+
 class RestorePathsTestApplication : ScopeApplication() {
     override val coroutineContext: CoroutineContext = SupervisorJob() + Dispatchers.Unconfined
 

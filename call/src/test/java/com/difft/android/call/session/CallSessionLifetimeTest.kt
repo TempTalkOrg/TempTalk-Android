@@ -45,16 +45,16 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/**
- * How a [CallSession] ends: the call-level teardown (screen-off lock, sounds, participant
- * observation, ongoing-call service, presence, calling flag) runs once, before the holder is
- * cleared, each action isolated; the clear always happens; the session `Job` lives until the last
- * cleanup step; a destroyed page leaves the call running, and the last page going away ends a
- * session whose finish no page rendered; the process-wide slots are claimed at start; a start that
- * throws unwinds through the same end; an app unlock clears the app-lock flag, page or not, until the
- * session ends. Robolectric for the toast path's resources; the re-attach
- * rows that need a resolved room live in [CallSessionReattachTest].
- */
+
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [33])
 class CallSessionLifetimeTest {
@@ -211,7 +211,7 @@ class CallSessionLifetimeTest {
 
     @Test
     fun `a configuration change keeps the page attached and the recreated page gets the sticky finish`() {
-        // A recreation keeps the view model (no onCleared), so nothing detaches.
+        
         val vm = LCallViewModelFixture.build(h)
         val session = h.sessions.single()
         OgsmTestState.enterCall(h.ogsm, ROOM_ID, session.id)
@@ -330,7 +330,7 @@ class CallSessionLifetimeTest {
         val session = h.start(h.params(needAppLock = true))
         assertTrue(h.ogsm.needAppLock)
 
-        // The session holds its listener: the registry keeps only a weak reference.
+        
         System.gc()
         AppLockCallbackManager.notifyUnlockSuccess()
         assertFalse("unlocked with no call page", h.ogsm.needAppLock)
@@ -341,7 +341,7 @@ class CallSessionLifetimeTest {
         assertTrue("the ended session's listener is gone", h.ogsm.needAppLock)
     }
 
-    /** What a non-configuration destroy does to the page's view model: its store is cleared. */
+    
     private fun destroy(vm: LCallViewModel) = ViewModelStore().apply {
         put("call-vm", vm)
         clear()

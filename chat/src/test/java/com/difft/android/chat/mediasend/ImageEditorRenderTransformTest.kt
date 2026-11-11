@@ -1,268 +1,249 @@
 package com.difft.android.chat.mediasend
 
 import android.content.Context
-import android.graphics.Bitmap
 import android.net.Uri
-import com.difft.android.base.utils.FileUtil
+import com.difft.android.base.media.AnimatedImageDetector
+import com.difft.android.base.media.ImageCompressor
 import com.difft.android.chat.messages.TestScopeApplication
 import com.difft.android.chat.mms.SentMediaQuality
-import com.difft.android.imageeditor.core.model.EditorModel
+import com.difft.android.chat.util.Util
 import com.difft.android.test.builders.LocalMediaBuilder
-import com.difft.android.test.harness.ContentSourceHarness
 import com.difft.android.test.harness.LogCapture
-import io.mockk.CapturingSlot
 import io.mockk.every
-import io.mockk.mockk
-import io.mockk.mockkStatic
-import io.mockk.slot
-import io.mockk.unmockkAll
 import io.mockk.verify
-import top.zibin.luban.Luban
-import org.junit.After
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
-import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.RuntimeEnvironment
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import java.io.File
-import java.io.IOException
+import java.io.FileNotFoundException
 
-/**
- * T46 — the standard-quality compression path reads its source through the resolver.
- *
- * Luban's `load(String)` overload treats its argument as a bare file path, so passing a MediaStore
- * URI as a string silently produced an unreadable source. `load(Uri)` uses
- * `ContentResolver.openInputStream`, which is what [ContentSourceHarness.opens] proves here.
- *
- * Run: :chat:testDebugUnitTest
- */
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [33])
-class ImageEditorRenderTransformTest {
+class ImageEditorRenderTransformTest : ImageTransformTestBase() {
+    @Test
+    fun standardHeicUpdatesMetadataAndKeepsGallerySource() {
+        val (media, original) = gallery("image/heic", "photo.heic", png)
+        val output = givenCompressionSucceeds()
 
-    private lateinit var context: Context
-    private lateinit var harness: ContentSourceHarness
+        assertSame(media, transform(media))
 
-    @Before
-    fun setUp() {
-        context = RuntimeEnvironment.getApplication()
-        harness = ContentSourceHarness(context)
+        assertEquals(output.file.path, media.realPath)
+        assertEquals("image/jpeg", media.mimeType)
+        assertEquals("photo.jpg", media.fileName)
+        assertEquals(output.size, media.size)
+        assertEquals(1600, media.width)
+        assertEquals(1200, media.height)
+        assertTrue(original.exists())
+        assertArrayEquals(png, original.readBytes())
+        assertEquals(Uri.parse(media.path), loaded.captured)
+        assertTrue(harness.opens.contains(loaded.captured))
+        verify { ImageCompressor.compress(any(), any(), "image/heic", intArrayOf(1600, 1024, 768, 512), 1024 * 1024, 70, draftDir) }
     }
 
     @Test
-    fun `standard quality compression opens the source content uri through the resolver`() {
-        val media = LocalMediaBuilder.gallery(
-            id = 5L,
-            mime = "image/jpeg",
-            contentUri = "content://media/external/images/media/5",
-            realPath = "/storage/emulated/0/DCIM/Camera/img_5.jpg",
-        )
-        val source = Uri.parse(media.path)
-        harness.registerReadable(source, ByteArray(200_000) { 0x1 })
+    fun transparentPngOutputKeepsPngLabel() {
+        val (media, _) = gallery("image/png", "photo.png", png)
+        val output = givenCompressionSucceeds("image/png", "png")
 
-        val transform = ImageEditorModelRenderMediaTransform(null, null, SentMediaQuality.STANDARD)
-        transform.transform(context, media)
+        transform(media)
 
-        assertTrue("resolver opens were ${harness.opens}", harness.opens.contains(source))
+        assertEquals("image/png", media.mimeType)
+        assertEquals("photo.png", media.fileName)
+        assertEquals(output.file.path, media.realPath)
+        assertEquals(output.size, media.size)
+        assertEquals(output.width, media.width)
+        assertEquals(output.height, media.height)
     }
 
-    // ---------------------------------------------------------------- T59
-
-    /**
-     * T59 — a failed render must not fall back to the untouched original.
-     *
-     * Reaching the render branch means the user cropped, drew on or captioned the image, so sending
-     * the original instead is sending something they never composed. The cleanup in `finally` still
-     * has to run on the propagating path, which the recycle assertion pins.
-     *
-     * The throw is raised from the compress call rather than from `render()` itself: `bitmap` is
-     * assigned from the render result, so a throw inside `render()` leaves it null and the recycle
-     * contract becomes unobservable. Both calls sit in the same try block and both mean "the render
-     * step failed".
-     */
     @Test
-    fun `failed render propagates instead of silently sending the original`() {
-        val media = LocalMediaBuilder.gallery(
-            id = 6L,
-            mime = "image/jpeg",
-            contentUri = "content://media/external/images/media/6",
-            realPath = "/storage/emulated/0/DCIM/Camera/img_6.jpg",
-        )
-        val originalRealPath = media.realPath
-        val rendered = mockk<Bitmap>(relaxed = true)
-        every { rendered.compress(any(), any(), any()) } throws RuntimeException("render failed")
-        val model = mockk<EditorModel>()
-        every { model.render(any(), any(), any()) } returns rendered
+    fun opaquePngOutputUsesJpegLabelAndDraftInputIsDeleted() {
+        val (media, original) = draft("image/png", "pasted.png", png)
+        val output = givenCompressionSucceeds()
 
-        val transform = ImageEditorModelRenderMediaTransform(model, null, SentMediaQuality.HIGH)
+        transform(media)
 
-        assertThrows(RuntimeException::class.java) { transform.transform(context, media) }
-        assertEquals(originalRealPath, media.realPath)
-        verify(exactly = 1) { rendered.recycle() }
+        assertEquals("image/jpeg", media.mimeType)
+        assertEquals("pasted.jpg", media.fileName)
+        assertEquals(output.size, media.size)
+        assertFalse(original.exists())
+        assertTrue(output.file.exists())
     }
 
-    // ---------------------------------------------------------------- T60
-
-    /**
-     * T60 — compression is a size optimisation, so failing it after a successful render must not
-     * fail the send: the user's edits already exist in the rendered output.
-     */
     @Test
-    fun `compression failure after a successful render keeps the rendered output`() {
-        File(FileUtil.getFilePath(FileUtil.DRAFT_ATTACHMENTS_DIRECTORY)).mkdirs()
-        val media = LocalMediaBuilder.gallery(
-            id = 7L,
-            mime = "image/jpeg",
-            contentUri = "content://media/external/images/media/7",
-            realPath = "/storage/emulated/0/DCIM/Camera/img_7.jpg",
-        )
-        givenCompressionFails()
-        val model = mockk<EditorModel>()
-        every { model.render(any(), any(), any()) } returns mockk(relaxed = true)
+    fun blankFileNameGetsUuidAndMatchingExtension() {
+        val (media, _) = gallery()
+        media.fileName = ""
+        givenCompressionSucceeds("image/png", "png")
 
+        transform(media)
+
+        assertTrue(media.fileName, media.fileName.matches(Regex("[0-9a-f-]{36}\\.png")))
+    }
+
+    @Test
+    fun lowMemoryConstraintsReachTheCompressor() {
+        every { Util.isLowMemory(any()) } returns true
+        val (media, _) = gallery()
+        givenCompressionSucceeds()
+
+        transform(media)
+
+        verify { ImageCompressor.compress(any(), any(), any(), intArrayOf(768, 512), 1024 * 1024, 70, draftDir) }
+    }
+
+    @Test
+    fun animatedImageSkipsCompressionAndKeepsDraftBytes() {
+        val (media, original) = draft("image/webp", "animated.webp", png)
+        every { AnimatedImageDetector.isAnimated(any<Context>(), any(), any()) } returns true
+
+        transform(media)
+
+        assertEquals(original.path, media.realPath)
+        assertArrayEquals(png, original.readBytes())
+        verify(exactly = 0) { ImageCompressor.compress(any(), any(), any(), any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun compressorFailureKeepsSourceAndMetadata() {
+        val (media, original) = draft("image/png", "pasted.png", png)
+
+        transform(media)
+
+        assertEquals(original.path, media.realPath)
+        assertEquals("image/png", media.mimeType)
+        assertEquals("pasted.png", media.fileName)
+        assertEquals(png.size.toLong(), media.size)
+        assertEquals(4000, media.width)
+        assertArrayEquals(png, original.readBytes())
+    }
+
+    @Test
+    fun similarlyNamedDraftSiblingIsNotDeleted() {
+        val file = File(root, "draft_blobs_other/source.jpg").apply { parentFile!!.mkdirs(); writeBytes(jpeg) }
+        val media = LocalMediaBuilder.sandbox(file.path)
+        givenCompressionSucceeds()
+
+        transform(media)
+
+        assertTrue(file.exists())
+    }
+
+    @Test
+    fun unreadableSourceFailsTheItemForBothQualities() {
+        val (media, _) = gallery()
+        harness.registerUnreadable(Uri.parse(media.path), "/denied/source.jpg")
+
+        SentMediaQuality.entries.forEach { quality ->
+            assertThrows(FileNotFoundException::class.java) { transform(media, quality = quality) }
+        }
+        verify(exactly = 0) { ImageCompressor.compress(any(), any(), any(), any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun deniedSourceFailsTheItemForBothQualities() {
+        val (media, _) = gallery()
+        shadowOf(context.contentResolver).registerInputStreamSupplier(Uri.parse(media.path)) { throw SecurityException("denied") }
+
+        SentMediaQuality.entries.forEach { quality ->
+            assertThrows(SecurityException::class.java) { transform(media, quality = quality) }
+        }
+    }
+
+    @Test
+    fun failedRenderPropagatesAndRecyclesBitmap() {
+        val (media, original) = gallery()
+        val (model, bitmap) = renderedModel()
+        every { bitmap.compress(any(), any(), any()) } throws IllegalStateException("render failed")
+
+        assertThrows(IllegalStateException::class.java) {
+            ImageEditorModelRenderMediaTransform(model, null, SentMediaQuality.HIGH).transform(context, media)
+        }
+
+        assertEquals(original.path, media.realPath)
+        verify(exactly = 1) { bitmap.recycle() }
+    }
+
+    @Test
+    fun standardCompressesRenderedOutputAndDeletesOnlyTheIntermediate() {
+        val (media, original) = gallery("image/heic", "photo.heic")
+        val output = givenCompressionSucceeds()
+        val (model, bitmap) = renderedModel()
+
+        ImageEditorModelRenderMediaTransform(
+            model, null, SentMediaQuality.STANDARD, preserveSourceForRetry = true
+        ).transform(context, media)
+
+        assertEquals("file", loaded.captured.scheme)
+        assertNotEquals(Uri.parse(media.path), loaded.captured)
+        assertFalse(File(loaded.captured.path!!).exists())
+        assertTrue(original.exists())
+        assertEquals(output.file.path, media.realPath)
+        assertEquals("photo.jpg", media.fileName)
+        verify { ImageCompressor.compress(any(), any(), "image/jpeg", any(), any(), any(), any()) }
+        verify(exactly = 1) { bitmap.recycle() }
+    }
+
+    @Test
+    fun compressionFailureAfterRenderingKeepsEdits() {
+        val (media, original) = gallery()
+        val (model, bitmap) = renderedModel()
+
+        ImageEditorModelRenderMediaTransform(model, null, SentMediaQuality.STANDARD).transform(context, media)
+
+        assertNotEquals(original.path, media.realPath)
+        assertArrayEquals(jpeg, File(media.realPath).readBytes())
+        assertEquals(640, media.width)
+        assertEquals(480, media.height)
+        assertEquals("image/jpeg", media.mimeType)
+        assertEquals(Uri.fromFile(File(media.realPath)), loaded.captured)
+        verify(exactly = 1) { bitmap.recycle() }
+    }
+
+    @Test
+    fun renderedInputBecomingUnreadableKeepsTheRender() {
+        val (media, original) = gallery()
+        val (model, _) = renderedModel()
+        val deniedContext = io.mockk.mockk<Context>()
+        val resolver = io.mockk.mockk<android.content.ContentResolver>()
+        every { deniedContext.contentResolver } returns resolver
+        every { resolver.openInputStream(any()) } throws FileNotFoundException("denied")
+        
+        every { deniedContext.applicationContext } returns context
+
+        ImageEditorModelRenderMediaTransform(model, null, SentMediaQuality.STANDARD).transform(deniedContext, media)
+
+        assertNotEquals(original.path, media.realPath)
+        assertTrue(File(media.realPath).exists())
+        verify(exactly = 0) { ImageCompressor.compress(any(), any(), any(), any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun resultDiagnosticContainsOnlySafeFields() {
+        val (media, _) = gallery("image/heic", "private-photo.heic")
+        givenCompressionSucceeds()
         val log = LogCapture()
         log.recording {
-            ImageEditorModelRenderMediaTransform(model, null, SentMediaQuality.STANDARD)
-                .transform(context, media)
-            awaitLine("the compression downgrade line") { it.contains("compress skipped after render") }
-        }
-
-        assertTrue(
-            media.realPath,
-            media.realPath.startsWith(FileUtil.getFilePath(FileUtil.DRAFT_ATTACHMENTS_DIRECTORY))
-        )
-    }
-
-    // ---------------------------------------------------------------- T61
-
-    /**
-     * T61 — with nothing rendered, the compressor was reading the source, so a failure there IS a
-     * source read failure and has to be reported while the review screen is still up.
-     */
-    @Test
-    fun `compression failure with nothing rendered propagates as a source read failure`() {
-        val media = LocalMediaBuilder.gallery(
-            id = 8L,
-            mime = "image/jpeg",
-            contentUri = "content://media/external/images/media/8",
-            realPath = "/storage/emulated/0/DCIM/Camera/img_8.jpg",
-        )
-        givenCompressionFails()
-
-        assertThrows(IOException::class.java) {
-            ImageEditorModelRenderMediaTransform(null, null, SentMediaQuality.STANDARD)
-                .transform(context, media)
+            transform(media)
+            val line = awaitLine("image result") { it.contains("[MediaSend] compress result=") }
+            assertTrue(line, line.contains("result=compressed reason=standard"))
+            assertTrue(line, line.contains("out=1600x1200 tier=0 fmt=jpeg meta=gps_stripped"))
+            assertFalse(line, line.contains("private-photo"))
+            assertFalse(line, line.contains("content://"))
+            assertFalse(line, line.contains(root.path))
         }
     }
 
-    // ---------------------------------------------------------------- T62
-
-    /**
-     * T62 — after a render, the compressor must read the render output, not the source.
-     *
-     * `readableUri()` is a source-only contract: it reads `path`, which a render never rewrites. So
-     * compressing through it would re-read the untouched gallery original and hand that to the send,
-     * silently discarding the crop / drawing / text the user just composed — invisible to the T46 row
-     * above, which only covers the unedited path.
-     */
-    @Test
-    fun `standard quality compression after a render reads the render output not the source`() {
-        val draftDir = FileUtil.getFilePath(FileUtil.DRAFT_ATTACHMENTS_DIRECTORY)
-        File(draftDir).mkdirs()
-        val media = LocalMediaBuilder.gallery(
-            id = 9L,
-            mime = "image/jpeg",
-            contentUri = "content://media/external/images/media/9",
-            realPath = "/storage/emulated/0/DCIM/Camera/img_9.jpg",
-        )
-        val sourceUri = Uri.parse(media.path)
-        val loaded = givenCompressionSucceeds(File(draftDir, "compressed_9.jpg"))
-        val model = mockk<EditorModel>()
-        every { model.render(any(), any(), any()) } returns mockk(relaxed = true)
-
-        ImageEditorModelRenderMediaTransform(model, null, SentMediaQuality.STANDARD)
-            .transform(context, media)
-
-        val compressInput = loaded.captured
-        assertEquals("compressed the source instead of the render", "file", compressInput.scheme)
-        assertNotEquals(sourceUri, compressInput)
-        assertTrue(
-            compressInput.toString(),
-            compressInput.path.orEmpty().startsWith(draftDir)
-        )
-    }
-
-    // ---------------------------------------------------------------- T63
-
-    /**
-     * T63 — with nothing rendered there is no output to read, so the compressor must still go
-     * through the resolver: a `file://` URI over the bare `realPath` is exactly what scoped storage
-     * makes unreadable.
-     */
-    @Test
-    fun `standard quality compression with nothing rendered loads the resolved source uri`() {
-        val draftDir = FileUtil.getFilePath(FileUtil.DRAFT_ATTACHMENTS_DIRECTORY)
-        File(draftDir).mkdirs()
-        val media = LocalMediaBuilder.gallery(
-            id = 10L,
-            mime = "image/jpeg",
-            contentUri = "content://media/external/images/media/10",
-            realPath = "/storage/emulated/0/DCIM/Camera/img_10.jpg",
-        )
-        val loaded = givenCompressionSucceeds(File(draftDir, "compressed_10.jpg"))
-
-        ImageEditorModelRenderMediaTransform(null, null, SentMediaQuality.STANDARD)
-            .transform(context, media)
-
-        assertEquals(media.readableUri(), loaded.captured)
-        assertEquals(Uri.parse(media.path), loaded.captured)
-    }
-
-    /**
-     * Stubs the compressor to succeed with [output] and captures the URI it was asked to read.
-     *
-     * The whole builder chain has to be stubbed because the terminal `get()` is what performs the
-     * read; capturing `load` is the only way to observe *which* source the compressor was pointed at,
-     * which a resolver-open assertion cannot distinguish once a render output also exists.
-     */
-    private fun givenCompressionSucceeds(output: File): CapturingSlot<Uri> {
-        val loaded = slot<Uri>()
-        mockkStatic(Luban::class)
-        val builder = mockk<Luban.Builder>()
-        every { Luban.with(any()) } returns builder
-        every { builder.load(capture(loaded)) } returns builder
-        every { builder.ignoreBy(any()) } returns builder
-        every { builder.setTargetDir(any()) } returns builder
-        every { builder.setRenameListener(any()) } returns builder
-        every { builder.get() } returns mutableListOf(output)
-        return loaded
-    }
-
-    /**
-     * Makes the compressor report an unreadable source.
-     *
-     * The upstream compressor swallows a failing source internally and simply produces nothing, so
-     * an unreadable registration cannot reach our catch block. Stubbing its terminal call is the
-     * only way to exercise the two branches that decide between propagating and degrading.
-     */
-    private fun givenCompressionFails() {
-        mockkStatic(Luban::class)
-        val builder = mockk<Luban.Builder>()
-        every { Luban.with(any()) } returns builder
-        every { builder.load(any<Uri>()) } returns builder
-        every { builder.ignoreBy(any()) } returns builder
-        every { builder.setTargetDir(any()) } returns builder
-        every { builder.setRenameListener(any()) } returns builder
-        every { builder.get() } throws IOException("cannot read source")
-    }
-
-    @After
-    fun tearDown() {
-        unmockkAll()
-    }
+    private fun transform(
+        media: com.difft.android.selector.entity.LocalMedia,
+        quality: SentMediaQuality = SentMediaQuality.STANDARD
+    ) = ImageEditorModelRenderMediaTransform(null, null, quality).transform(context, media)
 }

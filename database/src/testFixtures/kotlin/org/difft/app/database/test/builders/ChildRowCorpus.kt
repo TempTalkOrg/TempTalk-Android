@@ -25,10 +25,10 @@ import org.difft.app.database.toSharedContactPhone
 import org.difft.app.database.toSpeechToTextData
 import org.difft.app.database.toTranslateData
 
-// ---------------------------------------------------------------------------------------------
-// Child-row builders. `databaseId` is always passed explicitly: it is the ordering key the whole
-// hydration contract is written against, so a case must be able to seed it out of insertion order.
-// ---------------------------------------------------------------------------------------------
+
+
+
+
 
 @Suppress("LongParameterList")
 fun buildAttachmentModel(
@@ -188,16 +188,16 @@ fun buildForwardModel(
     this.serverTimestamp = serverTimestamp
 }
 
-/**
- * An in-memory stand-in for the child tables, plus [referenceSubDataFor] — a reference
- * implementation of the per-message point-query path written independently of
- * `MessageHydrator`.
- *
- * `referenceSubDataFor` mimics `WCDBExtensions.kt`'s point queries literally: filter the rows by
- * the same predicate, sort by `databaseId`, recurse naively into nested forwards, and run the same
- * `ChildRowMappers`. That makes "batch hydration == point queries" an executable assertion rather
- * than an argument about two pieces of code looking similar.
- */
+
+
+
+
+
+
+
+
+
+
 @Suppress("LongParameterList")
 class ChildRowCorpus(
     val messages: List<MessageModel> = emptyList(),
@@ -274,7 +274,7 @@ class ChildRowCorpus(
             ?.toSpeechToTextData(),
     )
 
-    /** Naive recursion, structurally a copy of `ForwardModel.forwards()` — no depth bound. */
+    
     private fun referenceForward(model: ForwardModel): Forward = Forward(
         id = model.id,
         type = model.type,
@@ -298,12 +298,12 @@ class ChildRowCorpus(
 
     companion object {
 
-        /**
-         * 12 messages covering every child-row family plus the three second-level paths: a bare
-         * text message, attachments, mentions, reactions, translate, speech-to-text, a quote with
-         * attachments, a quote without, shared contacts with and without phones, a flat combined
-         * forward, and a three-level nested forward.
-         */
+        
+
+
+
+
+
         @Suppress("LongMethod")
         fun rich(): ChildRowCorpus {
             val messages = mutableListOf<MessageModel>()
@@ -329,31 +329,31 @@ class ChildRowCorpus(
                 messages += it
             }
 
-            // 1: plain text, no child rows at all.
+            
             message("m-plain", 0)
 
-            // 2: two attachments seeded out of databaseId order -> the FIRST by databaseId wins.
+            
             message("m-attach", 1)
             attachments += buildAttachmentModel(databaseId = 71, messageId = "m-attach")
             attachments += buildAttachmentModel(databaseId = 31, messageId = "m-attach")
 
-            // 3: three mentions seeded out of order.
+            
             message("m-mention", 2)
             mentions += buildMentionModel(databaseId = 93, messageId = "m-mention")
             mentions += buildMentionModel(databaseId = 41, messageId = "m-mention")
             mentions += buildMentionModel(databaseId = 62, messageId = "m-mention")
 
-            // 4: two reactions.
+            
             message("m-reaction", 3)
             reactions += buildReactionModel(databaseId = 12, messageId = "m-reaction")
             reactions += buildReactionModel(databaseId = 11, messageId = "m-reaction")
 
-            // 5: translate + speech-to-text.
+            
             message("m-derived", 4)
             translates += buildTranslateModel(databaseId = 5, messageId = "m-derived")
             speechToTexts += buildSpeechToTextModel(databaseId = 6, messageId = "m-derived")
 
-            // 6: quote WITH attachments — one carries a zero-length thumbnail (normalised to null).
+            
             quotes += buildQuoteModel(databaseId = 5)
             message("m-quote", 5, quoteDatabaseId = 5L)
             attachments += buildAttachmentModel(
@@ -363,11 +363,11 @@ class ChildRowCorpus(
                 databaseId = 102, quoteModelDatabaseId = 5L, thumbnail = byteArrayOf(1, 2, 3),
             )
 
-            // 7: quote WITHOUT attachments -> Quote.attachments == null.
+            
             quotes += buildQuoteModel(databaseId = 6)
             message("m-quote-bare", 6, quoteDatabaseId = 6L)
 
-            // 8 + 9: shared contacts, one with three phones and one with none.
+            
             message("m-contacts", 7)
             sharedContacts += buildSharedContactModel(databaseId = 21, messageId = "m-contacts")
             sharedContacts += buildSharedContactModel(databaseId = 22, messageId = "m-contacts")
@@ -377,7 +377,7 @@ class ChildRowCorpus(
             message("m-contacts-nophone", 8)
             sharedContacts += buildSharedContactModel(databaseId = 23, messageId = "m-contacts-nophone")
 
-            // 10: flat combined forward — three top-level forwards, each with an attachment/mention.
+            
             forwardContexts += buildForwardContextModel(databaseId = 8, isFromGroup = true)
             message("m-forward-flat", 9, forwardContextDatabaseId = 8L)
             listOf(203, 201, 202).forEach { fwdId ->
@@ -390,7 +390,7 @@ class ChildRowCorpus(
                 )
             }
 
-            // 11: three-level nested forward.
+            
             forwardContexts += buildForwardContextModel(databaseId = 9)
             message("m-forward-nested", 10, forwardContextDatabaseId = 9L)
             forwards += buildForwardModel(databaseId = 501, forwardContextDatabaseId = 9L)
@@ -402,7 +402,7 @@ class ChildRowCorpus(
                 )
             }
 
-            // 12: everything at once on a single message.
+            
             quotes += buildQuoteModel(databaseId = 7)
             forwardContexts += buildForwardContextModel(databaseId = 10)
             message("m-everything", 11, quoteDatabaseId = 7L, forwardContextDatabaseId = 10L)

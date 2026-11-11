@@ -70,15 +70,15 @@ import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
-/**
- * Foreground service that owns the migration transfer coroutine scope, so a transfer survives
- * backgrounding instead of dying with the Activity; the view models re-attach to the live state via
- * [MigrationTransferStateHolder] on recreate.
- *
- * Invariants: this service is the single writer of [MigrationTransferStateHolder] — the view models
- * only read. `START_NOT_STICKY`, so a killed transfer is never auto-restarted; the user re-pairs.
- * Never logs the transfer key, the raw account or the raw environment.
- */
+
+
+
+
+
+
+
+
+
 @AndroidEntryPoint
 class MigrationTransferService : LifecycleService() {
 
@@ -90,52 +90,52 @@ class MigrationTransferService : LifecycleService() {
     @Inject lateinit var snapshotter: BackupSnapshotter
     @Inject lateinit var notificationHelper: MigrationTransferNotificationHelper
 
-    /** Live logged-in account source for the send; read inside the controller, never passed as an extra. */
+    
     @Inject lateinit var userManager: StorageBoundUserManager
 
-    // Same-device no-login handoff collaborators. All behaviour lives in these injected classes; this
-    // service only calls them before the first byte, on the receipt, on a failure and on a cancel.
+    
+    
     @Inject lateinit var handoffCompleter: MigrationHandoffCompleter
 
-    /** Refreshes the linked-devices count after a Desktop cancels its own login mid-wait. */
+    
     @Inject lateinit var deviceRepository: DeviceRepository
     @Inject lateinit var linkedDevicesCountStore: LinkedDevicesCountStore
     @Inject lateinit var handoffReconciler: MigrationHandoffReconciler
     @Inject lateinit var handoffGate: MigrationHandoffGate
     @Inject lateinit var migrationImportLauncher: MigrationImportLauncher
 
-    /** The one send awaiting a verdict, on disk — see [PendingVerdictStore]. */
+    
     @Inject lateinit var pendingVerdictStore: PendingVerdictStore
 
-    /** The device-replacement message pause (#1382) and the one path its outcome is settled through. */
+    
     @Inject lateinit var senderMessagePause: SenderMessagePause
     @Inject lateinit var verdictSettlement: SenderVerdictSettlement
 
-    /** The current sender run's pause, so a cancel put to the receiver reaches its settlement. */
+    
     @Volatile private var pauseRun: SenderPauseRun? = null
 
-    /** The transfer coroutine lives here, not on the view model or controller. */
+    
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    /**
-     * For the work that must outlive a `cancelChildren()` on [serviceScope]: asking the receiver
-     * whether a cancel is still possible, and the bookkeeping around a teardown. Cancelled in onDestroy.
-     */
+    
+
+
+
     private val controlScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    /** The sender's receiver session and what follows from it — see [SenderVerdictTracker]. */
+    
     private val verdicts by lazy { SenderVerdictTracker(pendingVerdictStore, controlScope) }
 
-    /** The receiver role's server events, progress and failures (see [ReceiverRoleEvents]). */
+    
     private val receiverEvents = ReceiverRoleEvents { percent -> notificationHelper.updateProgress(percent) }
 
-    /** The receiver role's wait for a peer or a scan, and the code rotation (see [ReceiverPairing]). */
+    
     private val pairing = ReceiverPairing(PAIRING_TIMEOUT_MS, PAIRING_ROTATE_INTERVAL_MS)
 
-    /** The CPU + Wi-Fi locks a transfer holds — see [TransferLocks]. */
+    
     private val transferLocks by lazy { TransferLocks(this) }
 
-    /** What the tray says once the service is gone — see [TransferTerminalNotices]. */
+    
     private val terminalNotices by lazy { TransferTerminalNotices(this, notificationHelper) }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -156,7 +156,7 @@ class MigrationTransferService : LifecycleService() {
                     includeAttachments = intent.getBooleanExtra(EXTRA_INCLUDE_ATTACHMENTS, true),
                     credentialHandoff = intent.getBooleanExtra(EXTRA_CREDENTIAL_HANDOFF, false),
                     awaitPeerConfirm = intent.getBooleanExtra(EXTRA_AWAIT_PEER_CONFIRM, false),
-                    // Absent means no pause: a Desktop link wrongly paused would never be released.
+                    
                     deviceReplacement = intent.getBooleanExtra(EXTRA_DEVICE_REPLACEMENT, false),
                 )
 
@@ -170,26 +170,26 @@ class MigrationTransferService : LifecycleService() {
         return START_NOT_STICKY
     }
 
-    // ── Receiver role (the new device) ───────────────────────────────────────
+    
 
     private fun startReceiverRole(account: String, sameDevice: Boolean, credentialHandoff: Boolean = false) {
         L.i { "[MigrationV2][P2P][FGS] start role=RECEIVER sameDevice=$sameDevice handoff=$credentialHandoff" }
-        // Give the ongoing notification a tap target before startForeground builds it, so a transfer
-        // buried by an incoming call or a Home press can always be reached again from the tray.
+        
+        
         notificationHelper.returnToTransferIntent = returnIntent(
             MigrationImportLauncherImpl.createP2pReceiveIntentFor(this, account, sameDevice, credentialHandoff = credentialHandoff),
         )
-        // Enter the foreground first on every start path: the caller already ran
-        // startForegroundService, so startForeground must be reached within 5s on every branch or
-        // API 31+ throws ForegroundServiceDidNotStartInTimeException. Idempotent at the same id.
-        // On a refusal the wrapper has already called stopSelf() — abort without starting a transfer.
+        
+        
+        
+        
         if (!startForegroundCompat()) {
             L.w { "[MigrationV2][P2P][FGS] startForeground refused — abort receiver" }
             return
         }
-        // Guard against a second start while a transfer is in flight: it would reset the holder and
-        // launch a second receiver, racing two servers on one port and two writers on the holder. The
-        // in-flight transfer owns the running service, so ignore the duplicate rather than tearing down.
+        
+        
+        
         if (isTransferInFlight() && !evictIdleListener()) {
             L.w { "[MigrationV2][P2P][FGS] start ignored — transfer already in flight" }
             return
@@ -197,7 +197,7 @@ class MigrationTransferService : LifecycleService() {
         MigrationTransferStateHolder.reset()
         MigrationTransferStateHolder.update(TransferState.Starting)
         pairing.resetScan()
-        // Loopback never touches the radio; holding a Wi-Fi lock for it would only cost battery.
+        
         transferLocks.acquire(wifi = !sameDevice)
         serviceScope.launch { runReceiver(account, sameDevice, credentialHandoff) }
     }
@@ -224,39 +224,39 @@ class MigrationTransferService : LifecycleService() {
         receiverEvents.attach(serviceScope)
         try {
             val handle = controller.startReceiver(
-                scope = serviceScope, // ★ scope passed in (E1) ★
+                scope = serviceScope, 
                 sameDevice = sameDevice,
                 onEvent = receiverEvents::onServerEvent,
                 onProgress = receiverEvents::onProgress,
                 onBodyComplete = ::publishPromoting,
                 onPromoted = {
-                    // Promoting is normally already published at body-complete; this is the fallback for
-                    // a receive that fired no body-complete signal. Re-publishing it is a no-op.
+                    
+                    
                     MigrationTransferStateHolder.update(TransferState.Promoting)
                     MigrationTransferStateHolder.update(TransferState.Promoted)
                 },
-                // The database is switched but its tail is unproven: keep the data, publish no terminal
-                // to the peer, and let the screen force the cold start that finishes the promote.
+                
+                
                 onCommittedUnconfirmed = {
                     MigrationTransferStateHolder.update(TransferState.CommittedUnconfirmed)
                 },
-                // After the body is in, a rejection is the import's own verdict, never a peer that left.
+                
                 onRejected = { if (isPromoting()) receiverEvents.fail(it, fromOutcome = true) else receiverEvents.failEventually(it) },
             )
             val target = handle.displayTarget
-            MigrationTransferStateHolder.publishQr(target) // transferKey never logged
+            MigrationTransferStateHolder.publishQr(target) 
             MigrationTransferStateHolder.update(
                 TransferState.WaitingForPeer(target.ip, target.port, target.pin),
             )
             L.i { "[MigrationV2][P2P][FGS] receiver up ip=${target.ip} port=${target.port}" }
-            // The code on screen rotates while nobody has claimed it: a fresh PIN every minute, the
-            // old one refused at once. Same device shows no code, so nothing rotates there.
+            
+            
             val rotation = if (sameDevice) null else serviceScope.launch { pairing.rotatePin(controller) }
-            // Suspend until the receive outcome resolves so the FGS stays up across the whole import.
-            // Bound the no-peer case so a backgrounded receiver does not stay up indefinitely. A
-            // computer's export QR scanned meanwhile turns this role into reverse pairing: the listener
-            // stays up — it is what the computer connects back to — and the same coroutine, locks and
-            // terminal handling carry it.
+            
+            
+            
+            
+            
             val macTarget = pairing.awaitPeerOrScan()
             rotation?.cancel()
             if (macTarget != null) {
@@ -268,24 +268,24 @@ class MigrationTransferService : LifecycleService() {
             MigrationTransferStateHolder.update(TransferState.Failed(failureReason(e)))
         } finally {
             receiverEvents.detach()
-            // A finished transfer keeps its listener up a while longer — closed to new sessions — so a
-            // sender whose final answer was lost can still read the terminal from /status instead of
-            // guessing: `succeeded` after a promote, `failed` / `cancelled` after a failure or a
-            // cancel (#1382 A07). Anything else (an evicted or torn-down listener) stops here.
+            
+            
+            
+            
             when (MigrationTransferStateHolder.state.value) {
                 TransferState.Promoted -> controller.lingerReceiver()
                 TransferState.Cancelled, is TransferState.Failed -> controller.lingerAfterUnsuccessfulEnd()
-                else -> controller.stopReceiver() // server teardown (idempotent)
+                else -> controller.stopReceiver() 
             }
             finishRole()
         }
     }
 
-    /**
-     * The reverse-pairing leg of the receiver role: ask the scanned computer to connect back, then
-     * hand the outcome to the ordinary upload path, exactly as the listening leg does. Runs inside
-     * [runReceiver]'s try, so cancellation, teardown and the terminal notification are shared.
-     */
+    
+
+
+
+
     private suspend fun runReversePair(
         account: String,
         handle: MigrationP2pReceiveController.ReceiverHandle,
@@ -301,13 +301,13 @@ class MigrationTransferService : LifecycleService() {
         MigrationTransferStateHolder.state.first { it.isTerminal() }
     }
 
-    /**
-     * Sender callbacks arrive from the upload's own thread, so one can land after ACTION_CANCEL has
-     * already written Cancelled: a cancel closes the pipe under the uploader, which then sees a clean
-     * end of body and reports it sent. Written into the holder, that late AwaitingVerdict would sit
-     * there for ever — the service is gone — and every later send would be refused as "in flight".
-     * Only a sender still moving bytes or waiting on its peer may advance.
-     */
+    
+
+
+
+
+
+
     private fun advanceLiveSender(next: TransferState) {
         val current = MigrationTransferStateHolder.state.value
         if (current.acceptsSenderCallback()) {
@@ -317,7 +317,7 @@ class MigrationTransferService : LifecycleService() {
         }
     }
 
-    // ── Sender role (the old device) ───────────────────────────────────
+    
 
     private fun startSenderRole(
         raw: String,
@@ -330,18 +330,18 @@ class MigrationTransferService : LifecycleService() {
             "[MigrationV2][P2P][FGS] start role=SENDER includeAttachments=$includeAttachments " +
                 "handoff=$credentialHandoff awaitPeerConfirm=$awaitPeerConfirm deviceReplacement=$deviceReplacement"
         }
-        // Same tap-target wiring as the receiver role (see there).
+        
         notificationHelper.returnToTransferIntent = returnIntent(
             MigrationImportLauncherImpl.createP2pSendIntentFor(this),
         )
-        // Enter the foreground first, before the QR decode and any early exit: the caller already ran
-        // startForegroundService, so an early return that stopSelf()ed without startForeground would
-        // crash on API 31+. On a refusal the wrapper has already called stopSelf() — just abort.
+        
+        
+        
         if (!startForegroundCompat()) {
             L.w { "[MigrationV2][P2P][FGS] startForeground refused — abort sender" }
             return
         }
-        // Ignore a duplicate start while a transfer is already in flight (see startReceiverRole).
+        
         if (isTransferInFlight() && !evictIdleListener()) {
             L.w { "[MigrationV2][P2P][FGS] start ignored — transfer already in flight" }
             return
@@ -351,7 +351,7 @@ class MigrationTransferService : LifecycleService() {
             L.w { "[MigrationV2][P2P][FGS] sender start with undecodable QR — stopping" }
             MigrationTransferStateHolder.reset()
             MigrationTransferStateHolder.update(TransferState.Failed("invalid QR payload"))
-            // Leave the foreground we just entered before stopping, on this early-exit branch.
+            
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
             return
@@ -362,22 +362,22 @@ class MigrationTransferService : LifecycleService() {
         serviceScope.launch { runSender(target, includeAttachments, credentialHandoff, awaitPeerConfirm, deviceReplacement) }
     }
 
-    /**
-     * A transfer is in flight when the holder is neither [TransferState.Idle] nor terminal. A second
-     * start in this window must be ignored: the existing transfer owns the service and the scope.
-     */
+    
+
+
+
     private fun isTransferInFlight(): Boolean {
         val current = MigrationTransferStateHolder.state.value
         return current != TransferState.Idle && !current.isTerminal()
     }
 
-    /**
-     * A receiver that is still only listening (no peer has connected) is not a transfer worth
-     * protecting: a QR page that was backed out of, or never scanned, would otherwise block every
-     * later start until its pairing timeout. A deliberate new start therefore tears it down and
-     * proceeds. Anything past pairing — bytes flowing, importing, awaiting a verdict — keeps the
-     * guard: two transfers must never share the holder. Returns true when the way is now clear.
-     */
+    
+
+
+
+
+
+
     private fun evictIdleListener(): Boolean {
         val current = MigrationTransferStateHolder.state.value
         if (current !is TransferState.WaitingForPeer && current != TransferState.Starting) return false
@@ -396,8 +396,8 @@ class MigrationTransferService : LifecycleService() {
         awaitPeerConfirm: Boolean = false,
         deviceReplacement: Boolean = false,
     ) {
-        // Minted and persisted before any byte: if this process dies mid-transfer, the id on disk is
-        // the only thing that lets the next start ask the new app whether the handoff completed.
+        
+        
         val handoffId = if (credentialHandoff) UUID.randomUUID().toString() else ""
         if (credentialHandoff) {
             userManager.update(commit = true) { migrationHandoffId = handoffId }
@@ -407,16 +407,16 @@ class MigrationTransferService : LifecycleService() {
             MigrationTransferStateHolder.update(
                 TransferState.Transferring(TransferState.Role.SENDER, INDETERMINATE),
             )
-            // Settle which of the advertised addresses to talk to before anything else; the address
-            // that wins is the one every later request, the session record and a resumed verdict
-            // query use. A single-address code passes straight through. All candidates failing is an
-            // unreachable peer, reported through the same path as a refused connection.
+            
+            
+            
+            
             val target = EndpointRace.resolve(target)
                 ?: throw java.net.SocketException("none of the ${target.candidates.size} advertised addresses answered")
             val onProgress: (Float) -> Unit = { ratio ->
                 advanceLiveSender(TransferState.Transferring(TransferState.Role.SENDER, ratio))
-                // The percent is known only for the Content-Length send. The chunked real-export path
-                // reports ratio=0f, so keep the bar indeterminate there rather than pinning it to 0%.
+                
+                
                 if (ratio > 0f) {
                     notificationHelper.updateProgress((ratio * 100).toInt())
                 }
@@ -424,12 +424,12 @@ class MigrationTransferService : LifecycleService() {
             val onBodySent: () -> Unit = {
                 L.i { "[MigrationV2][P2P][FGS] body sent — awaiting the receiver's verdict" }
                 advanceLiveSender(TransferState.AwaitingVerdict)
-                // A paused export stored its receipt with the commit marker; only a link saves it here.
+                
                 verdicts.onBodySent(persist = pause.session == null)
             }
             verdicts.reset()
-            // The handoff's receipt is the 200 plus the receiver's own word that it installed the
-            // credential; a 200 alone is what a receiver that never understood the handoff returns.
+            
+            
             var handoffAcknowledged = false
             var receiverRejected = false
             val ok = MigrationP2pSendController(
@@ -470,35 +470,35 @@ class MigrationTransferService : LifecycleService() {
             )
             if (credentialHandoff) {
                 if (handoffInstalled) {
-                    // The receipt: the new app promoted the database, installed the identity and said it
-                    // installed the credential. Only now may this device stop being a live session, and
-                    // the process dies inside complete(), so no terminal notification follows.
+                    
+                    
+                    
                     handoffCompleter.complete(handoffId)
                     return
                 }
                 if (ok) L.w { "[MigrationV2][P2P][FGS] handoff answered 200 without the installed acknowledgment — keeping this session" }
-                // No receipt. The new app may still have finished (a 200 lost on the way back, or an
-                // older new app that does not acknowledge), so ask it directly now rather than leaving
-                // two live sessions until the next cold start. The failure screen's retry stays gated
-                // on the answer.
+                
+                
+                
+                
                 reconcileAfterHandoffFailure()
             }
-            // Outside the handoff path this device does not sign itself out. A phone receiver registers
-            // as the primary device and the server revokes this one, which SessionAuthGuard handles on
-            // any screen; a desktop links as a secondary and this device stays the valid primary.
+            
+            
+            
         } catch (e: CancellationException) {
-            // A cancel means the body never finished, so the new app provably did not complete —
-            // clear the id synchronously instead of leaving a stale one for the next cold start to
-            // chase. Nothing was wiped here; this device is still online and still signed in.
+            
+            
+            
             if (credentialHandoff) {
                 userManager.update(commit = true) { migrationHandoffId = "" }
             }
-            val settled = pause.settleCancel() // before the service stops: tearDown waits for this coroutine
+            val settled = pause.settleCancel() 
             correctCancelledTerminal(settled, pause, credentialHandoff)
             throw e
         } catch (e: SendVerdictException) {
-            // The receiver's own word on a connection of its own, or a wait that ran out — not a
-            // transport failure, and never followed by a cancel.
+            
+            
             val settled = pause.settleVerdict(e.verdict)
             MigrationTransferStateHolder.update(pausedTerminal(settled, pause, credentialHandoff, verdicts.stateFor(e.verdict)))
             if (credentialHandoff) reconcileAfterHandoffFailure()
@@ -513,11 +513,11 @@ class MigrationTransferService : LifecycleService() {
         }
     }
 
-    /**
-     * The user's cancel. While the sender is only waiting for the verdict, the receiver is asked
-     * first: past its commit point a cancel changes nothing, and tearing this side down would only
-     * make the outcome unknowable. Everywhere else the transfer is torn down at once, as before.
-     */
+    
+
+
+
+
     private fun cancelTransfer() {
         if (!verdicts.mustAskReceiver(MigrationTransferStateHolder.state.value)) {
             L.i { "[MigrationV2][P2P][FGS] ACTION_CANCEL — tearing down transfer" }
@@ -527,7 +527,7 @@ class MigrationTransferService : LifecycleService() {
         L.i { "[MigrationV2][P2P][FGS] ACTION_CANCEL while awaiting the verdict — asking the receiver" }
         controlScope.launch {
             val decision = verdicts.askCancel()
-            if (MigrationTransferStateHolder.state.value.isTerminal()) return@launch // decided meanwhile
+            if (MigrationTransferStateHolder.state.value.isTerminal()) return@launch 
             when (decision) {
                 SenderVerdictTracker.CancelDecision.KEEP_WAITING -> MigrationTransferStateHolder.notify(TransferNotice.CANCEL_TOO_LATE)
                 SenderVerdictTracker.CancelDecision.CANCELLED -> tearDown(TransferState.Cancelled, decision)
@@ -536,11 +536,11 @@ class MigrationTransferService : LifecycleService() {
         }
     }
 
-    /**
-     * Ends the role from outside its coroutine: state first, then the work, then the foreground. A
-     * cancelled sender settles the message pause on its way out (#1382), so the service stays up
-     * until the cancelled role has finished. [asked] is the receiver's answer to the user's cancel.
-     */
+    
+
+
+
+
     private fun tearDown(terminal: TransferState, asked: SenderVerdictTracker.CancelDecision? = null) {
         pauseRun?.askedCancel = asked
         MigrationTransferStateHolder.update(terminal)
@@ -557,15 +557,15 @@ class MigrationTransferService : LifecycleService() {
         }
     }
 
-    /**
-     * The terminal a sender run may show (#1382 A11): a definite one only when the pause took the
-     * outcome (or there is none), and never while this run's pause awaits a decision. A handoff
-     * keeps its own failure screen, which gates the retry on the reconciler.
-     */
+    
+
+
+
+
     private fun pausedTerminal(settled: SettleResult, run: SenderPauseRun, credentialHandoff: Boolean, definite: TransferState): TransferState =
         if (!credentialHandoff && (!settled.proceeds || run.session?.awaitsDecision == true)) TransferState.Unknown else definite
 
-    /** The screen already reads Cancelled; a cancel the pause did not take is not one. */
+    
     private fun correctCancelledTerminal(settled: SettleResult, run: SenderPauseRun, credentialHandoff: Boolean) {
         if (MigrationTransferStateHolder.state.value != TransferState.Cancelled) return
         if (pausedTerminal(settled, run, credentialHandoff, TransferState.Cancelled) == TransferState.Unknown) {
@@ -573,18 +573,18 @@ class MigrationTransferService : LifecycleService() {
         }
     }
 
-    /** What the upload's own answer means before the pause has its say. */
+    
     private fun resultTerminal(ok: Boolean, credentialHandoff: Boolean, handoffAcknowledged: Boolean): TransferState = when {
         !ok -> TransferState.Failed("upload not confirmed (no 200)")
         credentialHandoff && !handoffAcknowledged -> TransferState.Failed(HANDOFF_NOT_ACKNOWLEDGED)
         else -> TransferState.Sent
     }
 
-    /**
-     * A device replacement pauses messaging (#1382). A handoff's pause is owned by its handoff id, so
-     * the reconciler can settle it too, and keeps no `/status` receipt: its unknown outcome is the
-     * reconciler's to decide.
-     */
+    
+
+
+
+
     private fun newPauseRun(deviceReplacement: Boolean, credentialHandoff: Boolean, handoffId: String): SenderPauseRun {
         val session = if (deviceReplacement) {
             senderMessagePause.newSession(handoffId.ifEmpty { UUID.randomUUID().toString() }, persistReceipt = !credentialHandoff)
@@ -601,17 +601,17 @@ class MigrationTransferService : LifecycleService() {
         stopSelf()
     }
 
-    /** Only a sender still waiting for the verdict may be told the receiver stalled or resumed. */
+    
     private fun advanceVerdictWait(next: TransferState) {
         if (MigrationTransferStateHolder.state.value.isAwaitingVerdict()) MigrationTransferStateHolder.update(next)
     }
 
-    /**
-     * The role's last act: report the outcome and leave the foreground. A role whose coroutine was
-     * cancelled does not own the service any more — an evicted idle listener handed it to the role
-     * that evicted it, and ACTION_CANCEL / onDestroy have already stopped it — so stopping here
-     * would tear down a transfer that is not this one.
-     */
+    
+
+
+
+
+
     private suspend fun finishRole() {
         if (!currentCoroutineContext().isActive) {
             L.i { "[MigrationV2][P2P][FGS] role cancelled — the service stays with its owner" }
@@ -622,16 +622,16 @@ class MigrationTransferService : LifecycleService() {
         stopSelf()
     }
 
-    /**
-     * Ask the new app, in-session, whether it nonetheless finished — the failed-send case where this
-     * process is still alive. A COMPLETED answer signs this device out from inside the reconciler;
-     * anything else leaves it online. Never throws: a reconcile failure must not mask the real
-     * transfer failure the user is about to see.
-     */
-    /**
-     * The Desktop unlinked itself on the server when its user cancelled the account switch, so the
-     * count this device shows is stale until re-read. Best effort; the list screen re-reads anyway.
-     */
+    
+
+
+
+
+
+    
+
+
+
     private suspend fun refreshLinkedDevices() {
         runCatching { deviceRepository.getDevices() }
             .onSuccess { linkedDevicesCountStore.update(it.size) }
@@ -644,7 +644,7 @@ class MigrationTransferService : LifecycleService() {
     }
 
 
-    /** An unreachable peer is a one-liner; anything else keeps its stack. */
+    
     private fun Throwable.describeFailure(): String =
         if (isPeerUnreachable()) "could not reach the peer: $message" else stackTraceToString()
 
@@ -653,17 +653,17 @@ class MigrationTransferService : LifecycleService() {
     @VisibleForTesting
     internal fun localizedFailureReason(reason: String): String = terminalNotices.localizedFailureReason(reason)
 
-    // ── FGS plumbing ───────────────────────────────────────────────────────
+    
 
-    /**
-     * Promotes to the foreground. Returns false if the OS refused (ForegroundServiceStartNotAllowed
-     * on Android 12+): the wrapper has already called stopSelf(), so callers must not continue.
-     */
-    /**
-     * Wrap a transfer-screen intent as the ongoing notification's tap target. `SINGLE_TOP | CLEAR_TOP`
-     * reuses the live Activity when it is still in the task (so a receive keeps its for-result link to
-     * the login flow) instead of stacking a second copy; `FLAG_IMMUTABLE` is required on API 31+.
-     */
+    
+
+
+
+    
+
+
+
+
     private fun returnIntent(target: Intent): PendingIntent {
         target.flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
         return PendingIntent.getActivity(
@@ -674,10 +674,10 @@ class MigrationTransferService : LifecycleService() {
         )
     }
 
-    /**
-     * Promotes on a channel verified at this call (#1354). With none, stops without
-     * `startForeground` — which on a missing channel would get the app killed — and returns false.
-     */
+    
+
+
+
     private fun startForegroundCompat(): Boolean {
         val channelId = NotificationChannelSpecs.serviceForegroundChannel(this, SERVICE_TAG)
         if (channelId == null) {
@@ -694,8 +694,8 @@ class MigrationTransferService : LifecycleService() {
     }
 
     override fun onDestroy() {
-        // Locks first: onDestroy is the one path every teardown reaches (cancel action, terminal
-        // stopSelf, system kill), so releasing here cannot leak them.
+        
+        
         transferLocks.release()
         serviceScope.cancel()
         controlScope.cancel()
@@ -706,13 +706,13 @@ class MigrationTransferService : LifecycleService() {
         const val ACTION_START_RECEIVER = "com.difft.migration.p2p.ACTION_START_RECEIVER"
         const val ACTION_START_SENDER = "com.difft.migration.p2p.ACTION_START_SENDER"
 
-        /** Receiver role only: reverse-pair with the computer whose export QR rides in [EXTRA_QR_PAYLOAD]. */
+        
         const val ACTION_START_REVERSE_PAIR = "com.difft.migration.p2p.ACTION_START_REVERSE_PAIR"
 
-        /** Cancel action; keep in sync with [MigrationTransferNotificationHelper.ACTION_CANCEL]. */
+        
         const val ACTION_CANCEL = MigrationTransferNotificationHelper.ACTION_CANCEL
 
-        /** Distinct from the helper's cancel request code so the two PendingIntents never alias. */
+        
         private const val REQUEST_CODE_RETURN_TO_TRANSFER = 0xCAFE0104.toInt()
 
 
@@ -720,59 +720,59 @@ class MigrationTransferService : LifecycleService() {
         const val EXTRA_ACCOUNT = "extra_account"
         const val EXTRA_QR_PAYLOAD = "extra_qr_payload"
 
-        /** Whether attachment bytes travel (voice notes always do). Absent → true. */
+        
         const val EXTRA_INCLUDE_ATTACHMENTS = "extra_include_attachments"
 
-        /** Receiver role: listen on loopback for the old app on this device (no QR, no LAN). */
+        
         const val EXTRA_SAME_DEVICE = "extra_same_device"
 
-        /**
-         * Both roles: this transfer is the same-device no-login credential handoff. Receiver → the
-         * container is expected to carry a session credential and this install adopts it; sender →
-         * the credential is projected into the container and this install signs out on the receipt.
-         */
+        
+
+
+
+
         const val EXTRA_CREDENTIAL_HANDOFF = com.difft.android.base.migration.PeerApps.EXTRA_CREDENTIAL_HANDOFF
         const val EXTRA_AWAIT_PEER_CONFIRM = com.difft.android.base.migration.PeerApps.EXTRA_AWAIT_PEER_CONFIRM
 
-        /** Sender only: a phone-to-phone device replacement, which pauses messaging (#1382). Absent → false. */
+        
         const val EXTRA_DEVICE_REPLACEMENT = "extra_device_replacement"
 
-        /** How long a teardown waits for the cancelled role to settle: its `/cancel` notice plus the pause write. */
+        
         private const val TEARDOWN_SETTLE_TIMEOUT_MS = 15_000L
 
-        /** Pairing timeout, matching the PIN TTL. Bounds how long a peerless receiver stays up. */
+        
         const val PAIRING_TIMEOUT_MS = 5 * 60 * 1000L
 
         @VisibleForTesting
         internal const val REASON_PAIRING_TIMEOUT = "pairing timeout"
 
-        /** How long one pairing code stays on screen before the listener issues the next. */
+        
         internal const val PAIRING_ROTATE_INTERVAL_MS = 60 * 1000L
 
-        /** Reverse pairing was requested while no receiver role was up to carry it. */
+        
         @VisibleForTesting
         internal const val REASON_NO_RECEIVER = "reverse-pair-without-receiver"
 
-        /** Indeterminate progress signal carried in [TransferState.Transferring]. */
+        
         private const val INDETERMINATE = -1f
 
-        /** Indeterminate percent passed to the notification (negative → indeterminate bar). */
+        
         private const val INDETERMINATE_PERCENT = -1
 
         private const val SERVICE_TAG = "MigrationTransferService"
 
-        /** No notification channel could carry the foreground notification; the service was not started. */
+        
         @VisibleForTesting
         internal const val REASON_NO_NOTIFICATION_CHANNEL = "no notification channel"
 
-        /** Starter-side channel preflight (#1354); on failure the transfer fails instead of starting. */
+        
         private fun preflight(context: Context): Boolean {
             if (NotificationChannelSpecs.preflightForegroundChannel(context, SERVICE_TAG) != null) return true
             MigrationTransferStateHolder.update(TransferState.Failed(REASON_NO_NOTIFICATION_CHANNEL))
             return false
         }
 
-        /** Starts the receiver role (the new device) from any context. */
+        
         fun startReceiver(
             context: Context,
             account: String,
@@ -789,10 +789,10 @@ class MigrationTransferService : LifecycleService() {
             ContextCompat.startForegroundService(context, intent)
         }
 
-        /**
-         * Turns the waiting receiver role into reverse pairing with the computer whose export QR was
-         * just scanned. Ignored when no receiver is waiting.
-         */
+        
+
+
+
         fun startReversePair(context: Context, rawQrPayload: String) {
             val intent = Intent(context, MigrationTransferService::class.java).apply {
                 action = ACTION_START_REVERSE_PAIR
@@ -801,11 +801,11 @@ class MigrationTransferService : LifecycleService() {
             context.startService(intent)
         }
 
-        /**
-         * Starts the sender role (the old device) from any context. [rawQrPayload] is the scanned QR;
-         * the transfer key rides inside it and is decoded in the controller. No account, environment
-         * or transfer-key extra is passed — identity is read live inside the controller.
-         */
+        
+
+
+
+
         fun startSender(
             context: Context,
             rawQrPayload: String,
@@ -826,7 +826,7 @@ class MigrationTransferService : LifecycleService() {
             ContextCompat.startForegroundService(context, intent)
         }
 
-        /** Request cancellation of an in-flight transfer. Safe no-op if nothing is running. */
+        
         fun cancel(context: Context) {
             val intent = Intent(context, MigrationTransferService::class.java).apply {
                 action = ACTION_CANCEL
@@ -836,35 +836,35 @@ class MigrationTransferService : LifecycleService() {
     }
 }
 
-/**
- * The role's terminal reason for [e], in the vocabulary `classifyFailure` reads. A peer that cannot
- * be reached — nobody listening at the pairing address (a Desktop that gave up waiting stops its
- * receiver), no route or an unresolvable host (a VPN or a second network carrying this device's
- * traffic away from the LAN), a connect that timed out, or a link that dropped mid-transfer — is
- * its own wire reason, kept apart from a stale-PIN 401 so the page says "connection", not
- * "unexpected error". A migration failure carries its error code, the way the receive side's
- * RestoreResult already does; anything else keeps its message (wire reject tokens live there).
- */
+
+
+
+
+
+
+
+
+
 internal fun failureReason(e: Throwable): String = when {
     e.isPeerUnreachable() -> PrepareUploadReasons.PEER_UNREACHABLE
     e is MigrationException -> "failed: ${MigrationError.from(e).code}"
     else -> e.message ?: e.javaClass.simpleName
 }
 
-/**
- * The receiver's reason for a connection that failed under its server. A socket that ended under
- * our read — the sender hung up, even before its first byte was flushed — or a read that timed out
- * is the link going, the same verdict the reader gives a stream that ends early. Whether the sender
- * left on purpose is what its `/cancel` says, not the shape of the drop. Anything else (a gate
- * reject, a protocol error) keeps its detail, which carries the wire token the classifier reads.
- */
+
+
+
+
+
+
+
 internal fun receiverFailureReason(detail: String, cause: Throwable?): String =
     if (cause != null && cause.isPeerUnreachable()) ReceiverFailureArbiter.DROPPED_LINK else detail
 
-/**
- * Everything is in; the import tail and promote run now. Only a live Transferring may advance, so a
- * transfer that already ended — or one the fallback in `onPromoted` moved on — is left alone.
- */
+
+
+
+
 internal fun publishPromoting() {
     val current = MigrationTransferStateHolder.state.value
     if (current is TransferState.Transferring && current.role == TransferState.Role.RECEIVER) {
@@ -873,20 +873,20 @@ internal fun publishPromoting() {
     }
 }
 
-/** The receiver is past its body and into the import tail: a rejection now is the import's own verdict. */
+
 internal fun isPromoting(): Boolean = MigrationTransferStateHolder.state.value == TransferState.Promoting
 
-/** A sender state that a progress / body-sent / peer-confirm callback may still advance. */
+
 internal fun TransferState.acceptsSenderCallback(): Boolean =
     (this is TransferState.Transferring && role == TransferState.Role.SENDER) || this == TransferState.AwaitingPeerConfirm
 
-/**
- * The peer or the link is gone: refused, reset, no route, unresolvable, timed out, or the stream
- * ended before its end. Subclasses cover connect refusals and resets (SocketException) and the
- * "unexpected end of stream" OkHttp raises when the other side hangs up mid-body. Over TLS the same
- * hang-up surfaces as an SSLException on the read or write; the handshake refusing the peer (a pin
- * mismatch) is not that and keeps its own reason.
- */
+
+
+
+
+
+
+
 internal fun Throwable.isPeerUnreachable(): Boolean =
     this is SocketException || this is SocketTimeoutException || this is UnknownHostException ||
         this is ProtocolException || this is EOFException || isTlsLinkFailure()

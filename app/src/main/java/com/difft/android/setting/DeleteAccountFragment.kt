@@ -58,12 +58,12 @@ class DeleteAccountFragment : Fragment(), SettingsIdiomPage {
         detailKeyboard(showOnFirstOpen = false, focus = {}, savedInstanceState = savedInstanceState)
         (view as ComposeView).setContent {
             val state by model.state.collectAsState()
-            // Synchronous IME echo; SavedStateHandle owns the draft across view recreation.
+            
             var input by remember(model) { mutableStateOf(model.state.value.input) }
             DifftTheme(applyWindowBackground = ownsWindow()) {
                 Column(Modifier.fillMaxSize().background(DifftTheme.colors.bg).detailPageInsets(containerPadsBottom(), ime = true)) {
                     TitleBar(stringResource(R.string.me_delete_account), onBackClick = { detailNavigation().pop(this@DeleteAccountFragment) }, showBackButton = showsDetailBackButton())
-                    // Top inset as padding, not a spacer: spacedBy would add the group gap after a spacer.
+                    
                     Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = DifftSettingsDefaults.PageInset).padding(top = DifftSettingsDefaults.FirstGroupSpacing), verticalArrangement = Arrangement.spacedBy(DifftSettingsDefaults.GroupSpacing)) {
                         Text(stringResource(R.string.me_delete_account_tips1), style = DifftTheme.typography.p2, color = DifftTheme.colors.textPrimary)
                         Text(stringResource(R.string.me_delete_account_tips2, state.suffix), style = DifftTheme.typography.p3, color = DifftTheme.colors.textSecondary)
@@ -74,7 +74,7 @@ class DeleteAccountFragment : Fragment(), SettingsIdiomPage {
             }
         }
         viewLifecycleOwner.lifecycleScope.launch {
-            // Busy survives a fold, but the confirmation's modal claim is never mounted again.
+            
             model.state.collect { if (!it.busy) deleteWait.dismiss() }
         }
         viewLifecycleOwner.lifecycleScope.launch {

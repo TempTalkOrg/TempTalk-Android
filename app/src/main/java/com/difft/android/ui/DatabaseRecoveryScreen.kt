@@ -24,12 +24,12 @@ import com.difft.android.R
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.ui.theme.DifftThemePreview
 
-/**
- * Full-screen UI shown by [com.difft.android.MainActivity] when DB corruption is
- * detected. Indeterminate spinner (the underlying `retrieve(null)` surfaces no
- * progress), app logo, and recovery status text. Uses [DifftTheme] tokens so it
- * renders correctly in light + dark.
- */
+
+
+
+
+
+
 @Composable
 fun DatabaseRecoveryScreen(
     modifier: Modifier = Modifier

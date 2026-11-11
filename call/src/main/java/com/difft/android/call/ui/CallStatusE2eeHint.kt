@@ -33,16 +33,11 @@ import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.isAnimationsDisabled
 import com.difft.android.call.R
 
-/**
- * Cross-fades [primaryLabel] ("等待接听…", the only remaining title-borne status — connection
- * statuses live in [CallStatusNotificationBar]) with the E2EE-encrypted label. The crossfade is
- * an E2EE-hints product requirement (PR #1125, Mac parity): the title fits two lines, so status
- * and encrypted hint timeshare one of them. Mounts `rememberInfiniteTransition` ONLY while
- * [shouldAnimate] is true — an unconditioned infinite transition drives main-thread
- * recomposition for the entire call, the exact bug class that guard exists for. When not
- * animating, renders a single static encrypted row — the reduced-motion fallback AND the
- * background/PiP fallback (deliberately the same single branch).
- */
+
+
+
+
+
 @Composable
 internal fun AlternatingCallStatusText(
     primaryLabel: String,
@@ -56,7 +51,7 @@ internal fun AlternatingCallStatusText(
     }
 
     val infiniteTransition = rememberInfiniteTransition(label = "callStatusEncryptionCrossfade")
-    // 0-43% primary visible, 43-50% fade out, 50-93% encrypted visible, 93-100% fade back in.
+    
     val primaryAlpha by infiniteTransition.animateFloat(
         initialValue = 1f, targetValue = 1f,
         animationSpec = infiniteRepeatable(
@@ -84,10 +79,10 @@ internal fun AlternatingCallStatusText(
     }
 }
 
-/**
- * Lock icon + "End-to-end encrypted" text — matches `ConnectedStatusContent`'s lock-icon row.
- * Also shown statically in the title while connection statuses render in the floating bar.
- */
+
+
+
+
 @Composable
 internal fun EncryptedStatusRow(
     textStyle: TextStyle,
@@ -95,8 +90,7 @@ internal fun EncryptedStatusRow(
     modifier: Modifier = Modifier,
 ) {
     Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
-        // Literal Color.White (not DifftTheme.colors.*) matches every other icon/text in this
-        // forced-dark-theme call surface (CallContent.kt:90).
+        
         Icon(
             imageVector = ImageVector.vectorResource(id = com.difft.android.base.R.drawable.base_tabler_lock),
             contentDescription = null,
@@ -114,13 +108,13 @@ internal fun EncryptedStatusRow(
     }
 }
 
-/** Foreground + not-PiP + animations-enabled gate for the E2EE crossfade. */
+
 @Composable
 internal fun rememberShouldAnimateCallStatus(isInPipMode: Boolean): Boolean {
     val context = LocalContext.current
     val lifecycleState by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
     val isForeground = lifecycleState.isAtLeast(Lifecycle.State.RESUMED)
-    // Read once per composition entry, not per-frame — Settings reads are cheap but not free.
+    
     val reducedMotion = remember { isAnimationsDisabled(context) }
     return isForeground && !isInPipMode && !reducedMotion
 }

@@ -14,26 +14,26 @@ import org.whispersystems.signalservice.internal.push.SignalServiceProtos.DataMe
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos.Envelope
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos.MsgExtra
 
-/**
- * The #1 correctness trap — gid normalization (design-report §3, §7.3).
- *
- * A legit group message must NOT be false-dropped because the content side and the
- * envelope side reduced the same group id to different strings. These tests pin:
- *   NM1/NM2 — same/different 32-byte gids compare (PROCESS / REJECT).
- *   NM3     — the "money" test: the real content lazy (:160) and the real envelope
- *             path (extractEnvelopeConversation -> parseToFor) reduce identical bytes
- *             to identical For.Group strings for the C1 / plain-ASCII population.
- *   NM-PLAIN-RT — f ∘ g is identity for plain-ASCII ids (manufactured C2/C3 never
- *                 false-drop the live population).
- *   NM-WEEK — f ∘ g is identity for legacy "WEEK"/16-byte ids after the C5 cross-platform
- *             alignment re-enabled the 16-byte decode branch, closing the former §3.1 residual.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 class ConversationGidNormalizationTest {
 
-    private val gidA = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" // 32 bytes ASCII
-    private val gidB = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" // 32 bytes ASCII
+    private val gidA = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" 
+    private val gidB = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" 
 
-    // NM1 — identical 32 bytes both sides -> For.Group equal -> PROCESS (no false-drop)
+    
     @Test
     fun `NM1 same group bytes both sides processes`() {
         val bytes = gidA.toByteArray(Charsets.UTF_8)
@@ -46,7 +46,7 @@ class ConversationGidNormalizationTest {
         )
     }
 
-    // NM2 — genuinely different gids still reject
+    
     @Test
     fun `NM2 different group bytes reject`() {
         val content = For.Group(gidA.toByteArray(Charsets.UTF_8).transformGroupIdFromServerToLocal())
@@ -58,10 +58,10 @@ class ConversationGidNormalizationTest {
         )
     }
 
-    // NM3 — money test: real content lazy (:160) vs real envelope path from the SAME bytes.
+    
     @Test
     fun `NM3 content path and envelope path reduce identical bytes identically`() {
-        val bytes = gidA.toByteArray(Charsets.UTF_8) // 32-byte on-wire server bytes
+        val bytes = gidA.toByteArray(Charsets.UTF_8) 
 
         val content = Content.newBuilder()
             .setDataMessage(
@@ -92,8 +92,8 @@ class ConversationGidNormalizationTest {
             .build()
 
         val data = SignalServiceDataClass(envelope, content, null)
-        val contentFor = data.conversation                 // real :160 reduction
-        val envelopeFor = data.envelopeConversation         // real parseToFor :329 reduction
+        val contentFor = data.conversation                 
+        val envelopeFor = data.envelopeConversation         
 
         assertTrue(contentFor is For.Group)
         assertTrue(envelopeFor is For.Group)
@@ -104,25 +104,25 @@ class ConversationGidNormalizationTest {
         )
     }
 
-    // NM-PLAIN-RT — f ∘ g is identity for plain-ASCII ids (live manufactured-path population)
+    
     @Test
     fun `NM-PLAIN-RT plain ASCII round trip is identity`() {
-        val local = gidA // 32-char ASCII local id
-        val server = local.transformGroupIdFromLocalToServer() // g
-        val back = server.transformGroupIdFromServerToLocal()  // f
+        val local = gidA 
+        val server = local.transformGroupIdFromLocalToServer() 
+        val back = server.transformGroupIdFromServerToLocal()  
         assertEquals(local, back)
     }
 
-    // NM-WEEK — f ∘ g is identity for legacy WEEK/16-byte ids after the C5 cross-platform
-    // alignment re-enabled the 16-byte decode branch (matching iOS/Desktop). This closes the
-    // former §3.1 WEEK false-drop residual: a WEEK id now round-trips through the manufactured
-    // envelope paths (C2/C3) unchanged. See GroupIdTransformParityTest for the raw-transform vectors.
+    
+    
+    
+    
     @Test
     fun `NM-WEEK legacy WEEK round trip is identity`() {
-        val local = "WEEK0123456789ABCDEF0123456789ABCDEF" // "WEEK" + 32 hex chars
-        val server = local.transformGroupIdFromLocalToServer() // g -> 16 bytes (live WEEK branch)
+        val local = "WEEK0123456789ABCDEF0123456789ABCDEF" 
+        val server = local.transformGroupIdFromLocalToServer() 
         assertEquals("WEEK encode must produce 16 bytes", 16, server.size)
-        val back = server.transformGroupIdFromServerToLocal()  // f -> "WEEK" + uppercase hex (live decode)
+        val back = server.transformGroupIdFromServerToLocal()  
         assertEquals(local, back)
     }
 }

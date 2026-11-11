@@ -16,7 +16,7 @@ import java.net.UnknownHostException
 import java.util.concurrent.TimeUnit
 import kotlin.test.assertEquals
 
-/** The failover budget caps how long a resend may spend connecting (#1396). */
+
 class HostFailoverBudgetTest {
 
     private val urlManager = mockk<UrlManager> {
@@ -58,7 +58,7 @@ class HostFailoverBudgetTest {
             every { call() } returns mockk<Call> { every { isCanceled() } returns false }
             every { connectTimeoutMillis() } returns 15_000
             every { proceed(any()) } answers {
-                now = 7_000 // the first host spent 7 s failing to resolve
+                now = 7_000 
                 throw UnknownHostException(A)
             }
             every { withConnectTimeout(any(), any()) } returns bounded

@@ -22,15 +22,15 @@ import org.json.JSONArray
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 
-/**
- * crop → compress → sandbox-transform → result handoff (image-load/ucrop/Luban
- * seams). Extracted from PictureCommonFragment (issue #1077); 1:1 semantics.
- */
+
+
+
+
 internal class MediaTransformPipeline(private val host: PictureCommonFragment) {
 
     private val config get() = host.selectorConfig
 
-    /** Dispatch the transform (crop / compress / sandbox) chain. */
+    
     fun dispatchTransformResult() {
         if (host.validator.checkCompleteSelectLimit()) {
             return
@@ -59,7 +59,7 @@ internal class MediaTransformPipeline(private val host: PictureCommonFragment) {
         for (i in result.indices) {
             val media = result[i]
             val availablePath = media.availablePath
-            // Only add valid paths, guarding against possible empty paths on e.g. Android 9.
+            
             if (!availablePath.isNullOrEmpty()) {
                 dataCropSource.add(availablePath)
             }
@@ -263,7 +263,7 @@ internal class MediaTransformPipeline(private val host: PictureCommonFragment) {
         host.results.onCallBackResult(result)
     }
 
-    /** SDK > 29: copy external resources into the app sandbox. */
+    
     private fun uriToFileTransform29(result: ArrayList<LocalMedia>) {
         host.showLoading()
         val queue = ConcurrentHashMap<String, LocalMedia>()
@@ -311,7 +311,7 @@ internal class MediaTransformPipeline(private val host: PictureCommonFragment) {
         }
     }
 
-    /** SDK > 29: copy external resources into the app sandbox (legacy). */
+    
     @Deprecated("")
     private fun copyExternalPathToAppInDirFor29(result: ArrayList<LocalMedia>) {
         host.showLoading()
@@ -340,7 +340,7 @@ internal class MediaTransformPipeline(private val host: PictureCommonFragment) {
         })
     }
 
-    /** Build original-image data. */
+    
     private fun mergeOriginalImage(result: ArrayList<LocalMedia>) {
         if (config.isCheckOriginalImage) {
             for (i in result.indices) {
@@ -362,7 +362,7 @@ internal class MediaTransformPipeline(private val host: PictureCommonFragment) {
         }
     }
 
-    /** Parse a REQUEST_CROP activity result, then dispatch compress/result. */
+    
     fun handleCropResult(data: Intent?) {
         val selectedResult = config.selectedResult
         try {
@@ -416,7 +416,7 @@ internal class MediaTransformPipeline(private val host: PictureCommonFragment) {
         }
     }
 
-    /** RESULT_CROP_ERROR handling. */
+    
     fun handleCropError(data: Intent?) {
         val throwable = if (data != null) Crop.getError(data) else Throwable("image crop error")
         if (throwable != null) {

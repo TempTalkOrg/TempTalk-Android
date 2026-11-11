@@ -18,22 +18,12 @@ import org.difft.app.database.models.RoomModel
 import org.difft.app.database.models.SharedContactModel
 import org.difft.app.database.models.SharedContactPhoneModel
 
-/**
- * In-memory [WcdbWriteTarget] standing in for a real second WCDB instance in the Robolectric
- * round-trip test. Faithfully reproduces the two WCDB ORM semantics the importer depends on:
- *
- *  1. **Autoincrement PK assignment** — `insertObject` assigns the next monotonic `databaseId` and
- *     writes it back into the model (matching `WCDBExtensions.convertToMessageModel`, which reads
- *     `quoteModel.databaseId` immediately after insert). The importer's FK reconnection relies on
- *     exactly this returned value.
- *  2. **Transaction grouping** — `runInTransaction` just runs the block (no rollback needed in the
- *     happy-path POC test); batching correctness is observable via the call grouping.
- *
- * It is NOT a SQL engine: it stores inserted models in lists so the test can re-project them back
- * into neutral records and feed both sides to [com.difft.android.migration.v2.verify.RoundTripVerifier].
- * The native WCDB path ([com.difft.android.migration.v2.importer.WcdbWriteTargetImpl]) is the same
- * shape and is exercised by the on-device POC Activity (plan §4 task 7) where the native lib loads.
- */
+
+
+
+
+
+
 class InMemoryWcdbWriteTarget : WcdbWriteTarget {
 
     val messages = ArrayList<MessageModel>()
@@ -53,9 +43,7 @@ class InMemoryWcdbWriteTarget : WcdbWriteTarget {
     var transactionCount = 0
         private set
 
-    // Per-table monotonic autoincrement counters (mirror SQLite rowid behaviour). Int post-#913:
-    // the real autoincrement PK column is now Int, so the fake mirrors that and widens to the
-    // portable Long the WcdbWriteTarget ID-remap contract returns.
+    
     private var quoteSeq = 0
     private var fcSeq = 0
     private var forwardSeq = 0
@@ -116,7 +104,7 @@ class InMemoryWcdbWriteTarget : WcdbWriteTarget {
     }
 
     override fun insertReadInfo(model: ReadInfoModel) {
-        // insert-or-replace on the {roomId, uid} composite PK (mirrors the real WCDB write).
+        
         readInfos.removeAll { it.roomId == model.roomId && it.uid == model.uid }
         readInfos.add(model)
     }
@@ -126,7 +114,7 @@ class InMemoryWcdbWriteTarget : WcdbWriteTarget {
         groupKeys.add(model)
     }
 
-    /** Set to make the next pending-envelope write throw, as an unsaveable row would. */
+    
     var failPendingEnvelopeWrites = false
 
     override fun insertPendingEnvelope(model: PendingMessageModelNew) {
@@ -136,8 +124,8 @@ class InMemoryWcdbWriteTarget : WcdbWriteTarget {
     }
 
     override fun markReadUpTo(roomId: String, maxServerTime: Long, readAt: Long, selfUid: String) {
-        // Same predicate as the SQL write-once UPDATE: only rows with no read time yet, incoming
-        // only, at or below the rung. The -1 sentinel fails `readTime == 0L` and stays put.
+        
+        
         messages.filter {
             it.roomId == roomId && it.readTime == 0L && it.fromWho != selfUid && it.systemShowTimestamp <= maxServerTime
         }.forEach { it.readTime = readAt }
@@ -147,7 +135,7 @@ class InMemoryWcdbWriteTarget : WcdbWriteTarget {
         attachments.filter { it.id == attachmentId }.forEach { it.status = 0 }
     }
 
-    // ── RoomStateReadWrite (Fix A): delegate reads to the shared support; update mutates the row ─────
+    
 
     override fun roomIdsWithMessages(): List<String> =
         RoomStateSupport.roomIdsWithMessages(messages)

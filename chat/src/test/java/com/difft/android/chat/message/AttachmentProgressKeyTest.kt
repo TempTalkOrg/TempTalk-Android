@@ -14,12 +14,12 @@ import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
-/**
- * Emit side and collect side must derive the SAME progress key or progress UI silently stops
- * updating. The emitters (DownloadAttachmentJob / PushTextSendJob) publish under the attachment
- * copy's own `localId`; every collector reads [getAttachmentIdForProgress]. These pin the two to
- * each other, for normal messages as well as forwarded ones.
- */
+
+
+
+
+
+
 class AttachmentProgressKeyTest {
 
     private fun attachment(localId: String, isForwardCopy: Boolean = false) = Attachment(
@@ -58,7 +58,7 @@ class AttachmentProgressKeyTest {
         val att = attachment("local-normal")
         val msg = message("msg-1") { attachment = att }
 
-        // Exactly the value the upload / download jobs emit under.
+        
         assertEquals(att.localId, msg.getAttachmentIdForProgress())
     }
 
@@ -96,7 +96,7 @@ class AttachmentProgressKeyTest {
 
     @Test
     fun `a forwarded copy's progress never reaches the message it was forwarded from`() {
-        // Both rows carry the same server-side id — the defect this rework closes.
+        
         val original = message("msg-original") { attachment = attachment("local-original") }
         val forwarded = singleForwardMessage("msg-forward", attachment("local-forwarded", isForwardCopy = true))
 
@@ -106,11 +106,11 @@ class AttachmentProgressKeyTest {
         assertNull(original.getAttachmentProgress())
     }
 
-    /**
-     * A persisted attachment row, and the bubble that renders it. Both sides of the pin below are
-     * derived from this one row: the emitter through [attachmentRowKey], the collector through the
-     * read mapper, exactly as production does.
-     */
+    
+
+
+
+
     private fun row(localId: String?, databaseId: Int = 42) = AttachmentModel().also {
         it.databaseId = databaseId
         it.id = "server-id"
@@ -124,7 +124,7 @@ class AttachmentProgressKeyTest {
 
     private fun bubbleFor(row: AttachmentModel) = message("msg-owner") { attachment = row.toAttachment() }
 
-    /** What `DownloadAttachmentJob.resolveTarget` derives for [row] — the key it emits under. */
+    
     private fun emitKey(row: AttachmentModel, jobLocalId: String?) =
         attachmentRowKey(row.localId, jobLocalId, row.synthesizedLocalId())
 
@@ -137,9 +137,9 @@ class AttachmentProgressKeyTest {
 
     @Test
     fun `a job persisted before the localId key emits under the synthesized key of an un-backfilled row`() {
-        // The upgrade window before the backfill stage runs. The pre-localId key was the MESSAGE id,
-        // which no bubble ever collects on: the read mapper synthesizes an id for a NULL column, so
-        // the spinner never advanced and the `progress == null` auto-download guard kept re-firing.
+        
+        
+        
         val row = row(localId = null)
 
         val key = emitKey(row, jobLocalId = null)
@@ -158,18 +158,18 @@ class AttachmentProgressKeyTest {
 
     @Test
     fun `an un-backfilled row this job could not adopt an id into keeps the requesting bubble's key`() {
-        // Ambiguous legacy lookup: the id was not written into the row, so the row cannot name itself.
-        // The key the requesting bubble used is still a per-copy address — never the shared legacy one.
+        
+        
         assertEquals("local-requested", emitKey(row(localId = null), jobLocalId = "local-requested"))
         assertEquals("local-requested", emitKey(row(localId = ""), jobLocalId = "local-requested"))
     }
 
     @Test
     fun `a crafted message carrying both an own attachment and a forward wrapper keys on what it renders`() {
-        // No client produces this shape, but the wire format allows it. ChatMessageViewHolder binds
-        // the FORWARD leaf for every forwards.size == 1 message, so the render-coupled selector must
-        // follow the leaf; the action-coupled one deliberately stays own-first (save / favorite act
-        // on the attachment the message itself carries).
+        
+        
+        
+        
         val own = attachment("local-own")
         val leaf = attachment("local-leaf", isForwardCopy = true)
         val msg = singleForwardMessage("msg-both", leaf).apply { attachment = own }

@@ -29,12 +29,12 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import util.AppForegroundObserver
 
-/**
- * [OngoingCallServiceController]: the ongoing-call service is started for a session id and stopped
- * only by that session; a start from the background is deferred to the page's `onResume` or the next
- * foreground transition; a stop never brings the service down while a type-update start is on its
- * way; every platform call is caught. Robolectric for the real `Intent` the starts carry.
- */
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [33])
 class OngoingCallServiceControllerTest {
@@ -69,7 +69,7 @@ class OngoingCallServiceControllerTest {
         unmockkAll()
     }
 
-    // #1354: with no channel for the notification, no start is ever issued.
+    
     @Test
     fun `no start is issued while no foreground channel exists`() {
         every { nm.getNotificationChannel(any()) } returns null
@@ -86,7 +86,7 @@ class OngoingCallServiceControllerTest {
         assertNull(NotificationChannelSpecs.verifiedForegroundChannel)
     }
 
-    // A failed preflight keeps the start unissued with the retry armed.
+    
     @Test
     fun `a foreground start without a channel is retried on the next foreground`() {
         every { nm.getNotificationChannel(any()) } returns null
@@ -103,7 +103,7 @@ class OngoingCallServiceControllerTest {
         assertEquals(1, starts.size)
     }
 
-    // The starter's own preflight failing is not a silent "issued".
+    
     @Test
     fun `a start the starter declines stays unissued and is retried`() {
         every { callToChat.startForegroundService(any(), any(), any()) } returns false
@@ -118,7 +118,7 @@ class OngoingCallServiceControllerTest {
         assertEquals(0, listeners.size)
     }
 
-    // A start the starter deferred and then could not issue re-arms the retry.
+    
     @Test
     fun `a deferred start that fails later re-arms the retry for the current session only`() {
         val onDeferredFailure = slot<() -> Unit>()
@@ -134,13 +134,13 @@ class OngoingCallServiceControllerTest {
         verify(exactly = 2) { callToChat.startForegroundService(any(), any(), any()) }
         assertEquals(0, listeners.size)
 
-        // Stale: another session owns the service by the time the deferred failure lands.
+        
         ForegroundService.ownerSessionId = OTHER
         onDeferredFailure.captured()
         shadowOf(Looper.getMainLooper()).idle()
         assertEquals(0, listeners.size)
 
-        // Or the service is already running for this session.
+        
         ForegroundService.ownerSessionId = SESSION
         ForegroundService.isServiceRunning = true
         onDeferredFailure.captured()

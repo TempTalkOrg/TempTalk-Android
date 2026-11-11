@@ -19,7 +19,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/** The vendor rows of the background connection page carry their own hint; the group caption only says they cannot be read. */
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34])
@@ -82,7 +82,7 @@ class BackgroundConnectionPageTest {
     fun `the group caption is the one sentence that the rows cannot be read`() {
         show(OemBrand.XIAOMI)
         composeTestRule.onAllNodesWithText(context.getString(R.string.background_vendor_checks_caption)).assertCountEquals(1)
-        // The caption repeats no row hint.
+        
         composeTestRule.onAllNodesWithText(context.getString(R.string.background_hint_power_policy_xiaomi), substring = true)
             .assertCountEquals(1)
     }

@@ -43,35 +43,28 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import java.util.concurrent.atomic.AtomicBoolean
 
-/**
- * The collaborators of one call session, built in a fixed construction order with lazies and
- * once-only gates. Phase A ([startPhaseA]) runs in the session's
- * start; Phase B is [startRoomDependentWiring] in `CallRoomWiring.kt`; the end of the call is
- * [runCallLevelTeardown] and [buildCleanupSteps] in `CallSessionTeardown.kt`.
- *
- * Every collaborator takes [mainScope] (same `Job` as the
- * session, `Main.immediate`), so none of them changes its effective dispatcher. Everything the
- * session shows on a call page goes through [uiState]; the graph never references the UI.
- */
-@Suppress("TooManyFunctions") // session state logic is deliberately kept in one graph
+
+
+
+@Suppress("TooManyFunctions") 
 internal class CallSessionGraph(
     val params: CallSessionParams,
     val deps: CallSessionDeps,
     val components: CallSessionComponentsFactory,
     val mainScope: CoroutineScope,
-    /** The owning session's id: the key of its projection fence, its service and its process-wide slots. */
+    
     val sessionId: Long,
-    /** Ends the owning session; bound by [CallSession] (posts to main when called off main). */
+    
     private val endSessionWithoutUi: () -> Unit,
 ) {
-    /** First member: every collaborator below writes its UI output here. */
+    
     val uiState = CallSessionUiState()
 
-    /** The session's only write path to OnGoingCallStateManager's session fields. */
+    
     val publisher = OngoingCallPublisher(sessionId, deps.onGoingCallStateManager)
 
-    // coerceInputValues so an explicit `null` for a non-null field falls back to its default rather
-    // than failing the decode — room metadata must parse field-by-field (see [RoomMetadataPatch]).
+    
+    
     private val json = Json {
         ignoreUnknownKeys = true
         coerceInputValues = true
@@ -79,7 +72,7 @@ internal class CallSessionGraph(
 
     private val mySelfId: String by lazy { components.selfId() }
 
-    // Written from CallSessionStarter's IO coroutine, read from main and other threads.
+    
     @Volatile var roomId: String? = null
         private set
 
@@ -97,9 +90,9 @@ internal class CallSessionGraph(
     lateinit var activeSpeakers: StateFlow<List<Participant>>
     lateinit var mediaCtl: CallMediaController
 
-    // Room CONNECTED but the local uplink (publisher) is degraded — "others can't hear/see me".
-    // IDLE (no local publish demand) and CONNECTED are healthy; connecting/reconnecting rooms keep
-    // showing the existing connection UI instead.
+    
+    
+    
     val mediaSendIssueState = MutableStateFlow(MediaSendIssueState.NONE)
     val mediaSendIssue: StateFlow<MediaSendIssueState> = mediaSendIssueState.asStateFlow()
 
@@ -146,13 +139,15 @@ internal class CallSessionGraph(
     val speakerState = SpeakerStateHolder(
         scope = mainScope,
         roomCtl = roomCtl,
-        participantManager = participantManager,
         onGoingCallStateManager = deps.onGoingCallStateManager,
     )
 
     private val screenShareFallback by lazy {
         ScreenShareFallbackSource(mainScope, room.localParticipant)
     }
+
+    
+    private val shareSpeaker = MutableStateFlow<String?>(null)
 
     val screenShareSpeakerLazy = lazy {
         ScreenShareFloatingSpeakerStateHolder(
@@ -161,13 +156,14 @@ internal class CallSessionGraph(
             speakingEnabled = uiState.speakingEnabled,
             contactorCacheManager = deps.contactorCacheManager,
             explicitFallback = screenShareFallback.flow,
+            layoutSpeaker = shareSpeaker.asStateFlow(),
         )
     }
     val screenShareFloatingSpeakerStateHolder by screenShareSpeakerLazy
 
     val cleanupExecutor = CallCleanupExecutor()
 
-    /** Screen off at the ear for the whole call, page or not; released in [runCallLevelTeardown]. */
+    
     val proximity = components.proximity(
         mainScope,
         combine(audio.deviceManager.routeSnapshot, roomCtl.cameraEnabled, uiState.isShareScreening, ::shouldHoldProximityLock),
@@ -181,6 +177,7 @@ internal class CallSessionGraph(
             resetNoBodySpeakCheckFn = ::resetNoBodySpeakCheck,
             onRemoteEndRequestedFn = ::onRemoteEndRequested,
             stopRingToneAndTimeoutCheckFn = ::stopRingToneAndTimeoutCheck,
+            stopCallerRingbackAndTimeoutCheckFn = ::stopCallerRingbackAndTimeoutCheck,
             resolveCallTypeFn = { callTypeCoordinator.resolveNow() },
             handleConnectedStateFn = ::handleConnectedState,
             startCallDurationTimerFn = ::startCallDurationTimer,
@@ -221,10 +218,10 @@ internal class CallSessionGraph(
     val callTypeCoordinatorLazy = lazy {
         CallTypeCoordinator(
             scope = mainScope,
-            // Non-throwing accessor: the coordinator's room.metadata collector lives in the
-            // session scope and can process a late emission after disconnectAndRelease() flipped
-            // `released`; the fail-loud `room` getter would crash there ("room accessed after
-            // release"). roomOrNull() yields null once released so that emission is dropped.
+            
+            
+            
+            
             roomProvider = { roomCtl.roomOrNull() },
             roomCtl = roomCtl,
             callDataManager = deps.callDataManager,
@@ -258,8 +255,11 @@ internal class CallSessionGraph(
             onRoomIdAssigned = ::onRoomIdAssigned,
             onE2eeKeyAssigned = ::onE2eeKeyAssigned,
             isSessionEnding = { endController.isEnding },
+            callerRingback = callerRingback,
         )
     }
+
+    private val callerRingback = CallerRingback(deps.callRingtoneManager)
 
     private val exitSession = object : CallExitSession {
         override val callStatus get() = roomCtl.callStatus
@@ -289,45 +289,42 @@ internal class CallSessionGraph(
             )
         },
         endSessionWithoutUi = endSessionWithoutUi,
-        // finish() can run off main (the exit handler's appScope coroutines): toast on main.
+        
         showToast = { res -> mainScope.launch { ToastUtil.show(ResUtils.getString(res)) } },
         scope = mainScope,
     )
 
-    /** Phase B once-only gate ([startRoomDependentWiring]). */
+    
     val roomWiringStarted = AtomicBoolean(false)
 
-    /**
-     * Phase A: runs in the session's start, on main, after the session bound the projection fence.
-     * The call is shown from here on.
-     */
+    
     fun startPhaseA(ioLaunchScope: CoroutineScope) {
-        // Before any writer: the process-wide statistics room ids and connected URL are this call's.
+        
         deps.statisticsLogManager.claimRoom(sessionId)
         LCallEngine.claimConnectedServerUrl(sessionId)
         publishIdentity()
         publisher.beginPresence()
-        // The app-lock check reads this while no call page is up; a page writes its own on create.
+        
         deps.onGoingCallStateManager.setNeedAppLock(params.needAppLock)
         proximity.start()
         components.registerCameraProvider(ioLaunchScope)
         audio.setup.start()
         deps.contactorCacheManager.startParticipantObservation(mainScope)
-        // The foreground service renders the ongoing-call notification from this status.
+        
         mainScope.launch {
             roomCtl.callStatus.collect { status -> publisher.publish { updateCallStatus(status) } }
         }
-        // Readers outside the call page (chat header, notifications, calls from chat) see the live type.
+        
         mainScope.launch {
             roomCtl.callType.collect { type -> publisher.publish { setCallType(type) } }
         }
     }
 
-    /**
-     * The call's identity from the start/join intent. A start writes its client call id only when the
-     * projection does not hold it yet, because that write clears the pre-connect cancel latch: a new
-     * call clears a stale latch, while a page re-entry keeps a pending cancel.
-     */
+    
+
+
+
+
     private fun publishIdentity() = publisher.publish {
         val intent = params.callIntent
         if (intent.action == CallIntent.Action.START_CALL) {
@@ -349,11 +346,11 @@ internal class CallSessionGraph(
         e2eeKey = key
     }
 
-    /**
-     * Apply the user's global voice-changer preference at call start.
-     * Safe to call for ORIGINAL too — it resets any lingering SoundTouch state
-     * on the shared audio processor.
-     */
+    
+
+
+
+
     fun applyInitialVoicePreset() {
         val preset = params.initialVoicePreset
         L.i { "[call] LCallViewModel applyInitialVoicePreset preset=${preset.sdkKey}" }
@@ -361,7 +358,7 @@ internal class CallSessionGraph(
         mediaCtl.setVoicePreset(preset)
     }
 
-    /** Formats on IO (contact-name lookup) in the session `Job`, then hands the result to the UI. */
+    
     fun showBarrage(participant: Participant, message: String, type: Int? = RTM_MESSAGE_TYPE_DEFAULT) {
         val identity = participant.identity?.value ?: return
         if (message.isEmpty()) return
@@ -371,33 +368,33 @@ internal class CallSessionGraph(
         }
     }
 
-    /** Through the call page when one collects the session's events, else as an app toast. */
+    
     fun showToast(message: String) {
         if (uiState.hasSubscriber) uiState.emit(CallSessionUiEvent.Toast(message)) else ToastUtil.show(message)
     }
 
     fun resetNoBodySpeakCheck() {
-        // Read the participants StateFlow (local + remotes) instead of the fail-loud room
-        // getter: this is invoked from the end-reminder dialog's "Continue" path and from
-        // 1v1 room events, both of which can race with call teardown (released=true).
+        
+        
+        
         val snapshot = participantManager.participants.value
         val hasRemote = snapshot.any { it is RemoteParticipant }
         val isSilent = snapshot.firstOrNull { it.isMicrophoneEnabled } == null || activeSpeakers.value.isEmpty()
         speakerState.reset(hasRemote, isSilent, params.callConfig)
     }
 
-    /**
-     * [RoomEventHost] remote-end seam. RTM END_CALL calls it on the RTM IO coroutine, server-end-call
-     * on the main room-event collector: both are posted (`Dispatchers.Main`, not `.immediate`) on this
-     * session's `Job`, so the end controller always runs on main after the current message, never
-     * re-entrantly inside the handler that saw the end. A cancelled `Job` (session already cleared)
-     * drops it.
-     */
+    
+
+
+
+
+
+
     private fun onRemoteEndRequested(roomId: String) {
         mainScope.launch(Dispatchers.Main) { endController.onRemoteControl(CallActionType.HANGUP, roomId) }
     }
 
-    /** [CallTimeoutMonitor] seam: posted to main on this session's `Job`, like [onRemoteEndRequested]. */
+    
     private fun onTimeout(roomId: String) {
         mainScope.launch(Dispatchers.Main) { endController.onTimeout(roomId) }
     }
@@ -407,23 +404,23 @@ internal class CallSessionGraph(
 
     fun setCameraEnabled(enabled: Boolean) = mediaCtl.setCameraEnabled(enabled)
 
-    /**
-     * Enters the connected state. For 1v1 the duration timer is NOT started here — the remote can be
-     * in the room over signaling while its RTC transport is still connecting, and counting from that
-     * moment tells the user they can talk when the remote cannot hear them yet. [RoomEventDispatcher]
-     * gates that call's timer on the remote reaching ACTIVE and subscribing the local microphone;
-     * group/instant keep the old behaviour of counting as soon as the room is up.
-     */
+    
+
+
+
+
+
+
     fun handleConnectedState() {
         roomCtl.updateCallStatus(CallStatus.CONNECTED)
         if (getCurrentCallType() != CallType.ONE_ON_ONE.type) startCallDurationTimer()
     }
 
     fun startCallDurationTimer() {
-        // One instant drives both clocks: the timer recomputes the on-screen duration from the
-        // connect instant the notification publishes as `when`, so the call UI, the conversation-list
-        // call bar and the system call chip cannot drift apart. It is read inside the fenced write; a
-        // session that no longer owns the projection counts from now, not from another session's.
+        
+        
+        
+        
         var connectedAt = 0L
         publisher.publish { connectedAt = markCallConnected() }
         timerManager.startCallTimer(connectedAt.takeIf { it > 0L } ?: System.currentTimeMillis()) { show ->
@@ -438,29 +435,36 @@ internal class CallSessionGraph(
         timeoutMonitor.cancelIfActive()
     }
 
+    
+    fun stopCallerRingbackAndTimeoutCheck() {
+        callerRingback.stop(tag = "callee already in room")
+        timeoutMonitor.cancelIfActive()
+    }
+
     fun updateScreenShareFallback(participant: Participant) = screenShareFallback.update(participant)
+    fun setShareSpeaker(id: String?) { shareSpeaker.value = id }
     fun shouldTriggerFeedbackView() = feedbackBinder.maybeTrigger()
 
-    /**
-     * The single in-call source of truth for the meeting type, written only by [CallTypeCoordinator].
-     *
-     * Not `CallData.type`: the UI never consults it and it is not populated until an outbound call
-     * has processed `ttCallResp`, so room-event handlers could branch on an empty type while the UI
-     * already showed the right one. Reading `roomCtl.callType` puts both on the same value; the coordinator mirrors it onto
-     * `CallData.type` for the exit-semantics path.
-     */
+    
+
+
+
+
+
+
+
     fun getCurrentCallType(): String = roomCtl.callType.value
 
-    // Uses the participants StateFlow rather than the fail-loud room getter: this is invoked
-    // from CallExitHandler's async hangup callback, which can run after a concurrent path has
-    // already released the room (remote onLeave / the session end's cleanup). The snapshot also
-    // retains the last-known remotes even after room.remoteParticipants is cleared by disconnect.
+    
+    
+    
+    
     fun currentCallUidList(): List<String> = participantManager.participants.value
         .filterIsInstance<RemoteParticipant>()
         .mapNotNull { it.identity?.value }
         .map { userId -> if (userId.contains(".")) userId.split(".")[0] else userId }
 
-    /** Zeroes and drops the call's E2EE key (a cleanup step). */
+    
     fun clearE2eeKey() {
         e2eeKey?.fill(0)
         e2eeKey = null

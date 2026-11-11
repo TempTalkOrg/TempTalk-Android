@@ -11,32 +11,32 @@ import com.intellij.psi.PsiMethod
 import org.jetbrains.uast.UCallExpression
 import org.jetbrains.uast.ULiteralExpression
 
-/**
- * Forbids hand-written colours in Compose code outside the theme package.
- *
- * Colour is a token, not a literal: `DifftTheme.colors.<semantic>` for anything that carries
- * meaning, `Palette.<step>` for a raw step of the ramp. A `Color(0xFF056FFA)` literal or a
- * `colorResource(R.color.…)` lookup pins one theme's value into a composable, so it does not
- * follow light/dark and drifts from the design library. The theme package is exempt via
- * `lint.xml` because it defines the tokens; the handful of genuine one-offs (overlay alphas,
- * Figma shadow rgba values, theme-independent launcher chrome) are exempt by path there too,
- * each with the reason recorded next to it.
- *
- * Two surfaces, one issue id:
- *  - `Color(<numeric literal>)` — the `Long` / `Int` factory in `androidx.compose.ui.graphics`
- *  - `colorResource(...)` — `androidx.compose.ui.res.colorResource`
- *
- * `Color.Transparent` / `Color.White` (property reads), `Color(red, green, blue)` built from
- * variables, and View-world APIs such as `setBackgroundColor(0x…)` are all left alone.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 class DifftColorTokenDetector : Detector(), Detector.UastScanner {
 
     override fun getApplicableMethodNames(): List<String> = listOf("Color", "colorResource")
 
     override fun visitMethodCall(context: JavaContext, node: UCallExpression, method: PsiMethod) {
         val owner = method.containingClass?.qualifiedName ?: return
-        // Kotlin mangles a function whose signature involves an inline class (`Color-8_81llA`);
-        // the readable name is what precedes the dash.
+        
+        
         when (method.name.substringBefore('-')) {
             "Color" -> {
                 if (owner != COLOR_FACADE) return
@@ -53,7 +53,7 @@ class DifftColorTokenDetector : Detector(), Detector.UastScanner {
         )
     }
 
-    /** True for `Color(0xFF056FFA)` / `Color(0x80000000)`, false for the float/variable forms. */
+    
     private fun hasSingleNumericLiteralArgument(node: UCallExpression): Boolean {
         val argument = node.valueArguments.singleOrNull() as? ULiteralExpression ?: return false
         val value = argument.value

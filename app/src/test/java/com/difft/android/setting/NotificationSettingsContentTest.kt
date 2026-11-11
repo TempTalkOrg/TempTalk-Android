@@ -47,10 +47,10 @@ import org.robolectric.annotation.GraphicsMode
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/**
- * Compose contract of the notification settings page and its Calls and Critical Alerts pages:
- * visibility, status text, captions, per-row notes and one jump per row.
- */
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34])
@@ -127,7 +127,7 @@ class NotificationSettingsContentTest {
 
     private fun text(id: Int) = context.getString(id)
 
-    /** Clicks the centre of the link at the end of a caption, found through the text layout. */
+    
     private fun tapCaptionLink(tag: String) {
         val node = composeTestRule.onNodeWithTag(tag).performScrollTo()
         val layout = mutableListOf<TextLayoutResult>()
@@ -198,13 +198,13 @@ class NotificationSettingsContentTest {
         composeTestRule.onNodeWithText(string(R.string.focus_caption_invalid)).performScrollTo().assertIsDisplayed()
     }
 
-    /** [note] shows once, inside the row tagged [rowTag]: a note line, never a group footer caption. */
+    
     private fun assertNoteInRow(rowTag: String, note: String) {
         composeTestRule.onNodeWithTag(rowTag).assertTextContains(note)
         composeTestRule.onAllNodesWithText(note).assertCountEquals(1)
     }
 
-    // ---------------------------------------------------------------- top page
+    
 
     @Test
     fun `the banner replaces the app notifications group while app notifications are off`() {
@@ -225,7 +225,7 @@ class NotificationSettingsContentTest {
             .assertTextContains(text(R.string.notification_enable))
         tap(TAG_ROW_APP_NOTIFICATIONS)
         assertEquals(listOf(NotificationFix.APP_NOTIFICATIONS), fixes)
-        // Only a vendor skin with app-level switches gets the caption.
+        
         composeTestRule.onAllNodesWithTag(TAG_ACTION_NOTIFICATION_OVERVIEW).assertCountEquals(0)
     }
 
@@ -299,8 +299,7 @@ class NotificationSettingsContentTest {
     fun `an unreadable skin shows no on and no test result in any summary`() {
         val ok = NotificationTestResult(NotificationTestOutcome.OK, 1L, "fp")
         show(c3Check, sdk = 33, brand = OemBrand.OPPO, tests = NotificationTestResults(banner = ok, lockscreen = ok, call = ok))
-        // The App notifications page holds unreadable switches here, so only the critical feature (Do Not
-        // Disturb access) and the background connection read on.
+        
         composeTestRule.onAllNodesWithText(text(R.string.notification_enable)).assertCountEquals(2)
         composeTestRule.onNodeWithTag(TAG_ROW_CRITICAL).assertTextContains(text(R.string.notification_enable))
         composeTestRule.onNodeWithTag(TAG_ROW_BACKGROUND).assertTextContains(text(R.string.notification_enable))
@@ -359,7 +358,7 @@ class NotificationSettingsContentTest {
             .assertExists()
     }
 
-    // ---------------------------------------------------------------- Calls page
+    
 
     @Test
     fun `the calls page shows the call category and full-screen rows with their own jumps`() {
@@ -375,7 +374,7 @@ class NotificationSettingsContentTest {
         composeTestRule.onAllNodesWithTag(TAG_ROW_OEM_POPUP).assertCountEquals(0)
         assertNoteInRow(TAG_ROW_FULL_SCREEN, text(R.string.notification_full_screen_note_calls))
         composeTestRule.onAllNodesWithText(text(R.string.notification_full_screen_note_critical)).assertCountEquals(0)
-        // The call category row carries no note.
+        
         composeTestRule.onNode(hasTestTag(TAG_ROW_CALL_CATEGORY) and hasText(text(R.string.notification_full_screen_note_calls)))
             .assertDoesNotExist()
         tap(TAG_ROW_CALL_CATEGORY)
@@ -396,12 +395,12 @@ class NotificationSettingsContentTest {
     fun `Xiaomi shows the permission editor row without a status, notes its switches and opens it`() {
         show(c3Check, page = Page.CALLS, brand = OemBrand.XIAOMI, tests = failedCallTest)
         composeTestRule.onNodeWithTag(TAG_ROW_OEM_POPUP).assertTextContains(text(R.string.notification_oem_popup))
-        // Neither a failed nor a passed call test shows on the vendor row.
+        
         composeTestRule.onAllNodesWithText(text(R.string.notification_test_not_shown)).assertCountEquals(0)
         assertNoteInRow(TAG_ROW_FULL_SCREEN, text(R.string.notification_full_screen_note_calls))
         assertNoteInRow(TAG_ROW_OEM_POPUP, text(CallR.string.notification_hint_oem_xiaomi))
         composeTestRule.onAllNodesWithText(text(R.string.notification_oem_popup_note)).assertCountEquals(0)
-        // The category reads nothing on a skin with unreadable vendor switches.
+        
         composeTestRule.onAllNodesWithText(text(R.string.notification_enable)).assertCountEquals(0)
         tap(TAG_ROW_OEM_POPUP)
         assertEquals(listOf(NotificationFix.OEM_POPUP), fixes)
@@ -430,7 +429,7 @@ class NotificationSettingsContentTest {
         assertEquals(emptyList(), fixes)
     }
 
-    // ---------------------------------------------------------------- Critical Alerts page
+    
 
     @Test
     fun `without access the critical page offers the access page and notes every dependency in its row`() {
@@ -443,7 +442,7 @@ class NotificationSettingsContentTest {
         assertNoteInRow(TAG_ROW_FULL_SCREEN, text(R.string.notification_full_screen_note_critical))
         assertNoteInRow(TAG_ROW_CRITICAL_BACKGROUND, text(R.string.critical_alert_connection_caption))
         composeTestRule.onAllNodesWithText(text(R.string.notification_full_screen_note_calls)).assertCountEquals(0)
-        // The unread bypass leaves the category row without a status.
+        
         composeTestRule.onAllNodesWithText(text(R.string.notification_enable)).assertCountEquals(1)
         composeTestRule.onNodeWithTag(TAG_ROW_CRITICAL_BACKGROUND).assertTextContains(text(R.string.notification_enable))
         tap(TAG_ROW_DND_ACCESS)
@@ -482,13 +481,13 @@ class NotificationSettingsContentTest {
         composeTestRule.onAllNodesWithText(text(R.string.notification_test_not_shown)).assertCountEquals(0)
         assertNoteInRow(TAG_ROW_OEM_POPUP, text(CallR.string.notification_hint_oem_xiaomi))
         assertNoteInRow(TAG_ROW_FULL_SCREEN, text(R.string.notification_full_screen_note_critical))
-        // Only the background connection row reads on.
+        
         composeTestRule.onAllNodesWithText(text(R.string.notification_enable)).assertCountEquals(1)
         tap(TAG_ROW_OEM_POPUP)
         assertEquals(listOf(NotificationFix.OEM_POPUP), fixes)
     }
 
-    // ---------------------------------------------------------------- Xiaomi never-set categories (design §7)
+    
 
     private val n2NeverSet = item(ReadinessItemId.N2, ReadinessStatus.PROBLEM, ReadinessIssue.MESSAGE_CATEGORY_NEVER_SET)
     private val c1NeverSet = item(ReadinessItemId.C1, ReadinessStatus.PROBLEM, ReadinessIssue.CALL_CATEGORY_NEVER_SET)

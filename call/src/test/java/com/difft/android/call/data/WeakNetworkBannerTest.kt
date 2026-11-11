@@ -5,10 +5,10 @@ import com.difft.android.call.network.NetworkQualityView
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/**
- * Decision matrix for [WeakNetworkBanner.resolve] — which weak-network banner (if any) the single
- * pill slot carries. Pure JVM: neither the enum nor [NetworkQualityView] touches Android.
- */
+
+
+
+
 class WeakNetworkBannerTest {
 
     private fun view(
@@ -52,8 +52,8 @@ class WeakNetworkBannerTest {
             WeakNetworkBanner.NONE,
             WeakNetworkBanner.resolve(
                 view(remote = mapOf("alice" to NetworkQualityLevel.BAD)),
-                // 3 is the boundary immediately above the hand-off, so an off-by-one in the
-                // predicate cannot slip through on a comfortably large headcount.
+                
+                
                 participantCount = 3,
             ),
         )
@@ -61,8 +61,8 @@ class WeakNetworkBannerTest {
 
     @Test
     fun `a good remote entry never raises the banner`() {
-        // Pins the upstream prohibition: the snapshot's `remote` map also carries GOOD entries, so
-        // a `remote.isNotEmpty()` check would light the banner on a perfectly renderable call.
+        
+        
         assertEquals(
             WeakNetworkBanner.NONE,
             WeakNetworkBanner.resolve(
@@ -74,8 +74,8 @@ class WeakNetworkBannerTest {
 
     @Test
     fun `a suppressed snapshot resolves to none without reading the flag`() {
-        // A suppressed snapshot is already emptied upstream; the resolver reaches NONE from the
-        // emptied values alone, so it never has to branch on `suppressed` (double suppression).
+        
+        
         assertEquals(
             WeakNetworkBanner.NONE,
             WeakNetworkBanner.resolve(view(suppressed = true), participantCount = 2),
@@ -90,8 +90,8 @@ class WeakNetworkBannerTest {
 
     @Test
     fun `local bad outranks a bad remote`() {
-        // Upstream suppression already empties the remote map when the local verdict is bad; this
-        // is the second, order-based guarantee for the same outcome.
+        
+        
         assertEquals(
             WeakNetworkBanner.LOCAL,
             WeakNetworkBanner.resolve(

@@ -3,13 +3,13 @@ package com.difft.android.chat.ui.messageaction
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/**
- * Pure-JVM tests for the horizontal placement of [MessageActionPopupPositioner] (#1294): the menu
- * aligns with the bubble edge on the message side, clamped into the content minus the edge
- * padding, and the arrow offset is clamped relative to that x.
- *
- * Portrait content `(0,100,1000,2100)` with an 8px edge padding gives the x band `8..992`.
- */
+
+
+
+
+
+
+
 class MessageActionPopupPositionerXTest {
 
     private val positioner = MessageActionPopupPositioner
@@ -43,11 +43,11 @@ class MessageActionPopupPositionerXTest {
 
     @Test
     fun `P4 bubble edge that would push the menu past the padding is clamped`() {
-        // Narrow outgoing bubble near the left edge: 300 - 700 < 8.
+        
         assertEquals(8, placeX(rect(26, 400, 300, 900), isOutgoing = true))
-        // Narrow incoming bubble near the right edge: 800 + 700 > 1000 - 8.
+        
         assertEquals(292, placeX(rect(800, 400, 990, 900), isOutgoing = false))
-        // Bubble wider than the content on both sides.
+        
         assertEquals(292, placeX(rect(-50, 400, 1100, 900), isOutgoing = true))
         assertEquals(8, placeX(rect(-50, 400, 1100, 900), isOutgoing = false))
     }
@@ -58,7 +58,7 @@ class MessageActionPopupPositionerXTest {
         val bubble = rect(1226, 300, 2388, 1600)
         assertEquals(1688, placeX(bubble, isOutgoing = true, content = pane))
         assertEquals(1226, placeX(bubble, isOutgoing = false, content = pane))
-        // A bubble in the other pane is clamped into this pane.
+        
         assertEquals(1208, placeX(rect(26, 300, 1100, 1600), isOutgoing = true, content = pane))
     }
 
@@ -98,7 +98,7 @@ class MessageActionPopupPositionerXTest {
     fun `P13 menu wider than the band starts at the left bound`() {
         val bubble = rect(50, 400, 900, 900)
         listOf(true, false).forEach { outgoing ->
-            // Band 8..992: a 984px menu exactly fills it, a 990px one does not fit.
+            
             assertEquals(8, placeX(bubble, outgoing, width = 984))
             assertEquals(8, placeX(bubble, outgoing, width = 990))
             assertEquals(8, placeX(bubble, outgoing, width = 1200))

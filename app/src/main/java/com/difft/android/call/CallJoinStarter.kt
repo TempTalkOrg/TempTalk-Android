@@ -27,11 +27,11 @@ import util.ScreenLockUtil
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Joins an existing call (incoming accept, critical-alert join, chat join): clears the call's
- * critical alert, resolves this device's role from the call data, then launches the call page with
- * the JOIN intent and starts its session ([CallSessionLauncher]). Backs [LCallToChatController.joinCall].
- */
+
+
+
+
+
 @Singleton
 class CallJoinStarter @Inject constructor(
     private val messageNotificationUtil: MessageNotificationUtil,
@@ -39,14 +39,14 @@ class CallJoinStarter @Inject constructor(
     private val criticalAlertStateManager: CriticalAlertStateManager,
     private val criticalAlertCallGate: CriticalAlertCallGate,
     private val callDataManagerLazy: Lazy<CallDataManager>,
-    // Lazy: the launcher's session graph depends back on the call-to-chat controller.
+    
     private val sessionLauncher: Lazy<CallSessionLauncher>,
     private val sessionHolder: Lazy<CallSessionHolder>,
 ) {
     private val mySelfId: String by lazy { globalServices.myId }
     private val callDataManager: CallDataManager by lazy { callDataManagerLazy.get() }
 
-    @Suppress("LongParameterList") // mirrors LCallToChatController.joinCall
+    @Suppress("LongParameterList") 
     suspend fun joinCall(
         context: Context,
         roomId: String,
@@ -56,7 +56,7 @@ class CallJoinStarter @Inject constructor(
         conversationId: String?,
         isNeedAppLock: Boolean,
     ): Boolean {
-        // #1381: a critical alert for this call that arrives before the session's presence is up is handled.
+        
         val joinToken = criticalAlertCallGate.beginJoin(roomId, conversationId)
         try {
             return joinCallInternal(context, roomId, roomName, callType, conversationId, isNeedAppLock)
@@ -73,7 +73,7 @@ class CallJoinStarter @Inject constructor(
         conversationId: String?,
         isNeedAppLock: Boolean,
     ): Boolean {
-        // This join's own share of the wait dialog: every failure path releases only it.
+        
         val waitToken = withContext(Dispatchers.Main) { CallWaitDialogUtil.show(context) }
 
         return try {
@@ -130,16 +130,16 @@ class CallJoinStarter @Inject constructor(
         }
     }
 
-    /**
-     * Launches the page and starts the session in one main-thread message. The app-lock exemption is
-     * set only for a launch that went through, still in that message, so it is in place before any
-     * callback of the new page; a refused launch leaves it alone and releases only this join's claim.
-     */
+    
+
+
+
+
     private suspend fun startCallInternal(context: Context, intent: Intent, waitToken: Int, roomId: String): Boolean =
         withContext(Dispatchers.Main) {
             val launched = sessionLauncher.get().launch(context.applicationContext, intent, waitToken)
             if (launched) {
-                // #1381: the session publishes its room only after the start-call response; this join knows it now.
+                
                 sessionHolder.get().current.value?.let { criticalAlertCallGate.bindSessionRoom(it.id, roomId) }
                 ScreenLockUtil.temporarilyDisabled = true
             } else {

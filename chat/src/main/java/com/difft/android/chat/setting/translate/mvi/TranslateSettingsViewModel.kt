@@ -36,17 +36,17 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.cancellation.CancellationException
 
-/**
- * Conversation auto-translate settings.
- *
- * This screen is the only code path that writes `RoomModel.translateSetting`. A selection lands in
- * the room row first and is broadcast afterwards, so anything that reacts to the broadcast by
- * re-reading the row can never observe the old value.
- *
- * "Only writer" is about code paths, not instances: another instance of this same screen, opened on
- * the same conversation, writes the same row. That is why [applySelection] re-reads the row inside
- * the write instead of trusting [State.selected].
- */
+
+
+
+
+
+
+
+
+
+
+
 @HiltViewModel(assistedFactory = TranslateSettingsViewModelFactory::class)
 class TranslateSettingsViewModel @AssistedInject constructor(
     @Assisted private val conversation: For,
@@ -62,12 +62,12 @@ class TranslateSettingsViewModel @AssistedInject constructor(
     private val _effect = Channel<Effect>(Channel.BUFFERED)
     val effect = _effect.receiveAsFlow()
 
-    /**
-     * The value of the write currently in flight, or null. [State.selected] only moves once the row
-     * is written, so without this a tap during the write would pass the idempotency guard — for the
-     * same value it would insert the system message twice, for a different one it would race a
-     * second write against the first one's broadcast. Touched from the main dispatcher only.
-     */
+    
+
+
+
+
+
     private var pendingSelect: Int? = null
 
     init {
@@ -90,18 +90,18 @@ class TranslateSettingsViewModel @AssistedInject constructor(
         }
     }
 
-    /**
-     * Idempotent by contract: re-picking the current value writes nothing, broadcasts nothing and
-     * inserts no system message. [State.loaded] is the second half of the same guard — before the
-     * stored value is known, the default 0 would look like a real change.
-     *
-     * [pendingSelect] is the third, and it rejects EVERY tap while a write is in flight, whatever
-     * its value: [State.selected] only moves after the write, so a tap for a different value would
-     * pass the idempotency guard and run a second write concurrently with the first — two rows, two
-     * broadcasts, two system messages, in whatever order IO happened to finish. Dropping it is
-     * correct rather than merely simple, because [State.pending] dims the rows for exactly that
-     * window: the user sees the screen is busy and the confirmed value is always the one on screen.
-     */
+    
+
+
+
+
+
+
+
+
+
+
+
     private fun select(value: Int) {
         val current = _state.value
         if (!current.loaded || pendingSelect != null || value == current.selected) return
@@ -120,9 +120,9 @@ class TranslateSettingsViewModel @AssistedInject constructor(
     private suspend fun applySelection(value: Int) {
         val alreadyStored = try {
             withContext(Dispatchers.IO) {
-                // Read before write: the row is what says whether this is a real change. Another
-                // instance of this screen, opened on the same conversation, may already have stored
-                // the same value, and the system message must be inserted exactly once.
+                
+                
+                
                 val stored = dbRoomStore.getTranslateSetting(conversation.id)
                 dbRoomStore.updateTranslateSetting(conversation.id, value)
                 stored == value
@@ -155,10 +155,10 @@ class TranslateSettingsViewModel @AssistedInject constructor(
             .forEach { modelStore.cancel(ModelId(it.modelCode)) }
     }
 
-    /**
-     * One status row per model the selected target needs. The selection half is de-duplicated, so a
-     * model update writing `models` back into [_state] cannot re-trigger this collector.
-     */
+    
+
+
+
     private fun observeModels() {
         combine(
             _state.map { it.selected }.distinctUntilChanged(),

@@ -1,10 +1,10 @@
 <resources>
-    <!-- Test (not translatable) -->
+    
     <string name="test_button_label" translatable="false">Test</string>
     <string name="test_dialog_title" translatable="false">Custom View Dialog</string>
     <string name="test_dialog_content" translatable="false">This is an example of a custom view dialog using traditional XML layout.\n\nYou can embed traditional View components in Compose via AndroidView, keeping existing layouts while enjoying modern Compose features.</string>
     <string name="test_dialog_close" translatable="false">Close</string>
-    <!--    settings-->
+    
     <string name="settings_screen_lock">Screen lock</string>
     <string name="settings_screen_lock_timeout">Timeout</string>
     <string name="settings_screen_lock_timeout_instant">Instant</string>
@@ -73,7 +73,13 @@
     <string name="search_view_more">View More</string>
     <string name="search_more_contacts">More Contacts</string>
     <string name="search_more_groups">More Groups</string>
-    <string name="search_more_messages">More Messages</string>
+    <string name="search_section_messages">Chat history</string>
+    <plurals name="search_view_all_count">
+        <item quantity="one">View all %d results</item>
+        <item quantity="other">View all %d results</item>
+    </plurals>
+    <string name="search_chats_hint">Search contacts, groups and messages</string>
+    <string name="search_no_results_for">No results found for “%s”</string>
     <string name="search_result_inclued">Include: %s</string>
     <string name="language_restart_required">Restart Required</string>
     <string name="language_restart_tips">The language change will take effect after you restart the app.</string>
@@ -94,11 +100,21 @@
     <string name="upgrade_notification_verifying">Verifying…</string>
     <string name="upgrade_notification_complete">Download complete, tap to install</string>
     <string name="upgrade_notification_failed">Download failed, tap to retry</string>
-    <string name="me_text_size">Text Size</string>
+    <string name="me_text_size">Font size</string>
     <string name="me_text_size_default">Default</string>
     <string name="me_text_size_lage">Large</string>
+    <string name="me_display_size">Display size</string>
+    <string name="me_display_size_small">Small</string>
+    <string name="me_display_size_standard">Standard</string>
+    <string name="me_display_size_large">Large</string>
+    <string name="me_navigation_placement">Navigation position</string>
+    <string name="me_navigation_placement_default">Bottom</string>
+    <string name="me_navigation_placement_right">Right</string>
+    <string name="me_hide_status_bar">Hide status bar</string>
+    <string name="me_screen_layout">Display &amp; layout</string>
+    <string name="me_screen_layout_note">Display size makes everything on screen larger or smaller. Font size changes only the text. You can adjust both.</string>
 
-    <!-- Database Recovery -->
+    
     <string name="db_recovery_in_progress">Recovering database</string>
     <string name="db_recovery_please_wait">Please wait, this may take a moment…</string>
     <string name="db_recovery_resync_message">Database reset. Re-syncing your account; local chat history could not be recovered.</string>
@@ -110,7 +126,7 @@
     <string name="dual_pane_divider_drag_hint">Drag to resize panes</string>
     <string name="dual_pane_list_expand_hint">Expand conversation list</string>
 
-    <!-- Self-hosted proxy -->
+    
     <string name="proxy_settings_title">Use proxy</string>
     <string name="proxy_use_proxy">Use proxy</string>
     <string name="proxy_use_proxy_desc">Connect to Quicall through a proxy you trust to hide your real IP from Quicall and improve connectivity on restricted networks. Call IP protection needs to be turned on separately.</string>
@@ -141,9 +157,6 @@
     <string name="proxy_passphrase_confirm">OK</string>
     <string name="proxy_passphrase_cancel">Cancel</string>
 
-    <!-- Data-migration backup (A3) — notification surface -->
-
-    <!-- Data-migration P2P transfer (I5) — foreground-service notification surface -->
     <string name="migration_p2p_notification_title_running">Transferring your data…</string>
     <string name="migration_p2p_notification_text_running">Keep the app open until the migration finishes.</string>
     <string name="migration_p2p_notification_action_cancel">Cancel</string>
@@ -155,16 +168,6 @@
     <string name="migration_p2p_notification_text_unconfirmed">Check your new device to see whether the migration finished.</string>
     <string name="migration_p2p_notification_text_pairing_timeout">Pairing timed out</string>
 
-    <!-- Data-migration backup (A3) — Me entry + user-facing UI surface -->
-
-    <!-- Data-migration v2 (A5) — import-on-login UI (file picker / passphrase / progress / error) -->
-    <!-- Bounces back to the import method chooser (not to login) — backing out re-shows the chooser -->
-    <!-- PRD §8.9 error messages, keyed by MigrationError code -->
-    <!-- I4 — P2P receive (NEW device shows QR) -->
-
-    <!-- P2P SEND (OLD device) — main-screen entry + send screen copy -->
-
-    <!-- Unified landing: option intros + existing-backup section header -->
     <string name="migration_p2p_send_scan_button">Scan your new device\'s QR</string>
     <string name="migration_p2p_send_scanning">Opening the scanner…</string>
     <string name="migration_p2p_send_scan_not_p2p">This isn\'t a migration code.</string>
@@ -186,7 +189,7 @@
     <string name="proxy_protect_call_desc">When on, calls are also routed through the proxy to hide your real IP from Quicall. This may reduce call quality.</string>
     <string name="proxy_protect_call_enable_proxy_first">Turn on Use proxy first.</string>
 
-    <!-- Linked Devices -->
+    
     <string name="linked_devices_title">Linked Devices</string>
     <string name="linked_devices_link_new_title">Link New Device</string>
     <string name="linked_devices_link_new_subtitle">Scan QR Code</string>
@@ -200,7 +203,6 @@
     <string name="linked_devices_unlink_failed">Quicall was unable to unlink your device.</string>
     <string name="linked_devices_list_update_failed">Failed to update device list.</string>
 
-    <!-- Same-device migration (old package → new package on one phone) -->
     <string name="migration_p2p_receive_relaunch_legacy">Open the old app again</string>
     <string name="migration_p2p_receive_legacy_open_failed">Couldn\'t open the old app. Make sure the official version is installed and try again.</string>
     <string name="migration_p2p_receive_scan_not_export_code">This isn\'t the computer\'s export code. Choose “Migrate to phone” on the computer, then scan the code it shows.</string>
@@ -219,14 +221,12 @@
     <string name="link_login_pin_expired">The code has refreshed. Please scan it again.</string>
     <string name="link_login_failed">Couldn\'t sign in on the computer. Please try again.</string>
 
-    <!-- Retiring package: "move to the new app" guide -->
     <string name="legacy_migration_title">Move to %1$s</string>
     <string name="legacy_migration_why">Due to changes in Google\'s Android app distribution requirements, future Quicall updates will be available through a separate app. We\'re actively working through these changes and doing our best to minimize the impact.\n\nYou can continue using the same account in %1$s, and your contacts and groups will remain available. To keep your chat history, complete the transfer before uninstalling this app. Once the transfer is complete, you\'ll be signed out of this app.</string>
     <string name="legacy_migration_download">Get %1$s</string>
     <string name="legacy_migration_later">Not Now</string>
     <string name="legacy_migration_open_failed">Couldn\'t open that. Please try again.</string>
 
-    <!-- Same-device no-login migration (handoff) -->
     <string name="migration_app_name_new">Quicall (New)</string>
     <string name="migration_app_name_legacy">Quicall (Old)</string>
     <string name="migration_handoff_entry_title">Transfer from %1$s?</string>

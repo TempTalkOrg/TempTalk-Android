@@ -21,10 +21,10 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/**
- * [SaveToPhotosSettingsContent] contract (issue #1223): `null` is a real stored value ("follow the
- * global setting"), so it carries the checkmark, and the footer explains the group.
- */
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34])
@@ -51,7 +51,7 @@ class SaveToPhotosSettingsContentTest {
         }
     }
 
-    // T25
+    
     @Test
     fun `the follow-global option is selected while the stored value is null`() {
         setContent(current = null)
@@ -61,7 +61,7 @@ class SaveToPhotosSettingsContentTest {
             .onAllNodesWithTag(DifftSettingsDefaults.CheckmarkTestTag, useUnmergedTree = true)
         checkmarks.assertCountEquals(1)
 
-        // The single checkmark belongs to the follow-global row, so it sits inside that row's band.
+        
         val mark = checkmarks[0].getBoundsInRoot()
         val label = composeTestRule
             .onNodeWithText(DEFAULT_LABEL, useUnmergedTree = true).getBoundsInRoot()
@@ -69,11 +69,11 @@ class SaveToPhotosSettingsContentTest {
             "checkmark at ${mark.top} should overlap the default row at ${label.top}",
             mark.top.value < label.bottom.value && mark.bottom.value > label.top.value,
         )
-        // Rendering alone reports nothing.
+        
         assertEquals(emptyList<Int?>(), selections)
     }
 
-    // T26
+    
     @Test
     fun `tapping Never reports 0 and the footer explains the group`() {
         setContent(current = 1)

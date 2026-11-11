@@ -18,11 +18,11 @@ import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.annotation.Config
 
-/**
- * [PageWait]: a detail page's wait dialog is mounted on the home screen's Activity, so a page
- * closed mid-request (group disbanded, conversation replaced, fold) must not leave it blocking the
- * screen, and releasing it must never close a dialog another claim still holds.
- */
+
+
+
+
+
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [34])
 class PageWaitTest {
@@ -55,12 +55,12 @@ class PageWaitTest {
         assertTrue(wait.held)
         assertEquals("mounted", baseline + 1, activity.dialogCount())
 
-        // The page is removed before its request returns (closeConversation, replaced stack).
+        
         activity.supportFragmentManager.beginTransaction().remove(page).commitNow()
 
         assertFalse(wait.held)
         assertEquals("released with the view", baseline - 1, activity.dialogCount())
-        wait.dismiss() // the late DismissWait is harmless
+        wait.dismiss() 
     }
 
     @Test
@@ -116,8 +116,8 @@ class PageWaitTest {
         val wait = PageWait(page)
         wait.show()
 
-        // The shared slot dropped our dialog (another screen's showWait evicts it the same way;
-        // a second resumed Activity's spinner does not settle under Robolectric).
+        
+        
         ComposeDialogManager.dismissWait()
         assertEquals("gone", baseline, activity.dialogCount())
 

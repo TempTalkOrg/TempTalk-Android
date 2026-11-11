@@ -31,12 +31,12 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import util.ScreenLockUtil
 
-/**
- * An incoming call while this device is in a call: [IncomingCallServiceManager] reads presence from
- * `OnGoingCallStateManager` and rings through the notification instead of starting the incoming
- * page over the live call. The same call with no call up starts the page (the control case).
- * Row T5-16.
- */
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [33])
 class IncomingCallServiceManagerInCallTest {

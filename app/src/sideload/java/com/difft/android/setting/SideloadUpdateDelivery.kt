@@ -30,11 +30,11 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import javax.inject.Inject
 
-/**
- * In-app APK update: download through [AppUpgradeService], verify, then hand off to the system
- * installer. Sideload channels have no store to defer to, so every offer installs in-app,
- * whatever the server's updateWithApk says.
- */
+
+
+
+
+
 class SideloadUpdateDelivery @Inject constructor() : UpdateDelivery {
 
     private var installMessageDialog: ComposeDialog? = null
@@ -174,14 +174,14 @@ class SideloadUpdateDelivery @Inject constructor() : UpdateDelivery {
             if (it.endsWith(".apk")) it else null
         } ?: "${CryptoUtil.bytesToHex(CryptoUtil.sha256(url.toByteArray(Charsets.UTF_8)))}.apk"
 
-        // Verify file names to avoid path traversal
+        
         if (filename.contains("../")) {
             ToastUtil.showLong(getString(R.string.status_upgrade_filename_error))
             L.i { "UpdateManager filename Verify error:${filename}" }
             return
         }
 
-        // Delete the old version apk file downloaded before
+        
         if (installMessageDialog == null) {
             clearDownloadedApk(fileDir, filename)
         }
@@ -189,17 +189,16 @@ class SideloadUpdateDelivery @Inject constructor() : UpdateDelivery {
 
         val file = File(fileDir, filename)
         val filePath = file.absolutePath
-        // Determine whether the file exists and verify the file hash value
+        
         if (file.exists()) {
-            // 使用协程在后台线程执行 APK 验证，避免 ANR
+            
             appScope.launch {
                 try {
-                    // 在 IO 线程执行验证
+
                     val isValid = withContext(Dispatchers.IO) {
                         ApkUpdateFiles.verifyApk(context, filePath, apkHash)
                     }
 
-                    // 切换到主线程处理结果
                     withContext(Dispatchers.Main) {
                         if (isValid) {
                             L.i { "UpdateManager upgradeApk install downloaded apk package." }
@@ -210,9 +209,9 @@ class SideloadUpdateDelivery @Inject constructor() : UpdateDelivery {
                                 showInstallDialog(context, file, false)
                             }
                         } else {
-                            // If the hash verification code fails, it will be downloaded.
+                            
                             L.i { "UpdateManager upgradeApk verify failed, invoke service download and install." }
-                            // 删除校验失败（hash 不符或签名不在白名单）的旧文件，避免带病复用并触发无谓的重下循环。
+                            
                             if (file.exists()) {
                                 file.delete()
                             }
@@ -223,14 +222,14 @@ class SideloadUpdateDelivery @Inject constructor() : UpdateDelivery {
                     throw e
                 } catch (error: Exception) {
                     L.e { "UpdateManager upgradeApk verify error: ${error.message}" }
-                    // If verification fails, download the APK
+                    
                     withContext(Dispatchers.Main) {
                         startDownloadService(context, url, apkHash, filePath, isForce)
                     }
                 }
             }
         } else {
-            // If the local update package does not exist, it will be downloaded.
+            
             L.i { "UpdateManager upgradeApk invoke service download and install." }
             startDownloadService(context, url, apkHash, filePath, isForce)
         }
@@ -242,10 +241,7 @@ class SideloadUpdateDelivery @Inject constructor() : UpdateDelivery {
         }
     }
 
-    /**
-     * Update APKs used to live under the base dir (the app-specific external dir when mounted); they
-     * are re-downloadable, so drop them (#1433). The base dir comes from FilePathManager's cache.
-     */
+    
     private fun clearLegacyExternalApks() {
         try {
             val legacyDir = File(FilePathManager.getBaseDirFile(), FileUtil.FILE_DIR_UPGRADE)

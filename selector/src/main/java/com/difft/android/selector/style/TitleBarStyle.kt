@@ -13,7 +13,7 @@ class TitleBarStyle {
     var titleBackgroundColor: Int = 0
     var previewTitleBackgroundColor: Int = 0
 
-    /** unit dp */
+    
     var titleBarHeight: Int = 0
 
     var titleAlbumBackgroundResource: Int = 0

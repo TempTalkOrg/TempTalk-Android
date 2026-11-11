@@ -75,8 +75,8 @@ internal fun RegisterIntroPage(
                 modifier = Modifier
                     .fillMaxWidth()
                     .onGloballyPositioned { coords ->
-                        // Pages share identical layout, so any visible page reports the
-                        // same Y; Screen uses this to anchor the floating indicator.
+                        
+                        
                         onButtonBottomYInRoot((coords.positionInRoot().y + coords.size.height).toInt())
                     },
             )

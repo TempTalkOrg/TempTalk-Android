@@ -20,10 +20,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 
-/**
- * Thread pool utility. 1:1 Java→Kotlin port (issue #1077); concurrency model preserved
- * verbatim — no coroutine refactor, no structural split (both deferred to #1077 future work).
- */
+
 @Suppress("LargeClass", "TooManyFunctions")
 object PictureThreadUtils {
 
@@ -43,9 +40,6 @@ object PictureThreadUtils {
 
     private var sDeliver: Executor? = null
 
-    /**
-     * Return whether the thread is the main thread.
-     */
     @JvmStatic
     fun isInUiThread(): Boolean {
         return Looper.myLooper() == Looper.getMainLooper()
@@ -70,17 +64,17 @@ object PictureThreadUtils {
         HANDLER.postDelayed(runnable, delayMillis)
     }
 
-    /**
-     * Return a thread pool that reuses a fixed number of threads.
-     */
+    
+
+
     @JvmStatic
     fun getFixedPool(@IntRange(from = 1) size: Int): ExecutorService {
         return getPoolByTypeAndPriority(size)
     }
 
-    /**
-     * Return a thread pool that reuses a fixed number of threads.
-     */
+    
+
+
     @JvmStatic
     fun getFixedPool(
         @IntRange(from = 1) size: Int,
@@ -89,67 +83,67 @@ object PictureThreadUtils {
         return getPoolByTypeAndPriority(size, priority)
     }
 
-    /**
-     * Return a thread pool that uses a single worker thread.
-     */
+    
+
+
     @JvmStatic
     fun getSinglePool(): ExecutorService {
         return getPoolByTypeAndPriority(TYPE_SINGLE)
     }
 
-    /**
-     * Return a thread pool that uses a single worker thread.
-     */
+    
+
+
     @JvmStatic
     fun getSinglePool(@IntRange(from = 1, to = 10) priority: Int): ExecutorService {
         return getPoolByTypeAndPriority(TYPE_SINGLE, priority)
     }
 
-    /**
-     * Return a thread pool that creates new threads as needed, but reuses previously
-     * constructed threads when available.
-     */
+    
+
+
+
     @JvmStatic
     fun getCachedPool(): ExecutorService {
         return getPoolByTypeAndPriority(TYPE_CACHED)
     }
 
-    /**
-     * Return a thread pool that creates new threads as needed, but reuses previously
-     * constructed threads when available.
-     */
+    
+
+
+
     @JvmStatic
     fun getCachedPool(@IntRange(from = 1, to = 10) priority: Int): ExecutorService {
         return getPoolByTypeAndPriority(TYPE_CACHED, priority)
     }
 
-    /**
-     * Return an IO thread pool.
-     */
+    
+
+
     @JvmStatic
     fun getIoPool(): ExecutorService {
         return getPoolByTypeAndPriority(TYPE_IO)
     }
 
-    /**
-     * Return an IO thread pool.
-     */
+    
+
+
     @JvmStatic
     fun getIoPool(@IntRange(from = 1, to = 10) priority: Int): ExecutorService {
         return getPoolByTypeAndPriority(TYPE_IO, priority)
     }
 
-    /**
-     * Return a cpu thread pool.
-     */
+    
+
+
     @JvmStatic
     fun getCpuPool(): ExecutorService {
         return getPoolByTypeAndPriority(TYPE_CPU)
     }
 
-    /**
-     * Return a cpu thread pool.
-     */
+    
+
+
     @JvmStatic
     fun getCpuPool(@IntRange(from = 1, to = 10) priority: Int): ExecutorService {
         return getPoolByTypeAndPriority(TYPE_CPU, priority)
@@ -484,18 +478,12 @@ object PictureThreadUtils {
         executeAtFixedRate(pool, task, initialDelay, period, unit)
     }
 
-    /**
-     * Cancel the given task.
-     */
     @JvmStatic
     fun cancel(task: Task<*>?) {
         if (task == null) return
         task.cancel()
     }
 
-    /**
-     * Cancel the given tasks.
-     */
     @JvmStatic
     fun cancel(vararg tasks: Task<*>?) {
         if (tasks.isEmpty()) return
@@ -505,9 +493,6 @@ object PictureThreadUtils {
         }
     }
 
-    /**
-     * Cancel the given tasks.
-     */
     @JvmStatic
     fun cancel(tasks: List<Task<*>?>?) {
         if (tasks == null || tasks.size == 0) return
@@ -517,9 +502,6 @@ object PictureThreadUtils {
         }
     }
 
-    /**
-     * Cancel the tasks in pool.
-     */
     @JvmStatic
     fun cancel(executorService: ExecutorService?) {
         if (executorService is ThreadPoolExecutor4Util) {
@@ -533,9 +515,6 @@ object PictureThreadUtils {
         }
     }
 
-    /**
-     * Set the deliver.
-     */
     @JvmStatic
     fun setDeliver(deliver: Executor?) {
         sDeliver = deliver
@@ -709,7 +688,7 @@ object PictureThreadUtils {
         override fun offer(runnable: Runnable): Boolean {
             val pool = mPool
             if (mCapacity <= size && pool != null && pool.poolSize < pool.maximumPoolSize) {
-                // create a non-core thread
+                
                 return false
             }
             return super.offer(runnable)
@@ -882,9 +861,9 @@ object PictureThreadUtils {
             return this
         }
 
-        /**
-         * Scheduled task doesn't support timeout.
-         */
+        
+
+
         fun setTimeout(timeoutMillis: Long, listener: OnTimeoutListener): Task<T> {
             mTimeoutMillis = timeoutMillis
             mTimeoutListener = listener

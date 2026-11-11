@@ -29,16 +29,16 @@ data class BarrageMessageConfig(
 data class EmojiBubbleMessage(
     val emoji: String,
     val userName: String,
-    val startOffsetPercent: Int, // 从屏幕左侧的偏移百分比
-    val durationMillis: Long, // 展示持续时间
-    val id: Long = System.currentTimeMillis() // 唯一标识
+    val startOffsetPercent: Int,
+    val durationMillis: Long,
+    val id: Long = System.currentTimeMillis()
 )
 
 data class TextBubbleMessage(
     val emoji: String?,
     val text: String,
     val userName: String,
-    val startOffsetPercent: Int, // 从屏幕左侧的偏移百分比
-    val durationMillis: Long, // 展示持续时间
-    val id: Long = System.currentTimeMillis() // 唯一标识
+    val startOffsetPercent: Int,
+    val durationMillis: Long,
+    val id: Long = System.currentTimeMillis()
 )

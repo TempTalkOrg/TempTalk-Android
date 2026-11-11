@@ -8,7 +8,7 @@ import java.util.LinkedList
 
 abstract class MappingViewHolder<Model>(itemView: View) : RecyclerView.ViewHolder(itemView) {
 
-    // Public so both subclass field-style access (`context`) and external getContext() resolve to one member.
+    
     val context: Context = itemView.context
     protected val payload: MutableList<Any> = LinkedList()
 

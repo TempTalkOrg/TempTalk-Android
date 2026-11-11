@@ -72,7 +72,7 @@ object PictureMimeType {
         return mimeType!!.startsWith(ofHeic())
     }
 
-    /** Is it a network image. */
+    
     @JvmStatic
     fun isHasHttp(path: String?): Boolean {
         if (TextUtils.isEmpty(path)) {
@@ -81,7 +81,7 @@ object PictureMimeType {
         return path!!.startsWith("http") || path.startsWith("https")
     }
 
-    /** Whether the two mime types are of the same media category. */
+    
     @JvmStatic
     fun isMimeTypeSame(oldMimeType: String?, newMimeType: String?): Boolean {
         if (TextUtils.isEmpty(oldMimeType)) {
@@ -90,7 +90,7 @@ object PictureMimeType {
         return getMimeType(oldMimeType) == getMimeType(newMimeType)
     }
 
-    /** Picture, video or audio. */
+    
     @JvmStatic
     fun getMimeType(mimeType: String?): Int {
         if (TextUtils.isEmpty(mimeType)) {

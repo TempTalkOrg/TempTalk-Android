@@ -18,10 +18,10 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/**
- * About page after folding its hand-rolled rows into the settings kit (issue #1209): the three
- * read-only rows carry no chevron, each action row carries one, and the call-network entry is gated.
- */
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34])
@@ -62,8 +62,8 @@ class AboutPageViewTest {
         composeTestRule.onNodeWithText("883521").assertIsDisplayed()
         composeTestRule.onNodeWithText(string(R.string.settings_version)).assertIsDisplayed()
 
-        // Three clickable rows (check update, desktop, submit log) -> three chevrons; the three
-        // read-only rows contribute none.
+        
+        
         val chevrons = composeTestRule
             .onAllNodesWithTag(DifftSettingsDefaults.ChevronTestTag, useUnmergedTree = true)
             .fetchSemanticsNodes()

@@ -15,9 +15,9 @@ import com.difft.android.imageeditor.core.model.EditorElement
 import com.difft.android.imageeditor.core.renderers.MultiLineTextRenderer
 import java.util.LinkedList
 
-/**
- * Invisible [android.widget.EditText] that is used during in-image text editing.
- */
+
+
+
 class HiddenEditText(context: Context) : AppCompatEditText(context) {
 
     private var currentTextEditorElement: EditorElement? = null
@@ -180,9 +180,9 @@ class HiddenEditText(context: Context) : AppCompatEditText(context) {
     }
 
     interface TextFilter {
-        /**
-         * Given an input string, return a filtered version.
-         */
+        
+
+
         fun filter(text: String): String?
     }
 

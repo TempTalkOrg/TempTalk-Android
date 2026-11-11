@@ -18,11 +18,11 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
-/**
- * Forward copying must mint a NEW local identity per attachment leaf, per target message, while
- * leaving server identity untouched — that pairing is what decouples copies on disk without changing
- * anything on the wire.
- */
+
+
+
+
+
 class ForwardAttachmentCopyTest {
 
     @Before
@@ -87,7 +87,7 @@ class ForwardAttachmentCopyTest {
         assertEquals(3, copiedIds.size)
         assertEquals(3, copiedIds.toSet().size)
         assertTrue(copiedIds.none { it in setOf("a", "b", "c") })
-        // The source tree is untouched.
+        
         assertEquals(listOf("a", "b", "c"), allAttachments(source).map { it.localId })
     }
 
@@ -156,10 +156,8 @@ class ForwardAttachmentCopyTest {
         val copy = attachment(localId = "local-orig")
             .toForwardCopy(ForwardSourceContext(ownerMessageId = "msg-1", isConfidential = false))
 
-        // Nothing at the current address is not yet a verdict: the file may still be at a
-        // pre-per-copy address, which only the migration can reach and only off the main thread. The
-        // ORIGINAL travels, not the copy — the copy's identity was minted after the file was
-        // written, so the original is the only object that can be resolved to that address.
+        
+        
         assertNull(copy.forwardSourceFilePath)
         val fallback = copy.forwardSourceFallback
         assertNotNull(fallback)
@@ -180,8 +178,8 @@ class ForwardAttachmentCopyTest {
 
         val copy = attachment().toForwardCopy(ForwardSourceContext(ownerMessageId = "msg-1", isConfidential = true))
 
-        // The suppression must hold on BOTH paths, or the fallback would quietly hand a confidential
-        // attachment the persistent copy it must never gain.
+        
+        
         assertNull(copy.forwardSourceFilePath)
         assertNull(copy.forwardSourceFallback)
     }

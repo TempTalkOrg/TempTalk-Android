@@ -16,12 +16,9 @@ import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.user.LogoutManager
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.LinkDataEntity
-import com.difft.android.base.utils.ValidatorUtil
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.chat.group.GroupChatContentActivity
-import com.difft.android.chat.group.GroupChatPopupActivity
 import com.difft.android.chat.ui.ChatActivity
-import com.difft.android.chat.ui.ChatPopupActivity
 import com.difft.android.login.LoginActivity
 import com.difft.android.login.VerifyCodeActivity
 import com.difft.android.login.entry.PendingLoginStore
@@ -38,6 +35,7 @@ import com.difft.android.migration.v2.login.PostRestoreWarmUp
 import com.difft.android.migration.v2.login.PostRestoreWarmUpPage
 import com.difft.android.migration.v2.restore.RestoreFlagStore
 import com.difft.android.network.auth.AuthTokenProvider
+import com.difft.android.chat.util.ChatPopupIntents
 import com.difft.android.chat.util.NotificationTrampolineActivity
 import com.difft.android.ui.DatabaseRecoveryScreen
 import com.difft.android.ui.KeyUnavailableScreen
@@ -66,48 +64,48 @@ class MainActivity : BaseActivity(), RecoveryFlowCoordinator.Host {
     @Inject
     lateinit var authTokenProvider: AuthTokenProvider
 
-    /** Same-device no-login migration: whether to offer it here, and whether it already happened. */
+    
     @Inject
     lateinit var handoffGate: MigrationHandoffGate
 
     @Inject
     lateinit var statusClient: MigrationStatusClient
 
-    /** A sign-in verified just before another account's data was wiped — see [PendingLoginStore]. */
+    
     @Inject
     lateinit var pendingLoginStore: PendingLoginStore
 
     @Inject
     lateinit var postRestoreWarmUp: PostRestoreWarmUp
 
-    /**
-     * Recovery circuit-breaker. Bounds consecutive recovery attempts so a permanently
-     * unrecoverable DB (dead Keystore, persistently failing delete) terminates in a
-     * logout instead of an infinite recovery loop. Backed by a standalone
-     * SharedPreferences file — independent of the (possibly corrupt) WCDB main DB.
-     */
+    
+
+
+
+
+
     private val recoveryState by lazy { DatabaseRecoveryState(this) }
 
-    /**
-     * WCDB cold-start recovery / key-loss routing, extracted so it's unit-testable
-     * without hitting `Runtime.exit`.
-     */
+    
+
+
+
     private val recoveryCoordinator by lazy {
         RecoveryFlowCoordinator(this, wcdb, recoveryState, userManager, logoutManager)
     }
 
-    /**
-     * False while routing: the app lock check defers to the page this Activity starts next, which
-     * would otherwise stack above a lock started from here. True only on the in-place recovery screens.
-     */
+    
+
+
+
     var hostsLockScreen = false
         private set
 
-    /**
-     * Option Y (no splash library): onCreate does NOT call setContent. The window
-     * shows the launch theme's background until the IO integrity probe decides what
-     * to render — keeping the main thread free of any DB call during onCreate.
-     */
+    
+
+
+
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         processIntent()
@@ -120,44 +118,44 @@ class MainActivity : BaseActivity(), RecoveryFlowCoordinator.Host {
     }
 
     private fun processIntent() {
-        // Re-entry guard: if recovery is already running, a re-delivered intent must
-        // not start a second recovery coroutine on the same DB handle.
+        
+        
         if (recoveryCoordinator.recoveryInProgress) {
             L.w { "[MainActivity][DBRecovery] processIntent ignored: recovery in progress" }
             return
         }
         lifecycleScope.launch {
-            // 1. DB integrity FIRST — corrupt DB (wipe-eligible) vs cipher-key failure
-            //    (fail-soft, never wiped) take over the screen; only HEALTHY continues.
+            
+            
             if (!recoveryCoordinator.routeOnDatabaseHealth()) return@launch
 
-            // 2. Healthy DB → existing routing, still off-main for token/identity reads.
+            
             val state = withContext(Dispatchers.IO) {
                 val loggedIn = verifyLocalToken()
-                // Identity-key consistency guard — only meaningful if logged in.
-                // Protects straggler users (pre-1.8.1) whose signal-key-value.db was deleted
-                // by TempTalkApplication's cleanupLegacyKeyValueDbIfNeeded.
+                
+                
+                
                 val identityMissing = if (loggedIn) {
                     needsIdentityKeyRelogin(userManager.getUserData())
                 } else {
                     false
                 }
-                // Cold-start restore resume already ran in TempTalkApplication's blocking startup
-                // chain, before the WCDB singleton opened; it is not repeated here.
-                // A restore-path sign-in leaves the restore flag at COMPLETED for exactly this launch:
-                // consume it here (one flag-file read + delete) so the success page shows once.
+                
+                
+                
+                
                 val flagStore = RestoreFlagStore(this@MainActivity)
                 val account = userManager.getUserData()?.account.orEmpty()
-                // A credential handoff writes the session directly, so a process death can leave the
-                // flag at SIGNING_IN although the restore finished: logged in as the same account
-                // means done — show the page once, clear the orphan.
+                
+                
+                
                 val migrationJustCompleted = flagStore.consumeCompleted() ||
                     (loggedIn && flagStore.consumeSigningInFor(account))
                 val handoffCompletedHere = userManager.getUserData()?.migrationHandoffCompletedId.orEmpty().isNotEmpty()
                 val migratedToNewApp = !loggedIn && (userManager.getUserData()?.migrationHandoffDoneAt ?: 0L) > 0
                 val handoffOffer = if (loggedIn || migratedToNewApp) HandoffOffer.NONE else probeHandoffOffer()
-                // The held sign-in is honoured only on the fresh install the wipe produced; anything
-                // else means the wipe did not happen or another account got here first, and it is dropped.
+                
+                
                 val pendingAccountSwitch = if (!loggedIn && account.isEmpty()) pendingLoginStore.consume() else null.also { pendingLoginStore.clear() }
                 StartupState(
                     isLoggedIn = loggedIn,
@@ -173,14 +171,14 @@ class MainActivity : BaseActivity(), RecoveryFlowCoordinator.Host {
             if (state.isLoggedIn && state.migrationJustCompleted) warmUpAfterRestore()
 
             when {
-                // This install already handed its session to the new package: the login page alone
-                // would say nothing about where the account went.
+                
+                
                 !state.isLoggedIn && state.migratedToNewApp -> {
                     startActivity(LegacyMigrationGuideActivity.createIntent(this@MainActivity, LegacyGuideMode.MIGRATED))
                     finish()
                 }
-                // The user agreed to replace another account's data and already verified the code:
-                // reopen the code page on that sign-in, which goes straight to the migration chooser.
+                
+                
                 !state.isLoggedIn && state.pendingAccountSwitch != null -> {
                     L.i { "[MainActivity] held sign-in after an account switch → migration chooser" }
                     startActivities(
@@ -192,8 +190,8 @@ class MainActivity : BaseActivity(), RecoveryFlowCoordinator.Host {
                     )
                     finish()
                 }
-                // The old app holds a session that can travel — offer the no-login migration before
-                // asking for a phone number and a verification code.
+                
+                
                 !state.isLoggedIn && state.handoffOffer != HandoffOffer.NONE -> {
                     L.i { "[MigrationV2][Handoff] startup offer=${state.handoffOffer}" }
                     startActivity(MigrationHandoffEntryActivity.createIntent(this@MainActivity))
@@ -203,34 +201,34 @@ class MainActivity : BaseActivity(), RecoveryFlowCoordinator.Host {
                     startActivity(Intent(this@MainActivity, LoginActivity::class.java))
                     finish()
                 }
-                // Identity-key branch runs BEFORE routing — recovering WCDB is meaningless
-                // if the identity keys are gone (decrypt would still fail).
+                
+                
                 state.needsIdentityRelogin -> {
                     L.w { "[MainActivity] logged in but identity key missing, forcing passive re-login" }
                     logoutManager.doLogoutWithoutRemoveData()
-                    // doLogoutWithoutRemoveData() eventually calls Process.killProcess; code below never runs.
+                    
                 }
-                // First launch after a same-device credential handoff: show the one-shot success page,
-                // since that path restarts straight out of the import with no page of its own. A
-                // cross-device restore already showed its completion page, so it falls through.
+                
+                
+                
                 state.migrationJustCompleted && state.migratedViaHandoff -> {
                     L.i { "[MainActivity] handoff completed on the previous launch → migration success page" }
                     startActivity(MigrationSuccessActivity.createIntent(this@MainActivity, credentialHandoff = true))
                     finish()
                 }
-                // Popup branch runs only after integrity + auth + identity-key checks pass.
-                // EXTRA_OPEN_POPUP is set by NotificationTrampolineActivity but MainActivity is
-                // exported=true, so any installed app can forge it (issue #758). Auth is gated
-                // above; tryOpenPopupChat re-validates id format. Falls back to deeplink path
-                // (IndexActivity.handleDeeplink runs ValidatorUtil too) if the id is malformed.
+                
+                
+                
+                
+                
                 shouldOpenPopupChat() -> {
                     val app = application as? TempTalkApplication
-                    // Fail closed: if the app class can't be resolved (should never happen) OR the lock
-                    // is required, do NOT open the popup. Queue it for replay after unlock and run a
-                    // single-pass lock check (the full check's 1100ms second pass could re-lock right
-                    // after a fast unlock+replay). Route to IndexActivity only on a cold start (task
-                    // root); otherwise finish to return to the previous top — IndexActivity is
-                    // singleTask and would clear it (reset to home).
+                    
+                    
+                    
+                    
+                    
+                    
                     if (app == null || app.isScreenLockRequiredOrShowing()) {
                         L.i { "[MainActivity] popup gated by app lock, queued for replay after unlock" }
                         PendingScreenLockDeeplink.offer(intent)
@@ -251,11 +249,11 @@ class MainActivity : BaseActivity(), RecoveryFlowCoordinator.Host {
         }
     }
 
-    /**
-     * First cold start after a restore: conversations are on disk, contactor and group tables are
-     * not. Hold here until the first sync lands (bounded — see [PostRestoreWarmUp]) so the chat list
-     * opens complete instead of showing every friend as a stranger for a few seconds.
-     */
+    
+
+
+
+
     private suspend fun warmUpAfterRestore() {
         L.i { "[MainActivity] restore completed on the previous launch → warming up contacts and groups first" }
         setContent { DifftTheme { PostRestoreWarmUpPage() } }
@@ -266,19 +264,19 @@ class MainActivity : BaseActivity(), RecoveryFlowCoordinator.Host {
         val isLoggedIn: Boolean,
         val needsIdentityRelogin: Boolean,
         val migrationJustCompleted: Boolean = false,
-        /** The session arrived through a credential handoff, so the success copy says so. */
+        
         val migratedViaHandoff: Boolean = false,
-        /** This (retiring) install handed its session over and signed itself out. */
+        
         val migratedToNewApp: Boolean = false,
         val handoffOffer: HandoffOffer = HandoffOffer.NONE,
-        /** The user agreed to replace another account's data and has already verified the code. */
+        
         val pendingAccountSwitch: LoginViewModel.PendingSignIn? = null,
     )
 
-    /**
-     * Bounded probe of the same-device no-login migration. Runs on every not-logged-in cold start, so
-     * it must never hold the launch open: the timeout collapses to "do not offer" (ordinary login).
-     */
+    
+
+
+
     private suspend fun probeHandoffOffer(): HandoffOffer =
         withTimeoutOrNull(HANDOFF_PROBE_TIMEOUT_MS) {
             if (!handoffGate.canReceive()) return@withTimeoutOrNull HandoffOffer.NONE
@@ -300,10 +298,10 @@ class MainActivity : BaseActivity(), RecoveryFlowCoordinator.Host {
         token = authTokenProvider.peek(),
     )
 
-    /**
-     * Navigate to IndexActivity, passing all deeplink/share data via Intent, except on a Recents
-     * relaunch ([isLaunchedFromHistory]), whose payload was handled when the task started.
-     */
+    
+
+
+
     private fun navigateToIndexActivity() {
         if (isLaunchedFromHistory()) {
             L.i { "[MainActivity] relaunched from recents, deeplink and share extras dropped" }
@@ -313,7 +311,7 @@ class MainActivity : BaseActivity(), RecoveryFlowCoordinator.Host {
         }
         val newIntent = Intent(this@MainActivity, IndexActivity::class.java)
         
-        // Pass deeplink data
+        
         val linkCategory = intent.getIntExtra(LinkDataEntity.LINK_CATEGORY, -1)
         val pushData = intent.getStringExtra("pushData")
         val groupId = intent.getStringExtra(GroupChatContentActivity.INTENT_EXTRA_GROUP_ID)
@@ -328,10 +326,10 @@ class MainActivity : BaseActivity(), RecoveryFlowCoordinator.Host {
         
         com.difft.android.setting.notificationtest.NotificationTestReturnRoute.forward(intent, newIntent)
 
-        // Pass scheme URL
+        
         intent.data?.let { newIntent.data = it }
         
-        // Handle external share (ACTION_SEND)
+        
         if (this.intent?.action == Intent.ACTION_SEND) {
             try {
                 newIntent.action = intent.action
@@ -367,10 +365,10 @@ class MainActivity : BaseActivity(), RecoveryFlowCoordinator.Host {
         try {
             startActivity(newIntent)
         } catch (e: SecurityException) {
-            // UriGrantsManagerService rejects FLAG_GRANT_READ_URI_PERMISSION for a content uri this
-            // process cannot read itself (sender granted nothing, media access is partial, or the grant
-            // expired across a process kill). The file is unreadable either way, so drop the share
-            // payload instead of crashing.
+            
+            
+            
+            
             L.w { "[MainActivity] share uri grant rejected, entering IndexActivity without share payload" }
             ToastUtil.showLong(R.string.share_file_access_error)
             startActivity(Intent(this@MainActivity, IndexActivity::class.java))
@@ -378,7 +376,7 @@ class MainActivity : BaseActivity(), RecoveryFlowCoordinator.Host {
         finish()
     }
 
-    // RecoveryFlowCoordinator.Host — Activity-coupled seams the recovery flow delegates to.
+    
 
     override val scope: CoroutineScope get() = lifecycleScope
 
@@ -396,14 +394,14 @@ class MainActivity : BaseActivity(), RecoveryFlowCoordinator.Host {
     override fun renderKeyUnavailableScreen() {
         setContent {
             DifftTheme {
-                // Retry restarts the process to re-attempt the Keystore read in a fresh process.
+                
                 KeyUnavailableScreen(onRetry = { restartApp() })
             }
         }
         hostLockScreen()
     }
 
-    /** These screens stay on this Activity until a process restart, so the app lock may cover them. */
+    
     private fun hostLockScreen() {
         hostsLockScreen = true
         (application as? TempTalkApplication)?.onLockHostReady(this)
@@ -413,17 +411,17 @@ class MainActivity : BaseActivity(), RecoveryFlowCoordinator.Host {
         ToastUtil.showLong(messageResId)
     }
 
-    /**
-     * Restart the process to reinitialize all lazy singletons with fresh DB handles.
-     *
-     * Uses `FLAG_ACTIVITY_NEW_TASK or FLAG_ACTIVITY_CLEAR_TASK` (issue #725 §9.5): on
-     * API ≥ 24 a `startActivity` from some contexts with `CLEAR_TASK` alone throws.
-     */
+    
+
+
+
+
+
     override fun restartApp() {
         L.i { "[MainActivity][DBRecovery] restarting app" }
-        // getLaunchIntentForPackage may return null; passing null to startActivity throws
-        // NPE and would skip exit(0), leaving a zombie process with poisoned singletons.
-        // Guard the relaunch but ALWAYS kill the process (issue #725 §9.5 semantics).
+        
+        
+        
         val intent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
         }
@@ -432,20 +430,20 @@ class MainActivity : BaseActivity(), RecoveryFlowCoordinator.Host {
     }
 
     private companion object {
-        /** The whole probe — gate read plus one binder round trip — or the login page instead. */
+        
         const val HANDOFF_PROBE_TIMEOUT_MS = 2_000L
     }
 
-    /**
-     * Recents relaunches a task with the intent that created it, so a task started from a
-     * notification or a share would open that chat or share again; its payload was handled then.
-     */
+    
+
+
+
     private fun isLaunchedFromHistory(): Boolean =
         intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0
 
-    /**
-     * Check if should open popup chat (indicated by TrampolineActivity).
-     */
+    
+
+
     private fun shouldOpenPopupChat(): Boolean {
         if (isLaunchedFromHistory()) return false
         val openPopup = intent.getBooleanExtra(NotificationTrampolineActivity.EXTRA_OPEN_POPUP, false)
@@ -454,34 +452,20 @@ class MainActivity : BaseActivity(), RecoveryFlowCoordinator.Host {
         return openPopup && isFromMessageNotification
     }
 
-    /**
-     * Try to open popup chat. Returns true on success, false if the id is missing/malformed
-     * (so the caller can fall through to the normal startup flow).
-     */
+    
+
+
+
     private fun tryOpenPopupChat(): Boolean {
         val groupId = intent.getStringExtra(GroupChatContentActivity.INTENT_EXTRA_GROUP_ID)
         val contactId = intent.getStringExtra(ChatActivity.BUNDLE_KEY_CONTACT_ID)
 
-        val popupIntent = when {
-            !groupId.isNullOrEmpty() && ValidatorUtil.isGid(groupId) -> {
-                Intent(this, GroupChatPopupActivity::class.java).apply {
-                    putExtra(GroupChatPopupActivity.INTENT_EXTRA_GROUP_ID, groupId)
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
+        val popupIntent = ChatPopupIntents.create(this, contactId, groupId) ?: run {
+            L.e {
+                "[MainActivity] tryOpenPopupChat: invalid or missing id " +
+                    "groupId.length=${groupId?.length ?: 0} contactId.length=${contactId?.length ?: 0}"
             }
-            !contactId.isNullOrEmpty() && ValidatorUtil.isUid(contactId) -> {
-                Intent(this, ChatPopupActivity::class.java).apply {
-                    putExtra(ChatPopupActivity.BUNDLE_KEY_CONTACT_ID, contactId)
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-            }
-            else -> {
-                L.e {
-                    "[MainActivity] tryOpenPopupChat: invalid or missing id " +
-                        "groupId.length=${groupId?.length ?: 0} contactId.length=${contactId?.length ?: 0}"
-                }
-                return false
-            }
+            return false
         }
 
         startActivity(popupIntent)

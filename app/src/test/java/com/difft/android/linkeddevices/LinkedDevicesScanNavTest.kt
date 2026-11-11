@@ -20,10 +20,10 @@ import org.robolectric.annotation.GraphicsMode
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 
-/**
- * The "Link New Device" row launches [ScanActivity]. Uses createAndroidComposeRule so the host
- * activity is reachable and the started intent can be asserted via [shadowOf].
- */
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [33])

@@ -16,35 +16,33 @@ import com.difft.android.base.R
 import com.difft.android.base.ui.compose.DifftSwitch
 import com.difft.android.base.ui.compose.settings.DifftSwitchRow
 
-/**
- * XML-hostable shell around [DifftSwitch]. Drop-in for `SwitchCompat`: same `isChecked` /
- * `isEnabled` / `setOnCheckedChangeListener` / `setOnClickListener` surface, plus
- * [DifftToggleView.setOnToggleRequestListener] for the controlled mode (see [DifftToggleView] for
- * the callback rule).
- *
- * Two forms, chosen by `android:text`:
- * - no text  → the bare 52×32 control (wrap_content footprint = the design box)
- * - text     → a [DifftSwitchRow]: label start, switch end. `SwitchCompat` is a TextView, so the
- *   migrated label rows keep their layout untouched; `android:background` and
- *   `android:paddingStart/End` stay on the View, which `AbstractComposeView` honours (it subtracts
- *   padding in onMeasure and offsets the composition in onLayout).
- *
- * ```xml
- * <com.difft.android.base.widget.DifftSwitchView
- *     android:layout_width="match_parent"
- *     android:layout_height="52dp"
- *     android:paddingStart="16dp"
- *     android:paddingEnd="16dp"
- *     android:text="@string/chat_stick" />
- * ```
- * Leave `android:background` unset inside a rounded settings card: the card paints the surface,
- * and a solid fill on the row would square off the card's corners.
- *
- * `android:textSize` / `android:textColor` are deliberately not read: every migrated row is the
- * theme's 16sp `textPrimary`, and two fewer attrs is two fewer ways to bypass the theme.
- *
- * When the page moves to Compose, replace the tag with a direct [DifftSwitch] / [DifftSwitchRow].
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 class DifftSwitchView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
@@ -55,12 +53,12 @@ class DifftSwitchView @JvmOverloads constructor(
 
     private var labelState by mutableStateOf<String?>(null)
 
-    /**
-     * Row label. Null / blank renders the bare control. A label also becomes the accessibility
-     * name, but only a label ever writes it: clearing the label drops the description only when it
-     * is still the one this setter installed, so an `android:contentDescription` on the bare form
-     * survives.
-     */
+    
+
+
+
+
+
     var label: String?
         get() = labelState
         set(value) {
@@ -89,15 +87,15 @@ class DifftSwitchView @JvmOverloads constructor(
             DifftSwitchRow(
                 label = text,
                 checked = checked,
-                onCheckedChange = null, // the View owns the click
+                onCheckedChange = null, 
                 enabled = enabled,
-                // The View reports the whole row to TalkBack (Switch class + contentDescription);
-                // silencing the subtree keeps TalkBack from announcing the label twice.
+                
+                
                 modifier = Modifier
                     .fillMaxWidth()
                     .clearAndSetSemantics { },
-                // The View's layout_height is the row height; a second min here would push a
-                // wrap_content row past its parent's AT_MOST height.
+                
+                
                 minHeight = 0.dp,
             )
         }

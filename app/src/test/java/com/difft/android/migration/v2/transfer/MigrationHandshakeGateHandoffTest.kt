@@ -11,14 +11,14 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
-/**
- * The same-device no-login handoff branch of the pre-transfer gate.
- *
- * The safety-critical case is the mode disagreement: an OLD app that hands its credential over to a
- * receiver which will never install it would be told "200" and wipe, stranding the user signed out
- * on one app and asked for a verification code on the other. Both directions of that disagreement
- * are rejected, before any byte, and `onAccept` never fires on a reject.
- */
+
+
+
+
+
+
+
+
 class MigrationHandshakeGateHandoffTest {
 
     private fun envHelper(current: String) = object : EnvironmentHelper {

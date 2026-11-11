@@ -6,6 +6,8 @@ import android.graphics.Color
 import android.graphics.Rect
 import android.os.Bundle
 import android.view.View
+import android.view.LayoutInflater
+import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.ProgressBar
 import android.widget.TextView
@@ -35,7 +37,6 @@ import javax.inject.Inject
 import com.difft.android.selector.entity.LocalMedia
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.chat.mediasend.MediaMetadataSource
-import com.difft.android.chat.mediasend.MediaSendActivityResult
 import com.difft.android.chat.mediasend.MediaSendFailureNotice
 import com.difft.android.chat.mediasend.VideoTrimTransform
 import com.difft.android.chat.mediasend.mediaKey
@@ -46,9 +47,11 @@ import com.difft.android.chat.mediasend.v2.MediaAnimations
 import com.difft.android.chat.mediasend.v2.MediaSelectionActivity
 import com.difft.android.chat.mediasend.v2.MediaSelectionState
 import com.difft.android.chat.mediasend.v2.MediaSelectionViewModel
+import com.difft.android.chat.mediasend.v2.MediaSendOutcome
 import com.difft.android.chat.mediasend.v2.MediaValidator
 import com.difft.android.chat.mms.MediaConstraints
 import com.difft.android.chat.mms.SentMediaQuality
+import com.difft.android.chat.mms.videoConstraintsQuality
 import com.difft.android.chat.util.MediaUtil
 import com.difft.android.chat.util.MemoryUnitFormat
 import com.difft.android.chat.util.SystemWindowInsetsSetter
@@ -65,9 +68,9 @@ import java.util.Locale
 import java.util.concurrent.TimeUnit
 import javax.annotation.meta.Exhaustive
 
-/**
- * Allows the user to view and edit selected media.
- */
+
+
+
 @AndroidEntryPoint
 class MediaReviewFragment : androidx.fragment.app.Fragment(R.layout.v2_media_review_fragment), VideoThumbnailsRangeSelectorView.RangeDragListener {
 
@@ -86,8 +89,6 @@ class MediaReviewFragment : androidx.fragment.app.Fragment(R.layout.v2_media_rev
     private lateinit var saveButton: View
     private lateinit var sendButton: ImageView
     private lateinit var inputContainer: View
-    private lateinit var inputArea: View
-    private lateinit var confidentialLine: View
     private lateinit var addMessageButton: AppCompatTextView
     private lateinit var confidentialToggle: ImageView
     private lateinit var pager: ViewPager2
@@ -103,7 +104,10 @@ class MediaReviewFragment : androidx.fragment.app.Fragment(R.layout.v2_media_rev
     private val exclusionZone = listOf(Rect())
 
     private var animatorSet: AnimatorSet? = null
-    private var sentMediaQuality: SentMediaQuality = SentMediaQuality.HIGH
+    private var sentMediaQuality: SentMediaQuality = SentMediaQuality.STANDARD
+
+    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View =
+        MediaReviewInputChrome.inflate(inflater, container)
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         postponeEnterTransition()
@@ -118,10 +122,9 @@ class MediaReviewFragment : androidx.fragment.app.Fragment(R.layout.v2_media_rev
         saveButton = view.findViewById(R.id.save_to_media)
         sendButton = view.findViewById(R.id.send)
         inputContainer = view.findViewById(R.id.input_container)
-        inputArea = view.findViewById(R.id.input_area)
-        confidentialLine = view.findViewById(R.id.confidential_line)
         addMessageButton = view.findViewById(R.id.add_a_message)
         confidentialToggle = view.findViewById(R.id.confidential_toggle)
+        MediaReviewInputChrome.apply(view)
         pager = view.findViewById(R.id.media_pager)
         controls = view.findViewById(R.id.controls)
         selectionRecycler = view.findViewById(R.id.selection_recycler)
@@ -173,9 +176,9 @@ class MediaReviewFragment : androidx.fragment.app.Fragment(R.layout.v2_media_rev
             sharedViewModel.sendCommand(HudCommand.SaveMedia)
         }
 
-//        addMessageEditText.doAfterTextChanged {
-//            sharedViewModel.setMessage(it)
-//        }
+
+
+
 
         addMessageButton.setOnClickListener {
             AddMessageDialogFragment.show(parentFragmentManager, sharedViewModel.state.value?.message, false)
@@ -332,7 +335,7 @@ class MediaReviewFragment : androidx.fragment.app.Fragment(R.layout.v2_media_rev
                 val outcome = sharedViewModel.send()
                 val sentCount = outcome.result.media.size
                 when {
-                    outcome.failures.isEmpty() -> callback.onSentWithResult(outcome.result)
+                    outcome.failures.isEmpty() -> callback.onSentWithResult(outcome)
                     sentCount == 0 -> {
                         showSendProgress(false)
                         MediaSendFailureNotice.showAllFailed(requireContext(), outcome.failures) { performSend() }
@@ -340,7 +343,7 @@ class MediaReviewFragment : androidx.fragment.app.Fragment(R.layout.v2_media_rev
                     else -> {
                         showSendProgress(false)
                         MediaSendFailureNotice.showPartial(requireContext(), outcome.failures, sentCount) {
-                            callback.onSentWithResult(outcome.result)
+                            callback.onSentWithResult(outcome)
                         }
                     }
                 }
@@ -353,10 +356,10 @@ class MediaReviewFragment : androidx.fragment.app.Fragment(R.layout.v2_media_rev
         }
     }
 
-    /**
-     * The overlay intercepts every touch, so any path that stops sending without hiding it again
-     * leaves the whole screen frozen with no way out but killing the process.
-     */
+    
+
+
+
     private fun showSendProgress(show: Boolean) {
         progressWrapper.animate().cancel()
         if (show) {
@@ -372,7 +375,7 @@ class MediaReviewFragment : androidx.fragment.app.Fragment(R.layout.v2_media_rev
         }
     }
 
-    /** Retry entry for the host activity's failure dialog. */
+    
     internal fun retrySend() = performSend()
 
     private fun presentAddMessageEntry(message: CharSequence?) {
@@ -383,7 +386,7 @@ class MediaReviewFragment : androidx.fragment.app.Fragment(R.layout.v2_media_rev
         )
         addMessageButton.setTextColor(
             ContextCompat.getColor(
-                requireContext(),
+                addMessageButton.context,
                 if (hasMessage) com.difft.android.base.R.color.t_primary else com.difft.android.base.R.color.t_disable
             )
         )
@@ -431,8 +434,8 @@ class MediaReviewFragment : androidx.fragment.app.Fragment(R.layout.v2_media_rev
         }
         val sourceUri = mediaItem.readableUri()
         val key = mediaItem.mediaKey()
-        // setInput is declared @Throws(IOException) and this runs inside a LiveData observer: an
-        // escape here would abort the whole observer dispatch, not just skip the timeline.
+        
+        
         val updatedInputInTimeline = try {
             videoTimeLine.setInput(sourceUri)
         } catch (e: IOException) {
@@ -442,8 +445,8 @@ class MediaReviewFragment : androidx.fragment.app.Fragment(R.layout.v2_media_rev
         if (updatedInputInTimeline) {
             videoTimeLine.unregisterDragListener()
         }
-        // MediaStore SIZE rather than a file probe: the bare path is exactly what may be
-        // unreadable, and a failed probe would report 0 and silently skip the duration cap.
+        
+        
         val size: Long = MediaMetadataSource.sizeBytes(mediaItem)
         val maxSend = sharedViewModel.getMediaConstraints().getVideoMaxSize(requireContext())
         if (size > maxSend) {
@@ -470,9 +473,9 @@ class MediaReviewFragment : androidx.fragment.app.Fragment(R.layout.v2_media_rev
 
         val durationMs = MediaMetadataSource.durationMs(focusedMedia, trimData.getDuration().inWholeMilliseconds)
         val bytes = calculateExpectedFileSize(focusedMedia, trimData, state)
-        // Hiding beats lying: "0:00 • 0.0MB" presents a failed read as a fact, which is exactly how
-        // the original defect stayed invisible. When the source really is unreadable the
-        // user-facing signal belongs on the send-time failure surface, not on this hint.
+        
+        
+        
         videoSizeHint.text = if (durationMs > 0 && bytes > 0) {
             val seconds = durationMs / 1000
             String.format(Locale.getDefault(), "%d:%02d • %s", seconds / 60, seconds % 60, MemoryUnitFormat.formatBytes(bytes, MemoryUnitFormat.MEGA_BYTES, true))
@@ -482,29 +485,29 @@ class MediaReviewFragment : androidx.fragment.app.Fragment(R.layout.v2_media_rev
         }
     }
 
-    /**
-     * Calculate expected file size based on whether compression will be needed.
-     * Returns original file size if no compression needed, otherwise returns estimated compressed size.
-     *
-     * Pure arithmetic over already-known metadata: this runs on the main thread from a LiveData
-     * observer, and the file probes it replaces both blocked that thread and reported 0 for a
-     * gallery item whose bare path cannot be opened. -1 means unknown and the caller hides the hint.
-     */
+    
+
+
+
+
+
+
+
     private fun calculateExpectedFileSize(media: LocalMedia, trimData: com.difft.android.chat.mediasend.v2.videos.VideoTrimData, state: MediaSelectionState): Long {
         val fileSize = MediaMetadataSource.sizeBytes(media)
-        // Same duration the hint displays: the timeline reports nothing until it has read the
-        // source, and an estimate over a 0ms duration is 0 bytes, which hides the hint on an item
-        // whose duration the MediaStore row knew all along.
+        
+        
+        
         val durationMs = MediaMetadataSource.durationMs(media, trimData.getDuration().inWholeMilliseconds)
 
-        // Trimming always requires transcode -> show estimated size
+        
         if (trimData.isDurationEdited) {
             return TranscodingQuality.createFromPreset(state.transcodingPreset, durationMs).byteCountEstimate
         }
 
-        // Check if compression is needed. An unknown bitrate (-1) makes needsCompression take its
-        // conservative branch, matching what VideoTrimTransform will decide at send time.
-        val constraints = MediaConstraints.getPushMediaConstraints(state.quality)
+        
+        
+        val constraints = MediaConstraints.getPushMediaConstraints(state.quality.videoConstraintsQuality())
         val maxFileSize = constraints.getCompressedVideoMaxSize(requireContext())
         val preset = constraints.videoTranscodingSettings
         val inputBitRate = VideoUtil.inputBitRate(fileSize, MediaMetadataSource.durationMs(media))
@@ -515,7 +518,7 @@ class MediaReviewFragment : androidx.fragment.app.Fragment(R.layout.v2_media_rev
         return if (compressionNeeded) {
             TranscodingQuality.createFromPreset(state.transcodingPreset, durationMs).byteCountEstimate
         } else {
-            fileSize // No compression, fast remux keeps original size
+            fileSize 
         }
     }
 
@@ -589,17 +592,10 @@ class MediaReviewFragment : androidx.fragment.app.Fragment(R.layout.v2_media_rev
 
     private fun computeAddMessageAnimators(state: MediaSelectionState): List<Animator> {
         return if (!state.isTouchEnabled) {
-            inputArea.visibility = View.INVISIBLE
-            confidentialLine.visibility = View.GONE
             listOf(
                 MediaReviewAnimatorController.getFadeOutAnimator(inputContainer)
             )
         } else {
-            val isConfidential = state.confidentialMode == 1
-            if (isConfidential) {
-                inputArea.visibility = View.VISIBLE
-                confidentialLine.visibility = View.VISIBLE
-            }
             listOf(
                 MediaReviewAnimatorController.getFadeInAnimator(inputContainer)
             )
@@ -690,27 +686,17 @@ class MediaReviewFragment : androidx.fragment.app.Fragment(R.layout.v2_media_rev
                 confidentialToggle.imageTintList = null
             } else {
                 confidentialToggle.setImageResource(R.drawable.chat_btn_confidential_mode_disable)
-                confidentialToggle.imageTintList = ContextCompat.getColorStateList(requireContext(), com.difft.android.base.R.color.icon)
+                confidentialToggle.imageTintList = null
             }
             applyConfidentialInputStyle(isConfidential)
         }
     }
 
     private fun applyConfidentialInputStyle(isConfidential: Boolean) {
-        if (isConfidential) {
-            val overlayColor = ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.bg_confidential_area)
-            inputArea.setBackgroundColor(overlayColor)
-            inputArea.visibility = View.VISIBLE
-            inputContainer.setBackgroundResource(R.drawable.chat_msg_input_bg_confidential)
-            confidentialLine.visibility = View.VISIBLE
-        } else {
-            inputArea.visibility = View.INVISIBLE
-            inputContainer.setBackgroundResource(R.drawable.chat_msg_input_field_bg)
-            confidentialLine.visibility = View.GONE
-        }
+        MediaReviewInputChrome.setConfidential(requireView(), isConfidential)
     }
 
-    /** Local-first: the switch takes effect at once; a sync job carries it to the server. */
+    
     private fun syncConfidentialModeToServer(mode: Int) {
         val conversationId = (requireActivity() as? MediaSelectionActivity)?.conversationId
         if (conversationId.isNullOrEmpty()) return
@@ -731,16 +717,17 @@ class MediaReviewFragment : androidx.fragment.app.Fragment(R.layout.v2_media_rev
     }
 
     private fun showConfidentialTipDialog(onConfirm: () -> Unit) {
-        globalServices.userManager.update { hasShownConfidentialTip = true }
         var dialog: ComposeDialog? = null
         dialog = ComposeDialogManager.showBottomDialog(
             activity = requireActivity(),
+            showDragHandle = false,
             onDismiss = { }
         ) {
             ConfidentialTipDialogContent(
                 title = getString(R.string.chat_confidential_tip_title),
                 content = getString(R.string.chat_confidential_tip_content),
                 onConfirm = {
+                    globalServices.userManager.update { hasShownConfidentialTip = true }
                     dialog?.dismiss()
                     onConfirm()
                 }
@@ -753,7 +740,7 @@ class MediaReviewFragment : androidx.fragment.app.Fragment(R.layout.v2_media_rev
     }
 
     interface Callback {
-        fun onSentWithResult(mediaSendActivityResult: MediaSendActivityResult)
+        fun onSentWithResult(outcome: MediaSendOutcome)
         fun onSentWithoutResult()
         fun onSendError(error: Throwable)
         fun onNoMediaSelected()
@@ -771,7 +758,7 @@ class MediaReviewFragment : androidx.fragment.app.Fragment(R.layout.v2_media_rev
         dialog = ComposeDialogManager.showBottomDialog(
             activity = requireActivity(),
             layoutId = R.layout.layout_media_quality_select_dialog,
-            onDismiss = { /* Dialog dismissed */ },
+            onDismiss = {  },
             onViewCreated = { v ->
                 val btnStandard = v.findViewById<TextView>(R.id.btn_standard)
                 val btnHigh = v.findViewById<TextView>(R.id.btn_high)

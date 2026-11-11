@@ -3,10 +3,9 @@ package com.difft.android.base.log.lumberjack
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-/**
- * Pins the file-sink redaction contract of [LogScrubber]. Inputs mirror the line shapes found in
- * the 2026-10 production log audit; values are synthetic.
- */
+
+
+
 class LogScrubberTest {
 
     @Test
@@ -98,9 +97,9 @@ class LogScrubberTest {
         )) {
             assertEquals("x: $dir<file>", LogScrubber.scrub("x: $dir$name does not exist"), name)
         }
-        // A quoted path ends at the closing quote; the rest of the line is kept.
+        
         assertEquals("""{"path":"$dir<file>","other":"x.png"}""", LogScrubber.scrub("""{"path":"${dir}a b.jpg","other":"x.png"}"""))
-        // Paths outside an attachment directory are not touched by this rule.
+        
         assertEquals("open /storage/emulated/0/DCIM/x.jpg", LogScrubber.scrub("open /storage/emulated/0/DCIM/x.jpg"))
     }
 

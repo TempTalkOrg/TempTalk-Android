@@ -5,13 +5,13 @@ import com.difft.android.websocket.api.websocket.WebSocketConnectionState
 import org.junit.Test
 import kotlin.test.assertEquals
 
-/**
- * Unit tests for [reconnectPolicyFor] — the branch matrix the health monitor consumes (issue #1230) —
- * and [reconnectBackoffCapMs], the foreground/background reconnect backoff cap (issue #1325).
- *
- * The point of the split is that an auth-level rejection must NOT switch host or count as a
- * connectivity failure: the server answered correctly and rejected the credential.
- */
+
+
+
+
+
+
+
 class WebSocketReconnectPolicyTest {
 
     @Test
@@ -62,7 +62,7 @@ class WebSocketReconnectPolicyTest {
         )
     }
 
-    // T15 — a local disconnect says nothing about the host unless its reason does.
+    
     @Test
     fun `a connect timeout or lost heartbeat switches host`() {
         assertEquals(

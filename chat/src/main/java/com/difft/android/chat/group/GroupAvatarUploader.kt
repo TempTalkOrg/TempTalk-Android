@@ -23,21 +23,21 @@ import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Uploads a local avatar file to the CDN and returns the plaintext avatar JSON
- * suitable for `CreateGroupReq.avatar` or `ChangeGroupSettingsReq.avatar`.
- *
- * For encrypted groups the caller should pass the returned JSON through
- * [com.difft.android.chat.crypto.GroupCrypto.encryptGroupAvatar] and put the
- * ciphertext in `encryptedAvatar` instead.
- *
- * Error contract:
- *  - [NetworkException] is thrown only when the server returns `status != 0` —
- *    its `message` carries the server-provided reason and is safe to surface to the user.
- *  - All local failures (file read, encrypt) throw [IOException] with an English
- *    debugging message meant for logs. The caller should fall back to a generic
- *    localized toast (e.g. `R.string.chat_net_error`) and not display the message.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 @Singleton
 class GroupAvatarUploader @Inject constructor(
     @param:ApplicationContext private val context: Context,
@@ -71,10 +71,10 @@ class GroupAvatarUploader @Inject constructor(
             throw IOException("avatar_encrypt_failed")
         }
 
-        // Close the returned ResponseBody to release the OkHttp connection resource.
-        // The suspend call only returns here after the upload (request body) has been
-        // fully sent and the server returned 2xx; close() only discards the (empty/
-        // irrelevant) response body. Non-2xx would have already thrown HttpException.
+        
+        
+        
+        
         noHeaderClient.httpService.fetchUploadAvatar(
             response.location.orEmpty(),
             RequestBody.create(null, encryptedData)

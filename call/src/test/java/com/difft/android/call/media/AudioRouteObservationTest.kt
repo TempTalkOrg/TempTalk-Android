@@ -8,15 +8,15 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * The route-confirmation decision table (design inventory rows #37 and #38).
- *
- * Pure functions with no framework dependency — `AudioDeviceInfo.TYPE_*` are compile-time int
- * constants — so the whole table is covered exhaustively instead of sampled.
- */
+
+
+
+
+
+
 class AudioRouteObservationTest {
 
-    // ── #37 ─────────────────────────────────────────────────────────────────────
+    
     @Test
     fun `the observed route is inferred from the legacy readings, cross-checked by commType`() {
         assertEquals(
@@ -58,12 +58,12 @@ class AudioRouteObservationTest {
         )
     }
 
-    // ── WK-1 ────────────────────────────────────────────────────────────────────
-    /**
-     * `null` means "this type says nothing", never "earpiece or wired": a wake-up source that
-     * guessed would fire on every unrelated endpoint. A2DP / LE speaker are `null` on purpose —
-     * widening them would silently change the confirmation criterion (tracked separately).
-     */
+    
+    
+
+
+
+
     @Test
     fun `a communication device type maps only to the route it actually indicates`() {
         assertEquals(ObservedRoute.BLUETOOTH, commDeviceRoute(AudioDeviceInfo.TYPE_BLUETOOTH_SCO))
@@ -112,15 +112,15 @@ class AudioRouteObservationTest {
         )
     }
 
-    // ── #38 ─────────────────────────────────────────────────────────────────────
+    
     @Test
     fun `every observed route matches exactly the kinds it can be`() {
         val all = AudioDeviceKind.entries
         val expected = mapOf(
             ObservedRoute.BLUETOOTH to setOf(AudioDeviceKind.BLUETOOTH_HEADSET),
             ObservedRoute.SPEAKER to setOf(AudioDeviceKind.SPEAKERPHONE),
-            // Earpiece and WiredHeadset share one criterion because the library never lists both at
-            // once and select() only accepts enumerable targets.
+            
+            
             ObservedRoute.EARPIECE_OR_WIRED to
                 setOf(AudioDeviceKind.EARPIECE, AudioDeviceKind.WIRED_HEADSET),
         )

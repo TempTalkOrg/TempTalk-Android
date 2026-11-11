@@ -1,7 +1,7 @@
 package com.difft.android.chat.common
 
 import android.content.Context
-import android.graphics.drawable.Drawable
+import android.graphics.Bitmap
 import android.util.AttributeSet
 import android.view.View
 import androidx.constraintlayout.widget.ConstraintLayout
@@ -38,10 +38,10 @@ class AvatarView @JvmOverloads constructor(
 
     val binding: ChatContactAvatarBinding by viewbind(this)
 
-    /** URL of the avatar currently being loaded, used to prevent image mismatch */
+    
     private var currentLoadingUrl: String? = null
     
-    /** Pending avatar params to be loaded after onAttachedToWindow */
+    
     private var pendingAvatarParams: AvatarParams? = null
 
     private data class AvatarParams(
@@ -50,15 +50,15 @@ class AvatarView @JvmOverloads constructor(
         val firstLetter: String?,
         val id: String,
         val letterTextSizeDp: Int,
-        val targetSizePx: Int? = null,  // Optional target size in pixels for Glide
-        // Fallback avatar tried when the primary fails to download/decrypt.
+        val targetSizePx: Int? = null,  
+        
         val fallbackUrl: String? = null,
         val fallbackKey: String? = null,
     )
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
-        // Execute pending load task after view is attached
+        
         pendingAvatarParams?.let {
             loadAvatarInternal(it)
             pendingAvatarParams = null
@@ -71,13 +71,13 @@ class AvatarView @JvmOverloads constructor(
         firstLetter: String?,
         id: String,
         letterTextSizeDp: Int = DEFAULT_LETTER_TEXT_SIZE_DP,
-        targetSizePx: Int? = null,  // Optional: explicit size in pixels for Glide (useful in Compose AndroidView)
+        targetSizePx: Int? = null,  
         fallbackUrl: String? = null,
         fallbackKey: String? = null,
     ) {
         resetAnimationState()
 
-        // Setup letter avatar as placeholder
+        
         binding.cvAvatar.setCardBackgroundColor(AvatarUtil.getBgColorResId(id))
         binding.tvAvatar.text = firstLetter
         binding.tvAvatar.textSize = letterTextSizeDp.toFloat()
@@ -95,13 +95,13 @@ class AvatarView @JvmOverloads constructor(
             if (isAttachedToWindow) {
                 loadAvatarInternal(params)
             } else {
-                // View not attached yet, save params for onAttachedToWindow
+                
                 pendingAvatarParams = params
                 binding.cvAvatar.visibility = VISIBLE
                 binding.ivAvatar.visibility = GONE
             }
         } else {
-            // No URL, show letter avatar
+            
             binding.ivFavorites.visibility = GONE
             binding.cvAvatar.visibility = VISIBLE
             binding.ivAvatar.visibility = GONE
@@ -110,24 +110,24 @@ class AvatarView @JvmOverloads constructor(
         }
     }
 
-    /**
-     * Internal avatar loading logic, guaranteed to run after view is attached.
-     */
+    
+
+
     private fun loadAvatarInternal(params: AvatarParams) {
         val (url, key, _, _, _, targetSize) = params
 
-        // Check if URL still matches (prevent mismatch during fast scrolling)
+        
         if (currentLoadingUrl != url) return
 
         val cachedFile = AvatarUtil.getCacheFile(url)
         if (cachedFile != null) {
-            // Cache exists, load directly
+            
             binding.cvAvatar.visibility = VISIBLE
             binding.tvAvatar.text = ""
             loadImageWithGlide(cachedFile, url, key, targetSize)
             binding.ivAvatar.visibility = VISIBLE
         } else {
-            // Cache not found, show letter avatar and download in background
+            
             binding.cvAvatar.visibility = VISIBLE
             binding.ivAvatar.visibility = GONE
 
@@ -155,8 +155,8 @@ class AvatarView @JvmOverloads constructor(
                         loadImageWithGlide(downloadedFile, loadedUrl, loadedKey, targetSize)
                         binding.ivAvatar.visibility = VISIBLE
                     } else {
-                        // Download finished while detached (recycled off-screen): replay on re-attach,
-                        // targeting whichever url won so the replay hits that warm cache directly.
+                        
+                        
                         if (loadedUrl != url) {
                             currentLoadingUrl = loadedUrl
                             pendingAvatarParams = params.copy(
@@ -196,31 +196,33 @@ class AvatarView @JvmOverloads constructor(
         binding.ivAvatar.alpha = 1f
     }
 
-    /**
-     * Load cache file with Glide, retry download on failure.
-     *
-     * @param targetSizePx Optional explicit size in pixels. If provided, Glide will use this fixed size
-     *                     instead of waiting for View layout. This solves timing issues in Compose AndroidView.
-     */
+    
+
+
+
+
+
     private fun loadImageWithGlide(file: File, url: String, key: String?, targetSizePx: Int?) {
-        // Use the View (this) for Glide lifecycle binding instead of context
-        // This ensures proper lifecycle management especially in Compose AndroidView.
-        // Load through the decrypting content:// provider (plaintext never on disk, docs §15). A
-        // stable uri key + lastModified signature keeps Glide's memory / encrypted-RESOURCE caches
-        // working and invalidates a re-downloaded same-name file.
+        
+        
+        
+        
+        
         val uri = AvatarEncryptedProvider.contentUri(AvatarEncryptedProvider.DIR_AVATAR, file.name)
         val requestBuilder = Glide.with(this)
+            
+            .asBitmap()
             .load(uri)
             .signature(ObjectKey(file.lastModified()))
             .diskCacheStrategy(
                 if (GlideCacheKeyManager.isCacheKeyReady(context)) DiskCacheStrategy.RESOURCE
                 else DiskCacheStrategy.NONE
             )
-            .listener(object : RequestListener<Drawable> {
+            .listener(object : RequestListener<Bitmap> {
                 override fun onLoadFailed(
                     e: GlideException?,
                     model: Any?,
-                    target: Target<Drawable>,
+                    target: Target<Bitmap>,
                     isFirstResource: Boolean
                 ): Boolean {
                     handleGlideLoadFailed(url, key)
@@ -228,9 +230,9 @@ class AvatarView @JvmOverloads constructor(
                 }
 
                 override fun onResourceReady(
-                    resource: Drawable,
+                    resource: Bitmap,
                     model: Any,
-                    target: Target<Drawable>?,
+                    target: Target<Bitmap>?,
                     dataSource: DataSource,
                     isFirstResource: Boolean
                 ): Boolean {
@@ -241,15 +243,15 @@ class AvatarView @JvmOverloads constructor(
                 }
             })
 
-        // Strategy selection based on whether explicit size is provided
+        
         if (targetSizePx != null) {
-            // Explicit size provided: use it directly, no need to wait for View layout
-            // This ensures consistent sizing and avoids layout timing issues
+            
+            
             requestBuilder.override(targetSizePx, targetSizePx).into(binding.ivAvatar)
         } else {
-            // No explicit size: fall back to original behavior
-            // If view size is 0, use override to force Glide to load immediately
-            // This can happen in Compose AndroidView before layout pass completes
+            
+            
+            
             if (binding.ivAvatar.width == 0 || binding.ivAvatar.height == 0) {
                 requestBuilder.override(Target.SIZE_ORIGINAL).into(binding.ivAvatar)
             } else {
@@ -258,9 +260,9 @@ class AvatarView @JvmOverloads constructor(
         }
     }
 
-    /**
-     * Handle Glide load failure: delete corrupted cache and re-download.
-     */
+    
+
+
     private fun handleGlideLoadFailed(url: String, key: String?) {
         getLifecycleOwner()?.lifecycleScope?.launch {
             val downloadedFile = withContext(Dispatchers.IO) {
@@ -270,6 +272,7 @@ class AvatarView @JvmOverloads constructor(
             if (downloadedFile != null && currentLoadingUrl == url && isAttachedToWindow) {
                 val uri = AvatarEncryptedProvider.contentUri(AvatarEncryptedProvider.DIR_AVATAR, downloadedFile.name)
                 Glide.with(this@AvatarView)
+                    .asBitmap()
                     .load(uri)
                     .signature(ObjectKey(downloadedFile.lastModified()))
                     .diskCacheStrategy(
@@ -283,9 +286,6 @@ class AvatarView @JvmOverloads constructor(
         }
     }
 
-    /**
-     * Crossfade: fade in image, fade out letter avatar.
-     */
     private fun crossfadeToImage() {
         binding.ivAvatar.alpha = 0f
         binding.ivAvatar.visibility = VISIBLE
@@ -310,6 +310,7 @@ class AvatarView @JvmOverloads constructor(
         binding.cvAvatar.visibility = View.GONE
         binding.ivAvatar.visibility = View.VISIBLE
         Glide.with(this)
+            .asBitmap()
             .load(localPath)
             .into(binding.ivAvatar)
     }
@@ -334,13 +335,13 @@ class AvatarView @JvmOverloads constructor(
     companion object {
         private const val CROSSFADE_DURATION = 150L
 
-        /** Avatar diameter the default letter size was designed for. */
+        
         const val DEFAULT_AVATAR_SIZE_DP = AvatarLetterSize.DEFAULT_AVATAR_SIZE_DP
 
-        /** Letter size the [DEFAULT_AVATAR_SIZE_DP] list avatar was designed with. */
+        
         const val DEFAULT_LETTER_TEXT_SIZE_DP = AvatarLetterSize.DEFAULT_LETTER_TEXT_SIZE_DP
 
-        /** Letter size that keeps the designed letter/diameter ratio for an avatar rendered at [avatarSizeDp]. */
+        
         fun letterTextSizeDpFor(avatarSizeDp: Int): Int =
             AvatarLetterSize.forDiameterDp(avatarSizeDp)
     }

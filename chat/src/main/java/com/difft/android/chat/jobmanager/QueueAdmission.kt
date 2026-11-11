@@ -1,6 +1,6 @@
 package com.difft.android.chat.jobmanager
 
-/** Durable admission says nothing about execution or delivery. */
+
 sealed interface QueueAdmission {
     data class Persisted(val jobId: String) : QueueAdmission
     data object RejectedLimit : QueueAdmission

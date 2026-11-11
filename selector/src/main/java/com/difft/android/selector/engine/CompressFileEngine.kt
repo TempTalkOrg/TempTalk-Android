@@ -8,8 +8,8 @@ import com.difft.android.selector.interfaces.OnKeyValueResultCallbackListener
 import java.util.ArrayList
 
 interface CompressFileEngine {
-    /**
-     * Custom compression engine. Implementers plug the compressed path into the LocalMedia object.
-     */
+    
+
+
     fun onStartCompress(context: Context, source: ArrayList<Uri>, call: OnKeyValueResultCallbackListener)
 }

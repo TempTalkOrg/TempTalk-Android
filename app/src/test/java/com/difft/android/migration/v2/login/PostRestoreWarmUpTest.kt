@@ -18,10 +18,10 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * The warm-up waits for the first contact and group sync, but only up to its bound; a sync that
- * outlives the bound keeps running and the chat list opens without it, exactly as before.
- */
+
+
+
+
 class PostRestoreWarmUpTest {
 
     private val groupUtil = mockk<GroupUtil>()
@@ -38,18 +38,18 @@ class PostRestoreWarmUpTest {
 
     @Test
     fun `both syncs landing in time reports ready and names the rooms once`() = runTest {
-        coEvery { groupUtil.syncAllGroupAndAllGroupMembers(forceFetch = false, syncMembers = true) } coAnswers { delay(300) }
+        coEvery { groupUtil.syncAllGroupAndAllGroupMembers(forceFetch = false) } coAnswers { delay(300); true }
         val warmUp = warmUp { delay(500); true }.also { it.scope = backgroundScope }
 
         assertTrue(warmUp.run(timeoutMs = 5_000))
         assertEquals(1, roomsNamed)
         verify(exactly = 1) { settings.syncConversationSettings() }
-        coVerify(exactly = 1) { groupUtil.syncAllGroupAndAllGroupMembers(forceFetch = false, syncMembers = true) }
+        coVerify(exactly = 1) { groupUtil.syncAllGroupAndAllGroupMembers(forceFetch = false) }
     }
 
     @Test
     fun `rooms are not named ahead of the directory`() = runTest {
-        coEvery { groupUtil.syncAllGroupAndAllGroupMembers(any(), any()) } coAnswers { }
+        coEvery { groupUtil.syncAllGroupAndAllGroupMembers(any()) } coAnswers { true }
         val warmUp = warmUp { delay(20_000); true }.also { it.scope = backgroundScope }
 
         assertFalse(warmUp.run(timeoutMs = 5_000))
@@ -58,7 +58,7 @@ class PostRestoreWarmUpTest {
 
     @Test
     fun `a failing room naming pass does not fail the warm-up`() = runTest {
-        coEvery { groupUtil.syncAllGroupAndAllGroupMembers(any(), any()) } coAnswers { }
+        coEvery { groupUtil.syncAllGroupAndAllGroupMembers(any()) } coAnswers { true }
         val warmUp = warmUp { true }.also {
             it.scope = backgroundScope
             it.nameRooms = { error("db closed") }
@@ -70,12 +70,12 @@ class PostRestoreWarmUpTest {
     @Test
     fun `a sync outliving the bound is left running, and the caller goes on`() = runTest {
         var contactsFinished = false
-        coEvery { groupUtil.syncAllGroupAndAllGroupMembers(any(), any()) } coAnswers { }
+        coEvery { groupUtil.syncAllGroupAndAllGroupMembers(any()) } coAnswers { true }
         val warmUp = warmUp { delay(20_000); contactsFinished = true; true }.also { it.scope = backgroundScope }
 
         assertFalse(warmUp.run(timeoutMs = 5_000))
         assertFalse(contactsFinished)
-        // Background work does not count towards "idle"; move the clock past the sync's own delay.
+        
         advanceTimeBy(20_001)
         runCurrent()
         assertTrue(contactsFinished)
@@ -83,7 +83,7 @@ class PostRestoreWarmUpTest {
 
     @Test
     fun `a failed contact sync is not ready and does not throw`() = runTest {
-        coEvery { groupUtil.syncAllGroupAndAllGroupMembers(any(), any()) } coAnswers { }
+        coEvery { groupUtil.syncAllGroupAndAllGroupMembers(any()) } coAnswers { true }
         val warmUp = warmUp { error("directory down") }.also { it.scope = backgroundScope }
 
         assertEquals(false, warmUp.run(timeoutMs = 5_000))

@@ -3,15 +3,16 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content">
+    android:layout_height="wrap_content"
+    android:minHeight="72dp">
 
     <com.difft.android.chat.common.GroupAvatarView
         android:id="@+id/group_avatar"
-        android:layout_width="48dp"
-        android:layout_height="48dp"
+        android:layout_width="52dp"
+        android:layout_height="52dp"
         android:layout_marginStart="16dp"
-        android:layout_marginTop="12dp"
-        android:layout_marginBottom="12dp"
+        android:layout_marginTop="10dp"
+        android:layout_marginBottom="10dp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
@@ -36,8 +37,7 @@
             android:includeFontPadding="false"
             android:lines="1"
             android:textColor="@color/t.primary"
-            android:textSize="14sp"
-            android:textStyle="bold"
+            android:textSize="16sp"
             tools:text="Bess" />
 
         <TextView

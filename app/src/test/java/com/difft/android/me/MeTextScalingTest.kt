@@ -13,7 +13,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 
-/** The text-size setting scales the Me page's content, never its header title. */
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class MeTextScalingTest {
@@ -38,20 +38,31 @@ class MeTextScalingTest {
         TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, value, controller.get().resources.displayMetrics)
 
     @Test
-    fun `default size scales the rows to 16sp and keeps the 20sp title`() {
+    fun `default size scales the rows to 16sp`() {
         MeTextScaling.apply(binding, isLarger = false)
 
-        assertEquals(sp(16f), binding.tvTextSize.textSize, 0.5f)
+        assertEquals(sp(16f), binding.tvThemeTitle.textSize, 0.5f)
         assertEquals(sp(14f), binding.tvProfile.textSize, 0.5f)
-        assertEquals("the header title is not page content", sp(20f), binding.tvTitle.textSize, 0.5f)
     }
 
     @Test
-    fun `large size scales the rows to 24sp and keeps the 20sp title`() {
+    fun `the appearance settings are one row without a value, and their old rows are gone`() {
+        val ids = controller.get().resources
+        val root = binding.root
+        assertEquals(controller.get().getString(com.difft.android.chat.R.string.me_appearance), binding.tvThemeTitle.text.toString())
+        listOf("tv_theme", "cl_text_size", "cl_display_size", "cl_status_bar", "cl_navigation_placement").forEach { name ->
+            val id = ids.getIdentifier(name, "id", controller.get().packageName)
+            assertEquals("$name is still in the Me layout", null, if (id == 0) null else root.findViewById<android.view.View>(id))
+        }
+        assertEquals(android.view.View.VISIBLE, binding.clLanguage.visibility)
+        assertEquals(android.view.View.VISIBLE, binding.tvLanguage.visibility)
+    }
+
+    @Test
+    fun `large size scales the rows to 24sp`() {
         MeTextScaling.apply(binding, isLarger = true)
 
-        assertEquals(sp(24f), binding.tvTextSize.textSize, 0.5f)
+        assertEquals(sp(24f), binding.tvThemeTitle.textSize, 0.5f)
         assertEquals(sp(21f), binding.tvProfile.textSize, 0.5f)
-        assertEquals("the header title is not page content", sp(20f), binding.tvTitle.textSize, 0.5f)
     }
 }

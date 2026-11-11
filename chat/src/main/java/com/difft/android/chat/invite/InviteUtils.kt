@@ -1,6 +1,7 @@
 package com.difft.android.chat.invite
 
 import android.animation.ObjectAnimator
+import com.difft.android.base.widget.floatAsTopBarButton
 import android.animation.ValueAnimator
 import android.app.Activity
 import android.graphics.Bitmap
@@ -48,8 +49,8 @@ class InviteUtils @Inject constructor() {
         fragment.show(context.supportFragmentManager, "InviteDialog")
     }
 
-    private val maxAutoRefreshTimes = 3 //自动刷新最大次数
-    private var currentAutoRefreshTimes = 0 //当前自动刷新次数
+    private val maxAutoRefreshTimes = 3
+    private var currentAutoRefreshTimes = 0
 
     fun getInviteCode(
         context: FragmentActivity,
@@ -63,7 +64,7 @@ class InviteUtils @Inject constructor() {
         tvError: AppCompatTextView?,
         onCopyDismiss: (() -> Unit)? = null
     ) {
-        if (regenerate == 0 && currentAutoRefreshTimes >= maxAutoRefreshTimes) { //强制刷新不限制次数
+        if (regenerate == 0 && currentAutoRefreshTimes >= maxAutoRefreshTimes) { 
             return
         }
         ComposeDialogManager.showWait(context, "")
@@ -77,8 +78,8 @@ class InviteUtils @Inject constructor() {
                     currentAutoRefreshTimes++
 
                     result.data?.inviteLink?.let { url ->
-                        val bmp = createQRBitmap(context, url)   // suspends; encode runs on Default inside
-                        imageViewQR?.setImageBitmap(bmp)         // back on main (lifecycleScope = Main)
+                        val bmp = createQRBitmap(context, url)   
+                        imageViewQR?.setImageBitmap(bmp)         
 
                         val content = context.getString(R.string.invite_tips, url)
                         clShare?.setOnClickListener {
@@ -160,11 +161,11 @@ class InviteUtils @Inject constructor() {
 
     private var countdownJob: kotlinx.coroutines.Job? = null
 
-    /**
-     * 启动倒计时
-     * @param maxTime 最大时长（毫秒）
-     * @param remainingTime 剩余时间（毫秒）
-     */
+    
+
+
+
+
     private fun startCountdown(
         activity: FragmentActivity,
         maxTime: Long,
@@ -174,11 +175,10 @@ class InviteUtils @Inject constructor() {
     ) {
         countdownJob?.cancel()
 
-        val interval = 100L // 每100ms更新一次
+        val interval = 100L
         val maxProgress = 100
 
         countdownJob = activity.lifecycleScope.launch {
-            // 初始化进度条为当前剩余时间的百分比
             progressBar?.setProgress((remainingTime.toFloat() / maxTime * maxProgress))
 
             var elapsed = 0L
@@ -190,13 +190,12 @@ class InviteUtils @Inject constructor() {
                 kotlinx.coroutines.delay(interval)
             }
 
-            // 倒计时结束时执行任务
             onCountdownComplete?.invoke()
         }
     }
 
-    // Logo build + QR encode are CPU work; run them off the main thread. setImageBitmap stays on the
-    // caller's main context (see both callers below).
+    
+    
     private suspend fun createQRBitmap(context: Activity, url: String): Bitmap? =
         withContext(Dispatchers.Default) {
             val logoBitmap = androidx.appcompat.content.res.AppCompatResources.getDrawable(context, R.drawable.ic_invite_qr_logo)?.let {
@@ -210,7 +209,7 @@ class InviteUtils @Inject constructor() {
                 content = url,
                 sizePx = 200.dp,
                 foreground = ContextCompat.getColor(context, com.difft.android.base.R.color.bg2_night),
-                errorCorrection = QrErrorCorrection.HIGH,   // preserves BGA's hardcoded ErrorCorrectionLevel.H
+                errorCorrection = QrErrorCorrection.HIGH,   
                 logo = logoBitmap,
             )
         }
@@ -247,9 +246,6 @@ class InviteUtils @Inject constructor() {
         }
     }
 
-    /**
-     * 邀请对话框关闭时的清理工作
-     */
     fun onInviteDialogDismiss() {
         countdownJob?.cancel()
         countdownJob = null
@@ -257,65 +253,33 @@ class InviteUtils @Inject constructor() {
         currentAutoRefreshTimes = 0
     }
 
-//    private fun getRoundCornerBitmap(bitmap: Bitmap): Bitmap? {
-//        val roundPx = 8.dp.toFloat()
-//        val output = Bitmap.createBitmap(
-//            bitmap.width, bitmap
-//                .height, Bitmap.Config.ARGB_8888
-//        )
-//        val canvas = Canvas(output)
-//        val color = -0xd938c3
-//        val paint = Paint()
-//        val rect = Rect(0, 0, bitmap.width, bitmap.height)
-//        val rectF = RectF(rect)
-//        paint.isAntiAlias = true
-//        canvas.drawARGB(0, 0, 0, 0)
-//        paint.color = color
-//        canvas.drawRoundRect(rectF, roundPx, roundPx, paint)
-//        paint.xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_IN)
-//        canvas.drawBitmap(bitmap, rect, rect, paint)
-//        return output
-//    }
 }
 
-/**
- * 邀请码底部弹窗Fragment
- */
 @AndroidEntryPoint
 class InviteBottomSheetFragment() : BaseBottomSheetDialogFragment() {
 
     @Inject
     lateinit var inviteUtils: InviteUtils
 
-    // 使用默认容器
     override fun getContentLayoutResId(): Int = R.layout.layout_invite
 
-    // 全屏显示
     override fun isFullScreen(): Boolean = true
 
-    // 不显示拖拽条，避免遮挡自定义背景
+    
     override fun showDragHandle(): Boolean = false
 
-    // 禁用默认背景，使用自定义ChatBackgroundDrawable
+    
     override fun useDefaultBackground(): Boolean = false
 
     override fun onBottomSheetReady(sheet: View, behavior: BottomSheetBehavior<*>) {
         super.onBottomSheetReady(sheet, behavior)
-        // 移除sheet默认背景
         sheet.background = null
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        // 在根容器上设置自定义渐变背景，并启用圆角裁剪
+        
         view.background = ChatBackgroundDrawable(requireContext(), view, false)
-        view.clipToOutline = true
-        view.outlineProvider = object : android.view.ViewOutlineProvider() {
-            override fun getOutline(view: View, outline: android.graphics.Outline) {
-                val radius = 16.dp.toFloat()
-                outline.setRoundRect(0, 0, view.width, view.height + radius.toInt(), radius)
-            }
-        }
     }
 
     override fun onContentViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -375,7 +339,7 @@ class InviteBottomSheetFragment() : BaseBottomSheetDialogFragment() {
             ScanActivity.startActivity(requireActivity())
         }
 
-        view.findViewById<AppCompatImageView>(R.id.iv_close).setOnClickListener {
+        view.findViewById<AppCompatImageView>(R.id.iv_close).apply { floatAsTopBarButton(leading = false) }.setOnClickListener {
             dismiss()
         }
 
@@ -384,7 +348,7 @@ class InviteBottomSheetFragment() : BaseBottomSheetDialogFragment() {
             InviteCodeActivity.startActivity(requireActivity())
         }
 
-        // Delay fetching invite code until the dialog is fully displayed to prevent Loading being covered
+        
         view.post {
             if (isAdded && context != null) {
                 inviteUtils.getInviteCode(requireActivity(), 0, 0, ivQR, clShare, clCopy, tvCode, progressBar, tvError)

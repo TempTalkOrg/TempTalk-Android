@@ -23,20 +23,6 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
 
-        <!--        <TextView-->
-        <!--            android:id="@+id/loginTitle"-->
-        <!--            android:layout_width="wrap_content"-->
-        <!--            android:layout_height="wrap_content"-->
-        <!--            android:layout_marginTop="10dp"-->
-        <!--            android:text="@string/app_name"-->
-        <!--            android:textColor="@color/t.primary"-->
-        <!--            android:textSize="@dimen/login_title_size"-->
-        <!--            android:textStyle="bold"-->
-        <!--            app:layout_constraintEnd_toEndOf="parent"-->
-        <!--            app:layout_constraintStart_toStartOf="parent"-->
-        <!--            app:layout_constraintTop_toBottomOf="@id/loginIcon" />-->
-
-
         <com.difft.android.base.widget.DifftButtonView
             android:id="@+id/btn_next"
             android:layout_width="match_parent"

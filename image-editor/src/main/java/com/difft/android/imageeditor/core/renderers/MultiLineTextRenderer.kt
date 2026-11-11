@@ -20,11 +20,11 @@ import com.difft.android.imageeditor.core.SelectableRenderer
 import kotlin.math.max
 import kotlin.math.min
 
-/**
- * Renders multiple lines of [text] in ths specified [color].
- *
- * Scales down the text size of long lines to fit inside the [Bounds] width.
- */
+
+
+
+
+
 @Parcelize
 class MultiLineTextRenderer(
     private var textValue: String,
@@ -118,12 +118,12 @@ class MultiLineTextRenderer(
 
     fun getMode(): Mode = modeValue
 
-    /**
-     * Post concats an additional matrix to the supplied matrix that scales and positions the editor
-     * so that all the text is visible.
-     *
-     * @param matrix editor matrix, already zoomed and positioned to fit the regular bounds.
-     */
+    
+
+
+
+
+
     fun applyRecommendedEditorMatrix(matrix: Matrix) {
         recommendedEditorMatrix.reset()
 
@@ -223,10 +223,10 @@ class MultiLineTextRenderer(
                 getTextBoundsWithoutTrim(startText, 0, startInString, startTemp)
 
                 if (selStart != selEnd) {
-                    // selection
+                    
                     getTextBoundsWithoutTrim(text, startInString, endInString, temp)
                 } else {
-                    // cursor
+                    
                     paint.getTextBounds("|", 0, 1, temp)
                     val width = temp.width()
 
@@ -306,7 +306,7 @@ class MultiLineTextRenderer(
         }
 
         fun render(rendererContext: RendererContext) {
-            // add our ascent for ourselves and the next lines
+            
             rendererContext.canvasMatrix.concat(ascentMatrix)
 
             rendererContext.save()
@@ -382,7 +382,7 @@ class MultiLineTextRenderer(
 
             rendererContext.restore()
 
-            // add our descent for the next lines
+            
             rendererContext.canvasMatrix.concat(descentMatrix)
         }
 
@@ -420,7 +420,7 @@ class MultiLineTextRenderer(
         for (line in lines) {
             line.setSelection(start, end)
 
-            val length = line.text.length + 1 // one for new line
+            val length = line.text.length + 1 
 
             start -= length
             end -= length
@@ -492,7 +492,7 @@ class MultiLineTextRenderer(
     }
 
     companion object {
-        // Getters: the system density changes with the display-size setting while the process lives.
+        
         private val HIT_PADDING get() = DimensionUnit.DP.toPixels(30f)
         private val HIGHLIGHT_HORIZONTAL_PADDING get() = DimensionUnit.DP.toPixels(8f)
         private val HIGHLIGHT_TOP_PADDING get() = DimensionUnit.DP.toPixels(10f)

@@ -21,15 +21,15 @@ import org.robolectric.RobolectricTestRunner
 import java.io.File
 import java.io.IOException
 
-/**
- * T38, T39 — [VideoRemuxer] must separate the two failure classes.
- *
- * A source that cannot be opened is a send-blocking failure and throws; a source that opens but
- * fails to remux is a privacy downgrade only and keeps returning false, so the original is still
- * sent.
- *
- * Run: :video:testDebugUnitTest
- */
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 class VideoRemuxerTest {
 
@@ -45,8 +45,8 @@ class VideoRemuxerTest {
     private fun outputPath(): String =
         File.createTempFile("remux", ".mp4").let {
             outputs += it
-            // The muxer creates its own output; a pre-existing empty file would mask the
-            // "no partial output left behind" assertion.
+            
+            
             it.delete()
             it.absolutePath
         }
@@ -56,7 +56,7 @@ class VideoRemuxerTest {
         every { scheme } returns "content"
     }
 
-    /** T38 — bind-phase failure: throws, and leaves no output file behind for a caller to send. */
+    
     @Test
     fun `unreadable source throws and leaves no output file`() {
         val ioError = IOException("cannot open")
@@ -74,10 +74,10 @@ class VideoRemuxerTest {
         assertFalse("a bind failure must not leave a partial output", File(out).exists())
     }
 
-    /**
-     * T39 — post-bind failure: returns false rather than throwing, and cleans up the partial
-     * output. Turning this into a thrown failure would block sends that succeed today.
-     */
+    
+
+
+
     @Test
     fun `post bind failure returns false and deletes the partial output`() {
         val extractor = mockk<MediaExtractor>(relaxed = true)
@@ -98,7 +98,7 @@ class VideoRemuxerTest {
         assertFalse("the partial output must be cleaned up", File(out).exists())
     }
 
-    /** Guards the ordering the two rows above depend on: nothing is created before the bind. */
+    
     @Test
     fun `muxer is not constructed before the source is bound`() {
         val mediaInput = mockk<MediaInput>()

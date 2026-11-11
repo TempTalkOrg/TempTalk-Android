@@ -38,21 +38,21 @@ import org.whispersystems.signalservice.internal.push.SignalServiceProtos.Envelo
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos.ForwardNoticeMessage
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos.SyncMessage
 
-/**
- * Integration tests for the 1v1-to-other self-sync path of the forward-notice
- * receive pipeline: `Content.syncMessage.forwardNoticeSync` branch of
- * [MessageContentProcessor.handleMessage].
- *
- * Split out of [MessageContentProcessorForwardNoticeTest] to keep each file
- * under the 500-line project limit. Primary-path (`Content.forwardNotice`)
- * tests live in the sibling file.
- */
+
+
+
+
+
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28])
 class MessageContentProcessorForwardNoticeSyncTest {
 
-    // An open receive ticket (#1382); deferred notify work retains its own from it.
+    
     private val admission = requireNotNull(TestMessagingPause().open().gate.tryAdmit(AdmissionKind.RECEIVE, "test"))
 
     private val testDispatcher = UnconfinedTestDispatcher()
@@ -110,10 +110,10 @@ class MessageContentProcessorForwardNoticeSyncTest {
         unmockkAll()
     }
 
-    // ------------------------------------------------------------------
-    // Self-sync 1v1 via SyncMessage.forwardNoticeSync — payload.number = peer's uid.
-    // Operator = myId; conversation = For.Account(peer from payload).
-    // ------------------------------------------------------------------
+    
+    
+    
+    
     @Test
     fun `self-sync 1v1 via SyncMessage resolves to payload number and operator is myId`() = runTest {
         val peer = "+15554444"
@@ -146,15 +146,15 @@ class MessageContentProcessorForwardNoticeSyncTest {
         assertEquals(For.Account(peer), forWhatSlot.captured)
     }
 
-    // ------------------------------------------------------------------
-    // Self-sync with malformed/missing conversation — must drop silently (return
-    // null + warn log), NOT route into Note-to-Self via the upstream lazy's
-    // `For.Account(senderId)` fallback. Guards against silent data corruption
-    // should a malformed payload ever reach this device.
-    // ------------------------------------------------------------------
+    
+    
+    
+    
+    
+    
     @Test
     fun `self-sync drops silently when payload conversation is missing`() = runTest {
-        // conversation field entirely absent
+        
         val forwardNotice = ForwardNoticeMessage.newBuilder()
             .setScene(ForwardNoticeMessage.ForwardScene.SINGLE)
             .addSourceAuthorIds("+16001")
@@ -174,7 +174,7 @@ class MessageContentProcessorForwardNoticeSyncTest {
 
     @Test
     fun `self-sync drops silently when payload conversation number is empty`() = runTest {
-        // conversation present but .number is the empty proto2 default (no groupId either)
+        
         val forwardNotice = ForwardNoticeMessage.newBuilder()
             .setScene(ForwardNoticeMessage.ForwardScene.SINGLE)
             .addSourceAuthorIds("+16001")
@@ -193,7 +193,7 @@ class MessageContentProcessorForwardNoticeSyncTest {
         }
     }
 
-    // -------- helpers --------
+    
     private fun minimalEnvelope(source: String, ts: Long): Envelope = Envelope.newBuilder()
         .setSource(source)
         .setSourceDevice(1)

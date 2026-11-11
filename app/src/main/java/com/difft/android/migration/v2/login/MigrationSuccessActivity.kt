@@ -11,17 +11,17 @@ import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.ui.theme.DifftTheme
 import dagger.hilt.android.AndroidEntryPoint
 
-/**
- * One-shot "migration complete" page the new device shows on its first cold start after a
- * same-device credential handoff: that path restarts the process the moment the session is in and
- * has no page of its own to say so. `MainActivity` routes here when the restore flag reads
- * `COMPLETED` for a handoff and consumes the flag before launching, so the page appears once.
- * A cross-device restore does not come here — the receive screen is its own completion page.
- */
+
+
+
+
+
+
+
 @AndroidEntryPoint
 class MigrationSuccessActivity : BaseActivity() {
 
-    /** The session travelled with the data rather than being re-established by a sign-in. */
+    
     private val credentialHandoff: Boolean by lazy {
         intent.getBooleanExtra(EXTRA_CREDENTIAL_HANDOFF, false)
     }

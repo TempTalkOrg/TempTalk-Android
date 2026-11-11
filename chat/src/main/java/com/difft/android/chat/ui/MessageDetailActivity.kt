@@ -6,7 +6,7 @@ import androidx.fragment.app.Fragment
 import com.difft.android.base.utils.pane.DetailShellActivity
 import dagger.hilt.android.AndroidEntryPoint
 
-/** Full-window shell for [MessageDetailFragment] (chat shells and popups). */
+
 @AndroidEntryPoint
 class MessageDetailActivity : DetailShellActivity() {
 

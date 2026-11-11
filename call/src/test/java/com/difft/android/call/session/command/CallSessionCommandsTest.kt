@@ -22,11 +22,11 @@ import org.junit.Test
 import java.util.Collections
 import kotlin.concurrent.thread
 
-/**
- * [CallSessionCommands], the out-of-page entry point: with no live session a command is dropped
- * with a log, and a command issued off the main thread reaches the session only once the main
- * dispatcher runs, on that dispatcher's thread. Rows: T4-12, T4-13.
- */
+
+
+
+
+
 class CallSessionCommandsTest {
 
     private val testDispatcher = StandardTestDispatcher()

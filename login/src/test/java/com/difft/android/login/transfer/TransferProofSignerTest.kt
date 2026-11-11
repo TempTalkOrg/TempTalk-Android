@@ -11,12 +11,12 @@ import org.signal.libsignal.protocol.IdentityKey
 import org.signal.libsignal.protocol.IdentityKeyPair
 import org.signal.libsignal.protocol.ecc.ECPrivateKey
 
-/**
- * The proof's bytes are a cross-platform contract: every end must sign the same message and encode
- * the same way, or the server's verification fails for one of them. libsignal's types are mocked —
- * its native library is not on the JVM test classpath — so this pins the message and the encodings,
- * not the curve arithmetic.
- */
+
+
+
+
+
+
 class TransferProofSignerTest {
 
     @Test

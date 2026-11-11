@@ -11,15 +11,9 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/**
- * T2-27 — banner removal from `chat_fragment_message_list.xml`. The `tv_privacy_banner` id no
- * longer exists in resources at all (the whole
- * node was deleted, not just hidden) — any lingering reference to it anywhere in production code
- * would already fail to compile ([ChatMessageListFragment.kt]'s `isFriend`/`initPrivacyBanner`/
- * `updatePrivacyBanner` were deleted outright in the same change), so the remaining regression
- * surface this test guards is the RecyclerView's constraint: it must anchor directly to the
- * parent's top, not to the removed banner view.
- */
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28])
 class ChatFragmentMessageListBannerRemovalTest {
@@ -32,6 +26,6 @@ class ChatFragmentMessageListBannerRemovalTest {
         val params = binding.recyclerViewMessage.layoutParams as ConstraintLayout.LayoutParams
 
         assertEquals(ConstraintLayout.LayoutParams.PARENT_ID, params.topToTop)
-        assertEquals(-1, params.topToBottom) // no longer constrained below the (deleted) banner
+        assertEquals(-1, params.topToBottom) 
     }
 }

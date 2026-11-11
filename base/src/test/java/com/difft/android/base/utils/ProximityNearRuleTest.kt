@@ -14,7 +14,7 @@ class ProximityNearRuleTest {
 
     @Test
     fun `far reading below the advertised maximum is not near`() {
-        // The defect class behind #1252: FAR = 5 while maximumRange = 10 was NEAR under `value < maximumRange`.
+        
         assertFalse(ProximityNearRule.isNear(5f, 10f))
         assertFalse(ProximityNearRule.isNear(7f, 10f))
         assertTrue(ProximityNearRule.isNear(3f, 10f))

@@ -10,10 +10,10 @@ import com.difft.android.chat.util.NoCrossfadeChangeDefaultAnimator
 import java.util.Optional
 import java.util.function.Function
 
-/**
- * A reusable and composable [RecyclerView.Adapter] built on top of [ListAdapter] to provide async
- * item diffing. Model types are mapped to view-holder factories at runtime via [registerFactory].
- */
+
+
+
+
 open class MappingAdapter @JvmOverloads constructor(
     private val useNoCrossfadeAnimator: Boolean = true
 ) : ListAdapter<MappingModel<*>, MappingViewHolder<*>>(MappingDiffCallback()) {

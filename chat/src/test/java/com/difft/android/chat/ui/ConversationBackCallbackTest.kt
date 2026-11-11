@@ -11,11 +11,11 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/**
- * The message list's Back callback on a real dispatcher, registered after a stand-in for
- * IndexActivity's host callback (as hosted pages are). Hosted: only the action menu and selection
- * mode are handled here, everything else reaches the host. Shell: closes the page as before.
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33])
 class ConversationBackCallbackTest {
@@ -97,7 +97,7 @@ class ConversationBackCallbackTest {
         val callback = register(hosted = true)
         menuShowing = true
         callback.refreshEnabled()
-        menuShowing = false // the menu closed itself without a refresh
+        menuShowing = false 
 
         dispatcher.onBackPressed()
 

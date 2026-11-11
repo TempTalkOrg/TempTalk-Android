@@ -13,10 +13,10 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/**
- * [CallFoldTracker]'s mapping of Jetpack folding features to plain data, and its log line. Runs under
- * Robolectric only for android.graphics.Rect; FoldingFeature is an interface and is mocked.
- */
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [30])
 class CallFoldTrackerMappingTest {

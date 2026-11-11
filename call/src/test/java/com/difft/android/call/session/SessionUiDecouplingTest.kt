@@ -31,11 +31,11 @@ import org.junit.Test
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
-/**
- * The session graph writes UI output through [CallSessionUiState] only. Row T3-16: group updates
- * from the IO-backed group listener set the session's critical-alert flag only for this call's
- * group, and no session-graph collaborator can take a [CallUiController].
- */
+
+
+
+
+
 class SessionUiDecouplingTest {
 
     private val testDispatcher = StandardTestDispatcher()

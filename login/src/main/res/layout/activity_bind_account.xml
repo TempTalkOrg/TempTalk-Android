@@ -23,34 +23,6 @@
             app:layout_constraintTop_toTopOf="parent"
             app:tint="@color/icon" />
 
-        <!--        <androidx.appcompat.widget.AppCompatTextView-->
-        <!--            android:id="@+id/tv_title"-->
-        <!--            android:layout_width="wrap_content"-->
-        <!--            android:layout_height="match_parent"-->
-        <!--            android:background="@null"-->
-        <!--            android:gravity="center"-->
-        <!--            android:src="@drawable/chative_ic_back"-->
-        <!--            android:text="@string/me_account"-->
-        <!--            android:textColor="@color/t.primary"-->
-        <!--            android:textSize="20sp"-->
-        <!--            android:textStyle="bold"-->
-        <!--            app:layout_constraintBottom_toBottomOf="@+id/ib_back"-->
-        <!--            app:layout_constraintLeft_toRightOf="@+id/ib_back"-->
-        <!--            app:layout_constraintTop_toTopOf="@+id/ib_back" />-->
-
-        <!--        <TextView-->
-        <!--            android:id="@+id/skip"-->
-        <!--            android:layout_width="wrap_content"-->
-        <!--            android:layout_height="match_parent"-->
-        <!--            android:layout_marginEnd="16dp"-->
-        <!--            android:gravity="center_vertical"-->
-        <!--            android:text="@string/login_skip"-->
-        <!--            android:textColor="@color/t.third"-->
-        <!--            android:textSize="14sp"-->
-        <!--            app:layout_constraintBottom_toBottomOf="parent"-->
-        <!--            app:layout_constraintEnd_toEndOf="parent"-->
-        <!--            app:layout_constraintTop_toTopOf="parent" />-->
-
     </androidx.constraintlayout.widget.ConstraintLayout>
 
     <androidx.appcompat.widget.AppCompatImageView
@@ -77,19 +49,6 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/loginIcon"
         tools:text="@string/login_sign_to_chative" />
-
-    <!--    <TextView-->
-    <!--        android:id="@+id/loginHint"-->
-    <!--        android:layout_width="wrap_content"-->
-    <!--        android:layout_height="wrap_content"-->
-    <!--        android:layout_marginHorizontal="16dp"-->
-    <!--        android:layout_marginTop="8dp"-->
-    <!--        android:text="@string/login_bind_email"-->
-    <!--        android:textColor="@color/t.secondary"-->
-    <!--        android:textSize="@dimen/login_hint_size"-->
-    <!--        app:layout_constraintEnd_toEndOf="parent"-->
-    <!--        app:layout_constraintStart_toStartOf="parent"-->
-    <!--        app:layout_constraintTop_toBottomOf="@id/loginTitle" />-->
 
     <LinearLayout
         android:id="@+id/inputZone"
@@ -136,10 +95,10 @@
                     tools:text="+86" />
 
                 <View
-                    android:layout_width="1dp"
+                    android:layout_width="@dimen/hairline"
                     android:layout_height="0dp"
                     android:layout_marginStart="10dp"
-                    android:background="@color/line"
+                    android:background="@color/divider"
                     app:layout_constraintBottom_toBottomOf="@+id/tv_phone_code"
                     app:layout_constraintStart_toEndOf="@+id/tv_phone_code"
                     app:layout_constraintTop_toTopOf="@+id/tv_phone_code" />

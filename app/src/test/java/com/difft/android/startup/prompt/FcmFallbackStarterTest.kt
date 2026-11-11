@@ -10,10 +10,10 @@ import io.mockk.verify
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/**
- * The silent fallback start keeps the old IndexActivity.handleFcmUnavailable conditions, and the
- * BACKGROUND_CONNECTION prompt is eligible exactly where that start cannot happen.
- */
+
+
+
+
 class FcmFallbackStarterTest {
 
     private val userManager: UserManager = mockk(relaxed = true)

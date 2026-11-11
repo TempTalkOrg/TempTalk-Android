@@ -31,12 +31,12 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-/**
- * State of the group settings notification section: the focus card and the Mute / Notifications /
- * Sound card (PRD 7.1). The server focus snapshot comes from [GroupFocusRepository]; the group's
- * conversation config is fed by the host ([Intent.ConversationChanged]) because its write path
- * stays in the existing chat setting view model.
- */
+
+
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class GroupFocusSettingsViewModel internal constructor(
@@ -57,7 +57,7 @@ class GroupFocusSettingsViewModel internal constructor(
 
     private val gid: String = savedStateHandle.get<String>(KEY_GROUP_ID).orEmpty()
 
-    /** What the section shows besides the focus snapshot. */
+    
     private data class Inputs(
         val groupName: String = "",
         val muted: Boolean = false,
@@ -173,7 +173,7 @@ class GroupFocusSettingsViewModel internal constructor(
     }
 
     companion object {
-        /** Intent extra / saved-state key carrying the group id (same key the group settings page uses). */
+        
         const val KEY_GROUP_ID = "groupId"
     }
 }

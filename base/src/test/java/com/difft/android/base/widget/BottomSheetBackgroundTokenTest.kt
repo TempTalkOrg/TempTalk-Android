@@ -11,11 +11,11 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/**
- * Pins the View-side bottom-sheet container to the design token `bg.popup` in both themes
- * (issue #1201). The container once used `bg`, which is one step darker than every Compose
- * sheet in dark mode; keep both sides on the same token.
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 class BottomSheetBackgroundTokenTest {
 

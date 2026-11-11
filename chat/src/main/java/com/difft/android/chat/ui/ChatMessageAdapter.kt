@@ -14,24 +14,22 @@ import com.difft.android.chat.message.EncryptionHeaderChatMessage
 import com.difft.android.chat.message.NotifyChatMessage
 import com.difft.android.chat.message.TextChatMessage
 import com.difft.android.chat.message.isAttachmentMessage
+import com.difft.android.chat.ui.theme.ChatBubbleGradient
+import com.difft.android.chat.ui.theme.ChatThemeSetting
 import difft.android.messageserialization.For
 import difft.android.messageserialization.model.Quote
 import difft.android.messageserialization.model.isAudioFile
 import difft.android.messageserialization.model.isAudioMessage
 import difft.android.messageserialization.model.isImage
-import difft.android.messageserialization.model.isVideo
+import difft.android.messageserialization.model.isPlayableVideo
 import org.difft.app.database.models.ContactorModel
 
-/**
- * 聊天消息 Adapter
- *
- * 负责管理和展示聊天消息列表，支持多种消息类型：
- * - 文本、图片、视频、语音、附件、联系人卡片
- * - 通知消息
- *
- * @param forWhat 聊天对象
- * @param contactorCache 联系人缓存实例（页面级，跟随ViewModel生命周期）
- */
+
+
+
+
+
+
 abstract class ChatMessageAdapter(
     private val forWhat: For? = null,
     private val contactorCache: MessageContactsCacheUtil
@@ -51,77 +49,68 @@ abstract class ChatMessageAdapter(
         }) {
 
     companion object {
-        // Payload constants for partial refresh
+        
         const val PAYLOAD_SELECTION = "payload_selection"
         const val PAYLOAD_HIGHLIGHT = "payload_highlight"
         const val PAYLOAD_TRANSLATE = "payload_translate"
 
-        /**
-         * Diff payload for a pair the DiffUtil callback already decided are the same item with
-         * different contents, so something did change.
-         *
-         * A translation arriving is by far the most frequent such change once auto-translate is on,
-         * and rebinding the whole row for it re-runs avatar, quote, forward and reaction binding for
-         * no reason. Any other difference returns null, i.e. a full rebind.
-         */
+        
+        const val PAYLOAD_WIDTH = "payload_width"
+
+        
+
+
         internal fun changePayloadFor(oldItem: ChatMessage, newItem: ChatMessage): Any? {
             if (oldItem !is TextChatMessage || newItem !is TextChatMessage) return null
             return if (oldItem.contentEqualsIgnoringTranslate(newItem)) PAYLOAD_TRANSLATE else null
         }
 
-        /**
-         * The payloads this adapter can apply without a full rebind.
-         *
-         * DiffUtil merges the payloads of several notifications into ONE list, so the decision is
-         * "which of them are recognised", not "is there exactly one": with two recognised payloads
-         * the old `size == 1` check fell through and rebound the whole row after already doing the
-         * partial work twice. An empty result means "fall through to the full bind" — which is also
-         * what a holder type with no partial path gets.
-         */
+        
+
+
+
         internal fun partialPayloadsFor(payloads: List<Any>, isMessageHolder: Boolean): Set<String> {
             if (payloads.isEmpty() || !isMessageHolder) return emptySet()
             return PARTIAL_PAYLOADS.filterTo(mutableSetOf()) { it in payloads }
         }
 
-        private val PARTIAL_PAYLOADS = listOf(PAYLOAD_SELECTION, PAYLOAD_HIGHLIGHT, PAYLOAD_TRANSLATE)
+        private val PARTIAL_PAYLOADS = listOf(PAYLOAD_SELECTION, PAYLOAD_HIGHLIGHT, PAYLOAD_TRANSLATE, PAYLOAD_WIDTH)
 
-        // 消息内容类型定义（0-99）
+        
         private const val CONTENT_TYPE_TEXT = 0
         private const val CONTENT_TYPE_IMAGE = 1
         private const val CONTENT_TYPE_VIDEO = 2
         private const val CONTENT_TYPE_AUDIO = 3
         private const val CONTENT_TYPE_ATTACH = 4
         private const val CONTENT_TYPE_CONTACT = 5
-        private const val CONTENT_TYPE_MULTI_FORWARD = 6  // 合并转发消息
-        // Reserved 7-99 for future content types
+        private const val CONTENT_TYPE_MULTI_FORWARD = 6
+        
 
-        // ViewType 计算偏移量
         private const val MINE_OFFSET = 0
         private const val OTHERS_OFFSET = 100
 
-        // ViewType = Mine/Others 偏移量 + 内容类型
-        const val VIEW_TYPE_MINE_TEXT = MINE_OFFSET + CONTENT_TYPE_TEXT        // 0
-        const val VIEW_TYPE_MINE_IMAGE = MINE_OFFSET + CONTENT_TYPE_IMAGE      // 1
-        const val VIEW_TYPE_MINE_VIDEO = MINE_OFFSET + CONTENT_TYPE_VIDEO      // 2
-        const val VIEW_TYPE_MINE_AUDIO = MINE_OFFSET + CONTENT_TYPE_AUDIO      // 3
-        const val VIEW_TYPE_MINE_ATTACH = MINE_OFFSET + CONTENT_TYPE_ATTACH    // 4
-        const val VIEW_TYPE_MINE_CONTACT = MINE_OFFSET + CONTENT_TYPE_CONTACT  // 5
-        const val VIEW_TYPE_MINE_MULTI_FORWARD = MINE_OFFSET + CONTENT_TYPE_MULTI_FORWARD  // 6
+        
+        const val VIEW_TYPE_MINE_TEXT = MINE_OFFSET + CONTENT_TYPE_TEXT
+        const val VIEW_TYPE_MINE_IMAGE = MINE_OFFSET + CONTENT_TYPE_IMAGE
+        const val VIEW_TYPE_MINE_VIDEO = MINE_OFFSET + CONTENT_TYPE_VIDEO
+        const val VIEW_TYPE_MINE_AUDIO = MINE_OFFSET + CONTENT_TYPE_AUDIO
+        const val VIEW_TYPE_MINE_ATTACH = MINE_OFFSET + CONTENT_TYPE_ATTACH
+        const val VIEW_TYPE_MINE_CONTACT = MINE_OFFSET + CONTENT_TYPE_CONTACT
+        const val VIEW_TYPE_MINE_MULTI_FORWARD = MINE_OFFSET + CONTENT_TYPE_MULTI_FORWARD
 
-        const val VIEW_TYPE_OTHERS_TEXT = OTHERS_OFFSET + CONTENT_TYPE_TEXT       // 100
-        const val VIEW_TYPE_OTHERS_IMAGE = OTHERS_OFFSET + CONTENT_TYPE_IMAGE     // 101
-        const val VIEW_TYPE_OTHERS_VIDEO = OTHERS_OFFSET + CONTENT_TYPE_VIDEO     // 102
-        const val VIEW_TYPE_OTHERS_AUDIO = OTHERS_OFFSET + CONTENT_TYPE_AUDIO     // 103
-        const val VIEW_TYPE_OTHERS_ATTACH = OTHERS_OFFSET + CONTENT_TYPE_ATTACH   // 104
-        const val VIEW_TYPE_OTHERS_CONTACT = OTHERS_OFFSET + CONTENT_TYPE_CONTACT // 105
-        const val VIEW_TYPE_OTHERS_MULTI_FORWARD = OTHERS_OFFSET + CONTENT_TYPE_MULTI_FORWARD // 106
+        const val VIEW_TYPE_OTHERS_TEXT = OTHERS_OFFSET + CONTENT_TYPE_TEXT
+        const val VIEW_TYPE_OTHERS_IMAGE = OTHERS_OFFSET + CONTENT_TYPE_IMAGE
+        const val VIEW_TYPE_OTHERS_VIDEO = OTHERS_OFFSET + CONTENT_TYPE_VIDEO
+        const val VIEW_TYPE_OTHERS_AUDIO = OTHERS_OFFSET + CONTENT_TYPE_AUDIO
+        const val VIEW_TYPE_OTHERS_ATTACH = OTHERS_OFFSET + CONTENT_TYPE_ATTACH
+        const val VIEW_TYPE_OTHERS_CONTACT = OTHERS_OFFSET + CONTENT_TYPE_CONTACT
+        const val VIEW_TYPE_OTHERS_MULTI_FORWARD = OTHERS_OFFSET + CONTENT_TYPE_MULTI_FORWARD
 
-        const val VIEW_TYPE_NOTIFY = 200  // 调整到 200，避免冲突
-        const val VIEW_TYPE_SCREENSHOT = 201  // 截屏消息
-        const val VIEW_TYPE_CONFIDENTIAL_PLACEHOLDER = 202  // Confidential message placeholder (same style as notify)
-        const val VIEW_TYPE_E2EE_HEADER = 203  // does NOT reuse VIEW_TYPE_NOTIFY (its binder hard-casts)
+        const val VIEW_TYPE_NOTIFY = 200  
+        const val VIEW_TYPE_SCREENSHOT = 201
+        const val VIEW_TYPE_CONFIDENTIAL_PLACEHOLDER = 202  
+        const val VIEW_TYPE_E2EE_HEADER = 203  
 
-        // 内容类型配置表（layout + binder）
         private val contentTypeConfigs = mapOf(
             CONTENT_TYPE_TEXT to (R.layout.chat_item_content_text to TextContentBinder),
             CONTENT_TYPE_IMAGE to (R.layout.chat_item_content_image to ImageContentBinder),
@@ -132,7 +121,6 @@ abstract class ChatMessageAdapter(
             CONTENT_TYPE_MULTI_FORWARD to (R.layout.chat_item_content_multi_forward to MultiForwardContentBinder)
         )
 
-        // 解析 ViewType
         private fun isMineType(viewType: Int): Boolean = viewType < OTHERS_OFFSET
         private fun getContentType(viewType: Int): Int = viewType % OTHERS_OFFSET
 
@@ -141,7 +129,6 @@ abstract class ChatMessageAdapter(
     override fun getItemViewType(position: Int): Int {
         val message = getItem(position)
 
-        // === 第一层：消息类型 ===
         if (message is EncryptionHeaderChatMessage) {
             return VIEW_TYPE_E2EE_HEADER
         }
@@ -154,21 +141,18 @@ abstract class ChatMessageAdapter(
             return VIEW_TYPE_NOTIFY
         }
 
-        // 判断消息内容类型
         if (message is TextChatMessage) {
-            // 截屏消息使用独立的 ViewType（居中显示，复用 notify 布局）
+            
             if (message.isScreenShotMessage) {
                 return VIEW_TYPE_SCREENSHOT
             }
 
-            // === 第二层：特殊结构（合并转发） ===
-            // 合并转发消息（forwards.size > 1）使用独立的 ViewType
             val forwardsSize = message.forwardContext?.forwards?.size ?: 0
             if (forwardsSize > 1) {
                 return if (message.isMine) VIEW_TYPE_MINE_MULTI_FORWARD else VIEW_TYPE_OTHERS_MULTI_FORWARD
             }
 
-            // 单条转发消息：根据转发内容的类型决定 ViewType（复用现有布局）
+            
             if (forwardsSize == 1) {
                 val forwardAttachment = message.forwardContext?.forwards?.firstOrNull()?.attachments?.firstOrNull()
                 return when {
@@ -176,7 +160,9 @@ abstract class ChatMessageAdapter(
                         if (message.isMine) VIEW_TYPE_MINE_IMAGE else VIEW_TYPE_OTHERS_IMAGE
                     }
 
-                    forwardAttachment?.isVideo() == true -> {
+                    
+                    
+                    forwardAttachment?.isPlayableVideo() == true -> {
                         if (message.isMine) VIEW_TYPE_MINE_VIDEO else VIEW_TYPE_OTHERS_VIDEO
                     }
 
@@ -185,26 +171,22 @@ abstract class ChatMessageAdapter(
                     }
 
                     forwardAttachment != null -> {
-                        // 其他附件类型（包括长文本）
                         if (message.isMine) VIEW_TYPE_MINE_ATTACH else VIEW_TYPE_OTHERS_ATTACH
                     }
 
                     else -> {
-                        // 单条转发的纯文本消息
                         if (message.isMine) VIEW_TYPE_MINE_TEXT else VIEW_TYPE_OTHERS_TEXT
                     }
                 }
             }
 
-            // === 第三层：普通消息的内容类型 ===
             if (message.isAttachmentMessage()) {
-                // 附件消息
                 return when {
                     message.attachment?.isImage() == true -> {
                         if (message.isMine) VIEW_TYPE_MINE_IMAGE else VIEW_TYPE_OTHERS_IMAGE
                     }
 
-                    message.attachment?.isVideo() == true -> {
+                    message.attachment?.isPlayableVideo() == true -> {
                         if (message.isMine) VIEW_TYPE_MINE_VIDEO else VIEW_TYPE_OTHERS_VIDEO
                     }
 
@@ -217,27 +199,17 @@ abstract class ChatMessageAdapter(
                     }
                 }
             } else if (!message.sharedContacts.isNullOrEmpty()) {
-                // 联系人卡片
                 return if (message.isMine) VIEW_TYPE_MINE_CONTACT else VIEW_TYPE_OTHERS_CONTACT
             } else {
-                // 文本消息
                 return if (message.isMine) VIEW_TYPE_MINE_TEXT else VIEW_TYPE_OTHERS_TEXT
             }
         }
 
-        // 默认文本消息
         return if (message.isMine) VIEW_TYPE_MINE_TEXT else VIEW_TYPE_OTHERS_TEXT
     }
 
-    /**
-     * 创建消息 ViewHolder
-     *
-     * 根据 ViewType 创建对应的 ViewHolder：
-     * - 通知消息：创建 Notify ViewHolder
-     * - 普通消息：根据内容类型和发送者创建 Message ViewHolder
-     */
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ChatMessageViewHolder {
-        // E2EE 说明头（复用 Notify 外壳，独立 binder）
+        
         if (viewType == VIEW_TYPE_E2EE_HEADER) {
             return ChatMessageViewHolder.Notify(
                 parentView = parent,
@@ -246,7 +218,6 @@ abstract class ChatMessageAdapter(
             )
         }
 
-        // 通知消息
         if (viewType == VIEW_TYPE_NOTIFY) {
             return ChatMessageViewHolder.Notify(
                 parentView = parent,
@@ -255,7 +226,7 @@ abstract class ChatMessageAdapter(
             )
         }
 
-        // 截屏消息（复用 notify 布局，使用独立的 ContentBinder）
+        
         if (viewType == VIEW_TYPE_SCREENSHOT) {
             return ChatMessageViewHolder.Notify(
                 parentView = parent,
@@ -264,7 +235,7 @@ abstract class ChatMessageAdapter(
             )
         }
 
-        // Confidential placeholder: reuses notify layout; change layout later if style needs to diverge
+        
         if (viewType == VIEW_TYPE_CONFIDENTIAL_PLACEHOLDER) {
             return ChatMessageViewHolder.Notify(
                 parentView = parent,
@@ -273,11 +244,9 @@ abstract class ChatMessageAdapter(
             )
         }
 
-        // 普通消息：解析 ViewType 获取消息类型和发送者
         val isMine = isMineType(viewType)
         val contentType = getContentType(viewType)
 
-        // 从配置表获取对应的 layout 和 binder
         val (contentLayoutRes, contentBinder) = contentTypeConfigs[contentType]
             ?: contentTypeConfigs[CONTENT_TYPE_TEXT]!!
 
@@ -301,13 +270,12 @@ abstract class ChatMessageAdapter(
     ) {
         val data = getItem(position)
 
-        // 应用当前选择状态
         data.editMode = selectMessageState.editModel
         data.selectedStatus = data.id in selectMessageState.selectedMessageIds
 
-        // ========== Payload partial refresh handling ==========
-        // An empty set means no partial path applies (unknown payload, or a holder type without
-        // one), and the full bind below runs.
+        
+        
+        
         val partial = partialPayloadsFor(payloads, holder is ChatMessageViewHolder.Message)
         if (partial.isNotEmpty() && holder is ChatMessageViewHolder.Message) {
             if (PAYLOAD_SELECTION in partial) {
@@ -319,18 +287,19 @@ abstract class ChatMessageAdapter(
             if (PAYLOAD_TRANSLATE in partial) {
                 holder.bindTranslateOnly(data) { message -> onTranslateRetry(message) }
             }
+            if (PAYLOAD_WIDTH in partial) {
+                holder.bindWidthOnly(data, contactorCache, shouldSaveToPhotos)
+            }
             return
         }
 
-        // ========== Full binding logic ==========
-        // 根据 ViewHolder 类型创建对应的 callbacks
+        
         val callbacks = when (holder) {
             is ChatMessageViewHolder.Notify -> {
                 MessageCallbacks.NotifyInteraction(onE2eeHeaderClick = { onE2eeHeaderClick() })
             }
 
             is ChatMessageViewHolder.Message -> {
-                // Message 使用 MessageInteraction
                 MessageCallbacks.MessageInteraction(
                     onItemClick = { rootView, message -> onItemClick(rootView, message) },
                     onItemLongClick = { rootView, message -> onItemLongClick(rootView, message) },
@@ -347,18 +316,24 @@ abstract class ChatMessageAdapter(
             }
 
             else -> {
-                // 默认使用 NotifyInteraction（兜底）
                 MessageCallbacks.NotifyInteraction()
             }
         }
 
-        // 使用简化的 bind 方法，highlightItemIds 作为独立参数，传递 contactorCache 和 shouldSaveToPhotos
+        
+        if (holder is ChatMessageViewHolder.Message) holder.bubble.applyChatTheme(ChatThemeSetting.current, bubbleGradient)
         holder.bind(data, callbacks, mHighlightItemIds, contactorCache, shouldSaveToPhotos)
     }
 
+    
+
+
+
+    var bubbleGradient: ChatBubbleGradient? = null
+
     override fun onViewRecycled(holder: ChatMessageViewHolder) {
         super.onViewRecycled(holder)
-        // Clear pending highlight runnable to prevent memory leak
+        
         if (holder is ChatMessageViewHolder.Message) {
             holder.clearHighlight()
             holder.clearQuoteThumbnail()
@@ -367,14 +342,14 @@ abstract class ChatMessageAdapter(
 
     private var mHighlightItemIds: ArrayList<Long>? = null
 
-    /**
-     * Highlight specified messages
-     *
-     * Uses Payload partial refresh, only updates items that need highlighting
-     */
+    
+
+
+
+
     fun highlightItem(ids: ArrayList<Long>) {
         mHighlightItemIds = ids
-        // Only refresh items that need highlighting
+        
         ids.forEach { timeStamp ->
             val position = currentList.indexOfFirst { it.timeStamp == timeStamp }
             if (position >= 0) {
@@ -383,23 +358,22 @@ abstract class ChatMessageAdapter(
         }
     }
 
-    // ========== Selection state management ==========
+    
     private var selectMessageState = SelectMessageState(false, emptySet(), 0)
 
-    // ========== Save to photos setting ==========
-    /**
-     * 是否应该自动保存到相册
-     * 由 Fragment/Activity 根据会话级别设置和全局设置计算后设置
-     */
+    
+    
+
+
     var shouldSaveToPhotos: Boolean = false
 
-    /**
-     * Update selection state
-     *
-     * Optimized with Payload partial refresh:
-     * - Edit mode toggle: full refresh (all items need to show/hide checkbox)
-     * - Selection state change only: partial refresh (only update changed items)
-     */
+    
+
+
+
+
+
+
     @SuppressLint("NotifyDataSetChanged")
     fun updateSelectionState(newState: SelectMessageState) {
         if (selectMessageState == newState) return
@@ -407,13 +381,13 @@ abstract class ChatMessageAdapter(
         val oldState = selectMessageState
         selectMessageState = newState
 
-        // Edit mode toggle -> full refresh (all items need to show/hide checkbox)
+        
         if (oldState.editModel != newState.editModel) {
             notifyDataSetChanged()
             return
         }
 
-        // Selection state change only -> partial refresh
+        
         val addedIds = newState.selectedMessageIds - oldState.selectedMessageIds
         val removedIds = oldState.selectedMessageIds - newState.selectedMessageIds
         val changedIds = addedIds + removedIds
@@ -426,7 +400,6 @@ abstract class ChatMessageAdapter(
         }
     }
 
-    // ========== 抽象方法（子类实现） ==========
     abstract fun onItemClick(rootView: View, data: ChatMessage)
     abstract fun onItemLongClick(rootView: View, data: ChatMessage)
     abstract fun onAvatarClicked(contactor: ContactorModel?)
@@ -444,13 +417,13 @@ abstract class ChatMessageAdapter(
         emoji: String,
     )
 
-    /** Inline retry tap inside the translate block of a failed manual translation. */
+    
     abstract fun onTranslateRetry(message: TextChatMessage)
 
     open fun onSelectedMessage(messageId: String, selected: Boolean) = Unit
 
-    // Not abstract: only ChatMessageListFragment's anonymous subclass ever shows an
-    // EncryptionHeaderChatMessage. ChatForwardMessageFragment's anonymous subclass never submits
-    // one and must not be forced to implement a callback it can never trigger.
+    
+    
+    
     open fun onE2eeHeaderClick() = Unit
 }

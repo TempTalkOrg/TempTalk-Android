@@ -21,13 +21,13 @@ import javax.inject.Singleton
 @Retention(AnnotationRetention.RUNTIME)
 annotation class SpeedTest
 
-/**
- * Provides a standalone OkHttpClient for speed testing.
- *
- * Cannot reuse ChativeHttpClient because it depends on UrlManager,
- * which depends on DomainSpeedTestCoordinator -> DomainSpeedTester,
- * creating a circular dependency.
- */
+
+
+
+
+
+
+
 @InstallIn(SingletonComponent::class)
 @Module
 object SpeedTestModule {
@@ -46,8 +46,8 @@ object SpeedTestModule {
 
         return OkHttpClient.Builder()
             .sslSocketFactory(sslCreator.socketFactory, sslCreator.trustManager)
-            // Route probes through the proxy when enabled so they cannot leak a
-            // direct connection; no-op (system DNS + plain socket) when disabled.
+            
+            
             .dns(ProxyTunnelDns(proxyConfigProvider))
             .socketFactory(ProxyTunnelSocketFactory(proxyConfigProvider))
             .connectionSpecs(listOf(connectionSpec))

@@ -6,7 +6,7 @@ import difft.android.messageserialization.model.ForwardContext
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/** The forward viewer's navigation stack, retained across configuration changes (#1440). */
+
 class ChatForwardMessageViewModelTest {
 
     private val root = ForwardContext(forwards = emptyList(), isFromGroup = false, sharedContactId = "root")
@@ -40,5 +40,19 @@ class ChatForwardMessageViewModelTest {
 
         assertEquals(listOf(nested2), vm.state.value.stack)
         assertEquals(null, vm.state.value.outerSourceConversation)
+    }
+
+    @Test
+    fun `replace swaps one level in place and ignores an index outside the stack`() {
+        val vm = ChatForwardMessageViewModel()
+        vm.dispatch(Intent.SetRoot(root, outerConversation, "author-1"))
+        vm.dispatch(Intent.PushNested(nested1))
+
+        vm.dispatch(Intent.ReplaceAt(1, nested2))
+        assertEquals(listOf(root, nested2), vm.state.value.stack)
+
+        vm.dispatch(Intent.ReplaceAt(5, nested1))
+        assertEquals(listOf(root, nested2), vm.state.value.stack)
+        assertEquals(outerConversation, vm.state.value.outerSourceConversation)
     }
 }

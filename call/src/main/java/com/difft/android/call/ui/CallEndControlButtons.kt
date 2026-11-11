@@ -1,7 +1,6 @@
 package com.difft.android.call.ui
 
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
@@ -26,9 +25,9 @@ import com.difft.android.call.R
 import com.difft.android.call.ui.actionbar.ActionButtonStyle
 import com.difft.android.call.ui.actionbar.CallActionBarPlanner
 import com.difft.android.call.ui.actionbar.CallActionButton
-import com.difft.android.call.ui.actionbar.actionButtonShadow
+import com.difft.android.call.ui.actionbar.actionButtonSurface
 
-/** 1v1 hang-up: a plain error-red circle with a white handset glyph. */
+
 @Composable
 fun OneOnOneHangupButton(
     onHangup: () -> Unit,
@@ -47,11 +46,11 @@ fun OneOnOneHangupButton(
     )
 }
 
-/**
- * Group leave: the red leave circle plus a bg2 chevron tail that opens the end menu. The tail
- * overlaps the circle by half its diameter, so the whole control is `size + tail - size / 2`
- * wide (78 at 48dp, 65 at 40dp).
- */
+
+
+
+
+
 @Composable
 fun GroupCallLeaveButton(
     onLeave: () -> Unit,
@@ -60,17 +59,17 @@ fun GroupCallLeaveButton(
 ) {
     val compact = size < CallActionBarPlanner.BUTTON_DP.dp
     val tailWidth = if (compact) CallActionBarPlanner.COMPACT_GROUP_END_TAIL_DP.dp else CallActionBarPlanner.GROUP_END_TAIL_DP.dp
-    // Same arithmetic the planner budgets with, so the rendered control can never drift from it.
+    
     val totalWidth = CallActionBarPlanner.groupEndWidth(size.value.toInt()).dp
     val chevronSize = if (compact) 12.dp else 14.dp
-    // Full-radius on the end side only, so `radius.pill` (a 50% CircleShape) cannot express it:
-    // percent corners give the same half-of-min-dimension the previous 100.dp literal was clamped to.
+    
+    
     val tailShape = RoundedCornerShape(topEndPercent = 50, bottomEndPercent = 50)
 
-    // Declaration order matters for z-order and hit-test priority in Compose Box:
-    // the last-declared child is drawn on top and wins hit-testing in overlap zones.
-    // The chevron tail (CenterEnd) and the leave circle (CenterStart) overlap by half a
-    // circle; the leave button must win in that overlap zone, so it is declared SECOND.
+    
+    
+    
+    
     Box(modifier = Modifier.size(width = totalWidth, height = size)) {
         Box(
             contentAlignment = Alignment.CenterEnd,
@@ -79,8 +78,7 @@ fun GroupCallLeaveButton(
                 .align(Alignment.CenterEnd)
                 .width(tailWidth)
                 .height(size)
-                .actionButtonShadow(tailShape)
-                .background(color = DifftTheme.colors.backgroundSecondary, shape = tailShape)
+                .actionButtonSurface(DifftTheme.colors.backgroundSecondary, tailShape)
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null

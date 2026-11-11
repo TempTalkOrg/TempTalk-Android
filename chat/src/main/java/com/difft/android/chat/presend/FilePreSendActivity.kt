@@ -4,57 +4,14 @@ import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.res.colorResource
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.globalServices
-import com.difft.android.base.utils.utf8Substring
 import com.difft.android.base.widget.ComposeDialog
 import com.difft.android.base.widget.ComposeDialogManager
-import com.difft.android.base.widget.ToastUtil
-import com.difft.android.base.ui.compose.input.ClearMode
-import com.difft.android.base.ui.compose.input.DifftClearableTextField
-import com.difft.android.base.ui.compose.input.DifftTextFieldStyle
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.chat.R
-import com.difft.android.chat.common.MAX_TEXT_FILE_SIZE
-import com.difft.android.chat.common.MESSAGE_INPUT_MAX_LINES
 import com.difft.android.chat.compose.ConfidentialTipDialogContent
 import com.difft.android.chat.setting.sync.ConfidentialModeSyncCoordinator
 import kotlinx.coroutines.CancellationException
@@ -108,7 +65,7 @@ class FilePreSendActivity : BaseActivity() {
         }
     }
 
-    // State held at Activity level so dialog callbacks can update it
+    
     private var confidentialMode = mutableIntStateOf(0)
     private var conversationId: String = ""
 
@@ -159,7 +116,7 @@ class FilePreSendActivity : BaseActivity() {
         }
     }
 
-    /** Local-first: the switch takes effect at once; a sync job carries it to the server. */
+    
     private fun syncConfidentialModeToServer(mode: Int) {
         if (conversationId.isEmpty()) return
         lifecycleScope.launch {
@@ -179,189 +136,20 @@ class FilePreSendActivity : BaseActivity() {
     }
 
     private fun showConfidentialTipDialog(onConfirm: () -> Unit) {
-        globalServices.userManager.update { hasShownConfidentialTip = true }
         var dialog: ComposeDialog? = null
         dialog = ComposeDialogManager.showBottomDialog(
             activity = this,
+            showDragHandle = false,
             onDismiss = { }
         ) {
             ConfidentialTipDialogContent(
                 title = getString(R.string.chat_confidential_tip_title),
                 content = getString(R.string.chat_confidential_tip_content),
                 onConfirm = {
+                    globalServices.userManager.update { hasShownConfidentialTip = true }
                     dialog?.dismiss()
                     onConfirm()
                 }
-            )
-        }
-    }
-}
-
-@Composable
-private fun FilePreSendScreen(
-    fileName: String,
-    fileSize: Long,
-    confidentialMode: Int,
-    showConfidentialToggle: Boolean,
-    onBack: () -> Unit,
-    onConfidentialToggle: () -> Unit,
-    onSend: (messageBody: String) -> Unit
-) {
-    var messageBody by rememberSaveable { mutableStateOf("") }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(DifftTheme.colors.background)
-            .statusBarsPadding()
-            .navigationBarsPadding()
-            .imePadding()
-    ) {
-        // Back button
-        Image(
-            painter = painterResource(id = com.difft.android.base.R.drawable.chative_ic_back),
-            contentDescription = null,
-            colorFilter = ColorFilter.tint(DifftTheme.colors.textPrimary),
-            modifier = Modifier
-                .size(48.dp)
-                .clickable { onBack() }
-                .padding(12.dp)
-        )
-
-        // File info - centered
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            Image(
-                painter = painterResource(id = R.mipmap.chat_attachment_file_logo),
-                contentDescription = null
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(
-                text = fileName,
-                color = DifftTheme.colors.textPrimary,
-                style = DifftTheme.typography.p2,
-                maxLines = 1,
-                modifier = Modifier.padding(horizontal = 32.dp)
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = FileUtil.readableFileSize(fileSize),
-                color = DifftTheme.colors.textSecondary,
-                style = DifftTheme.typography.p3
-            )
-        }
-
-        // Bottom input area with confidential style
-        val isConfidential = confidentialMode == 1
-
-        // Dashed line above input area
-        if (isConfidential) {
-            val primaryColor = DifftTheme.colors.primary
-            Canvas(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(1.dp)
-            ) {
-                drawLine(
-                    color = primaryColor,
-                    start = Offset.Zero,
-                    end = Offset(size.width, 0f),
-                    strokeWidth = 0.5.dp.toPx(),
-                    pathEffect = PathEffect.dashPathEffect(
-                        floatArrayOf(4.dp.toPx(), 3.dp.toPx())
-                    )
-                )
-            }
-        }
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(
-                    // Not a library colour: bg_confidential_area (#F7FCFF / #131F2E) is a
-                    // confidential-mode tint with no semantic token and no palette step.
-                    if (isConfidential) colorResource(id = com.difft.android.base.R.color.bg_confidential_area)
-                    else Color.Transparent
-                )
-                .padding(start = 16.dp, end = 10.dp, top = 8.dp, bottom = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Input field with confidential toggle inside
-            Row(
-                modifier = Modifier
-                    .weight(1f)
-                    .heightIn(min = 44.dp)
-                    .border(
-                        width = 0.5.dp,
-                        color = DifftTheme.colors.line,
-                        shape = DifftTheme.radius.largeShape
-                    )
-                    .background(
-                        color = if (isConfidential) DifftTheme.colors.background
-                        else DifftTheme.colors.backgroundSecondary,
-                        shape = DifftTheme.radius.largeShape
-                    ),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // The row draws the box (it also hosts the confidential toggle), so the field
-                // itself stays transparent and borderless.
-                DifftClearableTextField(
-                    value = messageBody,
-                    onValueChange = { newValue ->
-                        val utf8Size = newValue.toByteArray(Charsets.UTF_8).size
-                        messageBody = if (utf8Size > MAX_TEXT_FILE_SIZE) {
-                            ToastUtil.show(R.string.text_file_exceeds_10mb_limit)
-                            newValue.utf8Substring(MAX_TEXT_FILE_SIZE)
-                        } else {
-                            newValue
-                        }
-                    },
-                    onClear = {},
-                    hint = stringResource(id = R.string.MediaReviewFragment__add_a_message),
-                    style = DifftTextFieldStyle.Form,
-                    clearMode = ClearMode.Never,
-                    maxLines = MESSAGE_INPUT_MAX_LINES,
-                    containerColor = Color.Transparent,
-                    // Composer text, one step above the library field size.
-                    textStyle = DifftTheme.typography.p2,
-                    height = null,
-                    minHeight = 0.dp,
-                    contentPadding = PaddingValues(horizontal = 12.dp),
-                    modifier = Modifier.weight(1f),
-                )
-
-                // Confidential toggle inside input field
-                if (showConfidentialToggle) {
-                    val isEnabled = confidentialMode == 1
-                    Image(
-                        painter = painterResource(
-                            id = if (isEnabled) R.drawable.chat_btn_confidential_mode_enable
-                            else R.drawable.chat_btn_confidential_mode_disable
-                        ),
-                        contentDescription = null,
-                        colorFilter = if (isEnabled) null
-                            else ColorFilter.tint(DifftTheme.colors.icon),
-                        modifier = Modifier
-                            .size(44.dp)
-                            .clickable { onConfidentialToggle() }
-                            .padding(10.dp)
-                    )
-                }
-            }
-
-            // Send button
-            Image(
-                painter = painterResource(id = R.drawable.chat_icon_send),
-                contentDescription = null,
-                modifier = Modifier
-                    .padding(start = 10.dp)
-                    .size(32.dp)
-                    .clickable { onSend(messageBody) }
             )
         }
     }

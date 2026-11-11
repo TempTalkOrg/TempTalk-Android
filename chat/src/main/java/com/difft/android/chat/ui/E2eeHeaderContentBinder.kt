@@ -15,11 +15,11 @@ import com.difft.android.chat.R
 import com.difft.android.chat.message.ChatMessage
 import com.difft.android.chat.message.EncryptionHeaderChatMessage
 
-/**
- * Content binder for [EncryptionHeaderChatMessage] (VIEW_TYPE_E2EE_HEADER). Whole-row click is
- * wired in [ChatMessageViewHolder.Notify.bind] — no ClickableSpan here (project has a
- * LinkMovementMethod × scroll conflict precedent, TextTruncationUtil.kt:66-128).
- */
+
+
+
+
+
 object E2eeHeaderContentBinder : ContentBinder {
     override fun bind(
         contentFrame: ViewGroup,
@@ -32,10 +32,10 @@ object E2eeHeaderContentBinder : ContentBinder {
         val tvContent = contentFrame.findViewById<AppCompatTextView>(R.id.tv_e2ee_header_content)
         val context = contentFrame.context
 
-        // Lock icon is embedded as a leading ImageSpan (emoji-style), not a compound drawable —
-        // setCompoundDrawablesRelative vertical-centers the icon across the WHOLE (possibly
-        // multi-line) TextView instead of pinning it to the first line. Same technique as
-        // RecentChatFooterViewHolder.buildHintText.
+        
+        
+        
+        
         val iconSizePx = (12 * context.resources.displayMetrics.density).toInt()
         val lockDrawable = ContextCompat.getDrawable(context, com.difft.android.base.R.drawable.base_tabler_lock)
             ?.mutate()
@@ -50,9 +50,9 @@ object E2eeHeaderContentBinder : ContentBinder {
             builder.append(" ")
         }
 
-        // Non-friend variant uses the legacy chat_privacy_banner copy verbatim (minus its leading
-        // lock emoji, now rendered via the leading ImageSpan above); only the base copy differs —
-        // the blue "Learn more" suffix below is shared by both variants.
+        
+        
+        
         val baseCopyRes = if (header.isNonFriendVariant) R.string.chat_e2ee_header_non_friend else R.string.chat_e2ee_header_hint
         builder.append(context.getString(baseCopyRes))
         builder.append(" ")

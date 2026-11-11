@@ -11,10 +11,10 @@ import java.lang.ref.WeakReference
 import java.util.concurrent.CopyOnWriteArraySet
 import kotlin.concurrent.Volatile
 
-/**
- * A wrapper around [androidx.lifecycle.ProcessLifecycleOwner] that allows for safely adding/removing observers
- * on multiple threads.
- */
+
+
+
+
 object AppForegroundObserver {
   private val listeners: MutableSet<Listener> = CopyOnWriteArraySet()
 
@@ -27,7 +27,7 @@ object AppForegroundObserver {
   @Volatile
   private var startedActivityCount: Int = 0
 
-  /** Started activities that have resumed since their own last onStart; main thread only. */
+  
   private val resumedSinceStart = mutableListOf<WeakReference<Activity>>()
 
   @MainThread
@@ -48,12 +48,12 @@ object AppForegroundObserver {
     isInitialized = true
   }
 
-  /**
-   * Adds a listener to be notified of when the app moves between the background and the foreground.
-   * To mimic the behavior of subscribing to [ProcessLifecycleOwner], this listener will be
-   * immediately notified of the foreground state if we've experienced a foreground/background event
-   * already.
-   */
+  
+
+
+
+
+
   @AnyThread
   @JvmStatic
   fun addListener(listener: Listener) {
@@ -99,12 +99,12 @@ object AppForegroundObserver {
     resumedSinceStart.removeAll { it.get().let { ref -> ref == null || ref === activity } }
   }
 
-  /**
-   * Foreground signal for notification-tap routing only (#1427): true if a started, non-PiP
-   * activity has resumed since its own last onStart. Unlike [isForegrounded], an activity the
-   * system merely restarts below a translucent notification trampoline does not count, because
-   * some ROMs (HyperOS) deliver that start before the trampoline's onCreate.
-   */
+  
+
+
+
+
+
   @MainThread
   @JvmStatic
   fun hasUserFacingActivity(): Boolean =

@@ -23,11 +23,11 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/**
- * [DifftSwitch] contract (issue #1206): the non-interactive form is exactly the library's Android
- * switcher track box — 52×32 — and the interactive form exposes switch semantics with a 48dp-tall
- * touch target and toggles on click.
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34])
@@ -47,7 +47,7 @@ class DifftSwitchTest {
         assertEquals(4.dp, DifftSwitchDefaults.KnobInsetOn)
         assertEquals(8.dp, DifftSwitchDefaults.KnobInsetOff)
 
-        // On: 4dp short of the track end. Off: 8dp past its start.
+        
         assertEquals(24.dp, DifftSwitchDefaults.KnobOffsetOn)
         assertEquals(8.dp, DifftSwitchDefaults.KnobOffsetOff)
     }
@@ -65,7 +65,7 @@ class DifftSwitchTest {
 
     @Test
     fun `the off state keeps the same box as the on state`() {
-        // Guards the off-state insets staying draw-only (border), never padding that would grow the box.
+        
         composeTestRule.setContent {
             DifftTheme { DifftSwitch(checked = false, onCheckedChange = null, modifier = Modifier.testTag(TAG)) }
         }
@@ -77,8 +77,8 @@ class DifftSwitchTest {
 
     @Test
     fun `disabled veils the control at 40 percent without changing its box`() {
-        // Figma's Disable-On / Disable-Off keep the enabled colours behind a 40% veil, so the
-        // disabled switch must stay laid out exactly like the enabled one.
+        
+        
         assertEquals(0.4f, DifftSwitchDefaults.DisabledAlpha, 0f)
 
         composeTestRule.setContent {

@@ -18,11 +18,11 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/**
- * How [ChativeHttpClientModule] wires each client into the chat pool (#1396): which service routes
- * it, and the interceptor order that makes failover see raw responses and normalization see only
- * the final one. The real providers run, so a client added without a service shows up here.
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 class ChativeHttpClientFailoverWiringTest {
 
@@ -40,7 +40,7 @@ class ChativeHttpClientFailoverWiringTest {
         every { urlManager.fileSharing } returns "https://a.test/fileshare/"
     }
 
-    /** The interceptor chain of the private [OkHttpClient] a [ChativeHttpClient] builds. */
+    
     private fun ChativeHttpClient.okHttp(): OkHttpClient {
         val field = ChativeHttpClient::class.java.getDeclaredField("okHttpClient")
         field.isAccessible = true

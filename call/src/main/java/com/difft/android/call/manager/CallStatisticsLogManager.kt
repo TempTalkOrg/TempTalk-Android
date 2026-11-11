@@ -41,11 +41,11 @@ class CallStatisticsLogManager @Inject constructor(
     @Volatile
     private var currentRoomId: String? = null
 
-    // The call session whose room the ids belong to. Claimed on main, released from a cleanup step
-    // on IO: both are synchronized so a release can never clear a claim that landed in between.
+    
+    
     private var roomOwnerSessionId: Long = NO_ROOM_OWNER
 
-    /** Session [sessionId] starts: it owns the room ids from now on, which start empty. */
+    
     @Synchronized
     fun claimRoom(sessionId: Long) {
         roomOwnerSessionId = sessionId
@@ -53,10 +53,10 @@ class CallStatisticsLogManager @Inject constructor(
         currentRoomId = null
     }
 
-    /**
-     * Session [sessionId]'s cleanup: clears the room ids only while it still owns them, so a late
-     * cleanup of an ended call never clears the ids of the call that started after it.
-     */
+    
+
+
+
     @Synchronized
     fun releaseRoom(sessionId: Long) {
         if (roomOwnerSessionId != sessionId) {
@@ -127,9 +127,9 @@ class CallStatisticsLogManager @Inject constructor(
         delayedFlushJob = null
     }
 
-    /**
-     * Drains the queue and sends all pending events. Call on call-end to avoid data loss.
-     */
+    
+
+
     fun flushAll() {
         cancelDelayedFlush()
         val batch = synchronized(lock) {
@@ -137,7 +137,7 @@ class CallStatisticsLogManager @Inject constructor(
             ArrayList(queue).also { queue.clear() }
         }
         appScope.launch(Dispatchers.IO) {
-            // Login-state gate: with no persisted session token there is nothing to report.
+            
             if (globalServices.userManager.getUserData()?.microToken.isNullOrEmpty()) {
                 L.e { "[Call] CallStatisticsLogManager flush skipped: no token" }
                 return@launch

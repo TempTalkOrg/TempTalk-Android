@@ -34,11 +34,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.difft.app.database.models.GroupModel
 
-/**
- * Group name / avatar editing for the group-settings header. Request building and gating mirror
- * the retired edit sub-page: plain groups send `name`; encrypted groups send `encryptedName` /
- * `encryptedAvatar` derived from the local R_group key.
- */
+
+
 @HiltViewModel
 class GroupInfoHeaderViewModel @Inject constructor(
     @ApplicationContext private val appContext: Context,
@@ -54,13 +51,13 @@ class GroupInfoHeaderViewModel @Inject constructor(
     private val _effect = Channel<Effect>(Channel.BUFFERED)
     val effect = _effect.receiveAsFlow()
 
-    /** Loads are pure projections of the passed snapshot; a newer one supersedes an in-flight older one. */
+    
     private var loadJob: Job? = null
 
-    /** Saves in flight (name submit / avatar upload). Loads are parked while this is > 0, see [load]. */
+    
     private var mutationsInFlight = 0
 
-    /** Newest snapshot that arrived during a save; replayed only if the save failed (see [endMutation]). */
+    
     private var deferredLoad: GroupModel? = null
 
     fun dispatch(intent: Intent) {
@@ -94,7 +91,7 @@ class GroupInfoHeaderViewModel @Inject constructor(
         }
     }
 
-    /** Back / outside tap while editing: ask only when the user actually changed the name away from the baseline. */
+    
     private fun requestExit(source: ExitSource) {
         val s = _state.value
         if (s.hasUnsavedChanges) {
@@ -111,8 +108,8 @@ class GroupInfoHeaderViewModel @Inject constructor(
     private fun load(group: GroupModel) {
         val gid = group.gid ?: return
         if (mutationsInFlight > 0) {
-            // A snapshot taken before the save lands would revert the just-saved value; the save's own
-            // refresh (fetchAndSaveSingleGroupInfo) carries the authoritative data instead.
+            
+            
             deferredLoad = group
             return
         }
@@ -134,21 +131,21 @@ class GroupInfoHeaderViewModel @Inject constructor(
                     editingName = if (it.isEditing) it.editingName else name,
                 )
             }
-            // The header now renders server data, so the plaintext upload temp is no longer referenced.
+            
             previousLocalAvatar?.let { AvatarPickTempCleaner.deleteUploadedTemp(appContext, it) }
         }
     }
 
-    /** A save is starting: drop any in-flight load (its snapshot predates the save) and park new ones. */
+    
     private fun beginMutation() {
         mutationsInFlight++
         loadJob?.cancel()
     }
 
-    /**
-     * A save finished. On success the parked snapshot is stale by definition and the save's own refresh
-     * supersedes it; on failure nothing changed server-side, so the parked snapshot is replayed.
-     */
+    
+
+
+
     private fun endMutation(succeeded: Boolean) {
         mutationsInFlight--
         if (succeeded) deferredLoad = null
@@ -173,10 +170,10 @@ class GroupInfoHeaderViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Compares the trimmed input with the trimmed [State.editBaseline]. [exitSource] is set when the
-     * submit comes from the unsaved-changes dialog: on success (or no change) the pending exit completes.
-     */
+    
+
+
+
     private fun submitName(exitSource: ExitSource? = null) {
         val s = _state.value
         if (s.isSubmitting) return
@@ -213,10 +210,10 @@ class GroupInfoHeaderViewModel @Inject constructor(
                         it.copy(name = newName, isEditing = false, editingName = newName, hasEditedInput = false).withDerived()
                     }
                     _effect.send(Effect.HideKeyboard)
-                    // Unpark before the refresh so its Load is applied, not deferred.
+                    
                     settled = true
                     endMutation(succeeded = true)
-                    // Leave before the refresh: it is a network round trip and the name is already saved.
+                    
                     if (exitSource == ExitSource.Back) _effect.send(Effect.Finish)
                     groupUtil.fetchAndSaveSingleGroupInfo(s.groupId, true)
                 } else {
@@ -249,8 +246,8 @@ class GroupInfoHeaderViewModel @Inject constructor(
                 val response = groupRepo.changeGroupSettings(gid, request)
                 _effect.send(Effect.DismissWait)
                 if (response.status == 0) {
-                    // Keep showing the local file until the refresh Load swaps in server data (and deletes it).
-                    // A previous pick that never got its refresh is superseded now, so drop its temp here.
+                    
+                    
                     _state.value.pendingLocalAvatarPath?.takeIf { it != path }
                         ?.let { AvatarPickTempCleaner.deleteUploadedTemp(appContext, it) }
                     _state.update { it.copy(pendingLocalAvatarPath = path) }
@@ -284,7 +281,7 @@ class GroupInfoHeaderViewModel @Inject constructor(
         return ChangeGroupSettingsReq(encryptedName = GroupCrypto.encryptGroupName(kGroup, newName))
     }
 
-    /** Avatar editing is gated to encrypted groups with a key, so this always emits `encryptedAvatar`. */
+    
     private fun buildAvatarChangeRequest(gid: String, avatarJson: String): ChangeGroupSettingsReq {
         val rGroupBytes = groupCryptoRepo.getRGroupBytes(gid)
             ?: throw IllegalStateException("no_encryption_key")

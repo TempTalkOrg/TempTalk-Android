@@ -15,23 +15,23 @@ import javax.crypto.Mac
 import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
-/**
- * Encrypts/decrypts Glide RESOURCE cache files. Ported and trimmed from Signal-Android's
- * `EncryptedCoder`.
- *
- * On-disk layout:
- * ```
- * [ MAGIC(16) ][ random(32) ] || AES/CTR( [ MAGIC(16) ] + payload )
- * ```
- * - Per-file content key = HMAC-SHA256([masterKey], random); the IV is all-zero, which is safe under
- *   CTR because every file derives a unique key.
- * - The leading plaintext MAGIC marks the file as ours; the second MAGIC lives inside the ciphertext
- *   so that decrypting with the wrong/changed key (or a corrupt file) yields a mismatch and an
- *   [IOException], which the caller treats as a cache miss (and re-decodes from source).
- *
- * No HMAC over the body: integrity is not required for a local performance cache — tampering simply
- * causes a decode failure → cache miss → reload, which is harmless.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 class EncryptedCacheCoder(private val masterKey: ByteArray) {
 
     @Throws(IOException::class)
@@ -49,13 +49,13 @@ class EncryptedCacheCoder(private val masterKey: ByteArray) {
         return cipherOut
     }
 
-    /** @throws IOException on a non-cache file, a key change, corruption, or premature EOF. */
+    
     @Throws(IOException::class)
     fun encryptedInput(file: File): InputStream {
         val fileIn = FileInputStream(file)
         try {
-            // Fast reject foreign files (e.g. a plaintext JPEG in Glide's cache) after just the MAGIC,
-            // before reading the salt or initializing any crypto — this runs on every File decode.
+            
+            
             val theirMagic = ByteArray(MAGIC.size).also { fileIn.readFully(it) }
             if (!MessageDigest.isEqual(theirMagic, MAGIC)) {
                 throw IOException("Not an encrypted cache file")
@@ -98,14 +98,14 @@ class EncryptedCacheCoder(private val masterKey: ByteArray) {
         private const val RANDOM_SIZE = 32
         private const val IV_SIZE = 16
 
-        /** Bytes of framing overhead: leading MAGIC + random salt + in-ciphertext MAGIC. */
-        const val HEADER_OVERHEAD = 16 + RANDOM_SIZE + 16 // 64
+        
+        const val HEADER_OVERHEAD = 16 + RANDOM_SIZE + 16 
 
-        /**
-         * Cheap check (reads only the leading [MAGIC]) of whether [file] is one of our encrypted cache
-         * files. Used by callers that mix our ciphertext with foreign/legacy plaintext in the same
-         * directory (e.g. the avatar cache) to decide between decrypting and reading raw. Never throws.
-         */
+        
+
+
+
+
         fun hasMagic(file: File): Boolean = try {
             FileInputStream(file).use { input ->
                 val header = ByteArray(MAGIC.size)
@@ -121,7 +121,7 @@ class EncryptedCacheCoder(private val masterKey: ByteArray) {
             false
         }
 
-        // A fixed random sentinel; identical to Signal's so the construction stays battle-tested.
+        
         private val MAGIC = byteArrayOf(
             0x91.toByte(), 0x5e.toByte(), 0x6d.toByte(), 0xb4.toByte(),
             0x09.toByte(), 0xa6.toByte(), 0x68.toByte(), 0xbe.toByte(),

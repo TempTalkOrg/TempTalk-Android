@@ -6,13 +6,13 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 import java.util.Base64
 
-/**
- * The link QR's `dataMigrationInfo` parameter: base64url without padding of a v2 payload. This
- * module only checks the wrapping and the magic byte and hands the payload on as bare-code text;
- * anything else degrades silently to "no migration info" so the link login itself never fails.
- */
+
+
+
+
+
 class LinkMigrationInfoTest {
-    /** Vector B of the pairing proposal (§2.6): the Desktop login-link inner payload. */
+    
     private val vectorHex =
         "0202010a0000059f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f1234565a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a0e4e6174652773204d6163426f6f6b"
     private val vectorBytes = ByteArray(vectorHex.length / 2) { vectorHex.substring(2 * it, 2 * it + 2).toInt(16).toByte() }

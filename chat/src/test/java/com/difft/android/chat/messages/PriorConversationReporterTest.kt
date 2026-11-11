@@ -32,11 +32,11 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/**
- * Pins the setPriorConversation contract: the call fires only inside a replay window, at most once
- * per conversation per window, with `{number}` for 1:1 and `{gid}` for groups, and a failure never
- * escapes into the receive path.
- */
+
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28])
@@ -121,7 +121,7 @@ class PriorConversationReporterTest {
 
         coVerify(exactly = 1) { httpService.setPriorConversation(any()) }
 
-        // A new window is a new opportunity to report the same conversation.
+        
         reporter.onQueueEmpty()
         reporter.onReplayStarted()
         reporter.onConversationOpened(For.Account(ACCOUNT_ID))
@@ -159,7 +159,7 @@ class PriorConversationReporterTest {
 
     @Test
     fun `a replay starting while a group is open reports it as a gid whatever the id shape`() = runTest(testDispatcher) {
-        // A 36-char UUID-shaped gid: only the "not a number" rule classifies it as a group.
+        
         val uuidGid = "3f2504e0-4f89-11d3-9a0c-0305e82c3301"
         SendMessageUtils.addToCurrentChat(uuidGid)
         val body = slot<SetPriorConversationRequestBody>()
@@ -176,8 +176,8 @@ class PriorConversationReporterTest {
 
     @Test
     fun `a report started inside the window still lands when the backlog ends right after`() = runTest(testDispatcher) {
-        // Reporter scope on a standard dispatcher so the launched report is still pending when the
-        // window closes; Main stays unconfined.
+        
+        
         reporter.start(CoroutineScope(kotlinx.coroutines.test.StandardTestDispatcher(testScheduler)))
         SendMessageUtils.addToCurrentChat(ACCOUNT_ID)
 
@@ -193,11 +193,11 @@ class PriorConversationReporterTest {
         reporter.start(CoroutineScope(kotlinx.coroutines.test.StandardTestDispatcher(testScheduler)))
         SendMessageUtils.addToCurrentChat(ACCOUNT_ID)
 
-        reporter.onReplayStarted() // launches a report for window 1, still pending
-        reporter.onReplayStarted() // window 2 opens before it ran
+        reporter.onReplayStarted() 
+        reporter.onReplayStarted() 
         advanceUntilIdle()
 
-        // Only window 2's own report goes out; window 1's is stale and dropped.
+        
         coVerify(exactly = 1) { httpService.setPriorConversation(any()) }
     }
 

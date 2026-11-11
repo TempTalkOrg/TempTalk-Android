@@ -21,13 +21,13 @@ import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.utils.LanguageData
 import java.util.Locale
 
-/**
- * Stateless body of the language screen.
- *
- * The selected row comes from [LanguageData.selected], which `LanguageUtils.getLanguageList`
- * resolves by language code. Taps report the entry itself; the host decides via
- * `LanguageUtils.isCurrentChoice` whether a restart is needed.
- */
+
+
+
+
+
+
+
 @Composable
 fun LanguageSettingsContent(
     languages: List<LanguageData>,

@@ -21,12 +21,12 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
-/**
- * Tests the signal/wake mechanism in [JobController]:
- * - [JobController.pullNextEligibleJobForExecution] suspends via [CompletableDeferred] when
- *   no eligible job is found, and resumes when [JobController.wakeUp] (or internal
- *   [signalJobAvailable]) is called.
- */
+
+
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class JobControllerSignalTest {
 
@@ -63,7 +63,7 @@ class JobControllerSignalTest {
         )
     }
 
-    // -- Test 1: Job available immediately --
+    
 
     @Test
     fun `pullNextEligibleJobForExecution returns immediately when job is available`() = runTest {
@@ -84,7 +84,7 @@ class JobControllerSignalTest {
         verify { jobTracker.onStateChange(mockJob, JobTracker.JobState.RUNNING) }
     }
 
-    // -- Test 2: Job not available, then signaled --
+    
 
     @Test
     fun `pullNextEligibleJobForExecution suspends then resumes on signal`() = runTest {
@@ -92,7 +92,7 @@ class JobControllerSignalTest {
         val jobSpec = buildJobSpec("sig-1")
         val mockJob = createTestJob("sig-1")
 
-        // First call: no jobs available. Second call (after signal): job available.
+        
         var callCount = 0
         every {
             jobStorage.getPendingJobsWithNoDependenciesInCreatedOrder(any())
@@ -108,12 +108,12 @@ class JobControllerSignalTest {
             result = controller.pullNextEligibleJobForExecution(predicate, testDispatcher)
         }
 
-        // Advance so the first check runs and runner suspends on CompletableDeferred
+        
         advanceUntilIdle()
         assertTrue(pullJob.isActive, "Runner should be suspended waiting for signal")
 
-        // Signal job available via wakeUp (which calls signalJobAvailable)
-        // Must run on managementDispatcher to access waitingRunners safely
+        
+        
         launch(testDispatcher) { controller.wakeUp() }
         advanceUntilIdle()
 
@@ -123,7 +123,7 @@ class JobControllerSignalTest {
         verify { jobStorage.updateJobRunningState("sig-1", true) }
     }
 
-    // -- Test 3: Multiple runners waiting --
+    
 
     @Test
     fun `signalJobAvailable wakes all waiting runners`() = runTest {
@@ -133,16 +133,16 @@ class JobControllerSignalTest {
         val mockJob1 = createTestJob("multi-1")
         val mockJob2 = createTestJob("multi-2")
 
-        // Both calls return empty first, then return one job each on re-check
+        
         var callCount = 0
         every {
             jobStorage.getPendingJobsWithNoDependenciesInCreatedOrder(any())
         } answers {
             callCount++
             when {
-                callCount <= 2 -> emptyList()  // First check for each runner
-                callCount == 3 -> listOf(jobSpec1)  // First runner's re-check after signal
-                else -> listOf(jobSpec2)  // Second runner's re-check after signal
+                callCount <= 2 -> emptyList()  
+                callCount == 3 -> listOf(jobSpec1)  
+                else -> listOf(jobSpec2)  
             }
         }
         every { jobStorage.getConstraintSpecs("multi-1") } returns emptyList()
@@ -161,12 +161,12 @@ class JobControllerSignalTest {
             result2 = controller.pullNextEligibleJobForExecution(predicate, testDispatcher)
         }
 
-        // Let both runners perform initial check and suspend
+        
         advanceUntilIdle()
         assertTrue(runner1.isActive, "Runner 1 should be suspended")
         assertTrue(runner2.isActive, "Runner 2 should be suspended")
 
-        // Signal — should wake BOTH runners
+        
         launch(testDispatcher) { controller.wakeUp() }
         advanceUntilIdle()
 
@@ -176,23 +176,23 @@ class JobControllerSignalTest {
         assertNotNull(result2)
     }
 
-    // -- Test 4: Signal before wait --
+    
 
     @Test
     fun `signalJobAvailable when no runners waiting does not crash`() = runTest {
         val testDispatcher = StandardTestDispatcher(testScheduler)
 
-        // Call wakeUp with no runners waiting — should be a no-op, no exceptions
+        
         launch(testDispatcher) { controller.wakeUp() }
         advanceUntilIdle()
 
-        // Also test via init() which calls signalJobAvailable
+        
         controller.init()
 
-        // No assertion needed — the test passes if no exception is thrown
+        
     }
 
-    // -- Test 5: Rapid submit-wake cycle --
+    
 
     @Test
     fun `rapid submit and wake cycle delivers jobs correctly`() = runTest {
@@ -202,13 +202,13 @@ class JobControllerSignalTest {
         val jobSpecs = (1..iterations).map { buildJobSpec("rapid-$it") }
         val mockJobs = (1..iterations).map { createTestJob("rapid-$it") }
 
-        // Each pull: first check returns empty (runner suspends), after signal returns one job
+        
         var pullCallCount = 0
         every {
             jobStorage.getPendingJobsWithNoDependenciesInCreatedOrder(any())
         } answers {
             pullCallCount++
-            // Odd calls (1st check per iteration) return empty; even calls (after signal) return job
+            
             if (pullCallCount % 2 == 1) {
                 emptyList()
             } else {
@@ -234,11 +234,11 @@ class JobControllerSignalTest {
             val deferred = async {
                 controller.pullNextEligibleJobForExecution(predicate, testDispatcher)
             }
-            advanceUntilIdle()  // Runner suspends on CompletableDeferred
+            advanceUntilIdle()  
 
-            // Signal to wake up
+            
             launch(testDispatcher) { controller.wakeUp() }
-            advanceUntilIdle()  // Runner resumes and returns job
+            advanceUntilIdle()  
 
             results.add(deferred.await())
         }
@@ -249,7 +249,7 @@ class JobControllerSignalTest {
         }
     }
 
-    // -- Test 6: Debouncer onEmpty called when no running jobs --
+    
 
     @Test
     fun `pullNextEligibleJobForExecution publishes onEmpty via debouncer when no running jobs`() = runTest {
@@ -257,7 +257,7 @@ class JobControllerSignalTest {
         val jobSpec = buildJobSpec("empty-1")
         val mockJob = createTestJob("empty-1")
 
-        // First check: empty (triggers debouncer). Second check after signal: has job.
+        
         var callCount = 0
         every {
             jobStorage.getPendingJobsWithNoDependenciesInCreatedOrder(any())
@@ -271,18 +271,18 @@ class JobControllerSignalTest {
         val pullJob = launch {
             controller.pullNextEligibleJobForExecution(predicate, testDispatcher)
         }
-        advanceUntilIdle()  // Runner checks, finds nothing, registers wait
+        advanceUntilIdle()  
 
-        // Debouncer.publish should have been called with callback::onEmpty
+        
         verify { debouncer.publish(any()) }
 
-        // Wake to let the coroutine complete
+        
         launch(testDispatcher) { controller.wakeUp() }
         advanceUntilIdle()
         assertTrue(pullJob.isCompleted)
     }
 
-    // -- Test 7: Job with unmet constraints is skipped --
+    
 
     @Test
     fun `pullNextEligibleJobForExecution skips jobs with unmet constraints`() = runTest {
@@ -296,7 +296,7 @@ class JobControllerSignalTest {
         val metConstraint = mockk<Constraint>(relaxed = true)
         every { metConstraint.isMet() } returns true
 
-        // Return both jobs; first has unmet constraint, second has met constraint
+        
         every {
             jobStorage.getPendingJobsWithNoDependenciesInCreatedOrder(any())
         } returns listOf(unmetJobSpec, metJobSpec)
@@ -312,12 +312,12 @@ class JobControllerSignalTest {
         val result = controller.pullNextEligibleJobForExecution(predicate, testDispatcher)
 
         assertEquals("met-1", result.id)
-        // The unmet job should not be marked as running
+        
         verify(exactly = 0) { jobStorage.updateJobRunningState("unmet-1", true) }
         verify { jobStorage.updateJobRunningState("met-1", true) }
     }
 
-    // -- Helpers --
+    
 
     private fun createTestJob(id: String, params: Job.Parameters? = null): Job {
         val parameters = params ?: Job.Parameters.Builder(id).build()

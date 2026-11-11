@@ -1,5 +1,6 @@
 package com.difft.android.call.ui.actionbar
 
+import com.difft.android.base.ui.compose.floatingSurface
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -19,7 +20,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.painter.Painter
@@ -32,28 +32,25 @@ import androidx.compose.ui.unit.dp
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.ui.theme.tokens.ColorTokens
 
-/** Visual state of a round action control. */
+
 enum class ActionButtonStyle {
-    /** bg2 circle, primary-text glyph. */
+    
     NORMAL,
 
-    /** bgwhite (#FAFAFA) circle, bg2 glyph — "this route / feature is on". */
+    
     SELECTED,
 
-    /** Error-red circle, white glyph — the hang-up / leave control. */
+    
     END,
 }
 
-/**
- * Drop shadow shared by every bar control. Its hue is the call page ground (bgpage), so it is
- * invisible on the plain call background and only reads over video or a shared screen.
- */
-private val ACTION_SHADOW_COLOR = Color(0x330B0E11)
 
-internal fun Modifier.actionButtonShadow(shape: androidx.compose.ui.graphics.Shape = CircleShape): Modifier =
-    this
-        .shadow(elevation = 4.dp, shape = shape, clip = false, ambientColor = ACTION_SHADOW_COLOR, spotColor = ACTION_SHADOW_COLOR)
-        .shadow(elevation = 1.dp, shape = shape, clip = false, ambientColor = ACTION_SHADOW_COLOR, spotColor = ACTION_SHADOW_COLOR)
+
+
+
+@Composable
+internal fun Modifier.actionButtonSurface(fill: Color, shape: androidx.compose.ui.graphics.Shape = CircleShape): Modifier =
+    floatingSurface(shape, fill = fill)
 
 @Composable
 internal fun actionButtonBackground(style: ActionButtonStyle): Color = when (style) {
@@ -69,15 +66,15 @@ internal fun actionButtonGlyph(style: ActionButtonStyle): Color = when (style) {
     ActionButtonStyle.END -> Color.White
 }
 
-/**
- * One round control of the call action bar.
- *
- * [iconSize] is the box the painter is fitted into: pass the button size for the
- * `call_ic_*` family (48-unit viewport with a centred 24-unit glyph) and the glyph size for
- * tight vectors such as the dots / smile / invite icons.
- *
- * [overlay] draws on top of the circle (permission badge, preset ring, people count).
- */
+
+
+
+
+
+
+
+
+
 @Composable
 fun CallActionButton(
     painter: Painter,
@@ -88,18 +85,16 @@ fun CallActionButton(
     iconSize: Dp = size,
     style: ActionButtonStyle = ActionButtonStyle.NORMAL,
     iconAlpha: Float = 1f,
-    /** False for two-tone glyphs (mic-off's red slash) that carry their own colours. */
+    
     tintIcon: Boolean = true,
     testTag: String? = null,
-    /** Overrides the disc colour, e.g. inside a bottom sheet whose ground equals the NORMAL fill. */
+    
     containerColor: Color? = null,
     overlay: @Composable BoxScope.() -> Unit = {},
 ) {
     Box(
         modifier = modifier
             .size(size)
-            .actionButtonShadow()
-            .background(color = containerColor ?: actionButtonBackground(style), shape = CircleShape)
             .then(if (testTag != null) Modifier.testTag(testTag) else Modifier)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
@@ -108,6 +103,8 @@ fun CallActionButton(
             ),
         contentAlignment = Alignment.Center,
     ) {
+        
+        Box(Modifier.matchParentSize().actionButtonSurface(containerColor ?: actionButtonBackground(style)))
         Image(
             painter = painter,
             contentDescription = contentDescription,
@@ -120,7 +117,7 @@ fun CallActionButton(
     }
 }
 
-/** Caption under a labelled control: the type scale's P3 (14/20), primary text. */
+
 @Composable
 fun ActionButtonLabel(text: String, modifier: Modifier = Modifier) {
     Text(
@@ -134,7 +131,7 @@ fun ActionButtonLabel(text: String, modifier: Modifier = Modifier) {
     )
 }
 
-/** A control with its caption below (two-row bar, More sheet quick actions). */
+
 @Composable
 fun LabeledActionSlot(
     label: String,
@@ -151,10 +148,10 @@ fun LabeledActionSlot(
     }
 }
 
-/**
- * Participant count on the People control: 16dp tall pill on the tooltip grey (matches iOS), white 12sp,
- * hugging the circle's bottom-end corner.
- */
+
+
+
+
 @Composable
 fun BoxScope.ActionCountBadge(count: Int) {
     Box(

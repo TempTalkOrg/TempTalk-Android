@@ -35,9 +35,9 @@ import java.io.FileOutputStream
 import kotlin.coroutines.coroutineContext
 import com.difft.android.base.widget.ToastUtil
 
-/**
- * APK download service for app upgrades.
- */
+
+
+
 class AppUpgradeService : Service() {
 
     @EntryPoint
@@ -75,9 +75,9 @@ class AppUpgradeService : Service() {
 
         isDownloading = true
 
-        // Promote to a foreground service so the download survives OEM background kill (retry is
-        // typically triggered from background, via AppUpgradeRetryReceiver). Only on a channel
-        // verified here (#1354); startForegroundSafely absorbs FGSNAE.
+        
+        
+        
         val channelId = NotificationChannelSpecs.serviceForegroundChannel(this, SERVICE_TAG)
         if (channelId == null) {
             sendDownloadCompletedBroadcast(STATUS_DOWNLOAD_FAILED, filepath, isForce)
@@ -92,15 +92,15 @@ class AppUpgradeService : Service() {
             this, AppUpgradeNotifier.NOTIFICATION_ID, notifier.buildProgress(null, channelId), type
         )
         if (!started) {
-            // Signal failure like every other path: the broadcast reaches the in-app UI and also
-            // resets isDownloading + stops the service. The stale failed notification (not yet
-            // cancelled here) keeps its retry intent as the recovery entry point.
+            
+            
+            
             L.w { "[AppUpgradeService] startForeground rejected, abort download isForce=$isForce" }
             sendDownloadCompletedBroadcast(STATUS_DOWNLOAD_FAILED, filepath, isForce)
             return START_NOT_STICKY
         }
 
-        // Retry started: clear any stale terminal (failed/complete) notification.
+        
         notifier.cancelTerminal()
 
         downloadApkAndInstall(url, filepath, apkHash, isForce)
@@ -112,8 +112,8 @@ class AppUpgradeService : Service() {
     }
 
     private fun downloadApkAndInstall(url: String, filepath: String, apkHash: String, isForce: Boolean = false){
-        // cancel() alone is async: the old writer can stay mid-write for as long as its in-flight
-        // blocking read() takes, so the new job must join it before touching the same file.
+        
+        
         val previousJob = downloadJob
 
         ToastUtil.showLong(R.string.status_upgrade_downloading)
@@ -122,8 +122,8 @@ class AppUpgradeService : Service() {
 
         downloadJob = appScope.launch {
             previousJob?.cancelAndJoin()
-            // Shared terminal-failure sequence (verify-failed and download-error paths only
-            // differ in the broadcast status code); captures the enclosing call's params.
+            
+            
             fun handleFailure(status: Int) {
                 if (newFile.exists()) {
                     newFile.delete()
@@ -136,7 +136,7 @@ class AppUpgradeService : Service() {
             try {
                 notifier.showProgress(0)
 
-                // 1. Stream the APK to disk chunk by chunk: real progress, no full-body buffering
+                
                 withContext(Dispatchers.IO) {
                     entryPoint.noHeaderHttpClient().httpService.getResponseBodyStreaming(url, emptyMap(), emptyMap())
                         .use { responseBody ->
@@ -146,14 +146,14 @@ class AppUpgradeService : Service() {
                         }
                 }
 
-                // 2. Switch to "verifying" state: streamed SHA256 + signature check over a large APK
-                //    takes seconds; a progress bar stuck at 100% would look frozen
+                
+                
                 notifier.showVerifying()
                 val isValid = withContext(Dispatchers.IO) {
                     ApkUpdateFiles.verifyApk(applicationContext, filepath, apkHash)
                 }
 
-                // 3. Terminal notifications use their own id, so remove the FGS progress notification first
+                
                 if (isValid) {
                     L.i { "[AppUpgradeService] verifyApk success" }
                     removeForegroundNotification()
@@ -161,14 +161,14 @@ class AppUpgradeService : Service() {
                     sendDownloadCompletedBroadcast(STATUS_DOWNLOAD_SUCCESS, filepath, isForce)
                 } else {
                     L.i { "[AppUpgradeService] verifyApk failed" }
-                    // Delete the bad file (hash mismatch or signature not whitelisted) so it is never
-                    // reused and a compromised server can't trigger an endless re-download loop.
+                    
+                    
                     handleFailure(STATUS_VERIFY_FAILED)
                 }
             } catch (error: Exception) {
                 if (error is CancellationException) {
                     L.i { "[AppUpgradeService] download cancelled" }
-                    throw error // preserve coroutine cancellation semantics
+                    throw error 
                 }
 
                 L.w { "[AppUpgradeService] download error: ${error.stackTraceToString()}" }
@@ -177,13 +177,13 @@ class AppUpgradeService : Service() {
         }
     }
 
-    /**
-     * Streams the response body to disk. The copy loop is blocking IO with no suspension point,
-     * so ensureActive() every iteration is the only thing that makes downloadJob.cancel() actually
-     * stop the old writer — without it a quick retry can race two coroutines onto the same file.
-     * total <= 0 (no Content-Length) reports null progress (indeterminate). Caller owns closing
-     * the ResponseBody.
-     */
+    
+
+
+
+
+
+
     private suspend fun saveResponseToFile(
         response: ResponseBody,
         filepath: String,
@@ -230,11 +230,11 @@ class AppUpgradeService : Service() {
         downloadJob?.cancel()
         downloadJob = null
         isDownloading = false
-        // Clear the progress (FGS) notification only; a terminal one lives under its own id.
+        
         notifier.cancel()
     }
 
-    /** Owner of the intent contract shared by the start/retry intents and the completion broadcast. */
+    
     companion object {
         @Volatile
         var isDownloading: Boolean = false
@@ -253,12 +253,12 @@ class AppUpgradeService : Service() {
 
         private const val SERVICE_TAG = "AppUpgradeService"
 
-        /**
-         * The only way to start the download: runs the foreground-channel preflight first and does
-         * not start the service when no channel can carry its notification (#1354).
-         * [asForeground] starts it as a foreground service, for a start from the background.
-         * Returns whether the start was issued.
-         */
+        
+
+
+
+
+
         fun start(
             context: Context,
             url: String,

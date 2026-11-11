@@ -12,7 +12,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** #1350: the readiness model's per-item rules (design T1 to T5). */
+
 class NotificationReadinessEvaluatorTest {
 
     private val loud = ChannelReading(IMPORTANCE_HIGH, hasSound = true)
@@ -49,12 +49,12 @@ class NotificationReadinessEvaluatorTest {
     private fun messageLevel(channel: ChannelReading) = evaluate(input(message = channel)).messageLevel
     private fun callLevel(channel: ChannelReading?) = evaluate(input(call = channel)).callLevel
 
-    // T1: one vocabulary for the message row
+    
     @Test
     fun `message row maps importance, lock screen and sound with the documented precedence`() {
         assertEquals(CategoryLevel.OFF, messageLevel(ChannelReading(IMPORTANCE_NONE, hasSound = true)))
-        // Anything below HIGH does not pop up, whatever the sound says (HyperOS lowers a category to LOW
-        // when its floating-notification switch is off, while it still plays a sound).
+        
+        
         listOf(IMPORTANCE_MIN, IMPORTANCE_LOW, IMPORTANCE_DEFAULT).forEach {
             assertEquals(CategoryLevel.NO_BANNER, messageLevel(ChannelReading(it, hasSound = true)), "importance=$it")
             assertEquals(CategoryLevel.NO_BANNER, messageLevel(ChannelReading(it, hasSound = false)), "importance=$it")
@@ -62,7 +62,7 @@ class NotificationReadinessEvaluatorTest {
         assertEquals(CategoryLevel.ON, messageLevel(ChannelReading(IMPORTANCE_HIGH, hasSound = true)))
         assertEquals(CategoryLevel.SILENT, messageLevel(ChannelReading(IMPORTANCE_HIGH, hasSound = false)))
         assertEquals(CategoryLevel.LOCK_HIDDEN, messageLevel(ChannelReading(IMPORTANCE_HIGH, hasSound = true, lockscreenVisibility = secret)))
-        // Lock-screen hiding outranks the sound check; PRIVATE (hide content) and no override are fine.
+        
         assertEquals(CategoryLevel.LOCK_HIDDEN, messageLevel(ChannelReading(IMPORTANCE_HIGH, hasSound = false, lockscreenVisibility = secret)))
         assertEquals(CategoryLevel.ON, messageLevel(ChannelReading(IMPORTANCE_HIGH, hasSound = true, lockscreenVisibility = private)))
         assertEquals(CategoryLevel.NO_BANNER, messageLevel(ChannelReading(IMPORTANCE_LOW, hasSound = true, lockscreenVisibility = secret)))
@@ -88,7 +88,7 @@ class NotificationReadinessEvaluatorTest {
         assertEquals(CategoryLevel.OFF, evaluate(input(appEnabled = false)).callLevel)
     }
 
-    // T2: the call row uses the same words and precedence, minus the sound rule
+    
     @Test
     fun `call row follows the same rules as the message row except sound`() {
         assertEquals(CategoryLevel.ON, callLevel(ChannelReading(IMPORTANCE_HIGH, hasSound = false)))
@@ -123,7 +123,6 @@ class NotificationReadinessEvaluatorTest {
         }
     }
 
-    // T3
     @Test
     fun `C2 is always OK on API 33 and below`() {
         assertEquals(ReadinessStatus.OK, evaluate(input(sdk = 33, fullScreen = null)).status(ReadinessItemId.C2))
@@ -138,7 +137,7 @@ class NotificationReadinessEvaluatorTest {
         assertEquals(ReadinessStatus.OK, evaluate(input(sdk = 34, fullScreen = true)).status(ReadinessItemId.C2))
     }
 
-    // T4: the vendor row carries no readable signal, so it is "check" on China skins until a call test (#1350)
+    
     @Test
     fun `C3 is need-to-check on a China skin without a call test`() {
         OemBrand.entries.filter { it.isChinaOem }.forEach { brand ->
@@ -241,7 +240,6 @@ class NotificationReadinessEvaluatorTest {
         assertNull(evaluate(input(brand = OemBrand.SAMSUNG)).item(ReadinessItemId.C3))
     }
 
-    // T5
     @Test
     fun `before API 26 there are no channels to fail`() {
         val readiness = evaluate(input(sdk = 24, message = null, call = null, fullScreen = null))
@@ -270,7 +268,7 @@ class NotificationReadinessEvaluatorTest {
         assertNull(evaluate(input(call = null)).callPromptIssue())
     }
 
-    // Critical alerts post through CRITICAL_ALERT_V2, so A1 is independent of the CALL category.
+    
     @Test
     fun `A1 follows the critical-alert category and not the CALL category`() {
         val lowCall = evaluate(input(call = ChannelReading(IMPORTANCE_LOW, hasSound = false)))
@@ -287,7 +285,7 @@ class NotificationReadinessEvaluatorTest {
         assertEquals(ReadinessStatus.OK, evaluate(input()).status(ReadinessItemId.A1))
     }
 
-    // Design §7: a HyperOS category the user never set reads HIGH but is unreliable until set once.
+    
     private val untouched = ChannelReading(IMPORTANCE_HIGH, hasSound = true, userSetImportance = false)
 
     @Test
@@ -298,7 +296,7 @@ class NotificationReadinessEvaluatorTest {
         assertEquals(ReadinessIssue.CRITICAL_CATEGORY_NEVER_SET, readiness.item(ReadinessItemId.A1)?.issue)
         assertEquals(CategoryLevel.NEEDS_CHECK, readiness.messageLevel)
         assertEquals(CategoryLevel.NEEDS_CHECK, readiness.callLevel)
-        // App notifications off still wins on the rows.
+        
         val appOff = evaluate(input(appEnabled = false, message = untouched, call = untouched, brand = OemBrand.XIAOMI))
         assertEquals(CategoryLevel.OFF, appOff.messageLevel)
         assertEquals(CategoryLevel.OFF, appOff.callLevel)
@@ -318,7 +316,7 @@ class NotificationReadinessEvaluatorTest {
         assertEquals(ReadinessStatus.OK, readiness.status(ReadinessItemId.N2))
         assertEquals(ReadinessStatus.OK, readiness.status(ReadinessItemId.C1))
         assertEquals(ReadinessStatus.OK, readiness.status(ReadinessItemId.A1))
-        // Xiaomi's vendor switches are unreadable, so an OK category still shows nothing.
+        
         assertEquals(CategoryLevel.UNKNOWN, readiness.messageLevel)
         assertEquals(CategoryLevel.UNKNOWN, readiness.callLevel)
         val low = ChannelReading(IMPORTANCE_DEFAULT, hasSound = true, userSetImportance = true)
@@ -340,7 +338,7 @@ class NotificationReadinessEvaluatorTest {
         }
     }
 
-    // Design §8: a category whose settings page the user opened from the app counts as set.
+    
     private val allSeen = setOf(NotificationChannelIds.MESSAGE, NotificationChannelIds.CALL, NotificationChannelIds.CRITICAL_ALERT)
 
     @Test

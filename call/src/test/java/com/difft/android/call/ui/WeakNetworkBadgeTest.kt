@@ -25,14 +25,14 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/**
- * Rendering cases for [ParticipantWeakNetworkBadge]. Needs no ViewModel, Hilt or harness: the badge
- * takes plain values plus a bare [CallUiController], which is the direct benefit of keeping the whole
- * render decision in `resolveBadge`.
- *
- * The badge is the ONLY surface for a bad remote in a multi-party call, so what these cases pin is
- * the full visibility matrix — including the four states that must render nothing.
- */
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(application = TestScopeApplication::class, sdk = [30])
@@ -64,7 +64,7 @@ class WeakNetworkBadgeTest {
     ) {
         sessionUi.setNetworkQuality(view)
         composeTestRule.setContent {
-            // The call screen is a forced-dark subtree, matching CallContent.
+            
             DifftTheme(darkTheme = true) {
                 ParticipantWeakNetworkBadge(
                     controller = controller,
@@ -143,8 +143,8 @@ class WeakNetworkBadgeTest {
         setBadge(NetworkQualityView(remote = mapOf(PEER_ID to NetworkQualityLevel.BAD)), identity = PEER_ID)
 
         assertBadgeShown("precondition: the description can only be read off a rendered badge")
-        // Resolved through resources, never a literal: a wording change must fail the string-parity
-        // case that owns the copy, not this one.
+        
+        
         val expected = ResUtils.getString(R.string.call_other_network_poor_tip)
         assertEquals(
             "the glyph carries no text — a null or wrong description leaves the badge silent",
@@ -161,7 +161,7 @@ class WeakNetworkBadgeTest {
         const val LOCAL_ID = "self"
         const val PEER_ID = "alice"
 
-        /** Three people: above the two-person hand-off, so the badge is the active surface. */
+        
         const val GROUP_COUNT = 3
     }
 }

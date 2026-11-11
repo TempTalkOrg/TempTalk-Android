@@ -46,11 +46,11 @@ import com.difft.android.chat.util.shareFile
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos
 import java.util.UUID
 
-/**
- * Details of one message (times, read state, file). A page of the home detail stack or of its
- * shell [MessageDetailActivity]. The message snapshot comes from [MessageDetailBitmapHolder] by
- * the key in the arguments; the key is released when the page closes for good.
- */
+
+
+
+
+
 class MessageDetailFragment : Fragment() {
 
     companion object {
@@ -83,7 +83,7 @@ class MessageDetailFragment : Fragment() {
     }
 
     override fun onDestroy() {
-        // A fold recreates the page with the same arguments: keep the snapshot for it.
+        
         if (activity?.isChangingConfigurations != true) MessageDetailBitmapHolder.release(bitmapKey)
         super.onDestroy()
     }
@@ -103,9 +103,9 @@ class MessageDetailFragment : Fragment() {
                 val messageModel = wcdb.message.getAllObjects(DBMessageModel.id.eq(messageId)).firstOrNull()
                 messageModel ?: return@launch
 
-                // Resolved here, not in initView: the share gate is not a download gate — a file
-                // still at its pre-per-copy owner-message address would simply make the Share entry
-                // disappear — so the read has to be the migrating one, which is blocking IO.
+                
+                
+                
                 val attachment = messageModel.attachment()
                 val attachmentPath = attachment?.let {
                     AttachmentPathResolver.materializedFileFor(it, messageModel.id)
@@ -122,7 +122,7 @@ class MessageDetailFragment : Fragment() {
         }
     }
 
-    // Numeric-only display (expires-in seconds); no English text to translate.
+    
     @SuppressLint("SetTextI18n")
     private fun initView(message: MessageModel, attachment: Attachment?, attachmentPath: String?) {
         if (message.fromWho == globalServices.myId) {
@@ -146,7 +146,7 @@ class MessageDetailFragment : Fragment() {
 
             setTime(message.timeStamp, binding.tvTime1)
             setTime(message.systemShowTimestamp, binding.tvTime3)
-            // A migrated "not started" sentinel is negative; setTime hides the row on 0, so map it there.
+            
             setTime(message.readTime.takeIf { it > 0 } ?: 0L, binding.tvTime4)
             binding.tvExpiresInSeconds.text = message.expiresInSeconds.toString()
 
@@ -190,16 +190,16 @@ class MessageDetailFragment : Fragment() {
                 binding.llFileName.visibility = View.VISIBLE
                 binding.tvFileName.text = attachment.fileName
 
-                // A confidential attachment must not be shared out of the app — hide the share entry
-                // (consistent with confidential messages getting no copy/forward/save elsewhere).
+                
+                
                 val isConfidential = message.mode == SignalServiceProtos.Mode.CONFIDENTIAL_VALUE
                 if (attachmentPath != null && EncryptedAttachmentAccess.isReadable(attachmentPath) && !isConfidential) {
                     binding.llShare.visibility = View.VISIBLE
                     binding.ivShare.setOnClickListener {
-                        // shareFile is the single chokepoint: it routes encrypted-at-rest attachments
-                        // (image/audio) through the decrypting content provider and falls back to a
-                        // FileProvider uri only for plaintext files — so no plaintext leaves the
-                        // sandbox and a transient/missing plaintext file can't cause ENOENT.
+                        
+                        
+                        
+                        
                         requireContext().shareFile(attachmentPath)
                     }
                 } else {
@@ -225,7 +225,6 @@ class MessageDetailFragment : Fragment() {
 
             val readInfoList = wcdb.getReadInfoList(message.roomId ?: "").filter { it.readPosition >= message.systemShowTimestamp }
 
-            // 普通群消息：如果 receiverIds 缺失但有 readInfoList，直接用 readInfoList 中的 uid 获取联系人（排除自己）
             if (message.roomType == 1 && message.mode != SignalServiceProtos.Mode.CONFIDENTIAL_VALUE) {
                 if (receivers.isEmpty() && readInfoList.isNotEmpty()) {
                     L.w { "Group message receiverIds is null, messageId: ${message.id}, systemShowTimestamp: ${message.systemShowTimestamp}" }
@@ -238,7 +237,6 @@ class MessageDetailFragment : Fragment() {
                 var readList: List<ContactorModel>? = null
                 var unreadList: List<ContactorModel>? = null
 
-                //group message（机密消息与普通消息使用相同的已读逻辑）
                 if (message.roomType == 1) {
                     val readUserIds = readInfoList.map { it.uid }.toSet()
                     readList = receivers.filter { readUserIds.contains(it.id) }
@@ -299,7 +297,7 @@ class MessageDetailFragment : Fragment() {
     private val messageReadInfoAdapter: MessageReadInfoAdapter by lazy {
         object : MessageReadInfoAdapter() {
             override fun onContactClicked(contact: ContactorModel, position: Int) {
-                // ChatActivity.startActivity(this@MessageDetailActivity, contact.id)
+                
             }
         }
     }
@@ -307,42 +305,24 @@ class MessageDetailFragment : Fragment() {
     private val messageUnReadInfoAdapter: MessageReadInfoAdapter by lazy {
         object : MessageReadInfoAdapter() {
             override fun onContactClicked(contact: ContactorModel, position: Int) {
-                // ChatActivity.startActivity(this@MessageDetailActivity, contact.id)
+                
             }
         }
     }
 
-//    private fun calculateRemainingTime(readTime: Long, expiresInSeconds: Int): String {
-//        val currentTimeMillis = System.currentTimeMillis()
-//
-//        if (readTime <= 0 || expiresInSeconds <= 0) {
-//            L.i { "calculateRemainingTime:$readTime $expiresInSeconds" }
-//            return "Never expires"
-//        }
-//
-//        val expiryTime = readTime + expiresInSeconds * 1000L
-//        val remainingTimeMillis = expiryTime - currentTimeMillis
-//
-//        return buildString {
-//            append(TimeUtils.millis2FitTimeSpan(remainingTimeMillis, 4, true))
-//            append("    ")
-//            append(TimeUtils.millis2FitTimeSpan(expiresInSeconds * 1000L, 4, true))
-//            append("(${expiresInSeconds * 1000L})")
-//        }
-//    }
 }
 
-/**
- * Message snapshots for open message-detail pages, by key. Several pages can be open at once
- * (one per home tab, views kept while covered), so each has its own entry; at most
- * [MAX_ENTRIES] are kept (oldest dropped). Bitmaps are never recycled here: a page that still
- * draws one may hold it, and the GC frees it once nothing does. Lost with the process.
- */
+
+
+
+
+
+
 object MessageDetailBitmapHolder {
     private const val MAX_ENTRIES = 4
     private val bitmaps = LinkedHashMap<String, Bitmap>()
 
-    /** The key is unique across processes: a page restored after process death finds nothing. */
+    
     @Synchronized
     fun put(bitmap: Bitmap): String {
         val key = "message-detail-${UUID.randomUUID()}"
@@ -360,7 +340,7 @@ object MessageDetailBitmapHolder {
     }
 }
 
-/** Message details as a detail destination (home detail stack, or [MessageDetailActivity]). */
+
 class MessageDetailDestination(
     private val messageId: String,
     private val bitmapKey: String?,

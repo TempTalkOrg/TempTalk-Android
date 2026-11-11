@@ -52,14 +52,17 @@ object SearchUtils {
                 else -> return@mapNotNull null
             }
 
-            val singleMessage = result.singleMessage
-            if (result.messageCount == 1 && singleMessage != null) {
-                viewData.detail = singleMessage.messageText
-                viewData.onlyOneResult = true
-                viewData.messageTimeStamp = singleMessage.timeStamp
+            
+            
+            val latest = result.latestMessage
+            viewData.onlyOneResult = result.messageCount == 1 && latest != null
+            viewData.detail = if (viewData.onlyOneResult) {
+                latest?.messageText
             } else {
-                viewData.detail = context.resources.getQuantityString(R.plurals.search_related_messages, result.messageCount, result.messageCount)
+                context.resources.getQuantityString(R.plurals.search_related_messages, result.messageCount, result.messageCount)
             }
+            viewData.messageTimeStamp = latest?.timeStamp
+            viewData.matchTime = result.latestTimestamp
 
             viewData
         }

@@ -15,18 +15,10 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
 
-/**
- * Integration tests for the input compose-bar quote entry (⑥), AFTER the architecture switch to
- * "type-entry + reverse-lookup local original" (2026-06-11):
- *  - I-INT1-3: [ChatMessageInputFragment.buildQuotedAttachments] is now SYNCHRONOUS and emits only
- *    a type-entry (contentType/fileName/flags, thumbnail = null). NO bytes are generated or carried.
- *  - I-INT4: Draft Gson round-trip — the type-entry (no bytes) survives serialize/deserialize.
- *
- * The previous H1 async-ordering / last-writer-wins tests (I-INT5/I-INT6) and the JPEG-byte
- * assertions are gone: there is no async generation and no inline bytes anymore.
- *
- * Verify: ./gradlew :chat:testDebugUnitTest --tests "*.BuildQuotedAttachmentsIntegrationTest"
- */
+
+
+
+
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [33])
 class BuildQuotedAttachmentsIntegrationTest {
@@ -47,7 +39,7 @@ class BuildQuotedAttachmentsIntegrationTest {
         path = "/data/photo.jpg", status = AttachmentStatus.SUCCESS.code,
     )
 
-    // ── I-INT1: image attachment → type-entry only, NO thumbnail bytes ────────
+    
 
     @Test
     fun `buildQuotedAttachments emits type-entry with null thumbnail for image message`() {
@@ -64,7 +56,7 @@ class BuildQuotedAttachmentsIntegrationTest {
         assertNull("No thumbnail bytes are generated or carried anymore", qa.thumbnail)
     }
 
-    // ── I-INT2: audio attachment → type-entry, null thumbnail ─────────────────
+    
 
     @Test
     fun `buildQuotedAttachments emits type-entry for audio message`() {
@@ -85,7 +77,7 @@ class BuildQuotedAttachmentsIntegrationTest {
         assertNull(qa.thumbnail)
     }
 
-    // ── I-INT3: text-only message → null ─────────────────────────────────────
+    
 
     @Test
     fun `buildQuotedAttachments returns null for text-only message`() {
@@ -98,7 +90,7 @@ class BuildQuotedAttachmentsIntegrationTest {
         assertNull("Expected null result for text-only message", result)
     }
 
-    // ── I-INT4: draft Gson round-trip preserves the type-entry (no bytes) ─────
+    
 
     @Test
     fun `draft serialize-deserialize preserves quote type-entry`() {

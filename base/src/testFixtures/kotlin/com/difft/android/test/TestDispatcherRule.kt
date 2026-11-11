@@ -9,21 +9,21 @@ import kotlinx.coroutines.test.setMain
 import org.junit.rules.TestWatcher
 import org.junit.runner.Description
 
-/**
- * JUnit 4 TestRule that replaces [Dispatchers.Main] with a [TestDispatcher].
- *
- * Usage:
- * ```
- * @get:Rule
- * val dispatcherRule = TestDispatcherRule()
- * ```
- *
- * For tests that need explicit time control:
- * ```
- * @get:Rule
- * val dispatcherRule = TestDispatcherRule(StandardTestDispatcher())
- * ```
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class TestDispatcherRule(
     val testDispatcher: TestDispatcher = UnconfinedTestDispatcher()

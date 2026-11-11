@@ -14,22 +14,22 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * Cases #90 and #91 — FRAMEWORK ASSUMPTION tests behind the auto-snap-to-bottom decision, at the
- * enlarged window size.
- *
- * #90 pins WHY `isAtBottomBeforeUpdateList` has to be captured before `submitList` and must not be
- * moved into the commit callback: inside that callback the adapter's item count is already the new
- * one while the layout still reflects the old list, so the first clause of the Fragment's
- * `isAtBottom` (`lastVisible == itemCount - 1`) is structurally false. Moving the capture there
- * would silently disable auto-scroll for every incoming message.
- *
- * The `isAtBottom` clause is evaluated here rather than called: it is a private Fragment method, and
- * what these cases pin is the framework behaviour it is built on, not the method itself.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
 class CommitCallbackAtBottomTest : RecyclerViewScrollHarness() {
 
-    // #90 — at the commit callback, "last visible == itemCount - 1" is already false.
+    
     @Test
     fun `the commit callback sees a new item count against the old layout`() {
         val adapter = attachListAdapter()
@@ -53,8 +53,8 @@ class CommitCallbackAtBottomTest : RecyclerViewScrollHarness() {
         )
     }
 
-    // #91 — and the pre-capture path still lands the newly appended row on screen at 180 rows: the
-    // enlarged window does not regress auto-scroll-to-bottom.
+    
+    
     @Test
     fun `snapping to the bottom after an append still shows the appended row`() {
         val adapter = attachListAdapter()
@@ -103,11 +103,11 @@ class CommitCallbackAtBottomTest : RecyclerViewScrollHarness() {
             override fun areContentsTheSame(oldItem: String, newItem: String) = oldItem == newItem
         }
 
-        /**
-         * Diffs on the calling thread. Production diffs on a background thread and posts the result
-         * to the main one; that thread hop is not what these cases are about, and leaving it in makes
-         * the commit callback race the looper idling below.
-         */
+        
+
+
+
+
         val DIFFER_CONFIG: AsyncDifferConfig<String> =
             AsyncDifferConfig.Builder(STRING_DIFF)
                 .setBackgroundThreadExecutor { it.run() }

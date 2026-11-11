@@ -9,20 +9,20 @@ import java.nio.charset.CharacterCodingException
 import java.nio.charset.CodingErrorAction
 import java.util.Base64
 
-/**
- * The v2 pairing payload's binary layout — the structure a pairing code carries, as Base45 text on
- * a bare code and as base64url inside a link.
- *
- * ```
- * magic 0x02 · flags · nAddr · addr[nAddr] (IPv4) · [port] · fp (32) · pin (3, BCD) · [transferKey (32)]
- * · alias (len + UTF-8) · [precheck: env (1) · appVersion (len + ASCII) · formatVersion (2) · account (len + UTF-8)]
- * ```
- *
- * Decoding is strict and total: every rule the three platforms agreed on rejects with null, and
- * nothing here throws on foreign bytes. Encoding throws on a payload this build should never have
- * built (a fingerprint that is not 32 bytes, a PIN that is not six digits) — those are bugs, not
- * input. The in-memory [QrPayload] keeps its hex fingerprint and base64 key; only the wire is raw.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 object QrPayloadV2Codec {
     const val DEFAULT_PORT = 53317
     const val MAX_ADDRESSES = 4
@@ -43,7 +43,7 @@ object QrPayloadV2Codec {
     private const val IPV4_BYTES = 4
     private const val MAX_PORT = 0xFFFF
 
-    /** Environment on the wire: byte 0/1 in the pairing code, name `online`/`test` in JSON. Same on every platform. */
+    
     object Environment {
         const val PROD = "online"
         const val TEST = "test"
@@ -101,7 +101,7 @@ object QrPayloadV2Codec {
         return out.toByteArray()
     }
 
-    /** Null on any violation of the layout; never throws. */
+    
     fun decode(bytes: ByteArray): QrPayload? = runCatching { decodeStrict(Reader(bytes)) }
         .onFailure { L.w { "[P2P][QR] v2 payload rejected: ${it.message}" } }
         .getOrNull()
@@ -149,12 +149,12 @@ object QrPayloadV2Codec {
 
     private class Precheck(val env: Int, val appVersion: ByteArray, val formatMajor: Int, val formatMinor: Int, val account: ByteArray)
 
-    /**
-     * The pre-check block, or null when the payload does not carry a complete identity (the byte-pipe
-     * path, the Desktop login link, an environment this codec cannot name). A partial identity is
-     * dropped whole rather than written half: the connecting side treats "no block" as "check over
-     * the connection", which is always right.
-     */
+    
+
+
+
+
+
     private fun precheckOf(p: QrPayload): Precheck? {
         val env = Environment.toCode(p.environment) ?: return null
         val version = p.appVersion?.takeIf { it.isNotBlank() && it.all { c -> c.code in 0x20..0x7E } } ?: return null
@@ -169,7 +169,7 @@ object QrPayloadV2Codec {
         write(bytes)
     }
 
-    /** UTF-8 of [text] cut to at most [max] bytes on a character boundary. */
+    
     private fun truncateUtf8(text: String, max: Int): ByteArray {
         val sb = StringBuilder()
         var size = 0
@@ -211,7 +211,7 @@ object QrPayloadV2Codec {
 
     private fun bytesToIpv4(b: ByteArray): String = b.joinToString(".") { (it.toInt() and 0xFF).toString() }
 
-    /** Accepts plain or colon-separated hex, either case. */
+    
     private fun hexToBytes(hex: String): ByteArray {
         val clean = hex.filter { it != ':' && !it.isWhitespace() }
         require(clean.length % 2 == 0 && clean.all { it.isDigit() || it.lowercaseChar() in 'a'..'f' }) { "not hex" }

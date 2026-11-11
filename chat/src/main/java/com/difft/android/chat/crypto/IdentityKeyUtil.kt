@@ -19,11 +19,11 @@ import org.signal.libsignal.protocol.IdentityKeyPair
 import org.signal.libsignal.protocol.ecc.ECKeyPair
 
 
-/**
- * Utility class for working with identity keys.
- *
- * @author Moxie Marlinspike
- */
+
+
+
+
+
 object IdentityKeyUtil {
     fun generateIdentityKeyPair(): IdentityKeyPair {
         val djbKeyPair = ECKeyPair.generate()

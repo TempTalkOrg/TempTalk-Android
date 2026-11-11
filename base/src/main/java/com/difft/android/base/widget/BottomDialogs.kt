@@ -24,19 +24,17 @@ import com.difft.android.base.ui.compose.DifftDragHandle
 import com.difft.android.base.ui.compose.DifftModalBottomSheet
 import com.difft.android.base.ui.theme.DifftTheme
 
-/**
- * 普通底部Dialog - 支持Compose组件
- * 注意：ModalBottomSheet 设计上就是可关闭的
- */
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BottomDialog(
     isVisible: Boolean,
     onDismiss: () -> Unit,
+    showDragHandle: Boolean = true,
     content: @Composable () -> Unit
 ) {
     if (isVisible) {
-        DifftModalBottomSheet(onDismissRequest = onDismiss) {
+        DifftModalBottomSheet(onDismissRequest = onDismiss, showDragHandle = showDragHandle) {
             Box(modifier = Modifier.fillMaxWidth()) {
                 content()
             }
@@ -44,10 +42,7 @@ fun BottomDialog(
     }
 }
 
-/**
- * 普通底部Dialog - 支持自定义View (重载)
- * 注意：ModalBottomSheet 设计上就是可关闭的
- */
+
 @Composable
 fun BottomDialog(
     isVisible: Boolean,
@@ -72,10 +67,7 @@ fun BottomDialog(
     )
 }
 
-/**
- * 全屏底部Dialog - 支持Compose组件
- * 注意：ModalBottomSheet 设计上就是可关闭的
- */
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FullScreenBottomDialog(
@@ -85,11 +77,10 @@ fun FullScreenBottomDialog(
     content: @Composable () -> Unit
 ) {
     if (isVisible) {
-        // 如果有自定义背景，我们需要自定义整个 ModalBottomSheet 的外观
         if (backgroundDrawable != null) {
             DifftModalBottomSheet(
                 onDismissRequest = onDismiss,
-                showDragHandle = false, // 移除默认手势指示器，让背景完全覆盖
+                showDragHandle = false, 
                 containerColor = Color.Transparent,
             ) {
                 Box(
@@ -97,13 +88,12 @@ fun FullScreenBottomDialog(
                         .fillMaxWidth()
                         .fillMaxHeight(0.95f)
                         .drawBehind {
-                            // ChatBackgroundDrawable 自动计算边框，直接覆盖整个区域
                             backgroundDrawable.setBounds(0, 0, size.width.toInt(), size.height.toInt())
                             backgroundDrawable.draw(drawContext.canvas.nativeCanvas)
                         }
                 ) {
-                    // Handle above the content, not under it: a Column keeps the shared handle
-                    // visible even when the sheet content paints an opaque background.
+                    
+                    
                     Column(modifier = Modifier.fillMaxSize()) {
                         Box(
                             modifier = Modifier.fillMaxWidth(),
@@ -122,7 +112,6 @@ fun FullScreenBottomDialog(
                 }
             }
         } else {
-            // 使用纯色背景的原有逻辑
             DifftModalBottomSheet(onDismissRequest = onDismiss) {
                 Box(
                     modifier = Modifier
@@ -136,10 +125,7 @@ fun FullScreenBottomDialog(
     }
 }
 
-/**
- * 全屏底部Dialog - 支持自定义View (重载)
- * 注意：ModalBottomSheet 设计上就是可关闭的
- */
+
 @Composable
 fun FullScreenBottomDialog(
     isVisible: Boolean,

@@ -15,7 +15,7 @@
     <string name="login_restore_sign_in_again">Your data has been imported. Verify the account again to finish signing in.</string>
     <string name="login_error_too_many_attempts">Too many attempts. Please try again later.</string>
 
-    <!-- Screen Lock Strings -->
+    
     <string name="settings_passcode_submit">Done</string>
     <string name="settings_enter_passcode">Enter passcode</string>
     <string name="settings_switch_to_pattern">Switch to pattern</string>
@@ -55,7 +55,7 @@
     <string name="login_different_dialog_ok_text">Delete &amp; Re-login</string>
     <string name="login_different_dialog_cancel_text">Cancel</string>
 
-    <!-- Register intro / onboarding tutorial -->
+    
     <string name="register_intro_skip">Skip</string>
     <string name="register_intro_next">Next</string>
     <string name="register_intro_page1_title">Messages disappear</string>
@@ -64,13 +64,13 @@
     <string name="register_intro_page2_body">End-to-end encryption. No one except you and the other side can view chat content.</string>
     <string name="login_use_proxy">Use proxy</string>
 
-    <!-- Data-migration v2 (A5) — import-on-login prompt -->
+    
     <string name="login_import_backup_title">Import backup?</string>
     <string name="login_import_backup_message">Restore your chat history from a backup file before signing in. If you skip this, you will start with no history on this device.</string>
     <string name="login_import_backup_confirm">Import</string>
     <string name="login_import_backup_decline">Skip</string>
-    <!-- I4 — import method chooser (P2P vs File) + same-device file-only -->
-    <!-- Intro copy folded from the old pre-prompt into the single combined chooser dialog -->
+    
+    
 
     <string name="profile_avatar_reselect">The selected image is no longer available. Please choose it again.</string>
 </resources>

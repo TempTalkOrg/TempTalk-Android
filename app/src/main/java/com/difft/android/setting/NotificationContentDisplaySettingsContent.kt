@@ -22,19 +22,19 @@ import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.user.NotificationContentDisplayType
 import com.difft.android.chat.R
 
-/** Label for a [NotificationContentDisplayType] value; an unknown value reads as name + content. */
+
 private fun notificationContentLabelRes(value: Int): Int = when (value) {
     NotificationContentDisplayType.NAME_ONLY.value -> R.string.notification_only_name
     NotificationContentDisplayType.NO_NAME_OR_CONTENT.value -> R.string.notification_no_name_or_content
     else -> R.string.notification_display_name_and_content
 }
 
-/**
- * Stateless body of the notification-content-display screen.
- *
- * Every tap reports through [onSelect], including a tap on the already-selected row: the host
- * closes the screen on any tap, so suppressing the unchanged case would strand the user here.
- */
+
+
+
+
+
+
 @Composable
 fun NotificationContentDisplaySettingsContent(
     selected: Int,

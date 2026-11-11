@@ -23,8 +23,8 @@ fun SignalServiceProtos.ReadPosition.toOutgoingReadPositionEntity() =
     )
 
 fun ByteArray.transformGroupIdFromServerToLocal(): String {
-    // Mirror iOS/Desktop: 16-byte legacy id -> "WEEK" + uppercase hex; everything else -> UTF-8 string.
-    // String(bytes, Charset) never throws (malformed bytes -> U+FFFD), so no try/catch is needed.
+    
+    
     if (size == 16) {
         return "WEEK" + Hex.toStringCondensed(this).uppercase(Locale.getDefault())
     }

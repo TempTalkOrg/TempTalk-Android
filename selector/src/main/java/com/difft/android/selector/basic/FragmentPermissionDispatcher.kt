@@ -9,10 +9,10 @@ import com.difft.android.selector.permissions.PermissionConfig
 import com.difft.android.selector.permissions.PermissionResultCallback
 import com.difft.android.selector.permissions.PermissionUtil
 
-/**
- * Runtime-permission flow extracted from PictureCommonFragment (issue #1077).
- * Reaches base state through [host]; owns only the transient result callback.
- */
+
+
+
+
 internal class FragmentPermissionDispatcher(private val host: PictureCommonFragment) {
 
     private var permissionResultCallback: PermissionResultCallback? = null

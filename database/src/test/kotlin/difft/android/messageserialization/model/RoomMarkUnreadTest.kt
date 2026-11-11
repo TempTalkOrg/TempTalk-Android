@@ -6,10 +6,10 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * Pure rules behind the manual "mark as unread" state: when a stored mark is still visible, and
- * how an incoming sync from another device applies against the stored mark and read position.
- */
+
+
+
+
 class RoomMarkUnreadTest {
 
     @Test

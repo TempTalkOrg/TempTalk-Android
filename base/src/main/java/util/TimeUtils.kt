@@ -7,13 +7,13 @@ import java.text.DateFormat
 import java.text.SimpleDateFormat
 import java.util.Date
 
-/**
- * Time formatting helpers.
- *
- * Slimmed from the vendored Blankj TimeUtils down to the two methods actually used
- * ([millis2String] and [millis2FitTimeSpan]); the remaining ~100 unused methods and
- * the companion TimeConstants were removed.
- */
+
+
+
+
+
+
+
 object TimeUtils {
 
     private val SDF_THREAD_LOCAL: ThreadLocal<MutableMap<String, SimpleDateFormat>> =
@@ -27,26 +27,26 @@ object TimeUtils {
 
     private fun getDefaultFormat(): SimpleDateFormat = getSafeDateFormat("yyyy-MM-dd HH:mm:ss")
 
-    /**
-     * Milliseconds to the formatted time string. The pattern is `yyyy-MM-dd HH:mm:ss`.
-     */
+    
+
+
     @JvmStatic
     fun millis2String(millis: Long): String = millis2String(millis, getDefaultFormat())
 
-    /**
-     * Milliseconds to the formatted time string with the given [pattern] (e.g. `yyyy/MM/dd HH:mm`).
-     */
+    
+
+
     @JvmStatic
     fun millis2String(millis: Long, pattern: String): String = millis2String(millis, getSafeDateFormat(pattern))
 
     private fun millis2String(millis: Long, format: DateFormat): String = format.format(Date(millis))
 
-    /**
-     * Milliseconds to a fit human-readable time span, e.g. "2days3hours".
-     *
-     * @param precision how many units to render (clamped to 1..5); a non-positive value yields "".
-     * @param isShort   use the short unit labels.
-     */
+    
+
+
+
+
+
     @JvmStatic
     fun millis2FitTimeSpan(millis: Long, precision: Int, isShort: Boolean): String {
         if (precision <= 0) return ""

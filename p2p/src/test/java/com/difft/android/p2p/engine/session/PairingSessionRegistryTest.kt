@@ -9,12 +9,12 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * The reverse-pairing registry's two guarantees: a generation that dies takes every answer about it
- * with it (so a stale `pairToken` can never be honoured, and a waiter can never park on a dead
- * session), and the token is checked before the PIN so only a caller that already holds the token
- * can spend a PIN attempt.
- */
+
+
+
+
+
+
 class PairingSessionRegistryTest {
 
     private val registry = PairingSessionRegistry()
@@ -64,7 +64,7 @@ class PairingSessionRegistryTest {
     fun `the phase advances PENDING to CONNECTED to UPLOADING and releases a parked waiter`() = runTest {
         val handle = registry.register(pin = "111111", transferKey = "k", pairToken = "t")
         val waiter = async { registry.awaitPhaseAtLeast(handle.generation, PairingSessionRegistry.Phase.CONNECTED) }
-        testScheduler.runCurrent() // let the waiter park on PENDING before the phase moves
+        testScheduler.runCurrent() 
 
         assertEquals(PairingSessionRegistry.Decision.Accept, registry.authorizePrepareUpload("t", "111111"))
         withTimeout(WAIT_BUDGET_MS) { waiter.await() }

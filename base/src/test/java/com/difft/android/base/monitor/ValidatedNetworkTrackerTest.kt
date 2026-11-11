@@ -16,7 +16,7 @@ class ValidatedNetworkTrackerTest {
         tracker.onValidity(1, true)
         elapsed += 5_000L
         assertEquals(5_000L, tracker.onlineMsWithin(hour))
-        // Only the part of the span inside the window counts.
+        
         assertEquals(2_000L, tracker.onlineMsWithin(2_000L))
     }
 
@@ -29,7 +29,7 @@ class ValidatedNetworkTrackerTest {
         elapsed += 60_000L
         tracker.onValidity(1, true)
         elapsed += 60_000L
-        // Six minutes online, one offline, one online: seven of the eight minutes were online.
+        
         assertEquals(7 * 60_000L, tracker.onlineMsWithin(8 * 60_000L))
     }
 

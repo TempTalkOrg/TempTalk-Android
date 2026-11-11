@@ -10,7 +10,6 @@
 .kotlin
 .vscode
 
-# Eclipse / JDT Language Server (jdtls) generated files
 .classpath
 .project
 .settings/
@@ -18,14 +17,10 @@
 local.properties
 *.log
 org.difft.*.txt
-# Claude Code local settings (user-specific)
 .claude/settings.local.json
-# Per-workspace active-task pointer (runtime state; kept out of the shared tmp/ so
-# workspaces that symlink a common tmp/ don't clobber each other's current task)
 .claude/current-task
 CLAUDE.local.md
 tmp/
 
-# Python bytecode from .agents/.codex helper scripts and their tests
 __pycache__/
 *.pyc

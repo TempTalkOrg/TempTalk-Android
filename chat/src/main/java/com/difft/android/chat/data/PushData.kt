@@ -9,7 +9,7 @@ import kotlinx.parcelize.Parcelize
 data class PushCustomContent(
     val gid: String?,
     val locKey: String?,
-    val msg: String?,//加密消息内容
+    val msg: String?,
     val mutableContent: Int,
     val notifyType: Int,
     val passthrough: String?,
@@ -48,5 +48,5 @@ data class Passthrough(
 const val PERSONAL_CALL = "PERSONAL_CALL"
 const val GROUP_CALL = "GROUP_CALL"
 
-// Push notification types
-const val NOTIFY_TYPE_CALL_HANGUP = 23 // call挂断消息
+
+const val NOTIFY_TYPE_CALL_HANGUP = 23

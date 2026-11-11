@@ -13,13 +13,13 @@ import util.AppForegroundObserver
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * #1376: measures what the background connection costs, on ticks the keep-alive loop already
- * makes (it never schedules a wake of its own). Each [onTick] takes a [PowerSample] and adds the
- * delta since the previous one to [KeepAliveHealthCounters]; [onEvent] counts loop events while
- * in the background. A once-an-hour summary line goes to the file log so a single uploaded log
- * shows the same numbers.
- */
+
+
+
+
+
+
+
 @Singleton
 class BackgroundPowerSampler @Inject constructor(
     @param:ApplicationContext private val context: Context,
@@ -57,7 +57,7 @@ class BackgroundPowerSampler @Inject constructor(
         counters.onPowerCounts(add)
     }
 
-    // Caller holds lock.
+    
     private fun accumulateHour(delta: Map<String, Int>, nowElapsed: Long) {
         delta.forEach { (k, v) -> hour[k] = (hour[k] ?: 0) + v }
         val start = hourStartElapsed ?: nowElapsed.also { hourStartElapsed = it }
@@ -85,7 +85,7 @@ class BackgroundPowerSampler @Inject constructor(
         )
     }
 
-    // Unsupported properties read as Int.MIN_VALUE (or 0 on some devices).
+    
     private fun BatteryManager.batteryProperty(id: Int): Int? =
         runCatching { getIntProperty(id) }.getOrNull()?.takeIf { it > 0 }
 

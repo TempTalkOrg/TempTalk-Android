@@ -26,33 +26,19 @@ import org.junit.Test
 import java.io.IOException
 import kotlin.test.assertFailsWith
 
-/**
- * Unit tests for [PushForwardNoticeSendJob.onPushSend].
- *
- * Coverage (the 5 contract invariants):
- *
- *   1. **Group target**: `sendSyncToSelf=false` → Sender called exactly once (no sync leg).
- *   2. **1v1 to other**: `sendSyncToSelf=true` → Sender call carries the sync flag.
- *   3. **Self target (Save-to-Notes)**: `sendSyncToSelf=false` → Sender called exactly once.
- *   4. **Sender failure rethrows → Job retries**: Sender throws IOException → Job propagates
- *      → JobManager retries per PushSendJob.onShouldRetry contract. Local DB insert is NOT
- *      called (guarding the "don't insert if peer didn't get it" invariant).
- *   5. **Local DB failure does NOT rethrow**: primary send succeeded, LocalMessageCreator
- *      throws → swallowed (L.e log), the Job completes normally. Rethrowing would
- *      trigger retry → peer gets the notice twice (duplicate envelopes).
- *
- *   6. **Timestamp three-way alignment**: `sendTs` passed to Sender is the SAME value
- *      passed to LocalMessageCreator (envelope.timestamp = localDB.timestamp).
- *
- * Rule ordering per project standard: HiltAndroidRule(0) → TestDispatcherRule(1) →
- * GlobalStaticMockRule(2). We inline equivalent setup (no rules) because
- * `:base:testFixtures/kotlin/` sources are NOT published to consumer modules due to a
- * documented kapt limitation (see base/build.gradle.kts:43-45 and Task 2 deviation D2).
- */
+
+
+
+
+
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class PushForwardNoticeSendJobTest {
 
-    /** An open messaging gate: send jobs take a send ticket before they send (#1382). */
+    
     private val messagingGate = TestMessagingPause().open().gate
 
 
@@ -71,13 +57,13 @@ class PushForwardNoticeSendJobTest {
         messageSender = mockk()
         localMessageCreator = mockk(relaxed = true)
 
-        // Mock globalServices.myId (Job reads it inside onPushSend to compute sendSyncToSelf).
+        
         mockGlobalServices = mockk(relaxed = true)
         mockkStatic("com.difft.android.base.utils.ExtensionsKt")
         every { com.difft.android.base.utils.globalServices } returns mockGlobalServices
         every { mockGlobalServices.myId } returns myId
 
-        // Default: Sender succeeds. Tests override as needed.
+        
         coEvery {
             messageSender.sendForwardNoticeMessage(
                 recipient = any(),
@@ -94,10 +80,7 @@ class PushForwardNoticeSendJobTest {
     fun tearDown() {
         unmockkAll()
     }
-
-    // -----------------------------------------------------------------
-    // Case 1: Group target → sendSyncToSelf = false
-    // -----------------------------------------------------------------
+    
     @Test
     fun `group target — sendSyncToSelf is false and sender called once`() = runTest {
         val target = For.Group(groupId)
@@ -128,7 +111,7 @@ class PushForwardNoticeSendJobTest {
                 admission = any()
             )
         }
-        // Local DB insert happened on primary success.
+        
         coVerify(exactly = 1) {
             localMessageCreator.createForwardNoticeMessage(
                 operatorId = myId,
@@ -140,10 +123,7 @@ class PushForwardNoticeSendJobTest {
             )
         }
     }
-
-    // -----------------------------------------------------------------
-    // Case 2: 1v1 to other — sendSyncToSelf = true
-    // -----------------------------------------------------------------
+    
     @Test
     fun `1v1 to other — sendSyncToSelf is true`() = runTest {
         val target = For.Account(peerId)
@@ -163,17 +143,14 @@ class PushForwardNoticeSendJobTest {
                 recipient = target,
                 room = target,
                 message = any(),
-                sendSyncToSelf = true,       // KEY: other device sync leg required
+                sendSyncToSelf = true,       
                 sendTimestamp = any(),
                 admission = any()
             )
         }
     }
-
-    // -----------------------------------------------------------------
-    // Case 3: Self target (save-to-notes) — sendSyncToSelf = false
-    // (server routes recipient=self to all my devices; no dedicated sync).
-    // -----------------------------------------------------------------
+    
+    
     @Test
     fun `self target save-to-notes — sendSyncToSelf is false`() = runTest {
         val target = For.Account(myId)
@@ -199,10 +176,7 @@ class PushForwardNoticeSendJobTest {
             )
         }
     }
-
-    // -----------------------------------------------------------------
-    // Case 4: Sender IOException rethrows → Job retries. Local DB is NOT inserted.
-    // -----------------------------------------------------------------
+    
     @Test
     fun `sender failure rethrows and local DB is not inserted`() = runTest {
         val target = For.Group(groupId)
@@ -221,19 +195,16 @@ class PushForwardNoticeSendJobTest {
 
         assertFailsWith<IOException> { job.onPushSend() }
 
-        // Critical invariant: DB is NOT inserted when primary send fails.
-        // Otherwise the originating device would show a notice that peers never received.
+        
+        
         coVerify(exactly = 0) {
             localMessageCreator.createForwardNoticeMessage(
                 any(), any(), any(), any(), any(), any()
             )
         }
     }
-
-    // -----------------------------------------------------------------
-    // Case 5: Local DB failure does NOT rethrow — peer already has the notice,
-    //   retry would duplicate envelopes.
-    // -----------------------------------------------------------------
+    
+    
     @Test
     fun `local DB insert failure does not rethrow — peer already has the notice`() = runTest {
         val target = For.Account(peerId)
@@ -252,22 +223,19 @@ class PushForwardNoticeSendJobTest {
             null, target, notice, messageSender, localMessageCreator, gson, messagingGate
         ).bindLogin()
 
-        // Must NOT throw — a throw here would propagate to PushSendJob.onRun() → JobManager
-        // → retry → re-send to peer, producing duplicate envelopes.
+        
+        
         job.onPushSend()
 
-        // Sender was called exactly once (no retry triggered by the Job layer).
+        
         coVerify(exactly = 1) {
             messageSender.sendForwardNoticeMessage(any(), any(), any(), any(), any(), any())
         }
     }
-
-    // -----------------------------------------------------------------
-    // Case 6: Timestamp three-way alignment — the SAME sendTs flows into both
-    //   the Sender call (as Envelope.timestamp) and the LocalMessageCreator
-    //   call (as NotifyMessage.timestamp). This is what makes
-    //   generateMessageId(ts, myId, deviceId) equivalent across paths.
-    // -----------------------------------------------------------------
+    
+    
+    
+    
     @Test
     fun `timestamp flows unchanged from Job to Sender and LocalMessageCreator`() = runTest {
         val target = For.Group(groupId)
@@ -296,7 +264,7 @@ class PushForwardNoticeSendJobTest {
 
         job.onPushSend()
 
-        // sendTs must be identical in both paths — otherwise messageId three-tuple collides.
+        
         assertEquals(
             "Envelope.timestamp (sender) and NotifyMessage.timestamp (localDB) MUST match — " +
                 "they form the messageId three-tuple alongside myId + deviceId.",
@@ -304,11 +272,8 @@ class PushForwardNoticeSendJobTest {
             creatorTsCapture.captured
         )
     }
-
-    // -----------------------------------------------------------------
-    // Case 7: serialize / deserialize roundtrip produces same serialize output.
-    //   Guards Gson `@SerializedName` wiring on ForwardNoticeData.Scene values.
-    // -----------------------------------------------------------------
+    
+    
     @Test
     fun `serialize roundtrip preserves target + notice`() {
         val target = For.Group("g-1")
@@ -330,8 +295,6 @@ class PushForwardNoticeSendJobTest {
         val reNotice = gson.fromJson(reJson, ForwardNoticeData::class.java)
         assertEquals(notice, reNotice)
     }
-
-    // ----- helpers -----
 
     private fun successResult(): SendMessageResult = SendMessageResult.success(
         address = "addr",

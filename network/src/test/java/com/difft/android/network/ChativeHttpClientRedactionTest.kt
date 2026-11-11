@@ -12,15 +12,15 @@ import org.junit.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/**
- * What a DEBUG build's HTTP log may contain (issue #1231). Debug logs are attached to internal bug
- * reports, so the `Authorization` header — the password-equivalent Basic credential or the account
- * JWT — must never appear in one, and clients whose request body carries a credential must not log
- * bodies at all.
- *
- * Exercises the REAL [buildDebugLogger] inside a real OkHttp chain; an application interceptor
- * answers every call itself, so there is no network and no MockWebServer.
- */
+
+
+
+
+
+
+
+
+
 class ChativeHttpClientRedactionTest {
 
     private val lines = mutableListOf<String>()
@@ -48,18 +48,18 @@ class ChativeHttpClientRedactionTest {
         return lines.joinToString("\n")
     }
 
-    // T50 — body logging on: the header value is replaced, never printed.
+    
     @Test
     fun `the authorization header is redacted when bodies are logged`() {
         val log = log(debugLogBodies = true)
 
         assertTrue(log.contains("${HeaderInterceptor.HEADER_KEY_AUTHORIZATION}: ██"))
         assertFalse(log.contains(CREDENTIAL))
-        // The body IS logged here, which is what makes T51's absence assertion meaningful.
+        
         assertTrue(log.contains(BODY))
     }
 
-    // T51 — bodies off (the fileshare client, whose body carries the token): headers only.
+    
     @Test
     fun `body logging off omits the request body and still redacts the header`() {
         val log = log(debugLogBodies = false)

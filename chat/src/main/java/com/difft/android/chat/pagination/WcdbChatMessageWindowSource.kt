@@ -12,21 +12,21 @@ import org.difft.app.database.models.DBMessageModel
 import org.difft.app.database.models.DBRoomModel
 import org.difft.app.database.models.MessageModel
 
-/**
- * The one and only winq layer behind [ChatMessageWindowSource]. Every expression here is a
- * verbatim migration of the query it replaced in `ChatNormalPaginationController`; boundary
- * operators, `Order` and limit expressions must stay byte-identical to that origin.
- *
- * Deliberately unlogged: this is a pure query-relocation layer, and one log line per method would
- * add 13 lines of noise per emission. The business-semantic `L.i` lines stay in the controller.
- */
+
+
+
+
+
+
+
+
 internal class WcdbChatMessageWindowSource(
     private val wcdb: WCDB,
     private val forWhat: For,
 ) : ChatMessageWindowSource {
 
-    // Was BaseChatPaginationController.commonMessageQueryCondition. A field, not a local: it is
-    // built once per conversation exactly as before, so no native object churn is introduced.
+    
+    
     private val roomCondition =
         DBMessageModel.roomType.eq(forWhat.typeValue).and(DBMessageModel.roomId.eq(forWhat.id))
 
@@ -47,8 +47,8 @@ internal class WcdbChatMessageWindowSource(
     override fun firstUnreadFromOthers(readPosition: Long, myId: String): MessageModel? =
         wcdb.firstUnreadFromOthersMessage(forWhat.id, forWhat.typeValue, readPosition, myId)
 
-    // `?: 0` reproduces the pre-seam `getValue(...)?.int != 0` null branch: a null Value made that
-    // expression false, and here a 0 count makes the caller's `countOlderThan(t) != 0` false too.
+    
+    
     override fun countOlderThan(ts: Long): Int =
         wcdb.message.getValue(
             DBMessageModel.id.count(),
@@ -95,7 +95,7 @@ internal class WcdbChatMessageWindowSource(
         wcdb.message.getValue(
             DBMessageModel.id,
             roomCondition,
-            // Order by descending systemShowTimestamp to get the most recent entry
+            
             DBMessageModel.systemShowTimestamp.order(Order.Desc)
         )?.text
 

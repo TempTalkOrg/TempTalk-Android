@@ -15,8 +15,10 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.first
 
 import kotlinx.coroutines.withContext
 import org.difft.app.database.WCDB
@@ -31,10 +33,14 @@ import com.difft.android.base.utils.globalServices
 import com.difft.android.chat.crypto.GroupCrypto
 import com.difft.android.chat.crypto.GroupCryptoRepo
 import kotlinx.coroutines.launch
+import android.os.SystemClock
+import androidx.annotation.VisibleForTesting
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import javax.inject.Singleton
 
-// All wcdb calls in this class run on Dispatchers.IO.
+
 @Suppress("BlockingWcdbInSuspend")
 @Singleton
 class GroupUtil @Inject constructor(
@@ -44,6 +50,7 @@ class GroupUtil @Inject constructor(
     private val userManager: UserManager,
     private val groupCryptoRepo: GroupCryptoRepo,
     private val groupMemberWriter: GroupMemberWriter,
+    private val groupExpiryTracker: GroupExpiryTracker,
 ) {
 
     private val _singleGroupsUpdate = MutableSharedFlow<GroupModel>(replay = 1, extraBufferCapacity = 64)
@@ -53,25 +60,63 @@ class GroupUtil @Inject constructor(
         RoomChangeTracker.trackRoom(group.gid ?: "", RoomChangeType.GROUP)
     }
 
-    /**
-     * Local cleanup for "user no longer a member of this group" — kicked out,
-     * left, dismissed, destroyed, or fetch returned invalid. Removes room +
-     * messages, group members, group row, and crypto keys; then emits a
-     * non-zero-status sentinel so UI subscribers drop the group.
-     *
-     * Idempotent. All DB writes run on Dispatchers.IO so callers do not need
-     * to dispatch.
-     *
-     * ⚠️ Caller contract — this method does NOT verify membership. There is
-     * no network round-trip and no local self-check, so a misuse silently
-     * destroys data (incl. R_group keys that cannot be re-derived). The caller
-     * MUST have independently confirmed that the local user is no longer a
-     * member of [gid] before invoking. For notify-driven paths see the contract
-     * documented on `GroupUpdater.disableGroup`.
-     *
-     * Marked `internal` so the contract boundary is enforced at compile time —
-     * only the chat module's notify-handler / fetch-invalid paths can invoke it.
-     */
+    
+    private fun writeClearedDeadline(gid: String): GroupModel? {
+        val group = wcdb.group.getFirstObject(DBGroupModel.gid.eq(gid)) ?: return null
+        if (group.expireTime == null) return group
+        group.expireTime = null
+        wcdb.group.updateObject(group, DBGroupModel.expireTime, DBGroupModel.gid.eq(gid))
+        decryptGroupFieldsIfNeeded(group)
+        emitSingleGroupUpdate(group)
+        return group
+    }
+
+    
+    private fun storedDeadline(gid: String): Long? =
+        wcdb.group.prepareSelect().select(DBGroupModel.gid, DBGroupModel.expireTime).where(DBGroupModel.gid.eq(gid))
+            .firstObject()?.expireTime
+
+    suspend fun clearExpiry(gid: String, reason: String) = withContext(Dispatchers.IO) {
+        try {
+            groupExpiryTracker.clearExpiry(
+                gid = gid,
+                reason = reason,
+                load = { wcdb.group.getFirstObject(DBGroupModel.gid.eq(gid)) },
+                persist = { group -> wcdb.group.updateObject(group, DBGroupModel.expireTime, DBGroupModel.gid.eq(gid)) },
+                emit = ::emitSingleGroupUpdate,
+                
+                hasDeadline = {
+                    wcdb.group.prepareSelect().select(DBGroupModel.expireTime).where(DBGroupModel.gid.eq(gid))
+                        .firstObject()?.expireTime != null
+                },
+            )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            
+            L.e { "[GroupExpiry] clear_failed gid=$gid reason=$reason error=${e.stackTraceToString()}" }
+        }
+    }
+
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     internal suspend fun cleanupGroupLocally(gid: String, expectedSession: GroupWriteSession? = null) {
         if (gid.isEmpty()) return
         L.i { "[GroupUtil] cleanupGroupLocally gid=$gid" }
@@ -83,9 +128,9 @@ class GroupUtil @Inject constructor(
             wcdb.group.deleteObjects(DBGroupModel.gid.eq(gid))
             groupCryptoRepo.deleteKeys(gid)
         }
-        // Sentinel: only gid + non-zero status carry meaning here. UI subscribers
-        // (GroupsFragment, GroupChatFragment, GroupInfoActivity, ...) already
-        // branch on group.status != 0 to remove the group from their views.
+        
+        
+        
         check(expectedSession?.isCurrent(userManager) != false) { "group_session_changed" }
         emitSingleGroupUpdate(GroupModel().apply {
             this.gid = gid
@@ -93,18 +138,18 @@ class GroupUtil @Inject constructor(
         })
     }
 
-    /**
-     * Detect drift between RoomModel and GroupModel fields. When drift is detected, trigger
-     * RoomChangeTracker.GROUP so WCDBUpdateService syncs GroupModel.name/avatar back to
-     * RoomModel.roomName/roomAvatarJson.
-     *
-     * Fallback for the cold-start race where trackRoom(GROUP) is emitted before
-     * WCDBUpdateService subscribes and the event is dropped, leaving Room fields stuck on
-     * stale values (typically encrypted-group placeholder "🔒 Group").
-     *
-     * Intentionally invoked only from group chat entry points (not from the shared emit
-     * path) so the extra Room query happens only when a user actually opens a group chat.
-     */
+    
+
+
+
+
+
+
+
+
+
+
+
     suspend fun reconcileRoomIfDrifted(group: GroupModel) {
         val gid = group.gid ?: return
         val drifted = withContext(Dispatchers.IO) {
@@ -133,39 +178,131 @@ class GroupUtil @Inject constructor(
 
     val getGroupsStatusUpdate: SharedFlow<Pair<Boolean, List<String>>> = _getGroupsStatusUpdate.asSharedFlow()
 
-    /**
-     * A full sync is running. A second caller — the chat list opening while the post-restore warm-up
-     * still waits on the first sync — starts nothing: the running one lands the same rows, and two
-     * runs would each wipe and refill the group table.
-     */
-    private val fullSyncInFlight = java.util.concurrent.atomic.AtomicBoolean(false)
+    
+    private class RunningSync(val fetchesMembers: Boolean)
 
-    suspend fun syncAllGroupAndAllGroupMembers(forceFetch: Boolean, syncMembers: Boolean) = coroutineScope {
-        if (!fullSyncInFlight.compareAndSet(false, true)) {
+    
+
+
+
+
+    private val runningSync = MutableStateFlow<RunningSync?>(null)
+
+    
+    private val listDeadlinesInFlight = AtomicBoolean(false)
+
+    
+    @Volatile private var lastListFetchAt: Long? = null
+
+    
+    @VisibleForTesting
+    internal var listClock: () -> Long = SystemClock::elapsedRealtimeNanos
+
+    
+
+
+
+
+
+
+    suspend fun syncGroupListIfStale() {
+        val last = lastListFetchAt
+        if (last != null && listClock() - last < GROUP_LIST_SYNC_INTERVAL_NS) return
+        if (!listDeadlinesInFlight.compareAndSet(false, true)) return
+        try {
+            withContext(Dispatchers.IO) {
+                val requestStartedAt = groupExpiryTracker.requestStartedAt()
+                val fetchStartedAt = listClock()
+                val groups = groupRepo.getGroups()
+                
+                
+                groupExpiryTracker.persistResponse(groups, requestStartedAt, clearWritten = { gid -> writeClearedDeadline(gid) }) {
+                    writeDeadlines(groups).forEach { gid -> announceStoredGroup(gid) }
+                }
+                lastListFetchAt = fetchStartedAt
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            L.w { "[GroupUtil] group_list_deadlines_failed error=${e.stackTraceToString()}" }
+        } finally {
+            listDeadlinesInFlight.set(false)
+        }
+    }
+
+    
+    private fun storedDeadlines(): Map<String?, Long?> =
+        wcdb.group.prepareSelect().select(DBGroupModel.gid, DBGroupModel.expireTime).allObjects()
+            .associate { it.gid to it.expireTime }
+
+    
+    @VisibleForTesting
+    internal var writeDeadlines: (List<GroupModel>) -> List<String> = { groups ->
+        val stored = storedDeadlines()
+        val updates = groups.filter { it.gid in stored && stored[it.gid] != it.expireTime }
+        updates.forEach { group -> wcdb.group.updateObject(group, DBGroupModel.expireTime, DBGroupModel.gid.eq(group.gid)) }
+        updates.mapNotNull { it.gid }
+    }
+
+    
+    @VisibleForTesting
+    internal var announceStoredGroup: (String) -> Unit = { gid ->
+        wcdb.group.getFirstObject(DBGroupModel.gid.eq(gid))?.let { group ->
+            decryptGroupFieldsIfNeeded(group)
+            emitSingleGroupUpdate(group)
+        }
+    }
+
+    
+
+
+
+    suspend fun refreshAllNow() {
+        repeat(REFRESH_ATTEMPTS) {
+            val running = runningSync.value
+            if (running != null) {
+                runningSync.first { it == null }
+                if (running.fetchesMembers) return
+            } else if (syncAllGroupAndAllGroupMembers(forceFetch = true)) {
+                return
+            }
+        }
+    }
+
+    
+
+
+
+    suspend fun syncAllGroupAndAllGroupMembers(forceFetch: Boolean): Boolean = coroutineScope {
+        val fetches = forceFetch || userManager.getUserData()?.syncedGroupAndMembers == false
+        if (!runningSync.compareAndSet(null, RunningSync(fetches))) {
             L.i { "[GroupUtil] syncAllGroupAndAllGroupMembers already in flight, skipping forceFetch=$forceFetch" }
-            return@coroutineScope
+            return@coroutineScope false
         }
         try {
-            if (forceFetch || userManager.getUserData()?.syncedGroupAndMembers == false) {
+            if (fetches) {
+                val requestStartedAt = groupExpiryTracker.requestStartedAt()
+                val fetchStartedAt = listClock()
                 val groups = groupRepo.getGroups()
-                // Decrypt before persisting so DB stores real names/avatars, not placeholders.
-                // R_group for each group may already be in group_crypto_keys (e.g. after
-                // a cover install). For plain groups this is a cheap no-op.
+                
+                
+                
                 groups.forEach { decryptGroupFieldsIfNeeded(it) }
-                wcdb.group.deleteObjects()
-                wcdb.group.insertObjects(groups)
-
-                if (syncMembers) {
-                    groups.map {
-                        async {
-                            fetchAndSaveSingleGroupInfo(it.gid ?: "")
-                        }
-                    }.awaitAll()
+                groupExpiryTracker.persistResponse(groups, requestStartedAt, clearWritten = { gid -> writeClearedDeadline(gid) }) {
+                    val before = storedDeadlines()
+                    wcdb.group.deleteObjects()
+                    wcdb.group.insertObjects(groups)
+                    
+                    groups.filter { before[it.gid] != it.expireTime }.forEach { emitSingleGroupUpdate(it) }
                 }
 
-                userManager.update {
-                    this.syncedGroupAndMembers = true
-                }
+                groups.map {
+                    async {
+                        fetchAndSaveSingleGroupInfo(it.gid ?: "")
+                    }
+                }.awaitAll()
+                userManager.update { this.syncedGroupAndMembers = true }
+                lastListFetchAt = fetchStartedAt
                 emitGetGroupsStatusUpdate(true, groups.mapNotNull { it.gid })
                 L.i { "[GroupUtil] syncAllGroupAndAllGroupMembers success" + groups.size }
             }
@@ -175,21 +312,22 @@ class GroupUtil @Inject constructor(
             emitGetGroupsStatusUpdate(false, emptyList())
             L.e(e) { "[GroupUtil] syncAllGroupAndAllGroupMembers fail:" }
         } finally {
-            fullSyncInFlight.set(false)
+            runningSync.value = null
         }
+        true
     }
 
     private val singleGroupFetches = SingleFlight<String, GroupModel>()
 
-    /** Order mark for [fetchAndSaveSingleGroupInfo]'s `startedAfter`: take it when a server write is accepted. */
+    
     fun fetchMark(): Long = singleGroupFetches.mark()
 
-    /**
-     * Fetches and stores one group. A concurrent call for the same gid joins the in-flight fetch
-     * and receives its result, so callers can treat `null` as a failed fetch only. With
-     * [startedAfter], a fetch that began at or before that mark is waited out and a new GET follows,
-     * so the stored snapshot reflects a write accepted before the mark.
-     */
+    
+
+
+
+
+
     suspend fun fetchAndSaveSingleGroupInfo(
         groupID: String,
         sendUpdateEvent: Boolean = false,
@@ -204,7 +342,7 @@ class GroupUtil @Inject constructor(
         }
         if (joined) {
             L.i { "[GroupUtil] fetch_joined gid=$groupID result=${group != null}" }
-            // One update per fetch: the leader emits when it asked to, otherwise the joiner does.
+            
             if (sendUpdateEvent && !leaderEmits && group != null && group.status == 0) emitSingleGroupUpdate(group)
         }
         return group
@@ -219,6 +357,7 @@ class GroupUtil @Inject constructor(
         return try {
             withContext(Dispatchers.IO) {
                 requireGroupWriteSession(commitAllowed)
+                val requestStartedAt = groupExpiryTracker.requestStartedAt()
                 val response = groupRepo
                     .getGroupInfo(groupID)
                 requireGroupWriteSession(commitAllowed)
@@ -227,10 +366,13 @@ class GroupUtil @Inject constructor(
                     DBGroupModel.gid.eq(groupID)
                 ) ?: GroupModel().apply { gid = groupID }
                 group.status = response.status
+                
+                var corrected: GroupModel? = null
 
                 if (response.status == 0) {
                     group.name = groupInfo?.name
                     group.messageExpiry = groupInfo?.messageExpiry
+                    group.applyDetailExpiry(groupInfo)
                     group.avatar = groupInfo?.avatar
                     group.invitationRule = groupInfo?.invitationRule
                     group.version = groupInfo?.version
@@ -261,10 +403,22 @@ class GroupUtil @Inject constructor(
                     groupMemberWriter.replaceAllForGroup(groupID, members, commitAllowed)
                     requireGroupWriteSession(commitAllowed)
                     decryptGroupFieldsIfNeeded(group)
-                    wcdb.group.deleteObjects(DBGroupModel.gid.eq(groupID))
-                    wcdb.group.insertObject(group)
-                    // Background verify of pending (signatureVerify=null) members.
-                    // appScope so the caller's IO isn't held; runCatching isolates the failure.
+                    groupExpiryTracker.persistResponse(
+                        listOf(group), requestStartedAt,
+                        
+                        carriesDeadline = { (groupInfo?.expireTime ?: 0L) > 0L },
+                        stored = ::storedDeadline,
+                        clearWritten = { gid -> corrected = writeClearedDeadline(gid) },
+                    ) {
+                        requireGroupWriteSession(commitAllowed)
+                        val deadlineBefore = storedDeadline(groupID)
+                        wcdb.group.deleteObjects(DBGroupModel.gid.eq(groupID))
+                        wcdb.group.insertObject(group)
+                        
+                        if (sendUpdateEvent || deadlineBefore != group.expireTime) emitSingleGroupUpdate(group)
+                    }
+                    
+                    
                     appScope.launch {
                         runCatching {
                             requireGroupWriteSession(commitAllowed)
@@ -273,15 +427,12 @@ class GroupUtil @Inject constructor(
                             .onFailure { L.e { "[GroupUtil] verify trigger failed gid=$groupID: ${it.stackTraceToString()}" } }
                     }
                     L.i { "[GroupUtil] [Group: $groupID] fetch success, members: ${members.size}" }
-                    if (sendUpdateEvent) {
-                        emitSingleGroupUpdate(group)
-                    }
                 } else {
                     L.i { "[GroupUtil] [Group: $groupID] is invalid" }
                     cleanupGroupLocally(groupID, expectedSession)
                 }
 
-                group
+                corrected ?: group
             }
         } catch (e: CancellationException) {
             throw e
@@ -311,11 +462,11 @@ class GroupUtil @Inject constructor(
         return !(groupRole == GROUP_ROLE_MEMBER && group.publishRule != GroupPublishRole.ALL.rawValue)
     }
 
-    /**
-     * Decrypt encrypted group fields (name/avatar) in memory.
-     * Must be called from IO thread, before emitting to UI.
-     * Does NOT write back to database — only modifies the in-memory GroupModel.
-     */
+    
+
+
+
+
     internal fun decryptGroupFieldsIfNeeded(group: GroupModel) {
         if (group.groupCryptoMode == null || group.groupCryptoMode == 0) return
         val rGroupBytes = groupCryptoRepo.getRGroupBytes(group.gid ?: "")
@@ -329,8 +480,8 @@ class GroupUtil @Inject constructor(
             if (group.encryptedAvatar != null) {
                 group.avatar = GroupCrypto.decryptGroupAvatar(kGroup, group.encryptedAvatar!!) ?: group.avatar
             } else {
-                // No encrypted avatar = no custom avatar. Use empty string instead of null
-                // because WCDB's Value(null) may skip the column in updateRow.
+                
+                
                 group.avatar = ""
             }
             L.i { "[GE] Decrypted fields for group ${group.gid}" }
@@ -340,6 +491,11 @@ class GroupUtil @Inject constructor(
     }
 
     companion object {
+        
+        private const val REFRESH_ATTEMPTS = 3
+
+        private val GROUP_LIST_SYNC_INTERVAL_NS = TimeUnit.MINUTES.toNanos(10)
+
         fun convert(group: GroupModel): GroupUIData {
             return GroupUIData(
                 gid = group.gid ?: "",
@@ -360,13 +516,13 @@ class GroupUtil @Inject constructor(
     }
 }
 
-/**
- * Get avatar data for display, respecting encryption state.
- * - Plain group: returns avatar data from [avatar] field (same as before).
- * - Encrypted group: returns avatar data ONLY if [encryptedAvatar] is present
- *   (meaning the group has a custom avatar that was encrypted). If [encryptedAvatar]
- *   is null, the group has no custom avatar — returns null so UI shows default icon.
- */
+
+
+
+
+
+
+
 fun GroupModel.getDisplayAvatarData(): GroupAvatarData? {
     if ((groupCryptoMode ?: 0) > 0 && encryptedAvatar == null) return null
     return avatar?.getAvatarData()

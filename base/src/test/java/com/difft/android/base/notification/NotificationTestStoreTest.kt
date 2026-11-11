@@ -21,7 +21,7 @@ import org.junit.rules.TemporaryFolder
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/** #1350: the notification test store on a real file-backed DataStore, including the pinned key names (T14). */
+
 class NotificationTestStoreTest {
 
     @get:Rule
@@ -60,7 +60,7 @@ class NotificationTestStoreTest {
         assertEquals("fail|6|bb", prefs[stringPreferencesKey("notif_test_call")])
     }
 
-    // T14
+    
     @Test
     fun `a corrupt value is skipped and the next write replaces it`() = runBlocking {
         val lock = NotificationTestResult(NotificationTestOutcome.OK, 7L, "cc")

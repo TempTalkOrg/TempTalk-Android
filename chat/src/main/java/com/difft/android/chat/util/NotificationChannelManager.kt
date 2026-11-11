@@ -21,43 +21,43 @@ import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Outcome of [NotificationChannelManager.reconcileCriticalAlertBypass]. */
+
 enum class CriticalAlertBypass {
-    /** No Do Not Disturb access (or no channel support): nothing to reconcile. */
+    
     NOT_APPLICABLE,
 
-    /** The critical-alert category bypasses Do Not Disturb. */
+    
     ENABLED,
 
-    /** Access is granted but the category still does not bypass; only the user can switch it on. */
+    
     NEEDS_USER_ACTION,
 }
 
-/** Outcome of deleting one obsolete channel during [NotificationChannelManager.migrateIfNeeded]. */
+
 enum class ChannelDeletion {
     DELETED,
     ABSENT,
 
-    /** Retried at the next process start: a foreground service still holds it, or a summary sits on it below API 31. */
+    
     DEFERRED,
 
-    /** Unexpected error; not retried within this run. */
+    
     FAILED,
 }
 
-/**
- * Creates, renames and retires the app's own notification channels (#1354: five channels plus
- * per-conversation ones).
- *
- * - [ensureChannels] runs at every start: creates the [NotificationChannelIds.KEEP] channels that
- *   are missing and refreshes localized display names in place (`createNotificationChannel` on an
- *   existing id only updates name and description, never the user's importance/sound choices).
- *   It never reads DataStore.
- * - [migrateIfNeeded] runs off the main thread at every start and deletes whichever
- *   [NotificationChannelIds.OBSOLETE] ids still exist; nothing outside that list is ever deleted.
- * - [reconcileCriticalAlertBypass] re-applies bypass-Do-Not-Disturb, which AOSP only honors on a
- *   later `createNotificationChannel` call and only while the user has not touched the category.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
 @Singleton
 class NotificationChannelManager @Inject constructor(
     @param:ApplicationContext private val context: Context,
@@ -65,15 +65,15 @@ class NotificationChannelManager @Inject constructor(
 ) {
 
     companion object {
-        /** Stamped once the first full retirement of [NotificationChannelIds.OBSOLETE] completed. */
+        
         const val CHANNEL_VERSION = 2
 
         private val MESSAGE_GROUP_IDS = setOf(NotificationChannelIds.MESSAGE)
 
-        /** Shared channels whose spec lives in `:base` so `:call` and `:app` can ensure them. */
+        
         private val SHARED_SPEC_IDS = setOf(NotificationChannelIds.OTHER_ALERTS, NotificationChannelIds.RUNNING_IN_BACKGROUND)
 
-        /** Not app-owned or per-conversation; never logged as unknown. */
+        
         private val UNKNOWN_EXEMPT_PREFIXES = listOf(NotificationChannelIds.MESSAGE, "android.")
         private val UNKNOWN_EXEMPT_IDS = setOf("fcm_fallback_notification_channel", "livekit_screen_capture", "miscellaneous")
     }
@@ -82,7 +82,7 @@ class NotificationChannelManager @Inject constructor(
         context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
     }
 
-    /** Cheap and synchronous: safe on the startup path, and channels must exist before any post. */
+    
     fun ensureChannels() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         ensureGroup()
@@ -92,7 +92,7 @@ class NotificationChannelManager @Inject constructor(
         }
     }
 
-    /** Creates the MESSAGE channel (and its group) when missing; returns whether it exists. Never throws. */
+    
     fun ensureMessageChannel(): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return true
         return try {
@@ -107,12 +107,12 @@ class NotificationChannelManager @Inject constructor(
         }
     }
 
-    /**
-     * Deletes every [NotificationChannelIds.OBSOLETE] id that still exists. Runs at every start
-     * because existence, not the stamp, decides what is left: a downgrade that re-creates an old id
-     * or a run killed half-way heals on the next start. [CHANNEL_VERSION] is stamped only when
-     * nothing was deferred. Off the main thread: reads app_state.
-     */
+    
+
+
+
+
+
     suspend fun migrateIfNeeded() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val prefs = appState.data.first()
@@ -143,12 +143,12 @@ class NotificationChannelManager @Inject constructor(
         }
     }
 
-    /**
-     * Brings the critical-alert category's bypass-Do-Not-Disturb in line with the granted policy
-     * access, including for users who were granted access before this reconcile existed. The
-     * re-create is attempted at most once per [appVersion]; the result is read back because the
-     * system silently keeps the user's own setting.
-     */
+    
+
+
+
+
+
     suspend fun reconcileCriticalAlertBypass(appVersion: String = PackageUtil.getAppVersionName().orEmpty()): CriticalAlertBypass {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return CriticalAlertBypass.NOT_APPLICABLE
         if (!nm.isNotificationPolicyAccessGranted) return CriticalAlertBypass.NOT_APPLICABLE
@@ -169,11 +169,11 @@ class NotificationChannelManager @Inject constructor(
         return if (applied) CriticalAlertBypass.ENABLED else CriticalAlertBypass.NEEDS_USER_ACTION
     }
 
-    /**
-     * Deletes one obsolete id. Below API 31 the summary channel is deleted only while no
-     * notification sits on it: there a channel delete that cancels a group summary also cancels
-     * its children. The state only clears, since nothing posts to that channel any more.
-     */
+    
+
+
+
+
     @RequiresApi(Build.VERSION_CODES.O)
     private fun deleteSafely(id: String): ChannelDeletion {
         if (id == NotificationChannelIds.OBSOLETE_MESSAGE_SUMMARY && Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
@@ -189,7 +189,7 @@ class NotificationChannelManager @Inject constructor(
             nm.deleteNotificationChannel(id)
             ChannelDeletion.DELETED
         } catch (e: SecurityException) {
-            // API 31+: a foreground service still posts on it.
+            
             L.w { "[NotificationChannel] delete deferred id=$id error=${e.javaClass.simpleName}" }
             ChannelDeletion.DEFERRED
         } catch (e: Exception) {
@@ -213,7 +213,7 @@ class NotificationChannelManager @Inject constructor(
     private fun ensureGroup() {
         runCatching {
             val name = context.getString(requireNotNull(NotificationChannelIds.nameRes(NotificationChannelIds.MESSAGE_GROUP)))
-            // notificationChannelGroups is API 26; getNotificationChannelGroup(String) is API 28.
+            
             val existing = nm.notificationChannelGroups.firstOrNull { it.id == NotificationChannelIds.MESSAGE_GROUP }
             if (existing == null || existing.name?.toString() != name) {
                 nm.createNotificationChannelGroup(NotificationChannelGroup(NotificationChannelIds.MESSAGE_GROUP, name))
@@ -230,10 +230,10 @@ class NotificationChannelManager @Inject constructor(
         }
     }
 
-    /**
-     * Re-submits an existing channel under its localized name. The replica carries the current
-     * importance, group and bypass flag, so the update cannot lower or reset anything.
-     */
+    
+
+
+
     @RequiresApi(Build.VERSION_CODES.O)
     private fun renameExisting(id: String) {
         val existing = nm.getNotificationChannel(id) ?: return
@@ -243,12 +243,12 @@ class NotificationChannelManager @Inject constructor(
         L.i { "[NotificationChannel] renamed id=$id" }
     }
 
-    /** A copy of [existing] to re-submit under [name]: same importance, group and bypass flag. */
+    
     @RequiresApi(Build.VERSION_CODES.O)
     private fun replica(existing: NotificationChannel, name: String): NotificationChannel {
         val id = existing.id
         return NotificationChannel(id, name, existing.importance).apply {
-            // A legacy channel without a group gets one: AOSP assigns it only when the existing group is null.
+            
             group = existing.group ?: NotificationChannelIds.MESSAGE_GROUP.takeIf { id in MESSAGE_GROUP_IDS }
             setBypassDnd(existing.canBypassDnd())
         }

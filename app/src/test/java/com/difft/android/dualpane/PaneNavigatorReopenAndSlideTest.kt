@@ -2,15 +2,12 @@ package com.difft.android.dualpane
 
 import android.os.Looper
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.difft.android.R
 import com.difft.android.base.utils.pane.ConversationTarget
 import com.difft.android.dualpane.PaneNavigator.Companion.TAB_CHATS
 import com.difft.android.dualpane.PaneNavigator.Companion.TAB_ME
 import org.junit.After
-import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -22,11 +19,12 @@ import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import java.util.concurrent.TimeUnit
 
-/**
- * [PaneNavigator]: a reopened root conversation is told
- * (so it clears a manual unread mark like a fresh open), one-pane pushes slide while two-pane ones
- * stay instant, and Me settings pages always become the Me tab's root.
- */
+
+
+
+
+
+
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [33])
 class PaneNavigatorReopenAndSlideTest {
@@ -86,13 +84,13 @@ class PaneNavigatorReopenAndSlideTest {
 
     @Test
     @Config(qualifiers = "w400dp-h800dp")
-    fun `one-pane pushes slide in and pop out`() {
+    fun `one-pane pushes slide in and user pops slide out`() {
         launch()
-        assertArrayEquals(intArrayOf(R.anim.pane_push_enter, R.anim.pane_push_exit), nav.pushAnimations())
-        assertArrayEquals(intArrayOf(R.anim.pane_pop_enter, R.anim.pane_pop_exit), nav.popAnimations(userPop = true))
+        assertTrue(nav.slides())
+        assertTrue(nav.popSlides(userPop = true))
     }
 
-    /** Sign of the anim's start offset: the page enters / leaves on the layout's end side. */
+    
     private fun startsFromNegativeX(animRes: Int): Boolean {
         val parser = RuntimeEnvironment.getApplication().resources.getAnimation(animRes)
         while (parser.next() != XmlPullParser.START_TAG) Unit
@@ -104,24 +102,25 @@ class PaneNavigatorReopenAndSlideTest {
     }
 
     @Test
-    fun `left-to-right - a pushed page enters from the right and pops out to the right`() {
-        assertFalse(startsFromNegativeX(R.anim.pane_push_enter))
-        assertFalse(startsFromNegativeX(R.anim.pane_pop_exit))
+    fun `left-to-right - an Activity enters from the right and leaves to the right, like a page`() {
+        assertFalse(startsFromNegativeX(com.difft.android.base.R.anim.page_push_enter))
+        assertFalse(startsFromNegativeX(com.difft.android.base.R.anim.page_pop_exit))
     }
 
     @Test
     @Config(qualifiers = "ar-ldrtl")
-    fun `right-to-left - the slides mirror like the rest of the pane layout`() {
-        assertTrue(startsFromNegativeX(R.anim.pane_push_enter))
-        assertTrue(startsFromNegativeX(R.anim.pane_pop_exit))
+    fun `right-to-left - the window slides mirror like the pane layout`() {
+        assertTrue(startsFromNegativeX(com.difft.android.base.R.anim.page_push_enter))
+        assertTrue(startsFromNegativeX(com.difft.android.base.R.anim.page_pop_exit))
     }
 
     @Test
     @Config(qualifiers = "w840dp-h900dp")
-    fun `two-pane pushes stay instant`() {
+    fun `two-pane pushes and user pops slide too`() {
         launch()
-        assertNull(nav.pushAnimations())
-        assertNull(nav.popAnimations(userPop = true))
+        assertTrue(nav.slides())
+        assertTrue(nav.popSlides(userPop = true))
+        assertFalse(nav.popSlides(userPop = false))
     }
 
     @Test

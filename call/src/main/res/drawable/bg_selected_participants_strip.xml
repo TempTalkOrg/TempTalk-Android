@@ -9,7 +9,7 @@
         android:height="1dp"
         android:gravity="bottom">
         <shape android:shape="rectangle">
-            <solid android:color="@color/border" />
+            <solid android:color="@color/divider" />
         </shape>
     </item>
 </layer-list>

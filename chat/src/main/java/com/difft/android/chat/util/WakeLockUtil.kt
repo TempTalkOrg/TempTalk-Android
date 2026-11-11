@@ -6,9 +6,9 @@ import com.difft.android.base.log.lumberjack.L
 
 object WakeLockUtil {
 
-    /**
-     * @param tag will be prefixed with "signal:" if it does not already start with it.
-     */
+    
+
+
     @JvmStatic
     fun acquire(context: Context, lockType: Int, timeout: Long, tag: String): WakeLock? {
         val prefixedTag = prefixTag(tag)
@@ -23,9 +23,9 @@ object WakeLockUtil {
         }
     }
 
-    /**
-     * @param tag will be prefixed with "signal:" if it does not already start with it.
-     */
+    
+
+
     @JvmStatic
     fun release(wakeLock: WakeLock?, tag: String) {
         val prefixedTag = prefixTag(tag)

@@ -15,10 +15,10 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/**
- * The mic-queue avatar slot must reserve its 16dp footprint before the display info arrives, and
- * must do so without reaching for the Hilt entry point — this test runs with no Hilt graph.
- */
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [33])

@@ -15,24 +15,24 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.io.File
 
-/**
- * Behavioral guardrails for [GlideCacheKeyManager] — the degradation + self-heal contract.
- *
- * Robolectric does not emulate the AndroidKeystore (same limitation documented in
- * `WCDBKeyManagerTest`), so on the host JVM the Keystore-backed encrypt/decrypt path is unavailable
- * and [GlideCacheKeyManager.getKeyOrNull] degrades to `null`. The runnable tests below therefore pin
- * the **environment-independent** invariants that matter most for safety:
- *
- *  - it NEVER throws (the encrypted cache is a disposable optimization, never a correctness
- *    dependency) — neither on a clean slate, nor on a corrupt/zero/oversize/undecryptable key file;
- *  - its result is always either `null` or exactly a 32-byte key;
- *  - `getKeyOrNull()` and `isAvailable()` always agree;
- *  - repeated calls are stable.
- *
- * The Keystore-dependent specifics (actual key generation, self-heal SUCCESS, round-trip stability)
- * require a real device/emulator and are documented as `@Ignore`d contract tests, mirroring
- * `WCDBKeyManagerTest`.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class GlideCacheKeyManagerTest {
@@ -49,7 +49,7 @@ class GlideCacheKeyManagerTest {
     fun setup() {
         context = ApplicationProvider.getApplicationContext()
         resetCachedKey()
-        // Robolectric reuses filesDir across tests in the same process — start clean.
+        
         keyFile.delete()
         tempFile.delete()
     }
@@ -61,7 +61,7 @@ class GlideCacheKeyManagerTest {
         tempFile.delete()
     }
 
-    /** Reset the object's in-memory cache + readiness state so each test observes a cold load. */
+    
     private fun resetCachedKey() {
         GlideCacheKeyManager::class.java.getDeclaredField("cached").apply {
             isAccessible = true
@@ -69,10 +69,10 @@ class GlideCacheKeyManagerTest {
         }
         GlideCacheKeyManager::class.java.getDeclaredField("warmState").apply {
             isAccessible = true
-            setInt(GlideCacheKeyManager, 0) // STATE_UNKNOWN
+            setInt(GlideCacheKeyManager, 0) 
         }
-        // Clear the in-flight guard so an async warmUp() launched by a prior test cannot leave
-        // `warming` latched and starve warmUp() in the next test.
+        
+        
         GlideCacheKeyManager::class.java.getDeclaredField("warming").apply {
             isAccessible = true
             @Suppress("UNCHECKED_CAST")
@@ -114,8 +114,8 @@ class GlideCacheKeyManagerTest {
 
     @Test
     fun `getKeyOrNull does not crash on a correct-size but undecryptable key file`() {
-        // 60 bytes = 12 IV + 32 key + 16 tag → passes the size check, fails decryption.
-        // This is the exact trigger for the self-heal branch in loadOrCreate().
+        
+        
         keyFile.writeBytes(ByteArray(60) { it.toByte() })
         val key = GlideCacheKeyManager.getKeyOrNull(context)
         assertNullOr32Bytes(key)
@@ -135,22 +135,22 @@ class GlideCacheKeyManagerTest {
     @Test
     fun `isAvailable never throws regardless of key file state`() {
         keyFile.writeBytes(ByteArray(3))
-        // Must not throw; result type is the only contract on the host JVM.
+        
         GlideCacheKeyManager.isAvailable(context)
     }
 
     @Test
     fun `isCacheKeyReady returns false on a clean slate without blocking`() {
-        // warmState == UNKNOWN → must return false immediately (offloading the keystore work to an
-        // async warmUp), never touching the keystore synchronously on the (main-thread) caller.
+        
+        
         assertFalse(GlideCacheKeyManager.isCacheKeyReady(context))
     }
 
     @Test
     fun `isCacheKeyReady agrees with getKeyOrNull once resolved`() {
-        // Resolve state via the blocking path first. On the host JVM the Keystore is unavailable, so
-        // getKeyOrNull degrades to null → warmState becomes UNAVAILABLE → isCacheKeyReady must be false
-        // and consistent with getKeyOrNull(), never throwing.
+        
+        
+        
         val key = GlideCacheKeyManager.getKeyOrNull(context)
         assertEquals(key != null, GlideCacheKeyManager.isCacheKeyReady(context))
     }
@@ -158,13 +158,13 @@ class GlideCacheKeyManagerTest {
     @Test
     fun `isCacheKeyReady never throws regardless of key file state`() {
         keyFile.writeBytes(ByteArray(3))
-        // Must not throw; the non-blocking UI contract is the only thing pinned on the host JVM.
+        
         GlideCacheKeyManager.isCacheKeyReady(context)
     }
 
-    // --------------------------------------------------------------------- @Ignore'd
-    // Keystore-dependent contracts. AndroidKeystore is not emulated by Robolectric, so these
-    // document the behavior verified on a real device/emulator (mirrors WCDBKeyManagerTest).
+    
+    
+    
 
     @Test
     @Ignore("Requires AndroidKeystore — not available in Robolectric (host JVM)")
@@ -172,7 +172,7 @@ class GlideCacheKeyManagerTest {
         val key = GlideCacheKeyManager.getKeyOrNull(context)
         assertEquals(32, key!!.size)
         assertTrue(keyFile.exists())
-        assertEquals(60L, keyFile.length()) // 12 IV + 32 key + 16 GCM tag
+        assertEquals(60L, keyFile.length()) 
 
         resetCachedKey()
         val reloaded = GlideCacheKeyManager.getKeyOrNull(context)
@@ -183,8 +183,8 @@ class GlideCacheKeyManagerTest {
     @Test
     @Ignore("Requires AndroidKeystore — not available in Robolectric (host JVM)")
     fun `isCacheKeyReady becomes true after the key resolves`() {
-        // On a real device getKeyOrNull() succeeds → warmState = STATE_READY, so the non-blocking UI
-        // check flips to true and stays consistent with getKeyOrNull().
+        
+        
         assertEquals(32, GlideCacheKeyManager.getKeyOrNull(context)!!.size)
         assertTrue("isCacheKeyReady must be true once the key resolves", GlideCacheKeyManager.isCacheKeyReady(context))
     }
@@ -192,12 +192,12 @@ class GlideCacheKeyManagerTest {
     @Test
     @Ignore("Requires AndroidKeystore — not available in Robolectric (host JVM)")
     fun `self-heal regenerates a usable key when the key file is unreadable`() {
-        // Seed a correct-size but undecryptable file → self-heal must regenerate, not stay disabled.
+        
         keyFile.writeBytes(ByteArray(60) { it.toByte() })
 
         val key = GlideCacheKeyManager.getKeyOrNull(context)
         assertEquals(32, key!!.size)
-        assertEquals(60L, keyFile.length()) // overwritten with a valid sealed key
+        assertEquals(60L, keyFile.length()) 
 
         resetCachedKey()
         val reloaded = GlideCacheKeyManager.getKeyOrNull(context)

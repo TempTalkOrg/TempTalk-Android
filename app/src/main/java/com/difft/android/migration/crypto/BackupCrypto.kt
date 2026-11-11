@@ -13,59 +13,59 @@ import javax.crypto.spec.SecretKeySpec
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Low-level primitives for the backup encryption pipeline. Stateless — each method is
- * deterministic given its inputs and safe to call from any thread.
- *
- * The KDF is intentionally slow (~1s on mid-range devices); call it off the main thread.
- *
- * Security boundary: never log the passphrase, derived keys or cipher_key.
- */
+
+
+
+
+
+
+
+
 interface BackupCrypto {
 
-    /**
-     * Derive `(encKey: AES-256, macKey: HMAC-SHA256)` from `passphrase + salt` using
-     * PBKDF2-HMAC-SHA512 at [KDF_ITERATIONS]. Output is 64 bytes split 32 / 32.
-     *
-     * Deterministic: same `(passphrase, salt)` always yields the same pair.
-     */
+    
+
+
+
+
+
     fun deriveKeys(passphrase: String, salt: ByteArray): KeyPair
 
-    /** Initialise an AES/CTR/NoPadding cipher for streaming. */
+    
     fun newAesCtrCipher(mode: Int, encKey: SecretKey, iv: ByteArray): Cipher
 
-    /** Initialise an HMAC-SHA256 Mac for streaming. */
+    
     fun newHmacSha256(macKey: SecretKey): Mac
 
-    /**
-     * Build the 42-byte plaintext header:
-     *   `[MAGIC(4) | VERSION(2 BE) | SALT(16) | KDF_ITER(4 BE) | IV(16)]`.
-     */
+    
+
+
+
     fun buildHeader(salt: ByteArray, iv: ByteArray): ByteArray
 
-    /**
-     * Parse a 42-byte header and return its fields. Throws [IllegalArgumentException] for
-     * bad magic / unsupported version / unexpected KDF iter — the caller MUST translate
-     * to a `MigrationException` at the boundary.
-     */
+    
+
+
+
+
     fun parseHeader(header: ByteArray): Header
 
-    /**
-     * Build the encrypted-body prefix bytes (cleartext form):
-     *   `[CIPHER_KEY_LEN(2 BE)=48 | CIPHER_KEY(48) | DB_LEN(8 BE)]` — 58 bytes total.
-     */
+    
+
+
+
     fun buildBodyPrefix(cipherKey: ByteArray, dbLen: Long): ByteArray
 
-    /** Parse the 58-byte body prefix into `(cipherKey, dbLen)`. */
+    
     fun parseBodyPrefix(prefix: ByteArray): BodyPrefix
 
-    /** `SecureRandom.nextBytes` wrapper. Each invocation yields fresh entropy. */
+    
     fun randomBytes(size: Int): ByteArray
 
-    /**
-     * Constant-time byte-array equality. Returns false for differing-length arrays without
-     * leaking the length comparison via timing.
-     */
+    
+
+
+
     fun constantTimeEquals(a: ByteArray, b: ByteArray): Boolean
 
     data class KeyPair(val encKey: SecretKey, val macKey: SecretKey)
@@ -80,10 +80,10 @@ interface BackupCrypto {
     data class BodyPrefix(val cipherKey: ByteArray, val dbLen: Long)
 
     companion object {
-        /** ASCII bytes `"TTBK"` written verbatim at offset 0 of every backup file. */
+        
         const val MAGIC = "TTBK"
 
-        /** Format version of the v1 / same-platform byte-copy backup format. */
+        
         const val VERSION: Short = 0x0001
 
         const val SALT_BYTES = 16
@@ -92,16 +92,16 @@ interface BackupCrypto {
         const val PLAINTEXT_KEY_SIZE = 48
         const val KDF_ITERATIONS = 250_000
 
-        /** Header byte size: 4 (magic) + 2 (ver) + 16 (salt) + 4 (iter) + 16 (iv) = 42. */
+        
         const val HEADER_SIZE = MAGIC.length + 2 + SALT_BYTES + 4 + IV_BYTES
 
-        /** Encrypted body prefix size (cleartext form): 2 + 48 + 8 = 58. */
+        
         const val BODY_PREFIX_SIZE = 2 + PLAINTEXT_KEY_SIZE + 8
 
         const val AES_KEY_SIZE_BITS = 256
         const val HMAC_KEY_SIZE_BITS = 256
 
-        /** Streaming IO buffer for encrypt/decrypt. */
+        
         const val IO_BUFFER_BYTES = 64 * 1024
     }
 }
@@ -109,8 +109,8 @@ interface BackupCrypto {
 @Singleton
 class BackupCryptoImpl @Inject constructor() : BackupCrypto {
 
-    // SecureRandom is thread-safe per JDK spec; reuse the single instance to avoid the
-    // per-call seeding cost on some platforms.
+    
+    
     private val rng: SecureRandom = SecureRandom()
 
     override fun deriveKeys(passphrase: String, salt: ByteArray): BackupCrypto.KeyPair {
@@ -128,7 +128,7 @@ class BackupCryptoImpl @Inject constructor() : BackupCrypto {
         val derived = try {
             factory.generateSecret(spec).encoded
         } finally {
-            // Clear PBEKeySpec's internal copy of the passphrase as best-effort.
+            
             spec.clearPassword()
         }
         try {
@@ -136,8 +136,8 @@ class BackupCryptoImpl @Inject constructor() : BackupCrypto {
             val macKey: SecretKey = SecretKeySpec(derived.copyOfRange(32, 64), "HmacSHA256")
             return BackupCrypto.KeyPair(encKey, macKey)
         } finally {
-            // Wipe the joined 64-byte buffer — the two SecretKeySpec copies are the only
-            // remaining references to enc/mac material.
+            
+            
             derived.fill(0)
         }
     }
@@ -225,7 +225,7 @@ class BackupCryptoImpl @Inject constructor() : BackupCrypto {
     }
 
     override fun constantTimeEquals(a: ByteArray, b: ByteArray): Boolean {
-        // Length is fixed by the protocol on both sides, so an early length check leaks nothing.
+        
         if (a.size != b.size) return false
         var diff = 0
         for (i in a.indices) diff = diff or (a[i].toInt() xor b[i].toInt())

@@ -14,7 +14,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** Xiaomi's two pages and the openable-page rule; vivo is covered by [VivoSettingsChainTest]. */
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class XiaomiSettingsChainTest {
@@ -62,7 +62,7 @@ class XiaomiSettingsChainTest {
 
     @Test
     fun `neither row appears on an unrelated brand`() {
-        // The test device is not a Xiaomi, so neither row appears.
+        
         assertFalse(AutoStartPermissionHelper.canOpenAutoStartSettings(context))
         assertFalse(BackgroundActivityPermissionHelper.canOpenBackgroundActivitySettings(context))
     }

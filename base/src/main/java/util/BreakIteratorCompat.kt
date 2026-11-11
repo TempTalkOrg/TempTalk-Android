@@ -42,9 +42,9 @@ abstract class BreakIteratorCompat : Iterable<CharSequence> {
         }
     }
 
-    /**
-     * Take [atMost] graphemes from the start of string.
-     */
+    
+
+
     fun take(atMost: Int): CharSequence {
         if (atMost <= 0) return ""
 
@@ -62,11 +62,11 @@ abstract class BreakIteratorCompat : Iterable<CharSequence> {
         return stringBuilder.toString()
     }
 
-    /**
-     * The BreakIteratorCompat implementation, delegating to `android.icu.text.BreakIterator`.
-     * Handles grapheme clusters correctly. Sole implementation now (minSdk=26 always
-     * satisfies its API-24 requirement); do not re-add an SDK_INT/@RequiresApi guard.
-     */
+    
+
+
+
+
     private class AndroidIcuBreakIterator : BreakIteratorCompat() {
         private val breakIterator = android.icu.text.BreakIterator.getCharacterInstance()
 

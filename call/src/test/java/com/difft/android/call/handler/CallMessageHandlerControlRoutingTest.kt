@@ -34,14 +34,14 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos
 
-/**
- * Where [CallMessageHandler] sends a remote end: a CALLEND / HANGUP / REJECT for the call this device
- * is in goes straight to the live session through [CallSessionCommands]; a signal for the call the
- * incoming page is ringing for stays on `OnGoingCallStateManager.controlMessage`, which only that
- * page reads. A reject from the user's own other device never ends this device's call.
- * Robolectric only so `LCallManager` (whose object init reads `ApplicationHelper`) can be stubbed.
- * Rows: T4-16, T4-17, T5-22.
- */
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [33])
 class CallMessageHandlerControlRoutingTest {

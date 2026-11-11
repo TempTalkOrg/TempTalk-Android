@@ -27,28 +27,28 @@ import org.whispersystems.signalservice.internal.push.conversationId
 import org.whispersystems.signalservice.internal.push.forwardNoticeMessage
 import java.util.concurrent.TimeUnit
 
-/**
- * Sends a ForwardNoticeMessage after a forward operation completes.
- *
- * "Visible but silent": never carries a notification payload, never counts toward unread.
- * On primary send success, inserts the same notice into the sender device's local DB
- * via [LocalMessageCreator.createForwardNoticeMessage] so the originating device also
- * shows the system message (server does not echo the envelope back to the sender).
- *
- * Follows the minimal style of [PushReadReceiptSendJob]:
- *   - no notification payload
- *   - separate per-target queues (no head-of-line blocking across conversations)
- *   - fixed [Parameters.Builder.setMaxAttempts] of 3 (decorative, not a "must deliver")
- *   - retry only on Sender failure; DB-insert failures are logged + reported to
- *     Crashlytics but NOT rethrown (peer already has the notice; a retry would
- *     produce duplicate envelopes).
- *
- * `sendTs` (= System.currentTimeMillis()) is generated once per onPushSend call and
- * passed to BOTH the Sender (`sendTimestamp = sendTs`) AND the LocalMessageCreator
- * (`timestamp = sendTs`). This three-way alignment keeps the generated `messageId`
- * identical across sender-local DB insert, primary envelope receivers, and
- * SyncMessage receivers on other devices.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 class PushForwardNoticeSendJob @AssistedInject constructor(
     @Assisted parameters: Parameters?,
     @Assisted private val target: For,
@@ -70,27 +70,27 @@ class PushForwardNoticeSendJob @AssistedInject constructor(
     override fun onAdded() {}
 
     public override suspend fun onPushSend() {
-        // §4.11 invariant: sendTs is the SINGLE source of truth for Envelope.timestamp
-        // AND the local DB insert's NotifyMessage.timestamp. Never regenerate in the Sender.
+        
+        
         val sendTs = System.currentTimeMillis()
 
-        // Self-carried source conversation (payload.conversation) — receiver resolves
-        // notice's owning conversation WITHOUT relying on server-populated
-        // envelope.msgExtra.conversationId (that field was custom-notify-specific).
-        //
-        // Sender fills ONE payload from the SENDER's perspective; same payload is sent
-        // to both primary recipient and self-sync (no per-recipient variation):
-        //   - Group source          → conversation.groupId (server-format bytes)
-        //   - 1v1 source (peer=B)   → conversation.number = B (peer's id from my view)
-        //   - Note-to-Self source   → conversation.number = myId (self)
-        //
-        // Receiver rule:
-        //   hasGroupId                         → For.Group(groupId)
-        //   envelope.source == myId (self-sync) → For.Account(payload.number)
-        //   else (primary, envelope.source is the peer) → For.Account(envelope.source)
-        //
-        // Same pattern as SyncMessage.MarkAsUnread (proto:668), which also carries
-        // ConversationId inline rather than relying on msgExtra.
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
         val proto = forwardNoticeMessage {
             scene = noticeData.scene.toProtoEnum()
             sourceAuthorIds.addAll(noticeData.sourceAuthorIds)
@@ -99,17 +99,17 @@ class PushForwardNoticeSendJob @AssistedInject constructor(
             conversation = conversationId {
                 when (val src = target) {
                     is For.Group -> groupId = ByteString.copyFrom(src.id.transformGroupIdFromLocalToServer())
-                    is For.Account -> number = src.id   // peer uid from sender's view (= myId for NTS)
+                    is For.Account -> number = src.id   
                 }
             }
         }
 
-        // sendSyncToSelf: true only for 1v1-to-other. Sender reuses the SAME Content
-        // (payload already identifies source conversation); self-sync gets it via
-        // recipient=self and receiver resolves via envelope.source == myId branch.
-        //
-        // Groups: server fanouts to all members (including my-as-member). No sync.
-        // Note-to-Self source: recipient=self already reaches all my devices naturally.
+        
+        
+        
+        
+        
+        
         val sendSyncToSelf = target is For.Account && target.id != globalServices.myId
 
         L.i {
@@ -131,9 +131,9 @@ class PushForwardNoticeSendJob @AssistedInject constructor(
 
         val success = result.success
         if (success != null) {
-            // Primary send succeeded → insert local DB record on THIS device.
-            // DB failure is isolated — do NOT rethrow. Rethrowing would trigger Job retry,
-            // which re-sends the notice to peers (who already have it), producing duplicates.
+            
+            
+            
             try {
                 localMessageCreator.createForwardNoticeMessage(
                     operatorId = globalServices.myId,
@@ -144,23 +144,23 @@ class PushForwardNoticeSendJob @AssistedInject constructor(
                     sourceDevice = DEFAULT_DEVICE_ID
                 )
             } catch (ce: kotlinx.coroutines.CancellationException) {
-                // Preserve structured concurrency: let cancellation propagate so the
-                // enclosing coroutine / BaseJob sees it. Swallowing here would break
-                // Job cancellation semantics and also spam Crashlytics with false positives.
+                
+                
+                
                 throw ce
             } catch (dbE: Exception) {
                 L.e {
                     "[ForwardNotice][PushForwardNoticeSendJob] local DB insert failed, " +
                         "notice already sent to peers: ${dbE.stackTraceToString()}"
                 }
-                // swallow — peer already has it; retry would dup
+                
             }
         }
-        // Sender failure path: `sendForwardNoticeMessage` throws after exhausting internal
-        // retries (IOException, NonSuccessfulResponseCodeException, etc.). The thrown
-        // exception propagates up naturally — no explicit rethrow here. Job retry is
-        // safe because the Sender's "primary success → then sync" pattern guarantees
-        // no partial-success leak (if primary fails, no sync was sent).
+        
+        
+        
+        
+        
     }
 
     override fun onFailure() {

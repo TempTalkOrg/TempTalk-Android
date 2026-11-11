@@ -21,10 +21,10 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/**
- * [SaveAttachmentUtil.saveWithUI] releases only the wait it showed: hosted pages share the home
- * screen's wait slot, so a global release would close another page's or flow's wait.
- */
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class SaveAttachmentWaitTest {
@@ -51,7 +51,7 @@ class SaveAttachmentWaitTest {
         val activity = Robolectric.buildActivity(FragmentActivity::class.java).setup().get()
         val other = ComposeDialogManager.showWait(activity, "")
 
-        // The save itself fails; only the wait matters here.
+        
         runCatching { runBlocking { SaveAttachmentUtil.saveWithUI(activity, missing) } }
 
         assertTrue("another flow's wait stays", ComposeDialogManager.isWaitShowing(other))

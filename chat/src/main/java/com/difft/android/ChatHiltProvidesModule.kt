@@ -40,14 +40,14 @@ object ChatHiltProvidesModule {
             .registerTypeAdapter(ByteString::class.java, ByteStringTypeAdapter()).create()
     }
 
-    // Lockstep: must match the Data.Serializer set in ApplicationDependencyProvider's
-    // JobManager config. Drift here silently disables ReactionSendCoordinator dedupe.
+    
+    
     @Provides
     @Singleton
     fun provideJobDataSerializer(): Data.Serializer = JsonDataSerializer()
 
-    // Process-scoped — ReactionSendCoordinator launches enqueue work here so it survives
-    // Fragment/view destruction (the optimistic DB write has already committed by then).
+    
+    
     @Provides
     @Singleton
     @Named(ReactionSendCoordinator.REACTION_COORDINATOR_SCOPE)

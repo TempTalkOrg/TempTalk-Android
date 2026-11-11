@@ -29,19 +29,19 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import java.util.Collections
 
-/**
- * Builds [CallSession]s on the plain JVM: test dispatchers, a [FakeCallSessionComponentsFactory]
- * and a [CallSessionDeps] mock that hands out a REAL [OnGoingCallStateManager] (projection rows
- * assert its values). Phase B rows also call [PhaseBCollaboratorStubs.install].
- *
- * The session's room setup (Phase B, launched by its start) runs on [default]. By default that is
- * [parked], a dispatcher no test advances, so the room stays `Pending`; Phase B rows pass a
- * dispatcher they drive.
- *
- * Cleanup executor starts are captured ([cleanupStarts]) instead of running the steps on a real IO
- * thread, unless [captureCleanup] is false. Call [endAll] in `@After` (before `unmockkAll()`) so no
- * session `Job` outlives its test.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
 internal class CallSessionTestHarness(
     val main: CoroutineDispatcher,
     val default: CoroutineDispatcher = parked(),
@@ -64,7 +64,7 @@ internal class CallSessionTestHarness(
     }
     val dispatchers = CallSessionDispatchers(default = default, main = main)
 
-    /** Every session this harness created, in creation order. */
+    
     val sessions = mutableListOf<CallSession>()
     val factory = object : CallSession.Factory {
         override fun create(params: CallSessionParams, onEnded: (CallSession) -> Unit): CallSession =
@@ -72,7 +72,7 @@ internal class CallSessionTestHarness(
     }
     val holder = CallSessionHolder(factory)
 
-    /** `(reason, steps)` of every cleanup-executor start, in call order. */
+    
     val cleanupStarts: MutableList<Pair<String, List<CallCleanupExecutor.Step>>> =
         Collections.synchronizedList(mutableListOf())
 
@@ -104,22 +104,22 @@ internal class CallSessionTestHarness(
         entryWaitToken = entryWaitToken,
     )
 
-    /** Starts a session through the holder; fails the test when the start is refused or fails. */
+    
     fun start(p: CallSessionParams = params()): CallSession = checkNotNull(holder.start(p)) { "session start refused or failed" }
 
-    /**
-     * [start] with a call page attached, as on a call screen: rows that advance virtual time past
-     * the first-attach watchdog (10 s, CallSessionWatchdogTest) model a call that has its page.
-     */
+    
+
+
+
     fun startWithPage(p: CallSessionParams = params()): CallSession = start(p).also { it.attachUi() }
 
-    /** Writer view of [s]'s UI state: the session exposes the read type, the instance is the writer. */
+    
     fun uiWriter(s: CallSession) = s.uiState as CallSessionUiState
 
-    /**
-     * Ends every session (a no-op for an ended one) and cancels its `Job`, as the last cleanup step
-     * does, so no session `Job` leaks into later tests.
-     */
+    
+
+
+
     fun endAll() {
         sessions.toList().forEach {
             it.end(CallSessionEndReason.EXIT_CLEAR)
@@ -127,14 +127,14 @@ internal class CallSessionTestHarness(
         }
     }
 
-    /** What the session's last cleanup step does to its coroutines; the captured steps never run here. */
+    
     fun cancelScope(s: CallSession) = s.mainScope.cancel()
 
     companion object {
-        /** One test dispatcher for both views, on [scheduler]. */
+        
         fun onScheduler(scheduler: TestCoroutineScheduler) = CallSessionTestHarness(StandardTestDispatcher(scheduler))
 
-        /** A dispatcher on a scheduler of its own that nothing advances: work sent there never runs. */
+        
         fun parked(): CoroutineDispatcher = StandardTestDispatcher(TestCoroutineScheduler(), name = "parked")
     }
 }

@@ -30,7 +30,7 @@ class NewMessageEncryptor @Inject constructor(
         try {
             val privateKey = encryptionDataManager.getAciIdentityKey().privateKey.serialize().map { it.toUByte() }
             val publicKey = (Base64.decode(hisPublicKey).map { it.toUByte() }.removeKeyType())
-            val dtProto = DtProto(MESSAGE_CURRENT_VERSION)  // Version is set to 2
+            val dtProto = DtProto(MESSAGE_CURRENT_VERSION)
             dtProto.use {
                 val encryptedMessage = it.encryptMessage(publicKey, emptyMap(), privateKey, contentByteArray.paddedMessageBody().map { it.toUByte() })
                 return EncryptResult(
@@ -50,7 +50,7 @@ class NewMessageEncryptor @Inject constructor(
         try {
             val privateKey = encryptionDataManager.getAciIdentityKey().privateKey.serialize().map { it.toUByte() }
             val publicKeys = theirPubKeys.mapValues { Base64.decode(it.value).map { it.toUByte() }.removeKeyType() }
-            val dtProto = DtProto(MESSAGE_CURRENT_VERSION)  // Version is set to 2
+            val dtProto = DtProto(MESSAGE_CURRENT_VERSION)
             dtProto.use {
                 val encryptedMessage = it.encryptMessage(emptyList(), publicKeys, privateKey, contentByteArray.paddedMessageBody().map { it.toUByte() })
                 return EncryptResult(
@@ -72,25 +72,6 @@ class NewMessageEncryptor @Inject constructor(
         } else this
     }
 
-//    override fun encryptCallKey(pubKeys: Map<String, String>, mKey: String?): EncryptCallKeyResult {
-//        try {
-//            val mKeyUBytes = mKey?.let { key ->
-//                (Base64.decode(key).map { it.toUByte() }.removeKeyType())
-//            }
-//            val publicKeys = pubKeys.mapValues { Base64.decode(it.value).map { key -> key.toUByte() }.removeKeyType() }
-//            val dtProto = DtProto(MESSAGE_CURRENT_VERSION)  // Version is set to 2
-//            dtProto.use {
-//                val encryptedMessage = it.encryptKey(publicKeys, mKeyUBytes)
-//                return EncryptCallKeyResult(
-//                    mKey = encryptedMessage.mKey.map { it.toByte() }.toByteArray(),
-//                    eMKeys = encryptedMessage.eMKeys.mapValues { it.value.map { it.toByte() }.toByteArray() },
-//                    eKey = encryptedMessage.eKey.map { it.toByte() }.toByteArray()
-//                )
-//            }
-//        } catch (e: Exception) {
-//            throw RustEncryptionException(e)
-//        }
-//    }
 
     override fun generateKey(): ByteArray {
         val dtProto = DtProto(MESSAGE_CURRENT_VERSION)
@@ -103,7 +84,7 @@ class NewMessageEncryptor @Inject constructor(
                 (key.map { it.toUByte() }.removeKeyType())
             }
             val publicKeys = pubKeys.mapValues { Base64.decode(it.value).map { key -> key.toUByte() }.removeKeyType() }
-            val dtProto = DtProto(MESSAGE_CURRENT_VERSION)  // Version is set to 2
+            val dtProto = DtProto(MESSAGE_CURRENT_VERSION)
             dtProto.use {
                 val encryptedMessage = it.encryptKey(publicKeys, mKeyUBytes)
                 return EncryptCallKeyResult(
@@ -123,26 +104,23 @@ class NewMessageEncryptor @Inject constructor(
             val privateKey = encryptionDataManager.getAciIdentityKey().privateKey.serialize().map { it.toUByte() }
             val eMKeyBytes = Base64.decode(eMKey).map { it.toUByte() }
 
-            val dtProto = DtProto(MESSAGE_CURRENT_VERSION)  // Version is set to 2
+            val dtProto = DtProto(MESSAGE_CURRENT_VERSION)
             dtProto.use {
                 val dtDecryptedKey = it.decryptKey(eKeyBytes, privateKey, eMKeyBytes)
                 val dtDecryptedKeyBytes = dtDecryptedKey.mKey.map { it.toByte() }.toByteArray()
-//                return String(dtDecryptedKeyBytes, Charsets.UTF_8)
 
-//                return Base64.encodeBytes(dtDecryptedKeyBytes)
 
                 return dtDecryptedKeyBytes
             }
         } catch (e: Exception) {
             L.e(e) { "decryptCallKey error:" }
             return null
-//            throw RustEncryptionException(e)
         }
     }
 
     override fun encryptRtmMessage(message: ByteArray, localPrivateKey: ByteArray, aesKey: ByteArray, timestamp: Long): String {
         try {
-            val dtProto = DtProto(MESSAGE_CURRENT_VERSION)  // Version is set to 2
+            val dtProto = DtProto(MESSAGE_CURRENT_VERSION)
             dtProto.use {
                 val mMessageUBytes = message.let { key -> (key.map { it.toUByte() }) }
                 val mLocalKeyUBytes = localPrivateKey.let { key -> (key.map { it.toUByte() }) }
@@ -171,7 +149,7 @@ class NewMessageEncryptor @Inject constructor(
             val encryptedTextUBytes = android.util.Base64.decode(rtmEncryptedMessage.payload, android.util.Base64.NO_WRAP).map { it.toUByte() }
             val signatureUBytes = android.util.Base64.decode(rtmEncryptedMessage.signature, android.util.Base64.NO_WRAP).map { it.toUByte() }
             val mAesKey = aesKey.copyOfRange(0, 32).map { it.toUByte() }
-            val dtProto = DtProto(MESSAGE_CURRENT_VERSION)  // Version is set to 2
+            val dtProto = DtProto(MESSAGE_CURRENT_VERSION)
             dtProto.use {
                 val decryptedMessage = it.decryptRtmMessage(signatureUBytes, publicKey, mAesKey, encryptedTextUBytes)
                 if (decryptedMessage.verifiedIdResult) {

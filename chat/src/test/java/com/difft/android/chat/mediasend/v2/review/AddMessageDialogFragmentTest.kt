@@ -1,12 +1,16 @@
 package com.difft.android.chat.mediasend.v2.review
 
+import android.content.res.Configuration
 import android.os.Bundle
 import android.os.Looper
 import androidx.core.content.ContextCompat
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import com.difft.android.base.widget.DifftClearableInputView
+import com.difft.android.base.widget.FloatingSurfaceDrawable
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.chat.R
 import com.difft.android.chat.common.MAX_TEXT_FILE_SIZE
@@ -30,13 +34,13 @@ import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/**
- * The media caption on the shared input: the text-file size cap runs on the field's edits, and
- * the confidential style recolours the field's box. Real dialog, real view model; only the toast
- * is stubbed.
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
-// API 29: the dialog's keyboard-aware root reads the display through a path Robolectric only backs below 30.
+
 @Config(application = TestScopeApplication::class, sdk = [29])
 class AddMessageDialogFragmentTest {
 
@@ -48,7 +52,7 @@ class AddMessageDialogFragmentTest {
         CaptionHostActivity.confidentialMode = confidentialMode
         controller = Robolectric.buildActivity(CaptionHostActivity::class.java).setup()
         val activity = controller.get()
-        // The review screen owns the shared view model before the caption dialog opens.
+        
         ViewModelProvider(activity)[MediaSelectionViewModel::class.java]
         idle()
         AddMessageDialogFragment.show(activity.supportFragmentManager, initialText, false)
@@ -59,11 +63,11 @@ class AddMessageDialogFragmentTest {
 
     private fun idle() = shadowOf(Looper.getMainLooper()).idle()
 
-    /**
-     * The view model's caption once its state update has landed: the store applies updates on a
-     * background serial executor and posts the result, so the test waits (bounded) for the
-     * expected value instead of idling the main looper once.
-     */
+    
+
+
+
+
     private fun CaptionHostActivity.message(expected: String?): String? {
         val model = ViewModelProvider(this)[MediaSelectionViewModel::class.java]
         val deadline = System.currentTimeMillis() + 2_000
@@ -123,25 +127,37 @@ class AddMessageDialogFragmentTest {
         val capped = input.query
         assertEquals(MAX_TEXT_FILE_SIZE, capped.toByteArray(Charsets.UTF_8).size)
         verify(exactly = 1) { ToastUtil.show(any<String>()) }
-        // Release the large text before the dialog composes it; the view model keeps its copy.
+        
         input.query = ""
         assertEquals(capped, activity.message(capped))
     }
 
     @Test
-    fun `normal mode draws the bordered message box and no field box over it`() {
+    fun `normal mode draws the floating message box and no field box over it`() {
         val (_, input) = open(confidentialMode = 0)
-        assertEquals(R.drawable.chat_msg_input_field_bg, shadowOf(input.background).createdFromResId)
+        assertEquals(
+            Configuration.UI_MODE_NIGHT_YES,
+            input.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK,
+        )
+        assertTrue(input.background is FloatingSurfaceDrawable)
         assertEquals(android.graphics.Color.TRANSPARENT, input.containerColor)
+        assertNull(input.foreground)
+        val area = (input.parent as android.view.View).background as android.graphics.drawable.ColorDrawable
+        assertEquals(ContextCompat.getColor(input.context, com.difft.android.base.R.color.bg1), area.color)
     }
 
     @Test
-    fun `confidential mode draws the confidential bordered box on the confidential area`() {
-        val (activity, input) = open(confidentialMode = 1)
-        assertEquals(R.drawable.chat_msg_input_bg_confidential, shadowOf(input.background).createdFromResId)
+    fun `confidential mode only outlines the floating box on the normal dark area`() {
+        val (_, input) = open(confidentialMode = 1)
+        assertEquals(
+            Configuration.UI_MODE_NIGHT_YES,
+            input.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK,
+        )
+        assertTrue(input.background is FloatingSurfaceDrawable)
         assertEquals(android.graphics.Color.TRANSPARENT, input.containerColor)
         val area = (input.parent as android.view.View).background as android.graphics.drawable.ColorDrawable
-        assertEquals(ContextCompat.getColor(activity, com.difft.android.base.R.color.bg_confidential_area), area.color)
+        assertEquals(ContextCompat.getColor(input.context, com.difft.android.base.R.color.bg1), area.color)
+        assertNotNull(input.foreground)
     }
 }
 
@@ -160,7 +176,7 @@ class CaptionHostActivity : FragmentActivity() {
     }
 
     companion object {
-        /** Robolectric constructs the activity, so the mode is handed over statically. */
+        
         var confidentialMode = 0
     }
 }

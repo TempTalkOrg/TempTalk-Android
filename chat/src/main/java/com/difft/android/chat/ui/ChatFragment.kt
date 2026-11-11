@@ -1,5 +1,10 @@
 package com.difft.android.chat.ui
 
+import com.difft.android.base.ui.topchrome.installTopInsetPadding
+import com.difft.android.base.ui.topchrome.installTopInsetSpacer
+import com.difft.android.base.ui.topchrome.TopChromeStyle
+import com.difft.android.base.ui.topchrome.TopChromeOwner
+import com.difft.android.base.ui.sidechrome.padForSideChrome
 import android.Manifest
 import android.os.Bundle
 import android.text.TextUtils
@@ -23,7 +28,6 @@ import com.difft.android.base.android.permission.PermissionUtil
 import com.difft.android.base.android.permission.PermissionUtil.launchSinglePermission
 import com.difft.android.base.android.permission.PermissionUtil.registerPermission
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.RoomChangeTracker
 import com.difft.android.base.utils.RoomChangeType
 import com.difft.android.base.utils.globalServices
@@ -63,12 +67,11 @@ import com.difft.android.chat.util.MessageNotificationUtil
 import com.difft.android.chat.util.ViewUtil
 import javax.inject.Inject
 
-/**
- * ChatFragment - 单聊页面 Fragment
- * 用于支持大屏双栏布局
- */
+
 @AndroidEntryPoint
-class ChatFragment : Fragment(), ChatMessageListProvider, VoiceRecordHost, ReopenableConversationPage {
+class ChatFragment : Fragment(), ChatMessageListProvider, VoiceRecordHost, ReopenableConversationPage, TopChromeOwner {
+    override val topChromeStyle get() = TopChromeStyle.Feather
+
 
     override fun onConversationReopened() {
         chatViewModel.onReopened()
@@ -103,11 +106,11 @@ class ChatFragment : Fragment(), ChatMessageListProvider, VoiceRecordHost, Reope
             }
         }
 
-        /**
-         * (sourceType, source) the 1:1 conversation enclosing [fragment] was opened with, read from
-         * that [ChatFragment]'s arguments, so it works in ChatActivity and in IndexActivity's
-         * detail stacks alike. (null, null) outside a ChatFragment (popups).
-         */
+        
+
+
+
+
         fun conversationSourceOf(fragment: Fragment): Pair<String?, String?> {
             var current: Fragment? = fragment
             while (current != null && current !is ChatFragment) current = current.parentFragment
@@ -161,10 +164,7 @@ class ChatFragment : Fragment(), ChatMessageListProvider, VoiceRecordHost, Reope
     ): View {
         _binding = ChatFragmentChatBinding.inflate(inflater, container, false)
         
-        // Force initialize ViewModels before child fragments are created.
-        // Child fragments (ChatHeaderFragment, etc.) use this fragment as ViewModel owner,
-        // and their onCreateView runs before our onViewCreated.
-        // By accessing ViewModels here, we ensure they exist when children access them.
+        
         chatViewModel
         chatSettingViewModel
         
@@ -173,9 +173,19 @@ class ChatFragment : Fragment(), ChatMessageListProvider, VoiceRecordHost, Reope
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        
+        padForSideChrome(view)
+        
+        installTopInsetSpacer(binding.topInsetSpacer)
+        
+        installTopInsetPadding(binding.includeFullInput.root)
+        installConversationGlass(this, binding.root, binding.fragmentContainerViewContents)
+        trackChatChrome(viewLifecycleOwner, binding.fragmentContainerViewContents, binding.fragmentContainerViewHeader, binding.fragmentContainerViewInput) {
+            getChatMessageListFragment()?.setChromeInsets(it.top, it.bottom)
+        }
 
-        // API < 30: WindowInsetsAnimationCompat doesn't work with adjustNothing, so the window
-        // resizes for the keyboard; shared with the other pages of this window (no-op on 30+).
+        
+        
         SoftInputModeLease.acquireResize(requireActivity(), this, conversationRoot = true)
 
         viewLifecycleOwner.lifecycleScope.launch {
@@ -200,15 +210,14 @@ class ChatFragment : Fragment(), ChatMessageListProvider, VoiceRecordHost, Reope
     }
 
     override fun onDestroyView() {
-        // The last page of this window to let go restores the window's mode, so a conversation
-        // closed in another tab does not reset it under a page still using the keyboard.
+        
+        
         SoftInputModeLease.release(requireActivity(), this)
         super.onDestroyView()
         _binding = null
     }
 
     private fun onCreateForShowingMessages(savedInstanceState: Bundle?) {
-//        ScreenShotUtil.forceDisable(requireActivity())
 
         if (TextUtils.isEmpty(chatViewModel.forWhat.id)) {
             ToastUtil.show("No contactID detected. Finishing Activity.")
@@ -325,21 +334,21 @@ class ChatFragment : Fragment(), ChatMessageListProvider, VoiceRecordHost, Reope
             .launchIn(viewLifecycleOwner.lifecycleScope)
     }
 
-    /**
-     * Show confidential message first-use tip dialog
-     */
+    
+
+
     private fun showConfidentialTipDialog(onConfirm: () -> Unit) {
-        // Mark as shown when dialog is displayed
-        globalServices.userManager.update { hasShownConfidentialTip = true }
         var dialog: ComposeDialog? = null
         dialog = dismissWithView(ComposeDialogManager.showBottomDialog(
             activity = requireActivity(),
+            showDragHandle = false,
             onDismiss = { }
         ) {
             ConfidentialTipDialogContent(
                 title = getString(R.string.chat_confidential_tip_title),
                 content = getString(R.string.chat_confidential_tip_content),
                 onConfirm = {
+                    globalServices.userManager.update { hasShownConfidentialTip = true }
                     dialog?.dismiss()
                     onConfirm()
                 }
@@ -364,12 +373,10 @@ class ChatFragment : Fragment(), ChatMessageListProvider, VoiceRecordHost, Reope
                 return@launch
             }
             if (conversationSet?.confidentialMode == 1) {
-                val drawable = ResUtils.getDrawable(R.drawable.chat_btn_confidential_mode_enable)
-                binding.includeFullInput.ivFullInputConfidential.setImageDrawable(drawable)
+                binding.includeFullInput.ivFullInputConfidential.setImageResource(R.drawable.chat_btn_confidential_mode_enable)
                 binding.includeFullInput.ivFullInputConfidential.tag = 1
             } else {
-                val drawable = ResUtils.getDrawable(R.drawable.chat_btn_confidential_mode_disable)
-                binding.includeFullInput.ivFullInputConfidential.setImageDrawable(drawable)
+                binding.includeFullInput.ivFullInputConfidential.setImageResource(R.drawable.chat_btn_confidential_mode_disable)
                 binding.includeFullInput.ivFullInputConfidential.tag = 0
             }
         }
@@ -388,11 +395,11 @@ class ChatFragment : Fragment(), ChatMessageListProvider, VoiceRecordHost, Reope
         }
     }
 
-    /**
-     * Fetch latest contact info from server, compare with local data,
-     * and refresh UI + message contact cache if changed.
-     * Bypasses the global event bus to avoid circular refresh.
-     */
+    
+
+
+
+
     private fun fetchContactInfoFromServer() {
         viewLifecycleOwner.lifecycleScope.launch {
             try {
@@ -490,10 +497,10 @@ class ChatFragment : Fragment(), ChatMessageListProvider, VoiceRecordHost, Reope
         return childFragmentManager.findFragmentById(R.id.fragment_container_view_contents) as? ChatMessageListFragment
     }
 
-    /**
-     * Focus the input field and show keyboard.
-     * Used when returning from contact detail popup.
-     */
+    
+
+
+
     fun focusInputAndShowKeyboard() {
         val inputFragment = childFragmentManager.findFragmentById(R.id.fragment_container_view_input) as? ChatMessageInputFragment
         inputFragment?.focusInputAndShowKeyboard()

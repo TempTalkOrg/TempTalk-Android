@@ -2,9 +2,9 @@ package util
 
 import java.io.IOException
 
-/**
- * Utility for generating hex dumps.
- */
+
+
+
 object Hex {
 
     private const val HEX_DIGITS_START = 10
@@ -53,7 +53,7 @@ object Hex {
 
         val out = ByteArray(len shr 1)
 
-        // two characters form the hex value.
+        
         var i = 0
         var j = 0
         while (j < len) {

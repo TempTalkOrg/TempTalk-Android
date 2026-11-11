@@ -7,7 +7,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Test
 
-/** The build-config spelling never reaches the wire; each build maps to the one neutral name. */
+
 class MigrationEnvironmentTest {
 
     private fun helper(current: String) = object : EnvironmentHelper {

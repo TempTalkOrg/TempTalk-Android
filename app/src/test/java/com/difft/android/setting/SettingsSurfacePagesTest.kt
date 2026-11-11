@@ -4,10 +4,10 @@ import com.difft.android.base.utils.pane.SettingsIdiomPage
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * Every Me page that paints the settings surface (`bg`) must declare it, so the pane container
- * behind it uses the same surface during transitions and the theme guard enumerates it.
- */
+
+
+
+
 class SettingsSurfacePagesTest {
 
     @Test

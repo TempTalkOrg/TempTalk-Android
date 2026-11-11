@@ -31,8 +31,8 @@ class DifftColorTokenDetectorTest {
             )
             .issues(DifftColorTokenDetector.ISSUE)
             .allowMissingSdk()
-            // Compose's Color is a value class, so @JvmOverloads cannot be applied to the stub
-            // factories that return it — that harness mode rewrites them into invalid Kotlin.
+            
+            
             .skipTestModes(TestMode.JVM_OVERLOADS)
             .run()
             .expectErrorCount(2)
@@ -62,7 +62,7 @@ class DifftColorTokenDetectorTest {
             )
             .issues(DifftColorTokenDetector.ISSUE)
             .allowMissingSdk()
-            // Same value-class stubs as above: keep the @JvmOverloads harness mode off everywhere.
+            
             .skipTestModes(TestMode.JVM_OVERLOADS)
             .run()
             .expectErrorCount(1)
@@ -102,7 +102,7 @@ class DifftColorTokenDetectorTest {
             )
             .issues(DifftColorTokenDetector.ISSUE)
             .allowMissingSdk()
-            // Same value-class stubs as above: keep the @JvmOverloads harness mode off everywhere.
+            
             .skipTestModes(TestMode.JVM_OVERLOADS)
             .run()
             .expectClean()
@@ -140,9 +140,9 @@ class DifftColorTokenDetectorTest {
     }
 
     private companion object {
-        // File name matters: Kotlin compiles top-level functions into `<FileName>Kt`, which the
-        // detector matches on. `Color` is a value class on purpose — real Compose mangles the
-        // factory that returns it (`Color-8_81llA`), and the detector must match through that.
+        
+        
+        
         val COLOR_STUB = kotlin(
             "src/androidx/compose/ui/graphics/Color.kt",
             """

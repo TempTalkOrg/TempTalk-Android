@@ -38,30 +38,28 @@ class ScreenShareSurfaceViewRenderer : SurfaceViewRenderer, ViewVisibility.Notif
     }
 
     override fun release() {
-        // 标记为已释放，防止后续帧处理
+        
         isReleased = true
         initialized = false
         resetFrameState()
         
-        // 清理所有监听器，防止内存泄漏
         synchronized(frameStatusListeners) {
             frameStatusListeners.clear()
         }
         
-        // 清理 viewVisibility 引用，防止持有 Activity 引用
+        
         viewVisibility = null
         
         try {
             super.release()
         } catch (e: Exception) {
-            // 忽略释放过程中的异常，避免崩溃
             L.w {"[Call] ScreenShare SurfaceViewRenderer Error during release: ${e.message}."}
         }
     }
 
     @SuppressLint("LogNotTimber")
     override fun onFrame(frame: VideoFrame) {
-        // 如果已经释放，不再处理帧，避免 updateTexImage 崩溃
+        
         if (!initialized || isReleased) {
             if (!initialized) {
                 L.e {"[Call] ScreenShare SurfaceViewRenderer Received frame when not initialized! You must call Room.initVideoRenderer(view) before using this view!"}
@@ -72,25 +70,22 @@ class ScreenShareSurfaceViewRenderer : SurfaceViewRenderer, ViewVisibility.Notif
         try {
             super.onFrame(frame)
             if (firstFrameJustRendered) {
-                // 跳过与 onFirstFrameRendered 并发的帧（同一帧，尚未合成到屏幕）
+                
                 firstFrameJustRendered = false
                 return
             }
             if (hasFirstFrameRendered && !dismissPlaceholderView) {
-                // 此时上一帧已实际渲染到 Surface，可以安全移除占位图
+                
                 dismissPlaceholderView = true
                 frameStatusListeners.toList().forEach { it.onDismissPlaceHolderView() }
             }
         } catch (e: RuntimeException) {
-            // 捕获 updateTexImage 相关的 RuntimeException，避免崩溃
-            // 这通常发生在 SurfaceTexture 已经释放但还在尝试更新纹理时
+            
             if (e.message?.contains("updateTexImage") == true || 
                 e.message?.contains("SurfaceTexture") == true) {
                 L.w { "[Call] ScreenShare SurfaceViewRenderer Error updating texture, renderer may be released: ${e.message}" }
-                // 标记为已释放，防止后续帧处理
                 isReleased = true
             } else {
-                // 其他异常重新抛出
                 throw e
             }
         }

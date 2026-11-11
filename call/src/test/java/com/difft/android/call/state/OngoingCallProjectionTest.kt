@@ -26,14 +26,14 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 
-/**
- * OnGoingCallStateManager's session fields as a fenced projection: only the owning session writes
- * them, `endPresence` resets them (the incoming page's `controlMessage` excepted) and releases the
- * fence, a different session binding over a live owner resets them too, and a real session
- * publishes its identity, call type and presence from its start. The page flags follow the
- * process-wide count of call pages: the last one to go resets them.
- * Rows: T4-19..T4-24, T4-21b/T4-21c, T4-33, T5-15 (fence half).
- */
+
+
+
+
+
+
+
+
 class OngoingCallProjectionTest {
 
     private val testDispatcher = StandardTestDispatcher()
@@ -154,7 +154,7 @@ class OngoingCallProjectionTest {
         ogsm.updateControlMessage(control)
         assertTrue(connectedAtA > 0L)
 
-        // Session B binds before A's page ran endPresence.
+        
         ogsm.bindSession(2L)
 
         assertFalse(ogsm.isInCalling())
@@ -171,7 +171,7 @@ class OngoingCallProjectionTest {
         assertTrue(ogsm.isInPipMode())
         assertEquals(control, ogsm.controlMessage.value)
 
-        // A's late writes and its late endPresence are rejected.
+        
         assertFalse(ogsm.publish(1L) { setCurrentRoomId("rA") })
         assertFalse(ogsm.endPresence(1L))
         assertNull(ogsm.getCurrentRoomId())
@@ -235,8 +235,8 @@ class OngoingCallProjectionTest {
 
     @Test
     fun `an overlapping older page going away resets nothing while a newer page is up`() {
-        ogsm.callPageAttached() // the old page, still being destroyed
-        ogsm.callPageAttached() // the new page
+        ogsm.callPageAttached() 
+        ogsm.callPageAttached() 
         ogsm.setIsInForeground(true)
         ogsm.setIsInPipMode(true)
 
@@ -246,7 +246,7 @@ class OngoingCallProjectionTest {
         assertTrue(ogsm.isInPipMode())
 
         ogsm.callPageDetached()
-        ogsm.callPageDetached() // an extra detach never drives the count below zero
+        ogsm.callPageDetached() 
         ogsm.callPageAttached()
         ogsm.setIsInPipMode(true)
         ogsm.callPageAttached()
@@ -264,7 +264,7 @@ class OngoingCallProjectionTest {
         assertEquals("g1", ogsm.getConversationId())
         assertFalse(ogsm.isInitiatorPreConnectCancelled())
 
-        // One call at a time: the start call ends before the join starts.
+        
         start.end(CallSessionEndReason.EXIT_CLEAR)
         h.start(
             h.params(
@@ -272,7 +272,7 @@ class OngoingCallProjectionTest {
             ),
         )
 
-        // The start session's identity went with it; the join writes only its conversation.
+        
         assertNull(ogsm.getClientCallId())
         assertEquals("g2", ogsm.getConversationId())
     }
@@ -293,16 +293,16 @@ class OngoingCallProjectionTest {
 
     @Test
     fun `T4-33 page re-entry keeps a pending pre-connect cancel and only endPresence clears it`() {
-        every { appScope } returns TestScope(StandardTestDispatcher()) // E1's signaling never starts
+        every { appScope } returns TestScope(StandardTestDispatcher()) 
         val session = h.start(startParams())
         session.attachUi()
         assertEquals("c1", ogsm.getClientCallId())
 
-        // E1: the initiator leaves while still CALLING; the latch goes through the session's publisher.
+        
         session.requestExit(exitParams(), CallEndType.LEAVE)
         assertTrue(ogsm.isInitiatorPreConnectCancelled())
 
-        // What a page re-entry can still do (onNewIntent does not re-publish the identity).
+        
         session.attachUi()
         session.detachUi()
 

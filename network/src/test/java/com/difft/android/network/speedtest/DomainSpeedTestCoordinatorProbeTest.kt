@@ -20,10 +20,10 @@ import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/**
- * Probe publication, resets and probe triggers of [DomainSpeedTestCoordinator] (#1396): a probe
- * never overwrites a host that changed after it started, and every trigger respects its throttle.
- */
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(manifest = Config.NONE)
@@ -34,13 +34,13 @@ class DomainSpeedTestCoordinatorProbeTest {
 
     @After
     fun tearDown() {
-        // startPeriodicTest launches a real timer on appScope; stop it so it does not outlive the test.
+        
         coordinator.startPeriodicTest(isForeground = false)
     }
 
-    // -- probe publication (T10, T10b) --
+    
 
-    // T10 — a mark that lands while a probe is in flight survives its publication.
+    
     @Test
     fun `a mark made while a probe runs survives the probe publication`() = runTest {
         val gate = CompletableDeferred<List<HostSpeedResult>>()
@@ -55,7 +55,7 @@ class DomainSpeedTestCoordinatorProbeTest {
         assertEquals(B, coordinator.getBestHostSync())
     }
 
-    // T10b — the probe saw A down, but A answered before the probe published.
+    
     @Test
     fun `a healthy answer made while a probe runs survives the probe publication`() = runTest {
         val gate = CompletableDeferred<List<HostSpeedResult>>()
@@ -70,7 +70,7 @@ class DomainSpeedTestCoordinatorProbeTest {
         assertEquals(A, coordinator.getBestHostSync())
     }
 
-    // #1396 — a probe that ends while the network is down must not publish every host as down.
+    
     @Test
     fun `a probe that completes while offline is discarded`() = runTest {
         h.setPersistedBestHost(B)
@@ -112,7 +112,7 @@ class DomainSpeedTestCoordinatorProbeTest {
         assertEquals(listOf(B, C), coordinator.getAllHostsRanked())
     }
 
-    // -- reset --
+    
 
     @Test
     fun `resetAvailability clears marks and probe verdicts`() {
@@ -138,7 +138,7 @@ class DomainSpeedTestCoordinatorProbeTest {
         assertTrue(A in coordinator.getAllHostsRanked())
     }
 
-    // T22 — under the proxy the periodic clear resets what failover marked.
+    
     @Test
     fun `the periodic proxy clear makes a marked tunnel host eligible again`() = runTest {
         h.setProxy(P1, P2)
@@ -159,7 +159,7 @@ class DomainSpeedTestCoordinatorProbeTest {
         assertEquals(A, h.persistedBestHost)
     }
 
-    // -- probe triggers --
+    
 
     @Test
     fun `three consecutive websocket failures request a probe`() {

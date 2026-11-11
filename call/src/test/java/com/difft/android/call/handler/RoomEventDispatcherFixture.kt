@@ -18,15 +18,15 @@ import io.mockk.mockk
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 
-/**
- * Single owner of the [RoomEventHost] + [RoomEventDispatcher] construction shared by the
- * `RoomEventDispatcher*Test` classes. Collaborators are relaxed mocks a test can stub further (or
- * replace, for the `var`s, before [build]); the UI output goes to a real [CallSessionUiState]
- * (a session's own one when a test passes it).
- * Host calls are recorded in the lists below.
- *
- * Defaults: not retry-connecting, call status CONNECTED, room state CONNECTED, room id `room-1`.
- */
+
+
+
+
+
+
+
+
+
 internal class RoomEventDispatcherFixture(
     val scope: CoroutineScope,
     val uiState: CallSessionUiState = CallSessionUiState(),
@@ -42,24 +42,24 @@ internal class RoomEventDispatcherFixture(
     var participantManager: ParticipantManager = mockk(relaxed = true)
     var timerManager: TimerManager = mockk(relaxed = true)
 
-    /** `(participant, message, type)` of every host barrage, in order. */
+    
     val barrages = mutableListOf<Triple<Participant, String, Int?>>()
 
-    /** Every host `setMicEnabled(enabled, publishMuted, isShowBarrage)`, in order. */
+    
     val setMicCalls = mutableListOf<Triple<Boolean, Boolean, Boolean>>()
     val setCameraCalls = mutableListOf<Boolean>()
 
-    /** Every host `onNetworkPoorStateChanged(poor)`, in order. */
+    
     val networkPoorCalls = mutableListOf<Boolean>()
     var startCallTimerCalls = 0
 
-    /** `stopRingToneAndTimeoutCheck` / `handleConnectedState` host calls, in order. */
+    
     val connectStepCalls = mutableListOf<String>()
 
-    /** Room ids of every host `onRemoteEndRequested`, in order. */
+    
     val remoteEndRequests = mutableListOf<String>()
 
-    /** Runs after each recorded `onRemoteEndRequested`; a test binds the session's real end seam here. */
+    
     var onRemoteEndRequested: (String) -> Unit = {}
 
     init {
@@ -81,6 +81,7 @@ internal class RoomEventDispatcherFixture(
                 onRemoteEndRequested(rid)
             },
             stopRingToneAndTimeoutCheckFn = { connectStepCalls += STOP_RING },
+            stopCallerRingbackAndTimeoutCheckFn = { connectStepCalls += STOP_RINGBACK },
             resolveCallTypeFn = {},
             handleConnectedStateFn = { connectStepCalls += CONNECTED },
             startCallDurationTimerFn = { startCallTimerCalls++ },
@@ -109,7 +110,7 @@ internal class RoomEventDispatcherFixture(
         )
     }
 
-    /** Runs the private `dispatch(event)`, the body of the room-event collector. */
+    
     fun dispatch(dispatcher: RoomEventDispatcher, event: RoomEvent) {
         val method = RoomEventDispatcher::class.java.getDeclaredMethod("dispatch", RoomEvent::class.java)
         method.isAccessible = true
@@ -120,6 +121,7 @@ internal class RoomEventDispatcherFixture(
         const val ROOM_ID = "room-1"
         const val SELF_ID = "self"
         const val STOP_RING = "stopRingToneAndTimeoutCheck"
+        const val STOP_RINGBACK = "stopCallerRingbackAndTimeoutCheck"
         const val CONNECTED = "handleConnectedState"
     }
 }

@@ -4,11 +4,11 @@ import com.difft.android.base.call.CallRole
 import com.difft.android.base.call.CallType
 import com.difft.android.call.data.CallStatus
 
-/**
- * Stateless visibility rules for the Critical Alert entrypoint across the
- * three call types. Extracted from `LCallViewModel` to avoid carrying ~9 lines
- * of pure branching logic in the VM.
- */
+
+
+
+
+
 object CriticalAlertVisibility {
 
     fun for1v1(type: String?, role: CallRole, status: CallStatus): Boolean =

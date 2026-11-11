@@ -17,21 +17,21 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotSame
 import kotlin.test.assertSame
 
-/**
- * M3/M4/M5 (issue #1127, family L): [DifftTheme] wraps `colorScheme` construction in
- * `remember(darkTheme)`. Material3's [ColorScheme] has no `equals()`/`hashCode()` override
- * (reference identity only), so without `remember`, any DifftTheme recomposition — not just a
- * `darkTheme` flip — allocates a fresh instance and forces every `MaterialTheme.colorScheme.*`
- * reader to recompose needlessly.
- *
- * M3 forces DifftTheme to recompose for a reason unrelated to `darkTheme` (toggling
- * `useFlatBackground`, a real DifftTheme parameter that does not affect `colorScheme`) and
- * asserts the `colorScheme` instance is reused. M4 flips `darkTheme` itself and asserts a new
- * instance is produced with the correct field values — proving the fix does not break
- * dark-mode following. M5 is a plain unit test proving the two factory functions themselves are
- * pure (equal field values, different instances on each call) — the safety precondition
- * `remember(darkTheme)` relies on.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34])
@@ -52,9 +52,9 @@ class DifftThemeColorSchemeRememberTest {
         }
         composeTestRule.waitForIdle()
 
-        // Toggling useFlatBackground changes a real DifftTheme argument (forcing recomposition
-        // of DifftTheme itself, not just its content), while darkTheme stays constant — the
-        // "unrelated reason" family L is guarding against.
+        
+        
+        
         useFlatBackground = true
         composeTestRule.waitForIdle()
 

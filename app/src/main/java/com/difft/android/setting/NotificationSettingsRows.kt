@@ -29,17 +29,17 @@ import com.difft.android.chat.R as ChatR
 
 internal const val TAG_ROW_FULL_SCREEN = "row_full_screen"
 internal const val TAG_ROW_OEM_POPUP = "row_oem_popup"
-/** Which page the lock-screen rows speak for; picks the full-screen row's note. */
+
 internal enum class LockScreenSubject(@StringRes val fullScreenNote: Int) {
     CALLS(ChatR.string.notification_full_screen_note_calls),
     CRITICAL_ALERTS(ChatR.string.notification_full_screen_note_critical),
 }
 
-/**
- * Full-screen display (API 34+) and, on China OEM skins, the vendor pop-up row. Both pages show the
- * same permission with the same status and jump; the vendor row never shows a status, and its note
- * names the vendor's own switches on Xiaomi and vivo.
- */
+
+
+
+
+
 @Composable
 internal fun LockScreenRows(
     state: NotificationSettingsUiState,
@@ -77,7 +77,7 @@ private fun oemPopupNote(state: NotificationSettingsUiState): Int = when {
 private fun oemPopupLabel(state: NotificationSettingsUiState): Int =
     if (state.oemPopupOpensGuide) ChatR.string.notification_vendor_settings else ChatR.string.notification_oem_popup
 
-/** A row whose value is a [SettingStatus]: nothing while unknown or still loading. */
+
 @Composable
 internal fun StatusValueRow(label: String, status: SettingStatus?, tag: String, onClick: () -> Unit, note: String? = null) {
     val context = LocalContext.current
@@ -91,12 +91,12 @@ internal fun StatusValueRow(label: String, status: SettingStatus?, tag: String, 
     )
 }
 
-/**
- * Settings row whose title always shows in full: the value is single-line, right-aligned and
- * ellipsised into whatever width the title leaves. (The shared [DifftSettingsRow] label/value form
- * truncates the label first, which hides titles beside long values.) An optional [note] explains
- * this one row under its label line.
- */
+
+
+
+
+
+
 @Composable
 internal fun ValueRow(
     label: String,
@@ -110,7 +110,7 @@ internal fun ValueRow(
         if (note == null) {
             LabelValueLine(label, value, warning)
         } else {
-            // The value centres on the whole row, like the chevron, not on the label line.
+            
             Column(Modifier.weight(1f)) {
                 Text(text = label, style = DifftSettingsDefaults.LabelTextStyle, color = DifftTheme.colors.textPrimary)
                 Text(text = note, style = DifftSettingsDefaults.CaptionTextStyle, color = DifftTheme.colors.textTertiary)
@@ -151,7 +151,7 @@ private fun RowScope.LabelValueLine(label: String, value: String?, warning: Bool
     }
 }
 
-/** A group caption whose last words are a link, so the action never takes a line of its own. */
+
 @Composable
 internal fun CaptionWithLink(caption: String, link: String, tag: String, onLink: () -> Unit) {
     val linkStyles = TextLinkStyles(style = SpanStyle(color = DifftTheme.colors.textInfo, textDecoration = TextDecoration.Underline))

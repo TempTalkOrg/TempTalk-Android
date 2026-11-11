@@ -7,23 +7,23 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-/**
- * Keeps a receiver listener alive past its transfer, so the sender can still ask `GET /status` how
- * the session ended — the answer that separates "the import succeeded" from "nobody knows". The
- * listener goes away when the window runs out, when a new receiver needs the port, or when the
- * process ends, whichever comes first; the window is an upper bound, never a promise. At most one
- * listener lingers at a time, and keeping a second one stops the first.
- */
+
+
+
+
+
+
+
 class ReceiverLinger(
     private val scope: CoroutineScope,
     private val windowMs: Long = WINDOW_MS,
 ) {
-    /** What a lingering listener must be able to do. */
+    
     interface Listener {
-        /** Keep answering `/status` and `/cancel`; refuse to start a new session. */
+        
         fun closeToNewSessions()
 
-        /** Tear the listener down. Idempotent. */
+        
         fun stop()
     }
 
@@ -31,7 +31,7 @@ class ReceiverLinger(
     private var current: Listener? = null
     private var expiry: Job? = null
 
-    /** Keep [listener] answering for up to the window. Any listener kept before it is stopped now. */
+    
     fun keep(listener: Listener) {
         val previous: Listener?
         synchronized(lock) {
@@ -48,7 +48,7 @@ class ReceiverLinger(
         L.i { "[MigrationV2][P2P][Rx] listener lingers for status queries windowMs=$windowMs" }
     }
 
-    /** Stop whatever is lingering — a new receiver is about to need the port. */
+    
     fun stopNow() {
         val listener: Listener?
         synchronized(lock) {
@@ -74,10 +74,10 @@ class ReceiverLinger(
     }
 
     companion object {
-        /** The agreed upper bound of the queryable window after a session ends. */
+        
         const val WINDOW_MS = 5L * 60 * 1000
 
-        /** The process-wide instance: a lingering listener belongs to no service and no screen. */
+        
         val shared: ReceiverLinger by lazy { ReceiverLinger(appScope) }
     }
 }

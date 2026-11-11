@@ -13,7 +13,7 @@ class PasscodeAutoVerifyPolicyTest {
 
     @Test
     fun `wrong as-you-type values are capped`() {
-        // Guessing by typing and clearing without submit must not be unlimited (#1412).
+        
         assertTrue(PasscodeAutoVerifyPolicy.allowsAutoVerify(0, PasscodeAutoVerifyPolicy.AUTO_MISS_LIMIT - 1))
         assertFalse(PasscodeAutoVerifyPolicy.allowsAutoVerify(0, PasscodeAutoVerifyPolicy.AUTO_MISS_LIMIT))
         assertFalse(PasscodeAutoVerifyPolicy.allowsAutoVerify(0, PasscodeAutoVerifyPolicy.AUTO_MISS_LIMIT + 5))
@@ -27,7 +27,7 @@ class PasscodeAutoVerifyPolicyTest {
 
     @Test
     fun `entering the longest passcode fits the budget several times`() {
-        // A 10-digit passcode is tested at 4..9 digits on the way: 6 misses per entry.
+        
         val missesPerLongestEntry = 10 - 4
         assertTrue(PasscodeAutoVerifyPolicy.allowsAutoVerify(0, 3 * missesPerLongestEntry))
     }

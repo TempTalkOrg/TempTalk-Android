@@ -47,10 +47,10 @@ class DataMessageCreator @Inject constructor(
                 author = it.author
                 text = it.text
                 it.attachments?.forEach { qa ->
-                    // Emit only the type entry (contentType/fileName/flags), NOT a thumbnail pointer.
-                    // iOS/Mac/TT receivers reverse-look-up the local original message by
-                    // timestamp+thread+author and derive the preview from it; the entry alone is
-                    // enough to trigger that. No CDN upload / inline bytes are sent.
+                    
+                    
+                    
+                    
                     attachments.add(quotedAttachment {
                         contentType = qa.contentType
                         fileName = qa.fileName
@@ -201,7 +201,7 @@ class DataMessageCreator @Inject constructor(
                 group {
                     id = groupIdBytes
                     type = SignalServiceProtos.DataMessage.Group.Type.DELIVER
-                    // Encrypted group fallback: attach R_group so members who missed the key message can recover
+                    
                     groupCryptoRepo.getRGroupWithVersion(textMessage.forWhat.id)?.let { (rGroup, version) ->
                         groupRootKey = ByteString.copyFrom(rGroup)
                         keyVersion = version
@@ -214,10 +214,10 @@ class DataMessageCreator @Inject constructor(
         return createdDataMessage
     }
 
-    /**
-     * Calculate the minimum required protocol version based on message content.
-     * This allows older clients to display "unsupported message" for features they don't support.
-     */
+    
+
+
+
     private fun calculateRequiredProtocolVersion(textMessage: TextMessage): Int {
         var version = SignalServiceProtos.DataMessage.ProtocolVersion.INITIAL_VALUE
 

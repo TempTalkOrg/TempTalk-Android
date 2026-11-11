@@ -32,11 +32,11 @@ import com.difft.android.migration.ui.component.formatMigrationBytes
 import com.difft.android.migration.v2.transfer.send.classifyFailure
 import com.difft.android.p2p.engine.model.LinkPeerState
 
-/**
- * The "sign in to Quicall for Desktop" confirmation page: the target computer as a card, then one
- * block that is either the sync decision or a single statement of why there is none, and the
- * sign-in / cancel pair.
- */
+
+
+
+
+
 @Composable
 fun LinkLoginScreen(state: LinkLoginState, onIntent: (LinkLoginIntent) -> Unit) {
     MigrationPage(
@@ -58,7 +58,7 @@ fun LinkLoginScreen(state: LinkLoginState, onIntent: (LinkLoginIntent) -> Unit) 
     ) {
         MigrationCard {
             MigrationIdentityRow(
-                // A plain sign-in code names no computer; the compound one carries the Desktop's alias.
+                
                 title = (state as? LinkLoginState.Compound)?.alias ?: stringResource(R.string.link_login_device_generic),
                 subtitle = null,
             ) {
@@ -84,17 +84,17 @@ fun LinkLoginScreen(state: LinkLoginState, onIntent: (LinkLoginIntent) -> Unit) 
     }
 }
 
-/** The one block: a statement when there is nothing to decide, otherwise the sync card and what follows it. */
+
 @Composable
 private fun CompoundBlock(state: LinkLoginState.Compound, onIntent: (LinkLoginIntent) -> Unit) {
     when {
         state.reachable == false -> MigrationBodyText(stringResource(R.string.link_login_unreachable_note))
         state.gateReject != null -> MigrationBodyText(stringResource(classifyFailure(state.gateReject).reasonRes))
-        // The Desktop already holds this account's history: it keeps it, nothing syncs, no switch.
+        
         state.peerState == LinkPeerState.SAME_ACCOUNT -> MigrationBodyText(stringResource(R.string.link_login_same_account_note))
         else -> SyncCard(state, onIntent)
     }
-    // Another account's history is on the Desktop: its user will be asked to delete it first.
+    
     if (state.peerState == LinkPeerState.DIFFERENT_ACCOUNT && state.gateReject == null && state.reachable != false) {
         MigrationGap()
         MigrationCaption(stringResource(R.string.link_login_different_account_note))
@@ -105,16 +105,16 @@ private fun CompoundBlock(state: LinkLoginState.Compound, onIntent: (LinkLoginIn
 private fun SyncCard(state: LinkLoginState.Compound, onIntent: (LinkLoginIntent) -> Unit) {
     val estimate = state.estimate
     val context = LocalContext.current
-    // The attachment note only follows a card that actually shows the attachment switch.
+    
     val attachmentBytes = estimate?.takeIf { state.syncEnabled && it.offersAttachmentChoice }?.attachmentBytes
     MigrationCard {
         MigrationSwitchRow(
             title = stringResource(R.string.link_login_sync_switch),
-            // Off has a consequence worth stating; on only repeats the label, so it gets none.
+            
             subtitle = if (state.syncEnabled) null else stringResource(R.string.link_login_sync_off_note),
             checked = state.syncEnabled,
             onCheckedChange = { onIntent(LinkLoginIntent.SetSync(it)) },
-            // Off means there is no transfer: the size and attachment rows go away rather than greying out.
+            
             enabled = state.reachable != null,
         )
         if (state.syncEnabled) {
@@ -130,11 +130,11 @@ private fun SyncCard(state: LinkLoginState.Compound, onIntent: (LinkLoginIntent)
             } else {
                 val bytes = if (state.includeAttachments || !estimate.offersAttachmentChoice) estimate.totalBytes else estimate.withoutAttachmentsBytes
                 MigrationValueRow(
-                    // "Sync", not "transfer": this phone keeps everything.
+                    
                     label = stringResource(R.string.link_login_size_label),
                     value = formatMigrationBytes(context, bytes),
                 )
-                // Attachments are only a choice above the threshold; below it they simply travel.
+                
                 if (estimate.offersAttachmentChoice) {
                     MigrationCardDivider()
                     MigrationSwitchRow(
@@ -158,7 +158,7 @@ private fun CompoundActions(state: LinkLoginState.Compound, onIntent: (LinkLogin
     MigrationPrimaryButton(
         text = stringResource(primaryText),
         onClick = { onIntent(if (state.gateReject != null) LinkLoginIntent.SignInWithoutSync else LinkLoginIntent.SignIn) },
-        // Probing decides whether "and sync" is even on offer; a tap before it answers would be a guess.
+        
         enabled = !state.busy && state.reachable != null,
     )
 }

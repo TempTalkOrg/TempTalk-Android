@@ -1,34 +1,41 @@
 package com.difft.android.base.ui
 
+import com.difft.android.base.ui.compose.cornerCutoutPadding
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.foundation.layout.padding
+import com.difft.android.base.ui.compose.FloatingIconButton
+import com.difft.android.base.ui.compose.FloatingIconButtonEdge
+import com.difft.android.base.ui.compose.FloatingIconButtonTitleGap
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.difft.android.base.R
+import com.difft.android.base.ui.sidechrome.PublishSideChrome
+import com.difft.android.base.ui.sidechrome.SideChromeModel
 import com.difft.android.base.ui.theme.DifftTheme
 
-/**
- * Title bar with back button and title text.
- * Uses DifftTheme colors to ensure consistency with app theme.
- *
- * @param titleText the title text
- * @param titleEndText title additional text that always shows no matter has enough space or not
- * @param modifier optional modifier for the title bar
- * @param showBackButton whether to show the back button (false in dual-pane mode)
- * @param onBackClick the back button click listener
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
 @Composable
 fun TitleBar(
     titleText: String,
@@ -37,25 +44,25 @@ fun TitleBar(
     showBackButton: Boolean = true,
     onBackClick: () -> Unit = {}
 ) {
+    val backOnSideBar = PublishSideChrome(SideChromeModel(back = onBackClick.takeIf { showBackButton }))
     Row(
         horizontalArrangement = Arrangement.Start,
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
             .fillMaxWidth()
             .height(52.dp)
+            
+            .cornerCutoutPadding()
     ) {
-        if (showBackButton) {
-            IconButton(
-                onClick = { onBackClick() },
-            ) {
-                Icon(
-                    painter = painterResource(id = R.drawable.chative_ic_back),
-                    contentDescription = "Back",
-                    tint = DifftTheme.colors.icon
-                )
-            }
+        if (showBackButton && !backOnSideBar) {
+            FloatingIconButton(
+                iconRes = R.drawable.chative_ic_back,
+                contentDescription = "Back",
+                onClick = onBackClick,
+                modifier = Modifier.padding(start = FloatingIconButtonEdge, end = FloatingIconButtonTitleGap),
+            )
         } else {
-            // Add padding when back button is hidden
+            
             Spacer(modifier = Modifier.width(16.dp))
         }
 

@@ -20,11 +20,11 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 
-/** G-R2 (#1382): a WebSocket batch is admitted before its ACK, and admitted work runs to completion. */
+
 class IncomingEnvelopMessageProcessorMessagingPauseTest {
 
     init {
-        // The ACK loop reads elapsedRealtime for its queue-wait telemetry.
+        
         io.mockk.mockkStatic(SystemClock::class)
         io.mockk.every { SystemClock.elapsedRealtime() } returns 0L
     }
@@ -106,7 +106,7 @@ class IncomingEnvelopMessageProcessorMessagingPauseTest {
         verify(exactly = 1) { webSocket.sendAckToChatDataWebSocketWithoutLog(11L) }
         verify(exactly = 1) { webSocket.sendAckToChatDataWebSocketWithoutLog(12L) }
         coVerify(exactly = 2) { envelopToMessageProcessor.process(any(), "message", any()) }
-        // The second envelope ran after the pause began, on the batch's still-open ticket.
+        
         assertTrue(admissions.all { it === admissions.first() })
     }
 

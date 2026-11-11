@@ -9,11 +9,11 @@ import io.livekit.android.room.Room
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.serialization.json.Json
 
-/**
- * Creates an [RtmMessageHandler] wired with project-specific E2EE encryptor
- * and decryptor closures. Factored out of the ViewModel so the crypto
- * plumbing doesn't inflate VM line count.
- */
+
+
+
+
+
 internal fun createRtmHandler(
     room: Room,
     scope: CoroutineScope,

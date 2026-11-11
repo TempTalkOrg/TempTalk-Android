@@ -11,19 +11,19 @@ import org.robolectric.annotation.Config
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/**
- * M9b/M10b (issue #1127, family E): pins the real AndroidX mechanism
- * [ContactDetailFragment.isPopupMode] depends on (`parentFragment is BottomSheetDialogFragment`)
- * using bare double fragments — the real `@AndroidEntryPoint` `ContactDetailFragment` can't be
- * launched without a Hilt harness (mirrors `LinkedDevicesBackButtonTest`'s
- * `isInDualPaneMode` framework-fact test exactly).
- *
- * M9b reproduces `ContactDetailBottomSheetDialogFragment`'s attachment shape
- * (`childFragmentManager`) -> `parentFragment is BottomSheetDialogFragment == true`.
- * M10b reproduces the shape shared by `ContactDetailActivity` (path 1) and
- * `IndexActivity.replaceDetailFragmentForCurrentTab` (path 3) -> both attach directly via
- * `supportFragmentManager`, never a `childFragmentManager` -> `false`.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class ContactDetailFragmentParentFragmentResolutionTest {

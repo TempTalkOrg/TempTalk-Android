@@ -8,6 +8,7 @@ import androidx.lifecycle.lifecycleScope
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.user.UserManager
+import com.difft.android.base.utils.density.DisplayDensityNormalizer
 import com.difft.android.test.MessageTestUtil
 import dagger.hilt.android.AndroidEntryPoint
 import org.difft.app.database.wcdb
@@ -63,9 +64,18 @@ class TestActivity : BaseActivity() {
                     onDialogTest = {
                         DialogTestActivity.startActivity(this@TestActivity)
                     },
+                    densityMode = DisplayDensityNormalizer.mode(this@TestActivity),
+                    onDensityModeSelect = { mode -> restartWithDensityMode(mode) },
                 )
             }
         }
         setContentView(composeView)
+    }
+
+    
+    private fun restartWithDensityMode(mode: DisplayDensityNormalizer.Mode) {
+        DisplayDensityNormalizer.setMode(this, mode)
+        val launch = packageManager.getLaunchIntentForPackage(packageName) ?: return
+        startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
     }
 }

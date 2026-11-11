@@ -17,20 +17,20 @@ import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Local system message announcing a conversation auto-translate change, mirroring iOS and Desktop.
- *
- * Deliberately separate from [LocalMessageCreator]: that file is already at the size limit, and this
- * notice shares none of its name-resolution machinery.
- *
- * The message is never sent to the server — it is persisted with `putWhenNonExist` and nothing
- * enqueues a send job. It is also excluded from the conversation-list preview (see
- * `WCDBUpdateService`), so it neither reorders the list nor replaces the preview text, matching iOS
- * where the equivalent `TSInfoMessage` leaves `shouldAffectThreadSorting = NO`. Being a
- * `NotifyMessage` (`type = TYPE_NOTIFY`) it is excluded from the unread query for free.
- *
- * Idempotency is the caller's: this is only invoked when the stored value actually changed.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 @Singleton
 class LocalTranslateMessageCreator @Inject constructor(
     @param:ApplicationContext private val context: Context,
@@ -39,7 +39,7 @@ class LocalTranslateMessageCreator @Inject constructor(
     private val gson: Gson,
 ) {
 
-    /** @param translateSetting the newly stored target: 0 off, 1 Chinese, 2 English. */
+    
     suspend fun createTranslateSettingChangedMessage(forWhat: For, translateSetting: Int) {
         withContext(Dispatchers.IO) {
             runCatching {
@@ -52,7 +52,7 @@ class LocalTranslateMessageCreator @Inject constructor(
                     data = null,
                     notifyTime = timeStamp,
                     notifyType = TTNotifyMessage.NOTIFY_ACTION_TYPE_TRANSLATE_SETTING_CHANGED,
-                    // Same sentence the settings screen shows under the options, as on iOS.
+                    
                     showContent = context.getString(translateValueDescRes(translateSetting)),
                     display = 1,
                 )

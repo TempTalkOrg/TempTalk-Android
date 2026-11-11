@@ -12,7 +12,7 @@
       android:strokeLineJoin="round"
       android:strokeWidth="1.75"
       android:fillColor="@color/transparent"
-      android:strokeColor="@color/gray_600"
+      android:strokeColor="@color/icon"
       android:strokeLineCap="round"/>
   </group>
 </vector>

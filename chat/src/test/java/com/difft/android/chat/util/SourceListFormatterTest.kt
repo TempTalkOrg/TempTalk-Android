@@ -10,13 +10,10 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.util.Locale
 
-/**
- * Unit tests for [SourceListFormatter] — locale-aware author list formatting per
- * PRD v1.0 §5.3.4.
- *
- * Robolectric only needed because the formatter reads `Context.resources.configuration.locales`.
- * The formatter itself is pure.
- */
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28])
 class SourceListFormatterTest {
@@ -35,7 +32,7 @@ class SourceListFormatterTest {
         context.resources.updateConfiguration(config, context.resources.displayMetrics)
     }
 
-    // ---------- English ----------
+    
 
     @Test
     fun `english — empty list returns empty string`() {
@@ -91,7 +88,7 @@ class SourceListFormatterTest {
     @Test
     fun `english — 6 names — 5 shown plus 'and 1 other' (singular)`() {
         forceLocale(Locale.ENGLISH)
-        // Overflow: total=6, shown.size=5, others=1 → singular noun "other".
+        
         assertEquals(
             "Alice, Bob, Carol, Dave, Eve and 1 other",
             SourceListFormatter.format(
@@ -105,14 +102,14 @@ class SourceListFormatterTest {
     fun `english — 10 names — 5 shown plus 'and 5 others' (plural)`() {
         forceLocale(Locale.ENGLISH)
         val names = (1..10).map { "User$it" }
-        // Overflow: total=10, shown.size=5, others=5 → plural noun "others".
+        
         assertEquals(
             "User1, User2, User3, User4, User5 and 5 others",
             SourceListFormatter.format(names, context)
         )
     }
 
-    // ---------- Chinese ----------
+    
 
     @Test
     fun `chinese — empty list returns empty string`() {
@@ -159,7 +156,7 @@ class SourceListFormatterTest {
     @Test
     fun `chinese — 6 names — 5 shown plus 等 6 人 (N is total)`() {
         forceLocale(Locale.SIMPLIFIED_CHINESE)
-        // PRD §5.3.4: Chinese overflow "等 N 人" — space between N and 人.
+        
         assertEquals(
             "Alice、Bob、Carol、Dave、Eve 等 6 人",
             SourceListFormatter.format(
@@ -179,11 +176,11 @@ class SourceListFormatterTest {
         )
     }
 
-    // ---------- Locale fallback ----------
+    
 
     @Test
     fun `non-English non-Chinese locale falls back to English formatting`() {
-        // PRD §5.3.4 only specifies Chinese vs English; any other locale uses English.
+        
         forceLocale(Locale.FRENCH)
         assertEquals(
             "Alice, Bob, and Carol",

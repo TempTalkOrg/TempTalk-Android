@@ -25,14 +25,14 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
-/**
- * Classification and resend rules of [HostFailoverInterceptor] on real sockets (#1396): one
- * MockWebServer per virtual host, the real [UrlManager] and coordinator, and the production
- * interceptor order from [ChatPoolFixture.client].
- *
- * Marks are read back through the coordinator ([ChatPoolFixture.eligibleHosts]): a host missing
- * from it was marked.
- */
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class)
 class HostFailoverInterceptorTest {
@@ -57,7 +57,7 @@ class HostFailoverInterceptorTest {
     private fun ChatPoolFixture.call(client: okhttp3.OkHttpClient, request: Request = request()): String =
         client.newCall(request).execute().use { it.body.string() }
 
-    // T3 — connect-stage failure on A (DNS): A is marked and this very call succeeds on B.
+    
     @Test
     fun `a connect failure marks the host and the call succeeds on the next host`() {
         val f = pool(A, B, C)
@@ -72,7 +72,7 @@ class HostFailoverInterceptorTest {
         assertEquals(listOf(B, C), f.eligibleHosts())
     }
 
-    // T3 — a TLS failure is connect-stage too.
+    
     @Test
     fun `a tls failure on the first host is resent to the next`() {
         val f = pool(A, B, tls = true, untrusted = setOf(A))
@@ -84,7 +84,7 @@ class HostFailoverInterceptorTest {
         assertEquals(listOf(B), f.eligibleHosts())
     }
 
-    // T4 — the request was sent and the read timed out: mark, never resend.
+    
     @Test
     fun `a read timeout after the request was sent marks the host and does not resend`() {
         val f = pool(A, B, C)
@@ -109,7 +109,7 @@ class HostFailoverInterceptorTest {
         assertEquals(listOf(B), f.eligibleHosts())
     }
 
-    // T5 — A 500, B 404 without a reason: the loop stops at B with B's verdict, C is never tried.
+    
     @Test
     fun `a terminal 4xx from a backup ends the loop with its own verdict`() {
         val f = pool(A, B, C)
@@ -124,7 +124,7 @@ class HostFailoverInterceptorTest {
         assertEquals(listOf(B, C), f.eligibleHosts(), "A is marked, B answered")
     }
 
-    // T6 — A 500, B 200: B's response, A marked.
+    
     @Test
     fun `a 5xx is resent to the next host and the host is marked`() {
         val f = pool(A, B, C)
@@ -223,7 +223,7 @@ class HostFailoverInterceptorTest {
         assertEquals(0, error.errorCode)
     }
 
-    // T7 — a cancelled call is no host signal.
+    
     @Test
     fun `a cancelled call neither marks nor resends`() {
         val f = pool(A, B, C)
@@ -240,7 +240,7 @@ class HostFailoverInterceptorTest {
         assertEquals(0, f.requestCount(B))
     }
 
-    // T8 — a certificate failure on a pinned channel reports the risk for the attempted host.
+    
     @Test
     fun `a certificate failure on a pinned channel notifies the risk and marks the host`() {
         val f = pool(A, B, tls = true, untrusted = setOf(A))
@@ -274,7 +274,7 @@ class HostFailoverInterceptorTest {
         }
     }
 
-    // T9 — Signal API client: connect failures resend, a 5xx is marked but returned raw.
+    
     @Test
     fun `the signal client resends a connect failure`() {
         val f = pool(A, B)
@@ -301,7 +301,7 @@ class HostFailoverInterceptorTest {
         assertEquals(listOf(B, C), f.eligibleHosts())
     }
 
-    // T13 — any answer below 500 from a marked host makes it eligible again.
+    
     @Test
     fun `an answer from a marked host clears its mark`() {
         val f = pool(A, B, C)
@@ -313,7 +313,7 @@ class HostFailoverInterceptorTest {
         assertEquals(listOf(A, B, C), f.eligibleHosts())
     }
 
-    // T13b — a fresh 404 without a reason rehabilitates the host before normalization throws.
+    
     @Test
     fun `a 404 without a reason clears the mark before it becomes a network exception`() {
         val f = pool(A, B, C)
@@ -328,7 +328,7 @@ class HostFailoverInterceptorTest {
         assertEquals(listOf(A, B, C), f.eligibleHosts())
     }
 
-    // T14 — no usable network: connect failures say nothing about the hosts.
+    
     @Test
     fun `connect failures while offline mark nothing`() {
         val f = pool(A, B, C)
@@ -343,7 +343,7 @@ class HostFailoverInterceptorTest {
         assertEquals(0, f.probeLaunches)
     }
 
-    // #1396 — offline, every host fails alike: no walk through the pool.
+    
     @Test
     fun `a connect failure while offline is not resent to another host`() {
         val f = pool(A, B, C)
@@ -381,7 +381,7 @@ class HostFailoverInterceptorTest {
         assertEquals(listOf(B), f.eligibleHosts(), "the failed host is still marked")
     }
 
-    // T17 — under the proxy a failing host rotates only within the tunnel domains.
+    
     @Test
     fun `under the proxy failures rotate only within the tunnel domains`() {
         val f = pool(A, others = listOf(P1, P2), tunnel = listOf(P1, P2))
@@ -405,9 +405,9 @@ class HostFailoverInterceptorTest {
         assertEquals(0, f.requestCount(A))
     }
 
-    // T2 — an absolute URL to a CDN is no pool call: nothing is rewritten, marked or resent.
-    // An absolute URL built on a pool host other than the client origin (UrlManager.gifs) still
-    // fails over, as it did before routing moved into its own interceptor.
+    
+    
+    
     @Test
     fun `a 5xx from an absolute url on another pool host fails over`() {
         val f = pool(A, B, C)
@@ -448,7 +448,7 @@ class HostFailoverInterceptorTest {
         assertEquals(listOf(A, B), f.eligibleHosts())
     }
 
-    // Routing end to end: A marked, the next request goes to B with the live path.
+    
     @Test
     fun `after a host is marked the next request goes to the next host`() {
         val f = pool(A, B, C)

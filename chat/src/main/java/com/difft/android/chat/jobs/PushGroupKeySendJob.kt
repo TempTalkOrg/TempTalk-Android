@@ -21,18 +21,18 @@ import difft.android.messageserialization.For
 import org.whispersystems.signalservice.internal.push.groupKeyMessage
 import java.util.concurrent.TimeUnit
 
-/**
- * Distributes R_group to group members via the Job system, mirroring the reliability
- * guarantees of [PushTextSendJob]: network constraint, retries on IOException, and
- * persistent queue across app restarts.
- *
- * Two shapes:
- *  - Broadcast: [isBroadcast]=true, [recipientId]=gid — sends to For.Group(gid).
- *  - Targeted: [isBroadcast]=false, [recipientId]=memberUid — sends 1v1 to For.Account(memberUid).
- *
- * The R_group bytes are looked up from [GroupCryptoRepo] at send time (not serialized
- * into Data) so that the repo stays the single source of truth.
- */
+
+
+
+
+
+
+
+
+
+
+
+
 class PushGroupKeySendJob @AssistedInject constructor(
     @Assisted parameters: Parameters?,
     @Assisted("gid") private val gid: String,

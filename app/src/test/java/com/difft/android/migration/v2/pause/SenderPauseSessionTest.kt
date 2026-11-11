@@ -28,7 +28,7 @@ import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
-/** [SenderPauseSession]: begin, quiescence, drain and the commit marker (T8, T15, T18, T22, #1382). */
+
 class SenderPauseSessionTest {
 
     private val owner = "33333333-aaaa-bbbb-cccc-000000000003"
@@ -51,7 +51,7 @@ class SenderPauseSessionTest {
         gate = messaging.gate,
         scope = { login },
         drainRetryQueues = { drainOwner ->
-            // The drain runs as the owner, after every earlier ticket closed, with nobody else admitted.
+            
             assertEquals(owner, drainOwner)
             assertEquals(MigrationPausePhase.EXPORTING, messaging.pause.record?.phase)
             assertNull(messaging.gate.tryAdmit(AdmissionKind.RECEIVE, "late"))
@@ -63,11 +63,11 @@ class SenderPauseSessionTest {
         quiescenceTimeout = timeoutMs.milliseconds,
     )
 
-    /**
-     * What an owner drain does when a replayed envelope is queued for a deferred consumer (a
-     * receipt, a group or contact notify): retains the replay's ticket, hands it over and closes
-     * its own; the consumer closes the retained one once it has persisted.
-     */
+    
+
+
+
+
     private fun replayIntoDeferredConsumer(): MessagingTicket {
         val replay = assertNotNull(messaging.gate.tryAdmitAsOwner(owner, AdmissionKind.RECEIVE, "pending-drain"))
         val handedOver = assertNotNull(replay.retain("receipt"))
@@ -99,7 +99,7 @@ class SenderPauseSessionTest {
 
         assertEquals(SenderPauseSession.REASON_QUIESCENCE_TIMEOUT, e.message)
         assertEquals(emptyList<String>(), events)
-        // The pause is the export's own and still exporting, so settling the failure clears it.
+        
         assertEquals(MigrationPausePhase.EXPORTING, messaging.pause.record?.phase)
     }
 
@@ -148,7 +148,7 @@ class SenderPauseSessionTest {
         val e = assertIs<MigrationPauseException>(entered.await().exceptionOrNull())
 
         assertEquals(SenderPauseSession.REASON_RESIDUAL, e.message)
-        // Still this export's pause and still exporting: settling the failure clears it (nothing exported).
+        
         assertEquals(MigrationPausePhase.EXPORTING, messaging.pause.record?.phase)
         val settled = SenderVerdictSettlement(messaging.pause, pendingStore)
             .settle(owner, null, MigrationPauseOutcome.NOT_COMMITTED, "test")
@@ -254,7 +254,7 @@ class SenderPauseSessionTest {
         val s = session()
         s.enter()
         s.onSessionPrepared(statusRef)
-        // The pause went away meanwhile (a logout): the marker cannot be written for this export.
+        
         messaging.pause.clear(owner = null, reason = "test")
 
         assertFailsWith<MigrationPauseException> { s.beforeFinalize() }

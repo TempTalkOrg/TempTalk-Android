@@ -10,7 +10,7 @@ import com.difft.android.setting.notificationtest.mvi.NotificationTestContract.I
 import com.difft.android.setting.notificationtest.mvi.NotificationTestContract.Notice
 import com.difft.android.chat.R as ChatR
 
-/** The page's dialogs, driven by state so they survive the page going to the background mid-test. */
+
 @Composable
 internal fun NotificationTestDialogs(dialog: Dialog?, onIntent: (Intent) -> Unit) {
     val dismiss = { onIntent(Intent.DismissDialog) }
@@ -63,7 +63,7 @@ internal fun NotificationTestDialogs(dialog: Dialog?, onIntent: (Intent) -> Unit
     }
 }
 
-/** Offers the setup guide, plus the settings page that fixes the failure where one exists. */
+
 @Composable
 private fun FailedDialog(dialog: Dialog.Failed, onIntent: (Intent) -> Unit) {
     val fix = dialog.settingsFix

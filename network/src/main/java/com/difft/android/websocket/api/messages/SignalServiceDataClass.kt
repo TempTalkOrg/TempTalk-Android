@@ -14,10 +14,7 @@ import org.difft.app.database.wcdb
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos
 import util.Hex
 
-/**
- * Some special server to me notify message need shown inside one to one conversation or group conversation
- * Here do the special cases handle
- */
+
 private fun TTNotifyMessage.specialOneToOneConversation(myId: String): For {
     val groupDetailType = data?.groupNotifyDetailedType ?: -1
     val groupId: String? = when (groupDetailType) {
@@ -92,17 +89,15 @@ private fun TTNotifyMessage.specialGroupId(): String {
     return groupId ?: "server"
 }
 
-/**
- * Data class for store all deserialized message data(proto and json)
- * Created by King.W on 2024.07.01
- * todo king.w check here why it can't be data class, if data class it will compile error with load model error tip
- */
+
+
+
+
 class SignalServiceDataClass(
     val signalServiceEnvelope: SignalServiceProtos.Envelope,
     val signalServiceContent: SignalServiceProtos.Content?,
     val signalCustomNotifyMessage: TTNotifyMessage?
 ) {
-    // create component1() to component3 for this class
     operator fun component1() = signalServiceEnvelope
     operator fun component2() = signalServiceContent
     operator fun component3() = signalCustomNotifyMessage
@@ -116,8 +111,8 @@ class SignalServiceDataClass(
                 GroupNotifyDetailType.GroupSelfInfoChange.value,
                 GroupNotifyDetailType.KickoutAutoClear.value
             )))
-        ) { //Server one to one and special group Notify Message
-            -1 // return -1 as sequenceId means this message don't take part in hot data logic
+        ) { 
+            -1 
         } else if (signalServiceContent?.hasSyncMessage() == true
             && signalServiceContent.syncMessage?.hasSent() == true
             && signalServiceContent.syncMessage.sent.hasSequenceId()
@@ -149,7 +144,7 @@ class SignalServiceDataClass(
         ).idValue
     }
     val shouldShowNotification: Boolean by lazy {
-        // Skip notification for self-sent messages (v4 API: group messages returned as normal messages, not sync)
+        
         if (senderId == myId) return@lazy false
         (signalServiceContent?.hasDataMessage() == true && signalServiceContent.dataMessage.run { !hasReaction() })
     }
@@ -178,7 +173,7 @@ class SignalServiceDataClass(
                 } else if (signalServiceContent.syncMessage.sent.hasDestination()) {
                     For.Account(signalServiceContent.syncMessage.sent.destination)
                 } else if (senderId == myId) {
-                    For.Account(senderId) // for Note
+                    For.Account(senderId) 
                 } else {
                     throw IllegalArgumentException("syncMessage's sent doesn't have message or destination or the senderId is not me")
                 }
@@ -192,14 +187,8 @@ class SignalServiceDataClass(
                     throw IllegalArgumentException("readMessage's readPosition doesn't have groupId or sender")
                 }
             } else if (signalServiceContent.syncMessage.hasForwardNoticeSync()) {
-                // Self-sync: Content.syncMessage.forwardNoticeSync is a ForwardNoticeMessage.
-                // Resolve conversation from payload.conversation (filled by sender from its
-                // own view: peer uid for 1v1, myId for NTS source).
-                //
-                // The groupId arm below is defense-in-depth only — our sender never emits
-                // sync for group source (see PushForwardNoticeSendJob.sendSyncToSelf and
-                // NewSignalServiceMessageSender's For.Group guard). Kept so a future change
-                // that enables group sync doesn't silently route to the wrong conversation.
+                
+                
                 val syncMsg = signalServiceContent.syncMessage.forwardNoticeSync
                 val payloadConv = syncMsg.takeIf { it.hasConversation() }?.conversation
                 when {
@@ -208,13 +197,11 @@ class SignalServiceDataClass(
                             ?: For.Account(senderId)
                     payloadConv?.hasNumber() == true && payloadConv.number.isNotEmpty() ->
                         For.Account(payloadConv.number)
-                    else -> For.Account(senderId) // defensive: NTS fallback
+                    else -> For.Account(senderId) 
                 }
             } else if (signalServiceContent.syncMessage.hasActivityNoticeSync()) {
-                // Self-sync mirror of activityNoticeSync — same resolution rules as
-                // forwardNoticeSync above. Activity notice covers COPY (this iteration)
-                // and future types (PASTE/SCREENSHOT/...). Payload.conversation carries
-                // the source conversation filled by the sender's own view.
+                
+                
                 val syncMsg = signalServiceContent.syncMessage.activityNoticeSync
                 val payloadConv = syncMsg.takeIf { it.hasConversation() }?.conversation
                 when {
@@ -223,18 +210,18 @@ class SignalServiceDataClass(
                             ?: For.Account(senderId)
                     payloadConv?.hasNumber() == true && payloadConv.number.isNotEmpty() ->
                         For.Account(payloadConv.number)
-                    else -> For.Account(senderId) // defensive: NTS fallback
+                    else -> For.Account(senderId) 
                 }
             } else if (signalServiceContent.syncMessage.hasMarkAsUnread()) {
-                // Self-sync of the manual mark-unread state: the payload carries the
-                // ConversationId inline (peer uid for 1v1, group id for groups).
+                
+                
                 val conv = signalServiceContent.syncMessage.markAsUnread
                     .takeIf { it.hasConversation() }?.conversation
                 conv?.parseToFor(signalServiceEnvelope.timestamp) ?: For.Account(senderId)
             } else {
                 throw IllegalArgumentException("syncMessage doesn't have sent or read or topicMark or topicAction")
             }
-        } else if (signalCustomNotifyMessage != null) { //Server Notify Message
+        } else if (signalCustomNotifyMessage != null) { 
             if (signalServiceEnvelope.hasMsgExtra() && signalServiceEnvelope.msgExtra.hasConversationId()) {
                 if (signalServiceEnvelope.msgExtra.conversationId.hasGroupId()) {
                     val groupIdMsgExtra = signalServiceEnvelope.msgExtra.conversationId.groupId.toByteArray()
@@ -272,15 +259,8 @@ class SignalServiceDataClass(
                 }
             }
         } else if (signalServiceContent?.hasForwardNotice() == true) {
-            // Primary path: Content.forwardNotice from peer (or from self for NTS source).
-            // Self-sync goes through SyncMessage.forwardNoticeSync — NOT this branch.
-            //
-            // Rule:
-            //   1) payload.conversation.groupId → For.Group(groupId) — fixes group bug
-            //      (v1 relied on envelope.msgExtra.conversationId, which is custom-notify-specific).
-            //   2) else                         → For.Account(senderId) — envelope.source IS the peer
-            //                                     (for 1v1 primary; for NTS source this also lands
-            //                                      correctly since senderId==myId).
+            
+            
             val payloadConv = signalServiceContent.forwardNotice
                 .takeIf { it.hasConversation() }
                 ?.conversation
@@ -291,10 +271,10 @@ class SignalServiceDataClass(
                 For.Account(senderId)
             }
         } else if (signalServiceContent?.hasActivityNotice() == true) {
-            // Primary path: Content.activityNotice from peer (or from self for NTS source).
-            // Same resolution rules as forwardNotice — top-level `conversation` field
-            // is filled by sender's own view; 1v1 falls back to envelope.source.
-            // Self-sync goes through SyncMessage.activityNoticeSync — NOT this branch.
+            
+            
+            
+            
             val payloadConv = signalServiceContent.activityNotice
                 .takeIf { it.hasConversation() }
                 ?.conversation
@@ -309,27 +289,27 @@ class SignalServiceDataClass(
         }
     }
 
-    /**
-     * Server-stamped conversation from Envelope.msgExtra.conversationId, normalized to the
-     * same For representation as [conversation]. null when the server has not stamped it
-     * (old/transitional server) -> caller treats as absent (fail-open). Never throws.
-     * Public accessor for the receive-path cross-check in :chat.
-     */
+    
+
+
+
+
+
     val envelopeConversation: For? by lazy {
         extractEnvelopeConversation(signalServiceEnvelope)
     }
 }
 
-/**
- * Private helper — `MsgExtra.ConversationId` → [For].
- *
- * Routes group ids through [transformGroupIdFromServerToLocal]. Accepts 16-byte
- * (legacy WEEK), 32-byte, and 36-byte group ids as valid; logs a warning (no
- * Crashlytics) if the byte length is anything else.
- *
- * Returns `null` when neither `groupId` nor `number` is set — callers decide
- * the fallback (typically `For.Account(senderId)`).
- */
+
+
+
+
+
+
+
+
+
+
 private fun SignalServiceProtos.ConversationId.parseToFor(
     timestampForLog: Long
 ): For? {
@@ -344,14 +324,14 @@ private fun SignalServiceProtos.ConversationId.parseToFor(
     return null
 }
 
-/**
- * Envelope-side conversation for the cross-check. Reuses [parseToFor] so envelope-side
- * group ids reduce to the identical String the content side produces (both go through
- * transformGroupIdFromServerToLocal).
- *
- * Returns null when conversationId is absent or present-but-empty — both cases are
- * "absent" (fail-open). Never throws.
- */
+
+
+
+
+
+
+
+
 internal fun extractEnvelopeConversation(envelope: SignalServiceProtos.Envelope): For? {
     if (!envelope.hasMsgExtra() || !envelope.msgExtra.hasConversationId()) return null
     return envelope.msgExtra.conversationId.parseToFor(envelope.timestamp)

@@ -7,14 +7,10 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * The auto-download condition matrix.
- *
- * The defect being pinned: the old expression `status != SUCCESS && progress != 100 || !isFileValid`
- * downloaded whenever status lagged, even with the file on disk — which is exactly the state a
- * forwarded attachment lands in. The matrix below sweeps the full (isFileValid × status × progress)
- * space and asserts status NEVER changes the outcome.
- */
+
+
+
+
 class AttachmentDownloadDecisionTest {
 
     private val allStatuses = AttachmentStatus.entries.map { it.code }
@@ -79,8 +75,8 @@ class AttachmentDownloadDecisionTest {
                 "progress=$progress",
                 AttachmentDownloadDecision.isUploadInFlight(isFileValid = true, progress = progress)
             )
-            // The download rule sees the staged file and correctly calls it READY — which is exactly
-            // why the upload needs its own question.
+            
+            
             assertEquals(
                 AttachmentDownloadAction.READY,
                 AttachmentDownloadDecision.downloadAction(isFileValid = true, progress = progress)
@@ -100,9 +96,8 @@ class AttachmentDownloadDecisionTest {
 
     @Test
     fun `progress without a readable file is a download, never an upload, whoever sent the message`() {
-        // This is the case the old message-id heuristic got wrong: an own message synced from another
-        // device (or restored by a migration) being fetched showed as "uploading" and swallowed its
-        // expired / failed states. Direction is not an input any more; the missing file decides.
+        
+        
         for (progress in allProgresses) {
             assertFalse(
                 "progress=$progress",
@@ -114,8 +109,8 @@ class AttachmentDownloadDecisionTest {
     @Test
     fun `the download-side states apply exactly when no readable file is here`() {
         assertTrue(AttachmentDownloadDecision.needsFetch(isFileValid = false))
-        // A FAILED row with its staged file still present is a failed upload, reported by the
-        // message's send state — not a download waiting for a retry.
+        
+        
         assertFalse(AttachmentDownloadDecision.needsFetch(isFileValid = true))
     }
 
@@ -160,7 +155,7 @@ class AttachmentDownloadDecisionTest {
         for (isFileValid in listOf(true, false)) {
             for (size in listOf(1024, FileUtil.LARGE_FILE_THRESHOLD + 1)) {
                 assertEquals(expired, AttachmentDownloadDecision.tapAction(AttachmentStatus.EXPIRED.code, progress = null, isFileValid, size))
-                // A live expired sentinel wins over a lagging status and even over a running transfer's status.
+                
                 assertEquals(expired, AttachmentDownloadDecision.tapAction(AttachmentStatus.LOADING.code, progress = -2, isFileValid, size))
             }
         }
@@ -193,20 +188,17 @@ class AttachmentDownloadDecisionTest {
     fun `tap policy - without a readable file a large file downloads on request and anything else is rescued`() {
         val large = FileUtil.LARGE_FILE_THRESHOLD + 1
         assertEquals(AttachmentTapAction.Download, AttachmentDownloadDecision.tapAction(AttachmentStatus.LOADING.code, progress = null, isFileValid = false, sizeBytes = large))
-        // The cases the confidential-forward gate used to let through: a row still LOADING with no live
-        // progress (download died with the process) and a SUCCESS row whose file is gone.
+        
         assertEquals(AttachmentTapAction.Rescue, AttachmentDownloadDecision.tapAction(AttachmentStatus.LOADING.code, progress = null, isFileValid = false, sizeBytes = 1024))
         assertEquals(AttachmentTapAction.Rescue, AttachmentDownloadDecision.tapAction(AttachmentStatus.SUCCESS.code, progress = null, isFileValid = false, sizeBytes = 1024))
         assertEquals(AttachmentTapAction.Rescue, AttachmentDownloadDecision.tapAction(AttachmentStatus.SUCCESS.code, progress = 100, isFileValid = false, sizeBytes = large))
     }
 
-    // region rescuing a file the row says we have
+    
 
     @Test
     fun `a missing file the row calls transferred is asked for, not reported as an error`() {
-        // The dead end this removes: a display or tap gate finds nothing on disk, shows "load error",
-        // and nothing ever fixes it — while the file may be sitting at a pre-per-copy address that
-        // only the download job's local rescue can reach.
+        
         assertTrue(
             AttachmentDownloadDecision.shouldRescueMissingFile(
                 isFileValid = false,
@@ -229,8 +221,8 @@ class AttachmentDownloadDecisionTest {
 
     @Test
     fun `a rescue already running is not started again`() {
-        // The idempotence guard: a job that has started publishes progress under this copy's key, and
-        // every gate re-reads that map before asking again. Repeated taps must not pile up jobs.
+        
+        
         for (progress in allProgresses.filterNotNull()) {
             assertFalse(
                 "progress=$progress",
@@ -245,8 +237,8 @@ class AttachmentDownloadDecisionTest {
 
     @Test
     fun `a row that never completed a transfer is left to the existing download and error paths`() {
-        // SUCCESS is the whole justification: only it says these bytes were completely transferred
-        // once, which is what makes their absence a MOVE rather than a download that never happened.
+        
+        
         for (status in allStatuses.filter { it != AttachmentStatus.SUCCESS.code }) {
             assertFalse(
                 "status=$status",
@@ -259,5 +251,5 @@ class AttachmentDownloadDecisionTest {
         }
     }
 
-    // endregion
+    
 }

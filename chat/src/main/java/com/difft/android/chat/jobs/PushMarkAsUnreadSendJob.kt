@@ -19,17 +19,17 @@ import difft.android.messageserialization.For
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos.SyncMessage
 import java.util.concurrent.TimeUnit
 
-/**
- * Sends one `SyncMessage.markAsUnread` (CLEAR / UNREAD / READ) to the account's other devices
- * and, only once the server accepted it, stores the flag locally with the server timestamp as
- * the mark time — the same write-after-success rule iOS and Desktop follow, so all devices
- * agree on the mark time.
- *
- * Jobs for one room share a persisted queue, so flags apply in the order the user issued them:
- * opening a room while an UNREAD for it is still queued enqueues a CLEAR behind it (see
- * `ConversationUnreadMarker.clearOnOpen`), which survives process death. The local write keeps a
- * mark with a newer server time that arrived from another device while this sync was in flight.
- */
+
+
+
+
+
+
+
+
+
+
+
 class PushMarkAsUnreadSendJob @AssistedInject constructor(
     @Assisted
     parameters: Parameters?,
@@ -75,12 +75,12 @@ class PushMarkAsUnreadSendJob @AssistedInject constructor(
             throw e
         }
         if (success == null) {
-            // Non-throwing failure (e.g. unregistered): nothing to retry against, the local
-            // state simply stays as it was — matches the siblings, which only log here.
+            
+            
             L.w { "[MarkUnread][PushMarkAsUnreadSendJob] send failed without exception room=$roomId, dropping job" }
             return
         }
-        // The sync is already on the server: a local write failure must not re-send it.
+        
         try {
             storeResult(success.systemShowTimestamp)
         } catch (e: Exception) {
@@ -128,10 +128,10 @@ class PushMarkAsUnreadSendJob @AssistedInject constructor(
         private const val KEY_FLAG = "flag"
         private const val LIFESPAN_DAYS = 7L
 
-        /** The per-room queue every mark job for [roomId] runs in, in submission order. */
+        
         fun queueFor(roomId: String): String = "[$KEY::$roomId]"
 
-        /** The flag a queued [spec] of this job carries, or `null` for other jobs / undecodable data. */
+        
         fun flagOf(spec: JobSpec): Int? {
             if (spec.factoryKey != KEY) return null
             return runCatching { JsonDataSerializer().deserialize(spec.serializedData).getInt(KEY_FLAG) }.getOrNull()

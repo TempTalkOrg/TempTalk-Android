@@ -24,18 +24,10 @@ import org.whispersystems.signalservice.internal.push.conversationId
 import org.whispersystems.signalservice.internal.push.forwardNoticeMessage
 import org.whispersystems.signalservice.internal.push.notifyMessage
 
-/**
- * Proto-layer contract tests for ForwardNoticeMessage + its self-sync wrapper.
- *
- * v3 design:
- *   - Primary : `Content.forwardNotice = ForwardNoticeMessage`
- *   - Sync    : `Content.syncMessage.forwardNoticeSync = ForwardNoticeMessage`
- *              (direct reference; no wrapper type — v1's destination field was
- *               redundant with ForwardNoticeMessage.conversation.number)
- *
- * ForwardNoticeMessage.conversation (tag 4) is self-contained, so sync doesn't
- * need destination; receiver reads peer from inner conversation directly.
- */
+
+
+
+
 class SendForwardNoticeMessageSenderTest {
 
     private val messagingService: NewMessagingService = mockk(relaxed = true)
@@ -144,13 +136,7 @@ class SendForwardNoticeMessageSenderTest {
         assertFalse(notifyOnly.hasForwardNotice())
     }
 
-    // -----------------------------------------------------------------
-    // Sync builder: `createMultiDeviceForwardNoticeContent` wraps
-    // ForwardNoticeMessage in Content.syncMessage.forwardNoticeSync.
-    // Anti-regression: body MUST NOT be empty (same class of bug as
-    // difft-android's createMultiDeviceNotifyContent which set the body
-    // in an `if` block but forgot to assign back to syncMessage).
-    // -----------------------------------------------------------------
+    
     @Test
     fun `createMultiDeviceForwardNoticeContent wraps in SyncMessage forwardNoticeSync`() {
         val proto = forwardNoticeMessage {
@@ -168,7 +154,7 @@ class SendForwardNoticeMessageSenderTest {
             "Sync content must NOT set primary hasForwardNotice — different oneof branches",
             syncContent.hasForwardNotice()
         )
-        // Inner payload preserved end-to-end.
+        
         val inner = syncContent.syncMessage.forwardNoticeSync
         assertEquals(2, inner.messageCount)
         assertEquals("+peer-uid", inner.conversation.number)

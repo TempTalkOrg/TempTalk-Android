@@ -7,13 +7,13 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
-/**
- * The migration's progress rules: what an interrupted run resumes from, and what a completed version
- * leaves behind.
- *
- * Every writer is monotonic on purpose — replaying a stage is cheap and idempotent, while a marker
- * that walks backwards would re-migrate (or worse, re-sweep) work that is already done.
- */
+
+
+
+
+
+
+
 class AttachmentMigrationStateTest {
 
     private val store = FakePreferencesDataStore()
@@ -40,7 +40,7 @@ class AttachmentMigrationStateTest {
         state.advanceStage(ForwardAttachmentMigration.STAGE_BACKFILLED)
         state.advanceWatermark(340)
 
-        // Restart: a new instance over the same store sees where the last run got to.
+        
         val resumed = AttachmentMigrationState(store)
         assertEquals(ForwardAttachmentMigration.STAGE_BACKFILLED, resumed.stage())
         assertEquals(340, resumed.watermark())
@@ -56,8 +56,8 @@ class AttachmentMigrationStateTest {
 
         state.advanceStage(ForwardAttachmentMigration.STAGE_SWEPT)
 
-        // A version with two paged stages would otherwise start the second one at the row id the
-        // first stopped at, silently skipping every row below it.
+        
+        
         assertEquals("the watermark belongs to the stage in flight", 0, state.watermark())
         assertNull(store.data.first()[AppStateKeys.ATTACHMENT_MIGRATION_WATERMARK])
     }
@@ -112,8 +112,8 @@ class AttachmentMigrationStateTest {
         state.recordFileAttempt()
         state.recordFileAttempt()
 
-        // Restart: the give-up budget is spent across launches, not within one run — an instance
-        // that only ever sees failures on its own run would never reach the limit.
+        
+        
         val resumed = AttachmentMigrationState(store)
         assertEquals(2, resumed.fileAttempts())
         assertEquals(3, resumed.recordFileAttempt())
@@ -128,9 +128,9 @@ class AttachmentMigrationStateTest {
 
         assertEquals(3, state.fileAttempts())
         assertEquals("stage 2 giving up must not spend stage 3's budget", 0, state.sweepAttempts())
-        // Stage 4 belongs to a later migration version, and only the version stamp clears any of
-        // these — so a stage sharing stage 2's key would arrive with the budget already spent and
-        // abandon its rows on the very first pass.
+        
+        
+        
         assertEquals("stage 2 giving up must not spend stage 4's budget", 0, state.normalAttempts())
 
         state.recordSweepAttempt()
@@ -170,9 +170,9 @@ class AttachmentMigrationStateTest {
         state.recordNormalAttempt()
         state.recordNormalAttempt()
 
-        // Same budget rule as stage 2: spent across launches, not within one run — a stage that only
-        // ever saw failures on its own run would never reach the limit and never stamp the version,
-        // which is what withholds the final cleanup.
+        
+        
+        
         val resumed = AttachmentMigrationState(store)
         assertEquals(2, resumed.normalAttempts())
         assertEquals(3, resumed.recordNormalAttempt())

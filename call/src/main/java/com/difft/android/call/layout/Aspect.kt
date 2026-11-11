@@ -1,14 +1,14 @@
-// Synced from call-layout bf6b84ecbe, ports/kotlin/src/main/kotlin/org/difft/calllayout/Aspect.kt (spec v25), by scripts/sync-apps.ts.
-// Do not edit here: change call-layout and sync again.
+
+
 
 package com.difft.android.call.layout
 
 import kotlin.math.abs
 
-// Debounces video aspect changes before they reach the layout, so a phone being rotated
-// doesn't reshape cards on every intermediate frame. The first aspect of a video applies at
-// once (it arrives together with the first frame); a later change applies after it has held
-// for `aspectSettleMs`. Aspects within 2% count as the same. Ported from src/core/aspect.ts.
+
+
+
+
 
 data class PendingAspect(val aspect: Double, val since: Long)
 
@@ -21,7 +21,7 @@ fun createAspectState(): AspectState = AspectState(emptyMap(), emptyMap())
 
 private fun same(a: Double, b: Double) = abs(a / b - 1) <= 0.02
 
-// `raw` holds the latest frame aspect per participant; null means no video.
+
 fun settleAspects(prev: AspectState, raw: Map<String, Double?>, now: Long, cfg: LayoutConfig): AspectState {
     val settled = LinkedHashMap<String, Double>()
     val pending = LinkedHashMap<String, PendingAspect>()

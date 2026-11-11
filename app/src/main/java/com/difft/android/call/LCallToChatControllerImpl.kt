@@ -106,7 +106,7 @@ class LCallToChatControllerImpl @Inject constructor(
         )
     }
 
-    // region Call signaling
+    
 
     override suspend fun joinCall(
         context: Context,
@@ -133,9 +133,9 @@ class LCallToChatControllerImpl @Inject constructor(
     override suspend fun inviteCall(roomId: String, roomName: String?, callType: String?, mKey: ByteArray?, inviteMembers: ArrayList<String>, conversationId: String?): InviteRequestState =
         inviteExecutor.inviteCall(roomId, roomName, callType, mKey, inviteMembers, conversationId)
 
-    // endregion
+    
 
-    // region Contact & display
+    
 
     override suspend fun getContactorById(context: Context, id: String): Optional<ContactorModel> =
         ContactorUtil.getContactWithID(context, id)
@@ -156,13 +156,13 @@ class LCallToChatControllerImpl @Inject constructor(
 
     override fun contactorListSortedByPinyin(list: List<ContactorModel>): List<ContactorModel> = list.sortedByPinyin()
 
-    // endregion
+    
 
-    // region Notification
+    
 
     override fun cancelNotificationById(notificationId: Int) {
-        // Unconditional: the cancel also records the #1347 repost tombstone, which must exist even
-        // when the notification is not (yet) visible to activeNotifications.
+        
+        
         messageNotificationUtil.cancelNotificationsById(notificationId)
     }
 
@@ -172,9 +172,9 @@ class LCallToChatControllerImpl @Inject constructor(
     override fun isNotificationShowing(notificationId: Int): Boolean =
         messageNotificationUtil.isNotificationShowing(notificationId)
 
-    // endregion
+    
 
-    // region Message
+    
 
     override fun sendOrCreateCallTextMessage(
         callActionType: CallActionType, textContent: String, sourceDevice: Int,
@@ -247,14 +247,14 @@ class LCallToChatControllerImpl @Inject constructor(
         localMessageCreator.createCriticalAlertMessage(systemShowTimestamp, timestamp, fromWho, forWhat, sourceDevice)
     }
 
-    // endregion
+    
 
-    // region Encryption
+    
 
     override fun getLocalPrivateKey(): ByteArray? =
         encryptionDataManager.getAciIdentityKey().privateKey.serialize()
 
-    // Invoked on the RTM SDK's background dispatcher thread; never runs on Main.
+    
     @Suppress("BanRunBlockingOutsideTests")
     override fun getTheirPublicKey(uid: String): String? {
         val userId = if (uid.contains(".")) uid.split(".")[0] else uid
@@ -281,22 +281,22 @@ class LCallToChatControllerImpl @Inject constructor(
         return publicKeyInfo.identityKey
     }
 
-    // endregion
+    
 
-    // region Incoming call state
+    
 
     override fun restoreIncomingCallScreenIfActive() {
         L.i { "[Call] Status: isActivityShowing=${inComingCallStateManager.isActivityShowing()}, isInForeground=${inComingCallStateManager.isInForeground()}" }
 
-        // Case 1: the incoming-call Activity was already launched but moved to background
-        // (e.g. user pressed Home while the ringing screen was visible) -> reorder it to front.
-        // Suppressed while a voice message is being recorded, mirroring Case 2 and
-        // [IncomingCallServiceManager.showIncomingCallUI] so pulling the full-screen ringing UI over
-        // the chat does not interrupt an in-progress recording.
-        // Also suppressed once a call is in progress (isInCalling), mirroring Case 2: when the user
-        // answers from a notification, joinCall starts the call session (which sets isInCalling=true)
-        // over the still-showing ringing Activity; without this guard the foreground-restore would
-        // reorder the ringing screen back above the live call screen and strand the user there.
+        
+        
+        
+        
+        
+        
+        
+        
+        
         if (inComingCallStateManager.isActivityShowing()) {
             if (inComingCallStateManager.isInForeground() || onGoingCallStateManager.isInCalling()) return
             appScope.launch(Dispatchers.IO) {
@@ -319,45 +319,45 @@ class LCallToChatControllerImpl @Inject constructor(
             return
         }
 
-        // Case 2: only a notification was shown while the app was in background (the Activity was
-        // never launched). If the incoming call is still ringing (not timed out) and we are not
-        // already in a call, bring up the incoming-call screen when returning to foreground.
+        
+        
+        
         restoreIncomingCallFromNotificationIfNeeded()
     }
 
-    /**
-     * Restores the incoming-call screen from an active ringing notification.
-     * Picks the most recent still-notifying [CallData] and launches [LIncomingCallActivity].
-     *
-     * Skipped while a voice message is being recorded, mirroring the suppression in
-     * [IncomingCallServiceManager.showIncomingCallUI] so the recorder is not interrupted.
-     */
+    
+
+
+
+
+
+
     private fun restoreIncomingCallFromNotificationIfNeeded() {
         if (onGoingCallStateManager.isInCalling() || VoiceRecordingTracker.isRecording) return
-        // Cheap early-out; the authoritative selection happens inside the coroutine below.
+        
         if (callDataManager.getCallListData().values.none { it.notifying }) return
 
         appScope.launch(Dispatchers.IO) {
             if (ScreenDeviceUtil.isScreenLocked(application)) return@launch
-            // Re-check on the launch boundary to avoid racing with timeout/cancel that may have
-            // cleared the ringing state, with the Activity already being shown, or with a voice
-            // recording that started in the meantime (VoiceRecordingTracker is a point-in-time read).
+            
+            
+            
             if (onGoingCallStateManager.isInCalling()
                 || inComingCallStateManager.isActivityShowing()
                 || VoiceRecordingTracker.isRecording
             ) return@launch
 
-            // Select the latest active call here (not before launching) so a newer incoming call
-            // that arrived while this coroutine was deferred is honored instead of a stale pick.
+            
+            
             val callData = callDataManager.getCallListData().values
                 .filter { it.notifying }
                 .maxByOrNull { it.createdAt ?: 0L } ?: return@launch
 
             L.i { "[Call] Status: OK> restoreIncomingCallFromNotification roomId=${callData.roomId}" }
             withContext(Dispatchers.Main) {
-                // Final guard on the same thread as startActivity (no suspension in between): the
-                // incoming timeout may have cleared this call between selection and launch, so
-                // don't surface a ringing screen for an already-expired call.
+                
+                
+                
                 if (!callDataManager.getCallNotifyStatus(callData.roomId)
                     || onGoingCallStateManager.isInCalling()
                     || inComingCallStateManager.isActivityShowing()
@@ -375,14 +375,14 @@ class LCallToChatControllerImpl @Inject constructor(
                     .withCallerId(callData.caller.uid ?: "")
                     .withConversationId(callData.conversation)
                     .withCallRole(CallRole.CALLEE.type)
-                    // This flow resumes a background-notification call, so it must keep the same
-                    // app-lock requirement as the notification path (which passes true) rather than
-                    // the foreground direct-launch value (false). Only takes effect when the user
-                    // has an app lock configured; otherwise the Activity forces it off anyway.
+                    
+                    
+                    
+                    
                     .withNeedAppLock(true)
                     .build()
                 application.startActivity(intent)
-                // The Activity takes over the ringing UI; drop the now-redundant notification.
+                
                 cancelNotificationById(callData.roomId.hashCode())
             }
         }
@@ -401,9 +401,9 @@ class LCallToChatControllerImpl @Inject constructor(
 
     override fun getIncomingCallRoomId(): String? = inComingCallStateManager.getCurrentRoomId()
 
-    // endregion
+    
 
-    // region Service & critical alert
+    
 
     override fun startForegroundService(context: Context, intent: Intent, onDeferredFailure: () -> Unit): Boolean {
         return try {
@@ -437,5 +437,5 @@ class LCallToChatControllerImpl @Inject constructor(
     override fun cancelCriticalAlertNotification(conversationId: String?) =
         messageNotificationUtil.cancelCriticalAlertNotification(conversationId)
 
-    // endregion
+    
 }

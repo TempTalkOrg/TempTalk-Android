@@ -8,18 +8,18 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-/**
- * Whether an app-lock decision is scheduled but not applied yet. Set when a lock check is scheduled
- * and cleared only once the decision is applied (lock started, not needed, or the bounded retries
- * gave up), so the 150 ms retries that run outside the check job keep it set. Reading it consumes
- * nothing, unlike `ScreenLockUtil.recentlyUnlocked`.
- *
- * A quick check decides in about 100 ms; the full (deeplink) check takes about 1.1 s and the flag
- * may drop and rise again between its two passes. A check deferred while MainActivity routes stays
- * set until the next page's re-run decides, which sets it again. A flag still set after
- * [MAX_PENDING_MS] means a path missed its clear, so a watchdog clears it rather than keep every
- * startup prompt waiting.
- */
+
+
+
+
+
+
+
+
+
+
+
+
 class ScreenLockPending(
     private val handler: Handler = Handler(Looper.getMainLooper()),
     private val elapsed: () -> Long = SystemClock::elapsedRealtime,
@@ -50,7 +50,7 @@ class ScreenLockPending(
         handler.postDelayed(watchdog, MAX_PENDING_MS)
     }
 
-    /** A retry was scheduled: the decision is still open. */
+    
     fun onRetryScheduled() = Unit
 
     fun onDecided() {

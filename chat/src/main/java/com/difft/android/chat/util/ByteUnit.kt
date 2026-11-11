@@ -1,8 +1,8 @@
 package com.difft.android.chat.util
 
-/**
- * Just like [java.util.concurrent.TimeUnit], but for bytes.
- */
+
+
+
 enum class ByteUnit {
 
     BYTES {

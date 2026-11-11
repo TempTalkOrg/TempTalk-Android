@@ -10,7 +10,7 @@ import org.robolectric.annotation.Config
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
-/** Wording rules: the startup prompt covers only the full-screen permission. */
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class NotificationReadinessTextTest {

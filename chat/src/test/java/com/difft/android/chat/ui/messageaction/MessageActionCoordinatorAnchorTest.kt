@@ -39,14 +39,14 @@ import org.robolectric.annotation.GraphicsMode
 import java.time.Duration
 import kotlin.test.assertNotNull
 
-/**
- * K1-K10 (#1294): [MessageActionCoordinator] keeps the menu anchored to the live selection rows
- * and hides it only while a handle is dragged beyond the touch slop.
- *
- * Handle gestures are dispatched straight to the handle view (rawY = y), except K7, which goes
- * through the window so removing the overlay delivers the real ACTION_CANCEL to the handle, and
- * K10, which goes through the window so the overlay's (non-split) multi-touch dispatch is exercised.
- */
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(application = TestScopeApplication::class, sdk = [34], qualifiers = "w411dp-h891dp-xxhdpi")
@@ -55,7 +55,7 @@ class MessageActionCoordinatorAnchorTest {
     @get:Rule
     val globalMocks = GlobalStaticMockRule()
 
-    // Per-test recomposer and frame clock (see MessageActionPopupAnchorTest).
+    
     @get:Rule
     val composeRule = createEmptyComposeRule()
 
@@ -70,7 +70,7 @@ class MessageActionCoordinatorAnchorTest {
         runCatching { controller?.destroy() }
     }
 
-    /** Records drag signals and delegates to the coordinator's callback. */
+    
     private class DragSpy(private val delegate: TextSelectionManager.HandleDragCallback) :
         TextSelectionManager.HandleDragCallback {
         var started = 0
@@ -132,14 +132,14 @@ class MessageActionCoordinatorAnchorTest {
             )
         }
 
-        /** Runs the attach post, passes the 100ms isInitializing window, and places the menu. */
+        
         fun showAndIdle(enableTextSelection: Boolean = true) {
             show(enableTextSelection)
             shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(150))
             settle()
         }
 
-        /** Three frames; state writes are delivered explicitly because a hidden menu is not drawn. */
+        
         fun settle() {
             repeat(3) {
                 Snapshot.sendApplyNotifications()
@@ -159,7 +159,7 @@ class MessageActionCoordinatorAnchorTest {
         event.recycle()
     }
 
-    /** Dispatches a multi-pointer event; [pointers] are (pointerId, x, y) in index order. */
+    
     private fun touchPointers(view: View, action: Int, downTime: Long, vararg pointers: Triple<Int, Float, Float>) {
         val props = pointers.map { (id, _, _) ->
             MotionEvent.PointerProperties().apply {
@@ -183,7 +183,7 @@ class MessageActionCoordinatorAnchorTest {
         event.recycle()
     }
 
-    /** K3 steps: end handle DOWN, MOVE up two lines (beyond slop), MOVE a further 10px. Returns visibility per step. */
+    
     private fun dragEndHandleUp(f: Fixture): List<Boolean> {
         val handle = f.endHandle
         val up = -2 * f.lineHeight
@@ -329,11 +329,11 @@ class MessageActionCoordinatorAnchorTest {
         assertEquals(1, f.overlay.childCount)
     }
 
-    /**
-     * Rows are asserted to match the settled selection, not to be unchanged: `handleDrag` maps the
-     * handle view's top (above the end line by its touch padding) to an offset, so any MOVE on the
-     * end handle, even a zero-net one, settles the end one line up. That is pre-existing behaviour.
-     */
+    
+
+
+
+
     @Test
     fun `K9 sub-slop jitter never hides the menu`() {
         val f = Fixture()
@@ -356,12 +356,12 @@ class MessageActionCoordinatorAnchorTest {
         assertEquals(f.manager.getVisibleHandleRowRects(), f.popup.selectionRows)
     }
 
-    /**
-     * A second finger landing on the other handle while one handle is dragged must not start a
-     * second drag: the overlay does not split motion events, so the second pointer joins the first
-     * handle's gesture, which ignores it. The drag ends, and the menu re-shows, only on the first
-     * finger's UP. Handle A is the one outside the menu (as in K7); B is the other handle.
-     */
+    
+
+
+
+
+
     @Test
     fun `K10 a second finger on the other handle neither ends the drag nor moves that handle`() {
         val f = Fixture()

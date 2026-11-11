@@ -1,15 +1,16 @@
 package com.difft.android.chat.compose
 
 import android.content.res.Configuration
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
@@ -21,10 +22,10 @@ import com.difft.android.base.ui.compose.DifftButton
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.chat.R
 
-/**
- * Confidential message first-use tip dialog content.
- * Shows an icon, title, description and OK button.
- */
+
+
+
+
 @Composable
 fun ConfidentialTipDialogContent(
     title: String,
@@ -34,19 +35,19 @@ fun ConfidentialTipDialogContent(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 32.dp),
+            .padding(start = 24.dp, end = 24.dp, top = 32.dp, bottom = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Icon with t_info color
-        Image(
+        Icon(
             painter = painterResource(id = R.drawable.chat_btn_confidential_mode_enable),
             contentDescription = null,
-            modifier = Modifier.size(32.dp)
+            tint = DifftTheme.colors.icon,
+            modifier = Modifier.size(40.dp)
         )
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
-        // Title
+        
         Text(
             text = title,
             style = DifftTheme.typography.h5,
@@ -56,7 +57,7 @@ fun ConfidentialTipDialogContent(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Content
+        
         Text(
             text = content,
             style = DifftTheme.typography.p3,
@@ -69,7 +70,7 @@ fun ConfidentialTipDialogContent(
         DifftButton(
             text = stringResource(id = R.string.chat_dialog_ok),
             onClick = onConfirm,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().height(48.dp).clip(DifftTheme.radius.pill),
         )
     }
 }

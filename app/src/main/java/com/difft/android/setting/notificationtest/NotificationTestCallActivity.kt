@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
@@ -28,6 +27,7 @@ import com.difft.android.base.notification.NotificationTestKind
 import com.difft.android.base.notification.NotificationTestRepository
 import com.difft.android.base.notification.validNotificationTestId
 import com.difft.android.base.ui.compose.DifftButton
+import com.difft.android.base.ui.compose.systemBarsWithCutoutPadding
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.utils.appScope
 import com.difft.android.base.widget.ToastUtil
@@ -38,11 +38,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/**
- * Target of the call test's full-screen intent (#1350). Being created is the objective proof that
- * the system let the app pop a screen over the lock screen, so creation records the success. It
- * shares nothing with the real call screens.
- */
+
+
+
+
+
 @AndroidEntryPoint
 class NotificationTestCallActivity : ComponentActivity() {
 
@@ -60,7 +60,7 @@ class NotificationTestCallActivity : ComponentActivity() {
             return
         }
         allowOnLockScreen()
-        // The window is lit over the lock screen at once; the result only swaps in the screen body.
+        
         val shown = mutableStateOf(false)
         setContent { DifftTheme { if (shown.value) CallShownScreen(onDone = ::finish) else Box(Modifier.fillMaxSize().background(DifftTheme.colors.background)) } }
         appScope.launch {
@@ -88,7 +88,7 @@ class NotificationTestCallActivity : ComponentActivity() {
         const val RUN_ID = "notification_test_call_run_id"
     }
 
-    /** API 27+ uses the manifest's showWhenLocked / turnScreenOn; API 26 needs the window flags. */
+    
     private fun allowOnLockScreen() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O_MR1) {
             @Suppress("DEPRECATION")
@@ -103,7 +103,7 @@ private fun CallShownScreen(onDone: () -> Unit) {
         modifier = Modifier
             .fillMaxSize()
             .background(DifftTheme.colors.background)
-            .systemBarsPadding()
+            .systemBarsWithCutoutPadding()
             .padding(DifftTheme.spacing.insetLarge),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,

@@ -74,14 +74,14 @@ class AppExecutorsTest {
         AppExecutors.mainHandler().post {
             result.set(Looper.myLooper() == Looper.getMainLooper())
         }
-        // Drain Robolectric's main looper to execute posted tasks.
+        
         shadowOf(Looper.getMainLooper()).idle()
         assertEquals(true, result.get())
     }
 
     @Test
     fun `Default and IO are distinct executor instances`() {
-        // They're both backed by coroutine dispatchers but should be different handles.
+        
         assertNotSame(AppExecutors.Default, AppExecutors.IO)
     }
 }

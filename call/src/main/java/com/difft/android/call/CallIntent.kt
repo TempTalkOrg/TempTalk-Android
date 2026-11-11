@@ -21,7 +21,7 @@ class CallIntent(private val intent: Intent) {
             return "$CALL_INTENT_PREFIX.${extra.code}"
         }
 
-        /** Tags a START/JOIN launch with the key of the session its entry point started. */
+        
         fun putSessionKey(intent: Intent, key: String) {
             intent.putExtra(getExtraString(Extra.CALL_SESSION_KEY), key)
         }
@@ -59,9 +59,9 @@ class CallIntent(private val intent: Intent) {
         CALL_SESSION_KEY("CALL_SESSION_KEY"),
     }
 
-    /**
-     * Builds an intent to launch the call screen.
-     */
+    
+
+
     class Builder(val context: Context, targetActivity: Class<*>) {
         private val intent = Intent(context, targetActivity)
 
@@ -123,23 +123,23 @@ class CallIntent(private val intent: Intent) {
             return this
         }
 
-        /** 由 joinCall/startCall 在已展示 CallWaitDialog 时设置，LCallActivity 据此不再重复 show */
+        
         fun withCallWaitDialogShown(shown: Boolean): Builder {
             intent.putExtra(getExtraString(Extra.CALL_WAIT_DIALOG_SHOWN), shown)
             return this
         }
 
-        /** 仅主叫发起路径设置：本次发起生成的 clientCallId，贯穿到取消/挂断信令。 */
+        
         fun withClientCallId(clientCallId: String?): Builder {
             intent.putExtra(getExtraString(Extra.CALL_CLIENT_CALL_ID), clientCallId)
             return this
         }
 
-        /**
-         * Marks the intent the system fires as a notification's full-screen intent — which it does
-         * only when the display is off or the keyguard is up. The ring screen uses it to pick its
-         * answer control, since by onCreate the display has usually already been woken.
-         */
+        
+
+
+
+
         fun withFullScreenLaunch(fullScreenLaunch: Boolean): Builder {
             intent.putExtra(getExtraString(Extra.CALL_FULL_SCREEN_LAUNCH), fullScreenLaunch)
             return this
@@ -166,14 +166,14 @@ class CallIntent(private val intent: Intent) {
 
     val needAppLock: Boolean by lazy { intent.getBooleanExtra(getExtraString(Extra.CALL_NEED_APP_LOCK), false) }
 
-    /** True when the system launched this intent as a notification's full-screen intent (display off / keyguard up). */
+    
     val fullScreenLaunch: Boolean by lazy { intent.getBooleanExtra(getExtraString(Extra.CALL_FULL_SCREEN_LAUNCH), false) }
 
     val callWaitDialogShown: Boolean by lazy { intent.getBooleanExtra(getExtraString(Extra.CALL_WAIT_DIALOG_SHOWN), false) }
 
     val clientCallId: String? by lazy { intent.getStringExtra(getExtraString(Extra.CALL_CLIENT_CALL_ID)) }
 
-    /** The launching session's key on a START/JOIN launch; null on a return to the call (BACK_TO_CALL). */
+    
     val sessionKey: String? get() = intent.getStringExtra(getExtraString(Extra.CALL_SESSION_KEY))
 
     override fun toString(): String {

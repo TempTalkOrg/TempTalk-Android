@@ -7,13 +7,13 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import kotlin.test.assertNotNull
 
-/**
- * Guards the AndroidManifest registration of every Activity this feature can launch.
- *
- * Robolectric resolves against the real merged manifest, so a missing <activity> entry —
- * which unit tests with host doubles cannot see and which crashes on device with
- * ActivityNotFoundException — fails here at build time.
- */
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 class LinkedDevicesManifestTest {
 

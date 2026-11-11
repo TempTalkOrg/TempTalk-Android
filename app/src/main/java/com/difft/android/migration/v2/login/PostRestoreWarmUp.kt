@@ -25,14 +25,14 @@ import org.difft.app.database.wcdb
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * The stop between a restore's first cold start and the chat list: the first contact and group
- * sync, awaited. A migrated install has the conversations but not the contactor or group tables —
- * the container carries neither, the server directory is their source — yet every friend check,
- * name and avatar reads them, so opening the list first shows a friend as a stranger. Bounded by
- * [TIMEOUT_MS]: whatever has not landed is left to finish in [appScope], never the caller's scope.
- * The syncs are the ones the chat list would start, guarded so its trigger joins the running one.
- */
+
+
+
+
+
+
+
+
 @Singleton
 class PostRestoreWarmUp @Inject constructor(
     private val groupUtil: GroupUtil,
@@ -41,25 +41,25 @@ class PostRestoreWarmUp @Inject constructor(
     @VisibleForTesting
     internal var awaitContacts: suspend () -> Boolean = { ContactorUtil.awaitFirstSync() }
 
-    /** Names the rooms the import left nameless; returns how many it visited. */
+    
     @VisibleForTesting
     internal var nameRooms: suspend () -> Int = ::nameRoomsFromDirectory
 
     @VisibleForTesting
     internal var scope: CoroutineScope = appScope
 
-    /** True when contacts and groups both landed in time; false when the chat list opens ahead of them. */
+    
     suspend fun run(timeoutMs: Long = TIMEOUT_MS): Boolean {
         val startedAt = System.nanoTime()
         val contacts = scope.async { runCatching { awaitContacts() }.getOrElse { false } }
         val groups = scope.async {
-            runCatching { groupUtil.syncAllGroupAndAllGroupMembers(forceFetch = false, syncMembers = true) }.isSuccess
+            runCatching { groupUtil.syncAllGroupAndAllGroupMembers(forceFetch = false) }.isSuccess
         }
-        // Fire-and-forget by design; the imported room rows already carry these values as the fallback.
+        
         conversationSettingsManager.syncConversationSettings()
         val ready = withTimeoutOrNull(timeoutMs) { contacts.await() && groups.await() } ?: false
-        // Imported rooms carry no names (directory data); the chat list hides nameless rooms, so
-        // name them here once contacts and groups are in, within the same bound.
+        
+        
         val named = if (ready) {
             val remainingMs = timeoutMs - (System.nanoTime() - startedAt) / NANOS_PER_MILLI
             withTimeoutOrNull(remainingMs.coerceAtLeast(1)) { runCatching { nameRooms() }.getOrElse { -1 } }
@@ -80,7 +80,7 @@ class PostRestoreWarmUp @Inject constructor(
         const val TIMEOUT_MS = 5_000L
         private const val NANOS_PER_MILLI = 1_000_000L
 
-        /** Names every still-nameless room, as the chat list's listener would. */
+        
         private suspend fun nameRoomsFromDirectory(): Int = withContext(Dispatchers.IO) {
             val nameless = wcdb.room.getAllObjects(DBRoomModel.roomName.isNull().or(DBRoomModel.roomName.eq("")))
             nameless.forEach { it.updateRoomNameAndAvatar() }
@@ -89,7 +89,7 @@ class PostRestoreWarmUp @Inject constructor(
     }
 }
 
-/** What the user sees while [PostRestoreWarmUp] runs; same copy as the iOS reconciliation page. */
+
 @Composable
 fun PostRestoreWarmUpPage() {
     MigrationResultPage(

@@ -10,14 +10,10 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 
-/**
- * I5 T-SM1 — [MigrationTransferStateHolder] state-machine transitions + re-attach (design §7).
- *
- * Pure-JVM (no Robolectric): the holder is a process-singleton `StateFlow` pair with no Android types.
- * Asserts (a) the ordered transition sequence the FGS writes, and (b) RE-ATTACH — a LATE collector sees
- * the latest value immediately (StateFlow replays), which is exactly how a recreated VM re-binds to an
- * in-flight transfer after Activity death.
- */
+
+
+
+
 class MigrationTransferStateHolderTest {
 
     @Before
@@ -52,10 +48,10 @@ class MigrationTransferStateHolderTest {
 
     @Test
     fun `T-SM1b — a late collector sees the latest state (re-attach)`() = runTest {
-        // Write an in-flight state BEFORE any collector attaches (mimics Activity death mid-transfer).
+        
         MigrationTransferStateHolder.update(TransferState.Transferring(TransferState.Role.RECEIVER, 0.4f))
 
-        // A NEW collector (recreated VM) attaches AFTER the write — must immediately see the latest.
+        
         MigrationTransferStateHolder.state.test {
             val first = awaitItem()
             assertIs<TransferState.Transferring>(first)

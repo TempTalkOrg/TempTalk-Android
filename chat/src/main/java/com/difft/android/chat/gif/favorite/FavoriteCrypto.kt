@@ -9,39 +9,39 @@ import javax.crypto.Cipher
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
-/**
- * favKey symmetric encryption for the favorites list blob (AES-256-GCM, JCE — no Ed25519,
- * no group AAD dependency). See android-impl-design.md §B1/§B3.2 and
- * cross-platform-alignment.md §2.5/§3.
- *
- * Wire format (byte-exact across Android / iOS / Mac):
- *   blob = Base64.NO_WRAP( nonce(12B) ‖ ciphertext ‖ tag(16B) )
- *   plaintext = UTF-8 JSON of [FavoriteListPlainJson] (ByteArray fields = Base64.NO_WRAP strings)
- *   AAD = "tt-fav-v1|gcm|list"
- * This release does NOT gzip (small payloads; encVersion=1 reserved for a future gzip bump).
- */
+
+
+
+
+
+
+
+
+
+
+
 object FavoriteCrypto {
 
     const val FAV_KEY_SIZE = 32
-    /** Encryption-scheme version this client writes (AES-256-GCM, AAD "tt-fav-v1"). The PUT must
-     *  declare THIS (the version it encrypted with), never echo the server's stored value. */
+    
+
     const val ENC_VERSION = 1
     private const val GCM_NONCE_SIZE = 12
-    private const val GCM_TAG_BITS = 128 // 16-byte tag
+    private const val GCM_TAG_BITS = 128 
     private const val AAD = "tt-fav-v1|gcm|list"
 
     private val gson = Gson()
     private val secureRandom = SecureRandom()
 
-    /** Generate a new raw 32-byte AES-256 favKey via CSPRNG. */
+    
     fun generateFavKey(): ByteArray = ByteArray(FAV_KEY_SIZE).also { secureRandom.nextBytes(it) }
 
-    // ---- v2 key-wrapping: favKey wrapped under a KEK derived from the account identity ----
-    // See design-v2-cross-platform.md §3.2. favKey (DEK) stays stable; KEK = HKDF(aci identity
-    // private key). The wrapped favKey is stored server-side (opaque) so any device holding the
-    // masterKey can derive the KEK and recover favKey — no per-device key distribution.
+    
+    
+    
+    
 
-    /** HKDF info/salt/AAD — three-platform must-pin constants (must byte-match iOS/Mac). */
+    
     private const val KEK_INFO = "tt-fav-kek-v1"
     private const val KEK_SALT = "tt-fav-kek-salt-v1"
     private const val WRAP_AAD = "tt-fav-wrap-v1"
@@ -50,16 +50,16 @@ object FavoriteCrypto {
     private const val WRAP_ENV_ROOT = "master"
     private const val WRAP_ENV_CIPHER = "aes-256-gcm"
 
-    /**
-     * Derive the 32-byte KEK from the account identity private key (aci, 32-byte Curve25519 scalar).
-     * RFC 5869 HKDF-SHA256 with the pinned salt/info so all platforms derive the same KEK.
-     *
-     * The scalar is Curve25519-CLAMPED before HKDF (b0 &= 0xF8; b31 &= 0x7F; b31 |= 0x40). Clamping
-     * is idempotent (no-op on an already-clamped key), and it normalizes the byte representation so
-     * the KEK is identical whether the platform's crypto lib stored the private key clamped
-     * (libsignal) or as the raw seed (e.g. Curve25519Kit) — otherwise those 2 bytes would silently
-     * diverge the KEK and break cross-platform unwrap. Three-platform must-pin.
-     */
+    
+
+
+
+
+
+
+
+
+
     fun deriveKek(masterKeyPriv: ByteArray): ByteArray {
         val ikm = masterKeyPriv.copyOf()
         if (ikm.size == FAV_KEY_SIZE) {
@@ -75,7 +75,7 @@ object FavoriteCrypto {
         )
     }
 
-    /** Wrap [favKey] under [kek] into the self-describing envelope JSON string (stored server-side). */
+    
     fun wrapFavKey(kek: ByteArray, favKey: ByteArray): String {
         require(kek.size == FAV_KEY_SIZE) { "KEK must be $FAV_KEY_SIZE bytes" }
         val nonce = ByteArray(GCM_NONCE_SIZE).also { secureRandom.nextBytes(it) }
@@ -93,7 +93,7 @@ object FavoriteCrypto {
         return gson.toJson(env)
     }
 
-    /** Unwrap the envelope [wrappedFavKey] with [kek] → raw favKey, or null on any failure. */
+    
     fun unwrapFavKey(kek: ByteArray, wrappedFavKey: String): ByteArray? {
         if (kek.size != FAV_KEY_SIZE) return null
         return try {
@@ -113,19 +113,19 @@ object FavoriteCrypto {
         }
     }
 
-    /** favKey fingerprint (NOT the key): Base64.NO_WRAP of SHA-256(favKey)[0..7]. */
+    
     fun keyId(favKey: ByteArray): String {
         val digest = java.security.MessageDigest.getInstance("SHA-256").digest(favKey)
         return Base64.encodeToString(digest.copyOfRange(0, 8), Base64.NO_WRAP)
     }
 
-    /** RFC 5869 HKDF-SHA256 (standard, so iOS/Mac match byte-for-byte). */
+    
     private fun hkdfSha256(ikm: ByteArray, salt: ByteArray, info: ByteArray, length: Int): ByteArray {
         val mac = javax.crypto.Mac.getInstance("HmacSHA256")
-        // Extract
+        
         mac.init(SecretKeySpec(if (salt.isEmpty()) ByteArray(32) else salt, "HmacSHA256"))
         val prk = mac.doFinal(ikm)
-        // Expand
+        
         mac.init(SecretKeySpec(prk, "HmacSHA256"))
         val out = ByteArray(length)
         var t = ByteArray(0)
@@ -152,10 +152,10 @@ object FavoriteCrypto {
         @SerializedName("ct") val ct: String? = null
     )
 
-    /**
-     * Encrypt a favorites list into the Base64 blob. [favKey] must be 32 bytes.
-     * Throws on a malformed key (caller treats as a hard error).
-     */
+    
+
+
+
     fun encrypt(favKey: ByteArray, list: FavoriteListPlain): String {
         require(favKey.size == FAV_KEY_SIZE) { "favKey must be $FAV_KEY_SIZE bytes" }
         val plaintext = gson.toJson(list.toJson()).toByteArray(Charsets.UTF_8)
@@ -168,7 +168,7 @@ object FavoriteCrypto {
             GCMParameterSpec(GCM_TAG_BITS, nonce)
         )
         cipher.updateAAD(AAD.toByteArray(Charsets.UTF_8))
-        val ctWithTag = cipher.doFinal(plaintext) // ciphertext ‖ tag
+        val ctWithTag = cipher.doFinal(plaintext) 
 
         val out = ByteArray(nonce.size + ctWithTag.size)
         System.arraycopy(nonce, 0, out, 0, nonce.size)
@@ -176,10 +176,10 @@ object FavoriteCrypto {
         return Base64.encodeToString(out, Base64.NO_WRAP)
     }
 
-    /**
-     * Decrypt a Base64 blob back into a favorites list. Returns null on any failure
-     * (bad key / tampered blob / malformed JSON) — the caller leaves history pending.
-     */
+    
+
+
+
     fun decrypt(favKey: ByteArray, blob: String): FavoriteListPlain? {
         if (favKey.size != FAV_KEY_SIZE) {
             L.w { "[FavoriteCrypto] decrypt skipped: bad favKey size=${favKey.size}" }
@@ -207,7 +207,7 @@ object FavoriteCrypto {
         }
     }
 
-    // -- JSON wire shape (ByteArray -> Base64.NO_WRAP string) for byte-exact cross-platform blob --
+    
 
     private fun FavoriteListPlain.toJson() = FavoriteListPlainJson(
         records = records.map { r ->
@@ -260,11 +260,11 @@ object FavoriteCrypto {
 
     private data class FavoriteAttachmentPointerJson(
         @SerializedName("id") val id: String? = null,
-        // authorizeId is a snowflake id > 2^53. Serialize it as a STRING (not a JSON number) in the
-        // cross-platform blob so peers that parse JSON numbers as IEEE-754 doubles (JS / Swift) don't
-        // lose the low digits (e.g. ...514568 -> ...515000). Matches the server item meta, which is
-        // also a String. A String field still reads a bare number token exactly, so this is
-        // backward-tolerant of any older number-encoded blob.
+        
+        
+        
+        
+        
         @SerializedName("authorizeId") val authorizeId: String? = null,
         @SerializedName("key") val key: String? = null,
         @SerializedName("digest") val digest: String? = null,
@@ -272,7 +272,7 @@ object FavoriteCrypto {
         @SerializedName("contentType") val contentType: String? = null,
         @SerializedName("width") val width: Int = 0,
         @SerializedName("height") val height: Int = 0,
-        // Plaintext asset size in bytes; 0 when absent (legacy blob). Cross-platform contract field.
+        
         @SerializedName("size") val size: Int = 0
     )
 }

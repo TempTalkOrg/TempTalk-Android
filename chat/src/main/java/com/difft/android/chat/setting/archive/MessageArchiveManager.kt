@@ -54,7 +54,7 @@ import javax.inject.Singleton
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration.Companion.seconds
 
-// All wcdb calls in this class run on Dispatchers.IO.
+
 @Suppress("BlockingWcdbInSuspend")
 @Singleton
 class MessageArchiveManager @Inject constructor(
@@ -70,20 +70,20 @@ class MessageArchiveManager @Inject constructor(
     private val serverTimeSyncer: ServerTimeSyncer,
 ) {
     companion object {
-        private const val FOREGROUND_INTERVAL_MS = 5 * 60 * 1000L  // 5 minutes
-        private const val BACKGROUND_INTERVAL_MS = 60 * 60 * 1000L // 1 hour
+        private const val FOREGROUND_INTERVAL_MS = 5 * 60 * 1000L  
+        private const val BACKGROUND_INTERVAL_MS = 60 * 60 * 1000L 
 
-        /** `ResetIdentityKeyModel.status`: fetched from the server, messages not cleared yet. */
+        
         private const val RESET_STATUS_PENDING = 0
 
-        /** `ResetIdentityKeyModel.status`: messages cleared and notice posted. */
+        
         private const val RESET_STATUS_PROCESSED = 1
 
-        /**
-         * Server reset records that still need archiving, as pending rows. A record already
-         * processed for the same reset time is skipped, so the outcome does not depend on whether
-         * `/keys?beginTimestamp=` echoes the boundary record back (observed: it does not).
-         */
+        
+
+
+
+
         internal fun pendingResetIdentityKeyRecords(
             known: Map<String?, ResetIdentityKeyModel>,
             remote: List<PublicKeyInfo>,
@@ -105,20 +105,19 @@ class MessageArchiveManager @Inject constructor(
     @Volatile
     private var lastCheckTime: Long = 0L
 
-    // Single-run guard: Activity recreation re-enters startCheckTask and would stack loops on appScope
+    
     private val isStarted = AtomicBoolean(false)
 
-    // Defense in depth: no concurrent caller exists today, but the tombstone exists-then-insert
-    // below must never run concurrently, so any future second caller stays safe
+    
     private val archiveMutex = Mutex()
 
-    // Channel to signal state changes and interrupt the delay
+    
     private val stateChangeSignal = Channel<Unit>(Channel.CONFLATED)
 
-    // A cipher-key failure lasts the process lifetime: log the first skipped round only (#1395).
+    
     private val keyUnavailableLogged = AtomicBoolean(false)
 
-    // Test seams (#1395): WCDB's native library does not load in a JVM unit test.
+    
     @VisibleForTesting
     internal var isDbInaccessible: () -> Boolean = { wcdb.isDbInaccessible }
 
@@ -131,10 +130,10 @@ class MessageArchiveManager @Inject constructor(
     @VisibleForTesting
     internal val lastCheckTimeForTest: Long get() = lastCheckTime
 
-    /**
-     * Starts the process-wide archive loop once. Returns true only for the call that started it;
-     * IndexActivity and the warm-process foreground resync share this guard (#1395).
-     */
+    
+
+
+
     fun startCheckTask(): Boolean {
         if (!isStarted.compareAndSet(false, true)) return false
 
@@ -145,8 +144,8 @@ class MessageArchiveManager @Inject constructor(
         }
 
         appScope.launch(Dispatchers.IO) {
-            // Fail-soft: skip all DB work if the cipher key is unavailable (one-way process-lifetime
-            // flag). The archive task self-heals on the next cold start; the appScope CEH is the net.
+            
+            
             if (isDbInaccessible()) {
                 L.w { "[MessageArchiveManager] skip check task, DB inaccessible" }
                 return@launch
@@ -165,13 +164,13 @@ class MessageArchiveManager @Inject constructor(
             try {
                 doArchiveIfNeeded()
             } catch (e: WCDBKeyUnavailableException) {
-                // Key failures only: the round is skipped unstamped and retried next round. Any
-                // other exception still reaches appScope's handler and surfaces as a crash.
+                
+                
                 if (keyUnavailableLogged.compareAndSet(false, true)) {
                     L.w { "[MessageArchiveManager] archive round skipped error=${e.javaClass.simpleName}" }
                 }
             }
-            // Wait for either: interval timeout OR state change signal
+            
             val signaled = withTimeoutOrNull(currentInterval) {
                 stateChangeSignal.receive()
                 true
@@ -182,23 +181,23 @@ class MessageArchiveManager @Inject constructor(
         }
     }
 
-    /**
-     * Call when app foreground/background state changes.
-     * Updates the interval and triggers immediate check if needed.
-     */
+    
+
+
+
     fun onAppStateChanged(isForeground: Boolean) {
         currentInterval = if (isForeground) FOREGROUND_INTERVAL_MS else BACKGROUND_INTERVAL_MS
         stateChangeSignal.trySend(Unit)
     }
 
     private suspend fun doArchiveIfNeeded() = archiveMutex.withLock {
-        // Silent skip while the DB is inaccessible: no log, no stamp; the loop waits its interval.
+        
         if (isDbInaccessible()) return@withLock
-        // Monotonic clock: a wall-clock rollback would make this negative and stall the archive gate.
-        // elapsedRealtime is never meaningfully 0 at runtime, so the lastCheckTime == 0L sentinel holds.
+        
+        
         val timeSinceLastCheck = elapsedRealtime() - lastCheckTime
 
-        // First call (lastCheckTime = 0) or exceeded interval
+        
         if (lastCheckTime == 0L || timeSinceLastCheck >= currentInterval) {
             L.i { "[MessageArchiveManager] Archive check triggered (${timeSinceLastCheck / 1000}s since last)" }
             archivePass()
@@ -208,21 +207,21 @@ class MessageArchiveManager @Inject constructor(
         }
     }
 
-    /**
-     * Archive expired messages for all rooms. A message is archived if either:
-     * 1. readTime <= messageClearAnchor
-     * 2. readTime + messageExpiry < currentTime
-     *
-     * Archive system messages ("Earlier messages expired") are skipped during deletion
-     * to prevent accidentally emptying conversations. They are only replaced (delete + recreate)
-     * when new normal messages are archived.
-     */
+    
+
+
+
+
+
+
+
+
     private suspend fun archiveMessages() {
-        // Best-effort trusted-time anchor before deciding expiry (offline still proceeds on L2/L3 fallback).
+        
         serverTimeSyncer.ensureAnchored()
 
         val pageSize = 100L
-        // Trusted "now": immune to local wall-clock tampering once anchored.
+        
         val currentTimeMillis = ServerTimeProvider.nowMillis()
 
         val roomsNeedCheckClear = wcdb.room.getAllObjects(
@@ -246,7 +245,7 @@ class MessageArchiveManager @Inject constructor(
                     messageExpiryMillis = messageExpiryMillis,
                     currentTimeMillis = currentTimeMillis,
                     readPosition = readPosition
-                ) ?: return@forEach // No expiry rules configured, skip this room
+                ) ?: return@forEach 
 
                 while (true) {
                     val messagesToClear = wcdb.message.getAllObjects(
@@ -257,7 +256,7 @@ class MessageArchiveManager @Inject constructor(
 
                     if (messagesToClear.isNotEmpty()) {
                         messagesToClear.forEach { message ->
-                            // Skip archive system messages to avoid emptying the conversation
+                            
                             if (!isArchiveExpiredSystemMessage(message)) {
                                 totalProcessedCount++
                                 message.delete()
@@ -272,17 +271,17 @@ class MessageArchiveManager @Inject constructor(
                     delay(100)
                 }
 
-                // Ensure a single archive system message exists when normal messages were archived
+                
                 if (totalProcessedCount > 0) {
                     L.i { "[MessageArchiveManager] processed $totalProcessedCount normal messages for room ${room.roomId}" }
 
-                    // Create once, keep forever: an existing tombstone is never re-created
+                    
                     val existingTombstone = wcdb.message.getAllObjects(
                         DBMessageModel.roomId.eq(room.roomId).and(DBMessageModel.type.eq(MessageModel.TYPE_NOTIFY))
                     ).firstOrNull { isArchiveExpiredSystemMessage(it) }
 
                     if (existingTombstone != null) {
-                        // Safety net: re-anchor a tombstone that still carries a legacy sort key
+                        
                         if (existingTombstone.systemShowTimestamp != MessageModel.ARCHIVE_TOMBSTONE_SORT_SENTINEL) {
                             wcdb.message.updateValue(
                                 MessageModel.ARCHIVE_TOMBSTONE_SORT_SENTINEL,
@@ -291,7 +290,7 @@ class MessageArchiveManager @Inject constructor(
                             )
                         }
                     } else {
-                        // Earliest remaining message only drives readTime/expiresInSeconds; the sort key is the fixed sentinel
+                        
                         val earliestMessage = wcdb.message.getFirstObject(
                             DBMessageModel.roomId.eq(room.roomId),
                             DBMessageModel.systemShowTimestamp.order(Order.Asc)
@@ -299,11 +298,11 @@ class MessageArchiveManager @Inject constructor(
 
                         val systemShowTimestamp = MessageModel.ARCHIVE_TOMBSTONE_SORT_SENTINEL
 
-                        // Use the earliest message's readTime for consistent expiry calculation.
-                        // Fallback to current time if readTime = 0 (unread) to ensure it can be archived later.
+                        
+                        
                         val readTime = earliestMessage?.readTime?.takeIf { it > 0 } ?: ServerTimeProvider.nowMillis()
 
-                        // Inherit expiresInSeconds from earliest message, or fall back to room-level messageExpiry
+                        
                         val expiresInSeconds = earliestMessage?.expiresInSeconds ?: (room.messageExpiry ?: 0L).toInt()
 
                         L.i { "[MessageArchiveManager] creating archive message for room ${room.roomId}, timestamp: $systemShowTimestamp, readTime: $readTime, expiresInSeconds: $expiresInSeconds" }
@@ -326,24 +325,24 @@ class MessageArchiveManager @Inject constructor(
         L.i { "[MessageArchiveManager] finished archiving messages" }
     }
 
-    /**
-     * Build the WHERE condition for expired message deletion.
-     *
-     * Arrival floor: readTime is peer-supplied (iOS/Desktop send their local wall-clock readAt), so a
-     * bogus-early value could delete a message before it has actually aged. Each readTime predicate is
-     * therefore ANDed with the same predicate on systemShowTimestamp (arrival), flooring the effective
-     * read time at the message's own arrival. No-op for correct data (readTime >= systemShowTimestamp).
-     *
-     * Normal messages (readTime > 0):
-     * - (readTime <= messageClearAnchor AND systemShowTimestamp <= messageClearAnchor), OR
-     * - (readTime + messageExpiry < now AND systemShowTimestamp + messageExpiry < now)
-     *
-     * Legacy messages (readTime = 0, fallback):
-     * - When messageExpiry > 0 and systemShowTimestamp <= readPosition,
-     *   use systemShowTimestamp instead of readTime for expiry calculation.
-     *
-     * @return null if no expiry rules apply (neither messageClearAnchor nor messageExpiry is set)
-     */
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     private fun buildMessageClearCondition(
         baseCondition: Expression,
         messageClearAnchor: Long,
@@ -351,8 +350,8 @@ class MessageArchiveManager @Inject constructor(
         currentTimeMillis: Long,
         readPosition: Long
     ): Expression? {
-        // Legacy fallback: messages with readTime = 0 but systemShowTimestamp <= readPosition.
-        // Only enabled when both messageExpiry and readPosition are positive.
+        
+        
         val legacyFallback = if (messageExpiryMillis > 0 && readPosition > 0) {
             DBMessageModel.readTime.eq(0)
                 .and(DBMessageModel.systemShowTimestamp.le(readPosition))
@@ -360,10 +359,10 @@ class MessageArchiveManager @Inject constructor(
         } else null
 
         return when {
-            // Both messageClearAnchor and messageExpiry: check either condition
+            
             messageClearAnchor > 0 && messageExpiryMillis > 0 -> {
                 val hasReadTime = DBMessageModel.readTime.gt(0)
-                // Arrival floor: AND each readTime predicate with the same predicate on arrival (systemShowTimestamp).
+                
                 val clearAnchorCondition = DBMessageModel.readTime.le(messageClearAnchor)
                     .and(DBMessageModel.systemShowTimestamp.le(messageClearAnchor))
                 val expiryCondition = DBMessageModel.readTime.add(messageExpiryMillis).lt(currentTimeMillis)
@@ -376,17 +375,17 @@ class MessageArchiveManager @Inject constructor(
                     baseCondition.and(normalCondition)
                 }
             }
-            // Only messageClearAnchor: no legacy fallback needed (clearAnchor is an explicit cutoff)
+            
             messageClearAnchor > 0 -> {
-                // Arrival floor: a message that arrived after the anchor must not be anchor-cleared.
+                
                 baseCondition.and(DBMessageModel.readTime.gt(0))
                     .and(DBMessageModel.readTime.le(messageClearAnchor))
                     .and(DBMessageModel.systemShowTimestamp.le(messageClearAnchor))
             }
-            // Only messageExpiry: check time-based expiry
+            
             messageExpiryMillis > 0 -> {
                 val hasReadTime = DBMessageModel.readTime.gt(0)
-                // Arrival floor: don't expire before arrival(systemShowTimestamp) + expiry.
+                
                 val expiryCondition = DBMessageModel.readTime.add(messageExpiryMillis).lt(currentTimeMillis)
                     .and(DBMessageModel.systemShowTimestamp.add(messageExpiryMillis).lt(currentTimeMillis))
                 val normalCondition = hasReadTime.and(expiryCondition)
@@ -397,17 +396,17 @@ class MessageArchiveManager @Inject constructor(
                     baseCondition.and(normalCondition)
                 }
             }
-            // Neither set: no messages to delete
+            
             else -> null
         }
     }
 
-    /**
-     * Check if a message is the "Earlier messages expired" archive system message.
-     *
-     * Fast path: non-Notify messages (type != 2) return immediately without JSON parsing.
-     * Slow path: only Notify messages require JSON parsing, which are typically very few.
-     */
+    
+
+
+
+
+
     private fun isArchiveExpiredSystemMessage(message: MessageModel): Boolean {
         if (message.type != 2) return false
         return try {
@@ -527,38 +526,38 @@ class MessageArchiveManager @Inject constructor(
         }
     }
 
-    /**
-     * Update local message expiry. Called by MessageContentProcessor when handling Type 5 notify.
-     * Note: Event notification is emitted by the caller (MessageContentProcessor), not here.
-     *
-     * @param admission the receive ticket of the envelope that carried the change; the launched write
-     *   holds a ticket retained from it, so the migration pause waits for the write (#1382).
-     */
+    
+
+
+
+
+
+
     fun updateLocalArchiveTime(forWhat: For, messageExpiry: Long, messageClearAnchor: Long, admission: MessagingTicket?) {
         val held = admission?.retain("archive-time")
         appScope.launch(Dispatchers.IO) {
             try {
                 dbRoomStore.updateMessageExpiry(forWhat, messageExpiry, messageClearAnchor)
-                // Event notification is emitted by MessageContentProcessor
+                
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 L.e { "[MessageArchiveManager] updateLocalArchiveTime error: ${e.stackTraceToString()}" }
             }
-        }.invokeOnCompletion { held?.close() } // also runs when the launch is cancelled before it starts
+        }.invokeOnCompletion { held?.close() } 
     }
 
-    /** Messages [userId] sent before [timestamp] that an identity-key reset clears (the self room is never touched). */
+    
     private fun resetIdentityKeyClearCondition(userId: String, timestamp: Long): Expression =
         DBMessageModel.fromWho.eq(userId)
             .and(DBMessageModel.type.notEq(MessageModel.TYPE_NOTIFY))
             .and(DBMessageModel.timeStamp.lt(timestamp))
             .and(DBMessageModel.roomId.notEq(globalServices.myId))
 
-    /**
-     * Delete all messages sent by [userId] with timestamp before [timestamp], in batches.
-     * Returns false when the sweep aborted, so the caller keeps the reset pending for a retry.
-     */
+    
+
+
+
     private suspend fun clearMessagesBeforeTimestamp(userId: String, timestamp: Long, pageSize: Long = 100): Boolean {
         return try {
             L.i { "[MessageArchiveManager] start clearing messages for user: $userId before timestamp: $timestamp" }
@@ -585,16 +584,16 @@ class MessageArchiveManager @Inject constructor(
         }
     }
 
-    /**
-     * Cold-start catch-up for resets this device could not receive as a notify (e.g. passively
-     * logged out with the DB kept, then signed back in). Idempotent: it only re-queues records
-     * that are new, still pending from an interrupted run, or carry a later reset time, and the
-     * archive step itself posts nothing in a room that has nothing to clear, so a routine cold
-     * start ends up doing no writes.
-     */
+    
+
+
+
+
+
+
     private suspend fun checkIdentityKeyReset() {
         try {
-            // Fetch incremental reset records starting from the latest known reset timestamp
+            
             val maxResetTime = wcdb.resetIdentityKey.getValue(DBResetIdentityKeyModel.resetTime.max())?.long ?: 0L
             L.i { "[MessageArchiveManager] checkIdentityKeyReset maxResetTime: $maxResetTime" }
 
@@ -609,7 +608,7 @@ class MessageArchiveManager @Inject constructor(
                 if (pending.isNotEmpty()) {
                     wcdb.resetIdentityKey.insertOrReplaceObjects(pending)
                 }
-                // Also resumes records a previous run was killed before marking processed
+                
                 wcdb.resetIdentityKey.getAllObjects(DBResetIdentityKeyModel.status.eq(RESET_STATUS_PENDING))
                     .forEach { resetIdentityKeyModel ->
                         archiveMessagesByResetIdentityKey(resetIdentityKeyModel.uid!!, resetIdentityKeyModel.resetTime!!)
@@ -622,26 +621,26 @@ class MessageArchiveManager @Inject constructor(
         }
     }
 
-    /**
-     * Clear [operator]'s messages sent before [resetIdentityKeyTime] and post the local
-     * "reset the identity key, history cleared" notice. Shared by the server notify (type 19)
-     * and the cold-start catch-up above.
-     *
-     * The notice follows the same rules as the archive tombstone (and iOS `fetchThreadsToUpdate`):
-     *  - only in a 1v1 room that still holds messages to clear, so a never-chatted or already
-     *    emptied room is not resurfaced with a lone notice;
-     *  - never twice for one reset: a notify row already at [resetIdentityKeyTime] in that room
-     *    suppresses another. The key is deliberately payload-agnostic (timestamp, not action type)
-     *    so a notice migrated from another platform, which carries a foreign id and a different
-     *    payload shape, still counts;
-     *  - stamped with [resetIdentityKeyTime] so it sorts where the reset happened.
-     * Order matters: rooms are resolved and the notice posted BEFORE the paged clear. A run killed
-     * mid-sweep would otherwise find those rooms already empty on resume and drop their notice.
-     * The record is marked processed only once the sweep completed; a failed sweep stays pending
-     * and is retried on the next cold start, where the notice check above prevents a second post.
-     * Runs under [archiveMutex]: the cold-start catch-up and the live notify can target the same
-     * reset at once, and the room check above is an exists-then-insert like the tombstone's.
-     */
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     suspend fun archiveMessagesByResetIdentityKey(operator: String, resetIdentityKeyTime: Long) = archiveMutex.withLock {
         val noticeRooms = roomsNeedingResetIdentityKeyNotice(operator, resetIdentityKeyTime)
         if (noticeRooms.isNotEmpty()) {
@@ -661,7 +660,7 @@ class MessageArchiveManager @Inject constructor(
         })
     }
 
-    /** 1v1 rooms that still hold messages to clear for this reset and do not yet carry its notice. */
+    
     private fun roomsNeedingResetIdentityKeyNotice(operator: String, resetIdentityKeyTime: Long): List<RoomModel> {
         val myId = globalServices.myId
         val candidates = if (operator == myId) {

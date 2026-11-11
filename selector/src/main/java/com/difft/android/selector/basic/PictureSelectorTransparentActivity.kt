@@ -50,17 +50,17 @@ class PictureSelectorTransparentActivity : BaseActivity() {
     }
 
     private fun setupFragment() {
-        // Transparent activity now hosts only external preview.
+        
         if (!isExternalPreview()) {
             finish()
             return
         }
         val injected = selectorConfig.onInjectActivityPreviewListener?.onInjectPreviewFragment()
         val fragmentTag = injected?.getFragmentTag() ?: PictureSelectorPreviewFragment.TAG
-        // Recreated (fold, theme change): the FragmentManager has already restored the preview, which
-        // rebuilds itself from its saved state (position, shared preview list). Removing it and
-        // injecting a new one raced: the inject saw the tag still registered while the removal was
-        // pending, skipped the add, and the removal left the container empty (#1437).
+        
+        
+        
+        
         if (supportFragmentManager.findFragmentByTag(fragmentTag) != null) return
 
         val previewFragment = injected ?: PictureSelectorPreviewFragment.newInstance()

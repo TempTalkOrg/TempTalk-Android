@@ -32,10 +32,10 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import kotlin.math.abs
 
-/**
- * The slider's one job is that no tap or brush answers or declines, while a real drag past 60 % of
- * the travel does — exactly once per arming — and everything short of it springs back to centre.
- */
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(application = TestScopeApplication::class, sdk = [30])
@@ -79,7 +79,7 @@ class IncomingCallSliderTest {
         return ((bounds.left + bounds.right) / 2).value
     }
 
-    /** Positive [distancePx] drags right (answer), negative drags left (decline). */
+    
     private fun drag(distancePx: Float) {
         composeTestRule.onNodeWithTag(IncomingCallSliderDefaults.HANDLE_TEST_TAG).performTouchInput {
             swipe(start = center, end = Offset(center.x + distancePx, center.y), durationMillis = 200)
@@ -177,7 +177,7 @@ class IncomingCallSliderTest {
 
     private companion object {
         const val HINT = "Swipe right to answer, left to decline"
-        // Well past 60% of the travel at any test density; the offset is clamped to the track.
+        
         const val FULL_TRAVEL_PX = 4_000f
         const val SHORT_TRAVEL_PX = 30f
     }

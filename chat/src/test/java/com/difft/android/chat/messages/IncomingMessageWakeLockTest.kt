@@ -6,7 +6,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
 
-/** #1376: [IncomingMessageWakeLock] holds the CPU while queued envelopes wait for their batch. */
+
 class IncomingMessageWakeLockTest {
 
     private val acquired = mutableListOf<Long>()
@@ -49,7 +49,7 @@ class IncomingMessageWakeLockTest {
 
     @Test
     fun `a later batch settles an envelope that never reached a batch`() {
-        lock.onQueued() // dropped emission
+        lock.onQueued() 
         val second = lock.onQueued()
         lock.onProcessed(second)
 

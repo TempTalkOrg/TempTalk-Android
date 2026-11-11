@@ -6,17 +6,17 @@ import com.difft.android.websocket.api.util.Preconditions
 import java.io.IOException
 import java.util.concurrent.TimeoutException
 
-/**
- * Provide the basis for processing a [ServiceResponse] in a sharable, quasi-enforceable way. The
- * goal is to balance the readability at the call sites where the various cases are handled and
- * provide call specific information of what should be expected.
- *
- * General premise is for subclasses to override and expose (via access modifier) the types of
- * errors that should be handled when processing a response.
- *
- * This doesn't exactly enforce the handling like a checked exception would, but does hint to the
- * caller what they should be aware of as possible outcomes of processing a response.
- */
+
+
+
+
+
+
+
+
+
+
+
 abstract class ServiceResponseProcessor<T>(response: ServiceResponse<T>) {
 
     @JvmField

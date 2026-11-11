@@ -11,12 +11,15 @@ import androidx.fragment.app.viewModels
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.base.utils.DualPaneUtils.setupDynamicBackButton
+import com.difft.android.base.ui.sidechrome.sideChromeBar
 import com.difft.android.base.utils.pane.detailNavigation
 import com.difft.android.chat.R
 import com.difft.android.chat.common.header.CommonHeaderFragment
 import com.difft.android.chat.databinding.ChatFragmentGroupHeaderBinding
-import com.difft.android.chat.setting.archive.toArchiveTimeDisplayText
+import com.difft.android.chat.setting.archive.bindCompactExpiry
 import com.difft.android.chat.setting.viewmodel.ChatSettingViewModel
+import com.difft.android.chat.ui.usesConversationGlass
+import com.difft.android.chat.ui.ChatHeaderChrome
 import com.difft.android.chat.ui.ChatMessageViewModel
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
@@ -36,9 +39,9 @@ class GroupChatHeaderFragment : CommonHeaderFragment() {
 
     private lateinit var binding: ChatFragmentGroupHeaderBinding
 
-    // Use parent fragment as ViewModel owner when nested (in GroupChatFragment),
-    // otherwise use activity (when directly in GroupChatContentActivity).
-    // Parent fragment initializes ViewModels in onCreateView before child fragments are created.
+    
+    
+    
     private val chatViewModel: ChatMessageViewModel by viewModels(
         ownerProducer = { parentFragment ?: requireActivity() }
     )
@@ -56,15 +59,23 @@ class GroupChatHeaderFragment : CommonHeaderFragment() {
         return binding.root
     }
 
-    // Member-count display is "($n)" — parens + number, no English text to translate.
+    
     @SuppressLint("SetTextI18n")
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        ChatHeaderChrome.apply(
+            this, binding.ibBack, binding.titlePill, binding.imageviewTitleAvatar, binding.titleText,
+            binding.nameRow, binding.timerRow, binding.actionsCapsule,
+        )
+        ChatHeaderChrome.applyCard(binding.composeViewPinnedMessages, glass = usesConversationGlass())
+        
+        showActions(call = binding.buttonCall.visibility == View.VISIBLE, addMember = false)
 
         chatViewModel.chatUIData.onEach { chatUIData ->
             val group = chatUIData.group ?: return@onEach
 
             if (!isAdded || view == null) return@onEach
+            binding.imageviewTitleAvatar.setAvatar(group.getDisplayAvatarData(), gid = group.gid)
 
             if (group.status == 0) {
                 val (memberCount, currentUserRole) = withContext(Dispatchers.IO) {
@@ -84,38 +95,38 @@ class GroupChatHeaderFragment : CommonHeaderFragment() {
                 binding.textviewGroupMemberCount.text = "($memberCount)"
                 binding.textviewGroupMemberCount.visibility = View.VISIBLE
 
-                binding.imageviewAddMember.visibility = View.VISIBLE
-                binding.imageviewAddMember.setOnClickListener {
-                    if (currentUserRole < GROUP_ROLE_MEMBER || group.invitationRule == 2) {
-                        gotoMembersActivity(group.gid ?: "")
-                    } else {
-                        ToastUtil.show(getString(R.string.group_permission_denied))
-                    }
-                }
-
-                binding.buttonCall.visibility = View.VISIBLE
-                binding.buttonCall.setOnClickListener {
-                    if (!groupUtil.canSpeak(group, globalServices.myId)) {
-                        ToastUtil.show(getString(R.string.group_only_moderators_can_speak_tip))
-                        return@setOnClickListener
-                    }
-                    chatViewModel.startCall(requireActivity(), group.name)
-                }
+                showActions(
+                    call = true,
+                    addMember = true,
+                    onCall = {
+                        if (!groupUtil.canSpeak(group, globalServices.myId)) {
+                            ToastUtil.show(getString(R.string.group_only_moderators_can_speak_tip))
+                        } else {
+                            chatViewModel.startCall(requireActivity(), group.name)
+                        }
+                    },
+                    onAddMember = {
+                        if (canInviteGroupMembers(currentUserRole, group.invitationRule)) {
+                            gotoMembersActivity(group.gid ?: "")
+                        } else {
+                            ToastUtil.show(getString(R.string.group_permission_denied))
+                        }
+                    },
+                )
 
                 binding.titleContainerInner.setOnClickListener {
                     (parentFragment as? GroupChatFragment)?.openGroupInfoActivity()
                         ?: (activity as? GroupChatContentActivity)?.openGroupInfoActivity()
                 }
             } else {
-                // Group is invalid: keep existing title (avoid flickering to "unknown group"),
-                // hide interactive elements and block navigation to group info
+                
+                
                 if (!TextUtils.isEmpty(group.name)) {
                     binding.title.text = group.name
                 }
                 binding.textviewGroupMemberCount.visibility = View.GONE
-                binding.imageviewAddMember.visibility = View.GONE
-                binding.buttonCall.visibility = View.GONE
-                binding.textviewTimer.visibility = View.GONE
+                showActions(call = false, addMember = false)
+                binding.timerRow.visibility = View.GONE
                 binding.titleContainerInner.setOnClickListener(null)
             }
         }.launchIn(viewLifecycleOwner.lifecycleScope)
@@ -124,7 +135,7 @@ class GroupChatHeaderFragment : CommonHeaderFragment() {
             detailNavigation().pop(this)
         }
 
-        // 统一订阅 conversationSet，处理配置相关的 UI 更新
+        
         chatSettingViewModel.conversationSet
             .filterNotNull()
             .onEach {
@@ -132,16 +143,23 @@ class GroupChatHeaderFragment : CommonHeaderFragment() {
             }
             .launchIn(viewLifecycleOwner.lifecycleScope)
 
-        // 观察选择状态来切换返回按钮行为
+        
         chatViewModel.selectMessagesState.onEach {
             setupDynamicBackButton(
                 backButton = binding.ibBack,
                 isEditMode = it.editModel,
                 backIconRes = com.difft.android.base.R.drawable.chative_ic_back,
-                closeIconRes = R.drawable.chat_icon_close,
+                closeIconRes = R.drawable.chat_ic_close_24,
                 onExitEditMode = { chatViewModel.selectModel(false) },
             )
         }.launchIn(viewLifecycleOwner.lifecycleScope)
+    }
+
+    
+    private fun showActions(call: Boolean, addMember: Boolean, onCall: (() -> Unit)? = null, onAddMember: (() -> Unit)? = null) {
+        val bar = sideChromeBar()
+        bar.setAction(ACTION_CALL, binding.buttonCall, R.drawable.chat_fragment_header_call, getString(R.string.chat_action_call), call, onClick = onCall, floatInPlace = false)
+        bar.setAction(ACTION_ADD_MEMBER, binding.imageviewAddMember, R.drawable.chat_icon_create_group, getString(R.string.group_add_member), addMember, onClick = onAddMember, floatInPlace = false)
     }
 
     private fun gotoMembersActivity(groupId: String) {
@@ -149,16 +167,12 @@ class GroupChatHeaderFragment : CommonHeaderFragment() {
             com.difft.android.chat.group.mvi.GroupPageContract.MemberAction.ADD))
     }
 
-    /**
-     * 更新 archiveTime UI 显示
-     */
     private fun updateArchiveTimeUI(archiveTime: Long) {
-        if (archiveTime > 0L) {
-            binding.textviewTimer.visibility = View.VISIBLE
-            val text = " [" + archiveTime.toArchiveTimeDisplayText() + "]"
-            binding.textviewTimer.text = text
-        } else {
-            binding.textviewTimer.visibility = View.GONE
-        }
+        bindCompactExpiry(binding.timerRow, binding.textviewTimer, archiveTime)
+    }
+
+    private companion object {
+        const val ACTION_CALL = "call"
+        const val ACTION_ADD_MEMBER = "add_member"
     }
 }

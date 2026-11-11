@@ -20,15 +20,15 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import java.util.concurrent.atomic.AtomicInteger
 
-/**
- * The structural fact behind the perf numbers (perf doc item ①): real SELECT statement counts on
- * the real encrypted DB, measured with WCDB's `traceSQL` — not the in-code `queries=` counter,
- * which counts loader calls and never logs in a benchmark process.
- *
- * At these window sizes each loader call is exactly one statement (`IN` chunking starts at 500
- * keys), so old-vs-new per tier is: plain 6/message -> 1080 vs 6 total; uniform rich 24/message
- * -> 4320 vs 14 total. Counts are venue-independent — valid from emulator or device.
- */
+
+
+
+
+
+
+
+
+
 @RunWith(AndroidJUnit4::class)
 class QueryCountTest {
 

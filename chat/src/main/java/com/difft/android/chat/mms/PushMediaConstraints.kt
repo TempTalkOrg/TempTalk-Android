@@ -2,6 +2,7 @@ package com.difft.android.chat.mms
 
 import android.content.Context
 import androidx.annotation.IntRange
+import com.difft.android.base.media.ImageCompressionPreset
 import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.chat.util.Util
 import com.difft.android.video.TranscodingPreset
@@ -52,8 +53,16 @@ class PushMediaConstraints(sentMediaQuality: SentMediaQuality?) : MediaConstrain
         @param:IntRange(from = 0, to = 100) val qualitySetting: Int,
         val videoPreset: TranscodingPreset
     ) {
-        LEVEL_1_LOW_MEMORY(true, 1, MB, intArrayOf(768, 512), 70, TranscodingPreset.LEVEL_1),
-        LEVEL_1(false, 1, MB, intArrayOf(1600, 1024, 768, 512), 70, TranscodingPreset.LEVEL_1),
+        LEVEL_1_LOW_MEMORY(
+            true, 1, ImageCompressionPreset.STANDARD_LOW_MEMORY.maxBytes,
+            ImageCompressionPreset.STANDARD_LOW_MEMORY.targets, ImageCompressionPreset.STANDARD_LOW_MEMORY.quality,
+            TranscodingPreset.LEVEL_1
+        ),
+        LEVEL_1(
+            false, 1, ImageCompressionPreset.STANDARD.maxBytes,
+            ImageCompressionPreset.STANDARD.targets, ImageCompressionPreset.STANDARD.quality,
+            TranscodingPreset.LEVEL_1
+        ),
         LEVEL_2(false, 2, (1.5 * MB).toInt(), intArrayOf(2048, 1600, 1024, 768, 512), 75, TranscodingPreset.LEVEL_2),
         LEVEL_3(false, 3, 3 * MB, intArrayOf(4096, 3072, 2048, 1600, 1024, 768, 512), 75, TranscodingPreset.LEVEL_3);
 

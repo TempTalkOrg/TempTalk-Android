@@ -13,12 +13,13 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.fragment.app.DialogFragment
+import com.difft.android.base.utils.StatusBarSetting
 import com.difft.android.base.utils.WindowSizeClassUtil
 import com.difft.android.chat.R
 
-/**
- * Fullscreen Dialog Fragment which will dismiss itself when the keyboard is closed
- */
+
+
+
 abstract class KeyboardEntryDialogFragment(@LayoutRes contentLayoutId: Int) :
   androidx.fragment.app.DialogFragment(contentLayoutId),
   KeyboardAwareLinearLayout.OnKeyboardShownListener,
@@ -31,10 +32,10 @@ abstract class KeyboardEntryDialogFragment(@LayoutRes contentLayoutId: Int) :
 
   protected open val themeResId: Int = R.style.Theme_TT_RoundedBottomSheet
 
-  /**
-   * Whether to cap the window at the shared bottom-sheet max width on wide screens. Bottom-anchored
-   * entry sheets keep it; full-screen overlays that must mirror the host layout opt out.
-   */
+  
+
+
+
   protected open val capToSheetWidth: Boolean = true
 
   override fun onCreate(savedInstanceState: Bundle?) {
@@ -51,12 +52,13 @@ abstract class KeyboardEntryDialogFragment(@LayoutRes contentLayoutId: Int) :
     }
 
     dialog.window?.let { window ->
+      StatusBarSetting.attach(requireContext(), window)
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-        // API 30+: edge-to-edge mode, handle IME insets manually via WindowInsets API
+        
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING or WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE)
         WindowCompat.setDecorFitsSystemWindows(window, false)
       } else {
-        // API < 30: IME insets not reliably dispatched, use ADJUST_RESIZE for automatic keyboard avoidance
+        
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE)
       }
     }
@@ -64,15 +66,20 @@ abstract class KeyboardEntryDialogFragment(@LayoutRes contentLayoutId: Int) :
     return dialog
   }
 
+  override fun onDestroyView() {
+    dialog?.window?.let(StatusBarSetting::detach)
+    super.onDestroyView()
+  }
+
   override fun onStart() {
     super.onStart()
     applyMaxWidth()
   }
 
-  /**
-   * The window is non-floating (fills the screen), so on wide screens cap it at the shared
-   * bottom-sheet max width and keep it bottom-centered, matching the other bottom sheets.
-   */
+  
+
+
+
   private fun applyMaxWidth() {
     if (!capToSheetWidth) return
     val window = dialog?.window ?: return
@@ -91,7 +98,7 @@ abstract class KeyboardEntryDialogFragment(@LayoutRes contentLayoutId: Int) :
     return if (view is KeyboardAwareLinearLayout) {
       view.addOnKeyboardShownListener(this)
       view.addOnKeyboardHiddenListener(this)
-      // IME insets listener only needed for edge-to-edge mode (API 30+)
+      
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
         setupImeInsetsListener(view)
       }
@@ -107,15 +114,15 @@ abstract class KeyboardEntryDialogFragment(@LayoutRes contentLayoutId: Int) :
       val systemBarsInsets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
       val imeVisible = windowInsets.isVisible(WindowInsetsCompat.Type.ime())
 
-      // Apply bottom padding for IME or navigation bar
+      
       val bottomPadding = if (imeVisible && imeInsets.bottom > 0) imeInsets.bottom else systemBarsInsets.bottom
       v.setPadding(v.paddingLeft, v.paddingTop, v.paddingRight, bottomPadding)
 
-      // Track IME visibility for dismiss-on-keyboard-close behavior
+      
       if (imeVisible) {
         imeWasVisible = true
       } else if (imeWasVisible) {
-        // Keyboard was visible and now hidden - dismiss
+        
         dismissAllowingStateLoss()
       }
 

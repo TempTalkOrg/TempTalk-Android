@@ -13,10 +13,10 @@ import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Reads the system's notification and incoming-call state and evaluates it with
- * [NotificationReadinessEvaluator]. Reads cross process boundaries, so [read] always runs on the IO dispatcher.
- */
+
+
+
+
 @Singleton
 class NotificationReadinessProvider @Inject constructor(
     @param:ApplicationContext private val context: Context,
@@ -24,14 +24,14 @@ class NotificationReadinessProvider @Inject constructor(
 
     suspend fun read(): NotificationReadiness = withContext(Dispatchers.IO) { readBlocking() }
 
-    /** Must not be called on the main thread. */
+    
     fun readBlocking(): NotificationReadiness = NotificationReadinessEvaluator.evaluate(readInput())
 
     internal fun readInput(): ReadinessInput {
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val sdk = Build.VERSION.SDK_INT
         val brand = OemBrand.current()
-        // Inline SDK_INT checks: lint NewApi does not accept a local copy as a version guard.
+        
         val postGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
             PackageManager.PERMISSION_GRANTED

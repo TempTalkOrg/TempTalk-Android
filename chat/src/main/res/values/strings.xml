@@ -1,18 +1,18 @@
 <resources>
-    <!-- LearnMoreTextView -->
+    
     <string name="LearnMoreTextView_learn_more">Learn more</string>
     <string name="SpanUtil__read_more">Read more</string>
 
     <string name="you">You</string>
 
-    <!-- Contact -->
+    
     <string name="contact_all">All</string>
     <string name="chat_contacts">Contacts</string>
     <string name="chat_me">Me</string>
     <string name="contact_groups">Groups</string>
-    <string name="contact_name_profile">ID:</string>
-    <string name="contact_join_at">Joined:</string>
-    <string name="contact_how_you_met">How you met:</string>
+    <string name="contact_name_profile">ID</string>
+    <string name="contact_join_at">Joined</string>
+    <string name="contact_how_you_met">How you met</string>
     <string name="contact_info_website">Website:</string>
     <string name="contact_official_account_label">Official Account</string>
     <string name="contact_name_label">Name: %s</string>
@@ -25,7 +25,7 @@
     <string name="unsaved_changes_discard">Discard</string>
     <string name="contact_remark_avatar_choose_photos">Photos</string>
     <string name="contact_remark_avatar_restore">Revert to original</string>
-    <string name="contact_info_title">Contact Info</string>
+    <string name="contact_info_title">Contact info</string>
     <string name="contact_action_message">Message</string>
     <string name="contact_action_call">Call</string>
     <string name="contact_action_share">Share</string>
@@ -48,7 +48,7 @@
     <string name="contact_add_contacts">Add Contact</string>
     <string name="contact_add_contacts_contact_name_not_correct">The contact ID is not correct, please try again.</string>
     <string name="contact_add_contacts_code_not_correct">The code is not correct, please try again.</string>
-    <string name="weak_contact_pending_group_title">Removing Soon</string>
+    <string name="weak_contact_pending_group_title">Removing soon</string>
     <string name="weak_contact_remove_in_days">Removes in %1$d days</string>
     <string name="weak_contact_remove_today">Removes today</string>
     <string name="weak_contact_remove_now">Remove Now</string>
@@ -66,7 +66,7 @@
     <string name="contact_ignore">Ignore</string>
     <string name="contact_not_in_list">The user is not in your contact list!</string>
 
-    <!-- Chat -->
+    
     <string name="chat_chats">Chats</string>
     <string name="chat_proxy_status">Proxy status</string>
     <string name="chat_add_options">New chat</string>
@@ -98,8 +98,7 @@
     <string name="chat_message_image">[Image]</string>
     <string name="chat_message_gif">[GIF]</string>
     <string name="chat_message_video">[Video]</string>
-    <!-- Generic fallback placeholder used in multi-select copy output for any
-         message type not explicitly handled in MessageCopyTextFormatter. -->
+    
     <string name="chat_message_short_for_generic">[Message]</string>
     <string name="chat_message_audio">[Audio]</string>
     <string name="chat_message_confidential_message">[Message]</string>
@@ -160,7 +159,7 @@
     <string name="chat_speech_to_text_isblank">No text recognized</string>
     <string name="chat_translate_fail">Translation failed</string>
     <string name="chat_translate_to_language">Translate to %s</string>
-    <!-- Conversation auto-translate -->
+    
     <string name="chat_translate_setting_title">Translate</string>
     <string name="chat_translate_setting_off">Off</string>
     <string name="chat_translate_setting_zh">中文</string>
@@ -198,6 +197,7 @@
     <string name="chat_action_contact">Contact</string>
     <string name="chat_action_file">File</string>
     <string name="chat_action_call">Call</string>
+    <string name="chat_action_more">More</string>
     <string name="chat_action_newcall">Video Call</string>
     <string name="chat_action_confidential_mode">Confidential\nmode</string>
     <string name="chat_action_mention">Mention</string>
@@ -219,19 +219,15 @@
     <string name="chat_message_delete_tips">Really want to delete this message?</string>
     <string name="chat_label_new_message">NEW MESSAGES</string>
 
-    <!--Chat Option -->
+    
     <string name="chat_option_create_group">Create Group</string>
     <string name="chat_option_scan">Scan</string>
     <string name="chat_option_add_contact">Add Contact</string>
     <string name="chat_option_mark_all_as_read">Mark all as read</string>
-    <!-- Topic -->
-    <!--
--->
-    <!--
--->
+    
     <string name="chat_topic_title1">%1$s - %2$s</string>
     <string name="chat_topic_title2">%1$s</string>
-    <!-- Group -->
+    
     <string name="new_group">New Group</string>
     <string name="create_group_input_hint">Name this group chat</string>
     <string name="create_group_button">Create</string>
@@ -252,7 +248,6 @@
     <string name="group_create_a_group">%s created the group.</string>
     <string name="group_left_the_group">%s left the group.</string>
     <string name="group_invited_join_group">%1$s invited %2$s to join the group.</string>
-    <!--    <string name="group_invited_join_group">%1$s joined the group.</string>-->
     <string name="group_removed_from_group">%1$s have been removed from the group.</string>
     <string name="group_changed_group_name">%1$s changed the group name.</string>
     <string name="group_changed_group_avatar">%1$s changed the group avatar.</string>
@@ -261,6 +256,7 @@
     <string name="group_permission_denied">No permission, please contact the group moderators.</string>
     <string name="group_unknown_group">Unknown group</string>
     <string name="group_not_your_friend">%1$s are not your friend yet, you cannot invite them to join a group. Please ask them to accept you first.</string>
+    <string name="group_create_result_unknown">Could not confirm the result. Check your chat list before creating the group again.</string>
     <string name="group_allow_everyone_to_speak">This group has been set to allow everyone to speak.</string>
     <string name="group_only_moderators_can_speak">This group has been set to only moderators can speak.</string>
     <string name="group_only_moderators_can_speak_tip">Only moderators can speak.</string>
@@ -277,7 +273,7 @@
     <string name="group_members_view_all">View All</string>
     <string name="group_members_collapse">Collapse</string>
 
-    <!-- Me -->
+    
     <string name="me_account">Account</string>
     <string name="me_privacy">Security &amp; Privacy</string>
     <string name="me_advanced">Advanced</string>
@@ -307,55 +303,64 @@
     <string name="me_delete_dialog_ok">Delete</string>
     <string name="me_language">Language</string>
     <string name="me_help">Help &amp; Feedback</string>
-    <string name="me_theme">Theme</string>
+    <string name="me_appearance">Appearance</string>
     <string name="me_theme_dark">Dark</string>
     <string name="me_theme_light">Light</string>
     <string name="me_theme_system">System</string>
+    <string name="chat_theme">Chat theme</string>
+    <string name="me_color_mode">Color mode</string>
+    <string name="me_color_mode_note">System matches your phone\'s dark theme setting.</string>
+    <string name="me_text">Text</string>
+    <string name="me_text_preview">Font size preview</string>
+    <string name="me_text_preview_notice">Messages are end-to-end encrypted</string>
+    <string name="me_text_preview_received">Plan sent — only we can see it.</string>
+    <string name="me_text_preview_sent">Even the server can\'t read it.</string>
+    <string name="chat_theme_note">Changes your chat wallpaper and message bubble color. Works in light and dark mode.</string>
+    <string name="chat_theme_classic">Classic</string>
+    <string name="chat_theme_gradient">Gradient</string>
     <string name="me_chat">Chat &amp; Call</string>
     <string name="me_chat_and_call">Chat &amp; Call</string>
     <string name="me_save_to_photos">Save to Photos</string>
     <string name="me_automatically_save_photos">Automatically save received photos and videos to Photos; items won\'t be saved in Confidential Mode.</string>
 
-    <!-- Conversation-level save to photos settings -->
+    
     <string name="save_to_photos_default">Default (%s)</string>
     <string name="save_to_photos_always">Always</string>
     <string name="save_to_photos_never">Never</string>
     <string name="save_to_photos_on">On</string>
     <string name="save_to_photos_off">Off</string>
 
-    <!-- Voice playback speed settings -->
+    
     <string name="me_voice_playback_speed">Voice Playback Speed</string>
     <string name="me_voice_playback_speed_desc">Set the default playback speed for voice messages.</string>
     <string name="voice_speed_1x">1×</string>
     <string name="voice_speed_1_5x">1.5×</string>
     <string name="voice_speed_2x">2×</string>
 
-    <!-- Voice changer (call) settings -->
+    
     <string name="me_call_voice_changer">Voice Changer</string>
     <string name="me_call_voice_changer_desc">Set voice effects for calls.</string>
 
-    <!-- Contact profile setting-->
+    
     <string name="contact_profile_info">Profile</string>
     <string name="contact_profile_skip">Skip</string>
     <string name="contact_profile_done">Done</string>
     <string name="contact_profile_next">Next</string>
     <string name="contact_name">Name</string>
 
-    <!-- MainActivity -->
+    
     <string name="not_granted_necessary_permissions">Not granted necessary permissions</string>
     <string name="invalid_link">Invalid Link</string>
     <string name="not_supported_link">Not supported link. Please upgrade the client and try again.</string>
     <string name="unsupported_file_type">Unsupported file type</string>
     <string name="file_unavailable">Unable to read this file. It may have been moved or deleted.</string>
 
-    <!-- Forward message -->
-    <string name="forwarded_message">Forwarded Message</string>
-    <string name="forwarded_from">From:</string>
+    
+    <string name="chat_forwarded_from">Forwarded from %1$s</string>
     <string name="group_chat_history">Group Chat History</string>
     <string name="chat_history">Chat History</string>
     <string name="chat_history_for">Chat History for %s</string>
     <string name="chat_select_dialog_close">Close</string>
-    <string name="chat_select_dialog_multiple">Multiple</string>
     <string name="select_chat">Select Chat</string>
     <string name="select_contact">Select Contact</string>
     <string name="chat_select_recent_chats">RECENT CHATS</string>
@@ -371,7 +376,7 @@
     <string name="chat_recall_tips">Are you sure you want to recall message?</string>
     <string name="chat_recall_dialog_yes">Yes</string>
     <string name="chat_recall_dialog_cancel">Cancel</string>
-    <!--    invite-->
+    
     <string name="invite_link">Invite link</string>
     <string name="invite_regenerate">Regenerate</string>
     <string name="invite_share">Share</string>
@@ -387,13 +392,12 @@
     <string name="invite_regenerate_dialog_content">The old invite code will expire. Are you sure to continue?</string>
     <string name="invite_regenerate_dialog_cancel">Cancel</string>
     <string name="invite_regenerate_dialog_ok">Regenerate</string>
-    <!--    <string name="invite_disable_only_moderators">%1$s invite_disable_only_moderators</string>-->
     <string name="invite_only_moderators_can_add">This group only allows moderators to invite.</string>
     <string name="invite_code">%s Invite Code</string>
     <string name="invite_joined_at">%s joined</string>
     <string name="invite_code_error_tips">Invites full. Please try later!</string>
 
-    <!--    scan-->
+    
     <string name="scan_scan">Scan</string>
     <string name="scan_camera_open_failed">Failed to open the camera. Please try again.</string>
     <string name="scan_computer_export_code_hint">To transfer chat history from a computer, choose Transfer from Computer on the receiving phone\'s migration page during sign-in.</string>
@@ -403,7 +407,6 @@
     <string name="link_device_cancel">Cancel</string>
     <string name="chat_dialog_ok">OK</string>
     <string name="chat_dialog_cancel">Cancel</string>
-    <string name="search_title_recent">Recent</string>
     <string name="search_title_contacts">Contacts</string>
     <string name="search_title_group">Group</string>
     <string name="search_chat_history">Search chat history</string>
@@ -431,7 +434,7 @@
     <string name="app_close_application">Close application</string>
     <string name="app_ignore">Ignore</string>
 
-    <!-- 20230927@w: for event scheduler ____________________________________-->
+    
     <string name="duration_selection_15_mins">15 minutes</string>
     <string name="duration_selection_30_mins">30 minutes</string>
     <string name="duration_selection_45_mins">45 minutes</string>
@@ -444,7 +447,6 @@
     <string name="duration_selection_24_hrs">1 day</string>
     <string name="duration_selection_48_hrs">2 days</string>
     <string name="toggle_background_blur">Toggle Blur</string>
-    <!-- 20230927@w: for event scheduler ____________________________________-->
 
     <string name="operation_successful">Operation successful</string>
     <string name="operation_failed">Operation failed</string>
@@ -452,6 +454,7 @@
     <string name="notification_no_permission_tip">Application has no permission to show notifications. You can enable it in system settings..</string>
     <string name="notification_no_permission_tip1">Please allow %s to display notifications so that you can receive messages and calls normally.</string>
     <string name="background_connection_prompt_delay">Messages or calls may arrive late. Turn on the background connection to receive them on time.</string>
+    <string name="background_connection_prompt_restricted">Your phone may be limiting %1$s in the background, so messages or calls may arrive late. Check the background connection settings and the setup guide.</string>
     <string name="background_connection_prompt_critical">You have turned on Critical Alerts. Turn on the background connection so they can be delivered as promptly as possible.</string>
     <string name="notification_ignore">Not now</string>
     <string name="notification_go_to_settings">Go to settings</string>
@@ -642,7 +645,7 @@
     <string name="background_connection_enabled">Background connection enabled</string>
     <string name="background_connection_status_off">Not enabled</string>
 
-    <!-- Background Connection Checks -->
+    
     <string name="background_restriction_check">Background Restriction</string>
     <string name="background_restriction_restricted">Restricted</string>
     <string name="background_restriction_unrestricted">Normal</string>
@@ -676,7 +679,6 @@
 
     <string name="background_connection_fix_first">Complete “%s” first, then turn on the background connection</string>
 
-
     <string name="disappearing_messages">Timer</string>
     <string name="disappearing_messages_tips">Messages will expire after being read, they will GONE and then can NOT be viewed in any way.</string>
     <string name="disappearing_messages_not_archive">Do not expire</string>
@@ -687,22 +689,22 @@
     <string name="group_remove_member_confirm">Remove</string>
     <string name="chat_group_in_common">Groups in common</string>
 
-    <!-- Group Encryption -->
-    <!-- Cell row in group info -->
+    
+    
     <string name="group_upgrade_to_encrypted">Enhance Encryption</string>
     <string name="group_encrypted_label">Encryption Enhanced</string>
-    <!-- Confirm bottom sheet (unencrypted group) -->
+    
     <string name="group_encrypted_title">Enhance Encryption</string>
     <string name="group_upgrade_description">Group info will be upgraded from in-transit encryption to end-to-end encryption.</string>
     <string name="group_upgrade_button">Turn On</string>
     <string name="group_upgrade_cancel">Cancel</string>
-    <!-- Info bottom sheet (encrypted group) -->
+    
     <string name="group_encrypted_info_title">Encryption Enhanced</string>
     <string name="group_encrypted_info_description">Group info has been upgraded from in-transit encryption to end-to-end encryption.</string>
     <string name="group_encrypted_info_dismiss">OK</string>
-    <!-- System message sent to group after upgrade -->
+    
     <string name="group_encryption_hint_message">🔒 Group info has been upgraded to end-to-end encryption</string>
-    <!-- Crypto key reset (rotate) — system message + interim reset dialog -->
+    
     <string name="group_crypto_reset_hint_message">🔒 Group info encryption key has been reset</string>
     <string name="group_crypto_reset_title">Reset encryption key</string>
     <string name="group_crypto_reset_message">After reset, group info will use a new encryption key. Confirm the group photo and name.</string>
@@ -710,42 +712,32 @@
     <string name="group_crypto_reset_success">Encryption key reset</string>
     <string name="group_crypto_reset_failed">Couldn\'t reset. Try again later.</string>
     <string name="group_crypto_reset_name_hint">Enter a group name</string>
-    <!-- Placeholder group name when key unavailable -->
+    
     <string name="group_name_encrypted_placeholder">🔒 Group</string>
-    <!-- Toast when user tries to operate without key -->
+    
     <string name="group_encryption_update_required">Can\'t make changes right now</string>
-    <!-- Inline Edit/Done button next to group name field -->
+    
     <string name="group_edit_name_done">Done</string>
+    <string name="group_edit">Edit</string>
     <string name="group_edit_name_empty">Group name can\'t be empty</string>
     <string name="critical_alerts">Critical Alerts</string>
-    <!-- Chat Archive Settings -->
+    
     <string name="chat_archive_extend_time_title">Extend timer?</string>
     <string name="chat_archive_extend_time_message">Previously deleted messages can’t be recovered.</string>
     <string name="chat_archive_shorten_time_title">Shorten timer?</string>
     <string name="chat_archive_shorten_time_message">More messages may be deleted and won’t be recoverable. This change applies to all your devices.</string>
     <string name="chat_archive_messages_expired">Earlier messages are no longer available</string>
-    <!-- Forward notice (system message shown after a forward completes).
-         Terminal punctuation is appended by ForwardNoticeRenderer: the plurals text
-         itself has none, so the renderer always appends the locale terminator.
-         %3$s is the locale-formatted author list (no "from " prefix); the plurals
-         template owns the "from" / "来自" preamble. PRD v1.0 §5.4.2. -->
+    
     <plurals name="chat_forward_notice">
         <item quantity="one">\"%1$s\" forwarded a message from %3$s</item>
         <item quantity="other">\"%1$s\" forwarded %2$d messages from %3$s</item>
     </plurals>
-    <!-- Self-only variant: used when all distinct source authors (the OUTER bubble authors) are the
-         current user, so the "from You" suffix would be redundant. PRD v2.0 keeps this — it stays
-         reachable when the outer author is me but inner content is foreign (gating uses inner authors;
-         the source list uses outer authors), so an all-self source list renders the short form. -->
+    
     <plurals name="chat_forward_notice_self_only">
         <item quantity="one">\"%1$s\" forwarded a message</item>
         <item quantity="other">\"%1$s\" forwarded %2$d messages</item>
     </plurals>
-    <!-- Combined-forward (chat history) variants — PRD v1.0 §5.4.2.
-         "chat history" naming chosen to match the bubble's user-facing label.
-         Used when the source selection is fully a CF (ALL_COMBINED_FORWARD), or
-         a single-bubble forward where that bubble IS a CF (CONTAINS_COMBINED_FORWARD,
-         count == 1). -->
+    
     <plurals name="chat_forward_notice_chat_history">
         <item quantity="one">\"%1$s\" forwarded a chat history from %3$s</item>
         <item quantity="other">\"%1$s\" forwarded %2$d chat histories from %3$s</item>
@@ -754,8 +746,7 @@
         <item quantity="one">\"%1$s\" forwarded a chat history</item>
         <item quantity="other">\"%1$s\" forwarded %2$d chat histories</item>
     </plurals>
-    <!-- Mixed variant — CONTAINS_COMBINED_FORWARD with count > 1: a selection that
-         contains BOTH regular messages and at least one CF bubble. -->
+    
     <plurals name="chat_forward_notice_plural_mixed">
         <item quantity="one">\"%1$s\" forwarded a message (including chat history) from %3$s</item>
         <item quantity="other">\"%1$s\" forwarded %2$d messages (including chat history) from %3$s</item>
@@ -764,7 +755,7 @@
         <item quantity="one">\"%1$s\" forwarded a message (including chat history)</item>
         <item quantity="other">\"%1$s\" forwarded %2$d messages (including chat history)</item>
     </plurals>
-    <!-- SUB_COMBINED_FORWARD — operation against a sub-message INSIDE a CF detail view. -->
+    
     <plurals name="chat_forward_notice_from_chat_history">
         <item quantity="one">\"%1$s\" forwarded a message from %3$s\'s chat history</item>
         <item quantity="other">\"%1$s\" forwarded %2$d messages from %3$s\'s chat history</item>
@@ -775,8 +766,7 @@
     </plurals>
     <string name="chat_forward_notice_sentence_terminator">.</string>
 
-    <!-- Copy notice (system message shown after the user copies messages to clipboard).
-         Same conventions as chat_forward_notice. PRD v1.0 §5.4.1. -->
+    
     <plurals name="chat_copy_notice">
         <item quantity="one">\"%1$s\" copied a message from %3$s</item>
         <item quantity="other">\"%1$s\" copied %2$d messages from %3$s</item>
@@ -785,8 +775,7 @@
         <item quantity="one">\"%1$s\" copied a message</item>
         <item quantity="other">\"%1$s\" copied %2$d messages</item>
     </plurals>
-    <!-- SUB_COMBINED_FORWARD — copy from inside a CF detail view. Main-conv copy
-         (UNKNOWN/CONTAINS/ALL) shares the base chat_copy_notice plural per PRD §5.4.1. -->
+    
     <plurals name="chat_copy_notice_from_chat_history">
         <item quantity="one">\"%1$s\" copied a message from %3$s\'s chat history</item>
         <item quantity="other">\"%1$s\" copied %2$d messages from %3$s\'s chat history</item>
@@ -797,28 +786,26 @@
     </plurals>
     <string name="chat_copy_notice_sentence_terminator">.</string>
 
-    <!-- GIF panel (M1: browse + search + send) -->
+    
     <string name="gif_search_hint">Search GIFs</string>
     <string name="gif_no_result">No GIFs found</string>
     <string name="gif_load_failed">Couldn\'t load GIFs. Try again later.</string>
     <string name="gif_tab_trending">Trending</string>
 
-    <!-- GIF favorites (M3: favorites data flow) -->
+    
     <string name="gif_favorites_empty">No favorites yet</string>
-    <!-- Unified favorite menu labels (message long-press menu + GIF grid long-press floating menu). -->
+    
     <string name="gif_favorites_add_full">Add to Fav</string>
     <string name="gif_favorites_remove">Remove from Favorites</string>
     <string name="gif_favorites_added">Added to Favorites</string>
     <string name="gif_favorites_failed">Couldn\'t add. Try again later.</string>
     <string name="gif_favorites_add_size_limit">This GIF is too large to add to Favorites.</string>
-    <!-- Cap-reached confirm dialog (limit 200). Secondary "Cancel" just dismisses (current GIF not added). -->
+    
     <string name="gif_favorites_cap_title">Favorites Limit Reached</string>
     <string name="gif_favorites_cap_message">You can save up to 200 favorites. Replace the oldest one or remove some favorites first.</string>
     <string name="gif_favorites_cap_confirm">Replace Oldest</string>
     <string name="gif_favorites_cap_cancel">Cancel</string>
-    <!-- Media send failure surface: dialog titles, per-item lines, overflow line and buttons.
-         Deliberately does not reuse file_unavailable: that wording asserts the file was moved or
-         deleted, which is the wrong attribution for a read that the system refused. -->
+    
     <string name="media_send_failed_title_single">Couldn\'t send this file</string>
     <string name="media_send_failed_title_all">None of the %1$d items could be sent</string>
     <string name="media_send_failed_title_partial">%2$d of %1$d items couldn\'t be sent</string>
@@ -830,17 +817,13 @@
     <string name="media_send_failed_retry">Retry</string>
     <string name="media_send_failed_back">Go back</string>
     <string name="media_send_failed_send_rest">Send the other %1$d</string>
-    <!-- Short reason labels, one per failure reason. Kept to a fragment so they read inside an item line. -->
+    
     <string name="media_send_reason_unreadable">couldn\'t be read</string>
     <string name="media_send_reason_unsupported">format not supported</string>
     <string name="media_send_reason_no_space">not enough storage</string>
     <string name="media_send_reason_transform">processing failed</string>
     <string name="media_send_reason_unknown">unexpected error</string>
-    <!-- Next-step guidance, one line per reason. media_send_next_restart_or_file covers both the
-         "read was refused with no attribution available" and "access looks granted yet the read
-         failed" cases, so it states only the observable fact and must not name a permission state;
-         it must keep the restart advice, which is what helps under either mechanism. The "File"
-         literal in it and in media_send_next_reselect_photos must match chat_action_file. -->
+    
     <string name="media_send_next_restart_or_file">The system refused to read this file. Restart the app and try again — or send it through \"File\" instead.</string>
     <string name="media_send_next_grant">The app doesn\'t have access to your photos right now. Allow it in system settings, then try again.</string>
     <string name="media_send_next_reselect_photos">This file isn\'t in the set of photos you allowed access to. Choose it in the access list, or send it through \"File\" instead.</string>
@@ -850,10 +833,33 @@
     <string name="media_send_next_retry_or_plain">Try again, or undo the edits and send the original.</string>
     <string name="media_send_next_unknown">Something went wrong (%1$s). Try again.</string>
 
-    <!-- Retiring package: title-bar entry + one-time notice for the move to the new app -->
+    
     <string name="legacy_migration_app_name_new">Quicall (New)</string>
     <string name="legacy_migration_entry_short">Move to New App</string>
     <string name="notification_test_busy">Another notification test is already running.</string>
     <string name="notification_test_persistence_failed">The test result could not be saved. Please test again.</string>
     <string name="group_change_followup_pending">Change accepted. Local updates are still pending. Retry to finish without submitting again.</string>
+    <string name="chat_expiry_minutes_short">m</string>
+    <string name="contacts_days_short">%dd</string>
+    <string name="contacts_today">Today</string>
+    <string name="contacts_official">Official</string>
+    <string name="contacts_card_group_info">Group info</string>
+    <string name="contacts_card_countdown">Disappearing messages</string>
+    <string name="contacts_card_invite">Invite</string>
+    <string name="contacts_card_add">Add</string>
+    <string name="contacts_card_group_members">Group members</string>
+    <plurals name="group_dissolve_in_days">
+        <item quantity="one">%1$d day until dissolution</item>
+        <item quantity="other">%1$d days until dissolution</item>
+    </plurals>
+    <string name="group_dissolve_today">Dissolves today</string>
+    <string name="group_dissolve_keep_hint">Send a message or edit group info to keep it</string>
+    <string name="weak_contact_keep_hint">Add this contact again to keep them</string>
+    <string name="contacts_card_remove_confirmation">Delete this contact now?</string>
+    <string name="contacts_directory_contacts">Contacts</string>
+    <string name="contacts_expiring_groups">Dissolving soon</string>
+    <string name="group_member_list_title">Group members</string>
+    <string name="group_member_list_moderators">Moderators</string>
+    <string name="group_member_list_participants">Participants</string>
+    <string name="group_member_list_no_match">No members found for “%1$s”</string>
 </resources>

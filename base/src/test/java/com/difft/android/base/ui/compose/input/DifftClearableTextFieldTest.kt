@@ -40,15 +40,15 @@ import kotlin.math.abs
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/**
- * Behavior pins for [DifftClearableTextField] — the shared clearable input primitive.
- *
- * The highest-value pins guard the migration-wide callback contract: onValueChange and
- * onClear never overlap (tapping ✕ must NOT surface as onValueChange("")), the clear icon
- * is conditionally RENDERED (not alpha-hidden — the legacy alpha=0 button stayed clickable,
- * a phantom tap target), and the reserved trailing slot keeps the text width stable across
- * the empty/non-empty transition.
- */
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34])
@@ -107,33 +107,33 @@ class DifftClearableTextFieldTest {
         rule.activity.getString(R.string.base_clear_text)
     )
 
-    /** The inner BasicTextField node (the testTag lands on the outer Row). */
+    
     private fun fieldNode() = rule.onNode(hasSetTextAction())
 
-    // A1: WhenNotEmpty + non-empty -> clear icon exists
+    
     @Test
     fun whenNotEmpty_nonEmptyText_showsClearIcon() {
         rule.setContent { Host(value = "a") }
         clearNode().assertExists()
     }
 
-    // A2: WhenNotEmpty + empty -> node DOES NOT EXIST (phantom-tap-target pin).
-    // assertIsNotDisplayed()/assertIsNotEnabled() would be too weak: the legacy alpha=0
-    // button was exactly "not displayed but clickable".
+    
+    
+    
     @Test
     fun whenNotEmpty_emptyText_clearIconDoesNotExist() {
         rule.setContent { Host(value = "") }
         clearNode().assertDoesNotExist()
     }
 
-    // A3: WhileEditing + non-empty but NOT focused -> hidden
+    
     @Test
     fun whileEditing_notFocused_clearIconDoesNotExist() {
         rule.setContent { Host(value = "a", clearMode = ClearMode.WhileEditing) }
         clearNode().assertDoesNotExist()
     }
 
-    // A4: WhileEditing + focused + non-empty -> shown
+    
     @Test
     fun whileEditing_focusedAndNonEmpty_showsClearIcon() {
         rule.setContent { Host(value = "a", clearMode = ClearMode.WhileEditing) }
@@ -142,7 +142,7 @@ class DifftClearableTextFieldTest {
         clearNode().assertExists()
     }
 
-    // A5: tapping ✕ fires onClear exactly once and onValueChange zero times
+    
     @Test
     fun tappingClear_firesOnClearOnly() {
         var clears = 0
@@ -154,7 +154,7 @@ class DifftClearableTextFieldTest {
         assertEquals(0, changes)
     }
 
-    // A6: clear refocuses the input (X2: pre-assert not focused before the tap)
+    
     @Test
     fun tappingClear_refocusesInput() {
         lateinit var clearFocus: () -> Unit
@@ -171,7 +171,7 @@ class DifftClearableTextFieldTest {
         fieldNode().assertIsFocused()
     }
 
-    // A7: typing fires onValueChange only
+    
     @Test
     fun typing_firesOnValueChangeOnly() {
         var clears = 0
@@ -183,7 +183,7 @@ class DifftClearableTextFieldTest {
         assertEquals(0, clears)
     }
 
-    // A8/A9: autoFocus
+    
     @Test
     fun autoFocusTrue_focusesOnFirstComposition() {
         rule.setContent { Host(value = "", autoFocus = true) }
@@ -198,8 +198,8 @@ class DifftClearableTextFieldTest {
         fieldNode().assertIsNotFocused()
     }
 
-    // A10: reserved trailing slot -> field width identical for empty vs non-empty (R2 pin:
-    // no 40dp text reflow on the first keystroke)
+    
+    
     @Test
     fun whenNotEmpty_slotReserved_textAreaWidthStableAcrossEmptyTransition() {
         val state = androidx.compose.runtime.mutableStateOf("")
@@ -211,7 +211,7 @@ class DifftClearableTextFieldTest {
         assertTrue(abs((emptyWidth - filledWidth).value) <= 0.5f, "text area width changed: $emptyWidth -> $filledWidth")
     }
 
-    // A11: IME action handler fires
+    
     @Test
     fun imeAction_firesHandler() {
         var actions = 0
@@ -229,17 +229,17 @@ class DifftClearableTextFieldTest {
         assertEquals(1, actions)
     }
 
-    // A12: disabled -> no clear icon, field not enabled
+    
     @Test
     fun disabled_noClearIconAndFieldDisabled() {
         rule.setContent { Host(value = "a", enabled = false) }
         clearNode().assertDoesNotExist()
-        // A disabled BasicTextField exposes no SetText semantics at all — its absence is the pin.
+        
         fieldNode().assertDoesNotExist()
     }
 
-    // A13: WhileEditing — tapping ✕ completes even though it would hide itself if the tap
-    // stole focus (focusProperties { canFocus = false } pin)
+    
+    
     @Test
     fun whileEditing_tappingClear_isNotInterruptedByFocusTransfer() {
         var clears = 0
@@ -251,7 +251,7 @@ class DifftClearableTextFieldTest {
         assertEquals(1, clears)
     }
 
-    // A14: hint shows only when empty
+    
     @Test
     fun hint_visibleOnlyWhenEmpty() {
         rule.setContent { Host(value = "", hint = "SearchHintProbe") }
@@ -264,9 +264,9 @@ class DifftClearableTextFieldTest {
         rule.onNodeWithText("SearchHintProbe").assertDoesNotExist()
     }
 
-    // A16: clear tap target is the full 40dp-wide slot at container height (user-ratified
-    // 40dp; pin against a later "wrap_content" shrink). Container height is the library
-    // Large box (40).
+    
+    
+    
     @Test
     fun clearIcon_tapTargetIs40dpWideAndContainerHigh() {
         rule.setContent { Host(value = "a") }
@@ -278,7 +278,7 @@ class DifftClearableTextFieldTest {
         )
     }
 
-    // A17: a11y semantics — ✕ has Role.Button
+    
     @Test
     fun clearIcon_hasButtonRole() {
         rule.setContent { Host(value = "a") }
@@ -287,7 +287,7 @@ class DifftClearableTextFieldTest {
         )
     }
 
-    // T-F5: maxLength TRUNCATES (InputFilter.LengthFilter semantics), never rejects
+    
     @Test
     fun maxLength_truncatesInsteadOfRejecting() {
         val received = mutableListOf<String>()
@@ -298,7 +298,7 @@ class DifftClearableTextFieldTest {
         assertEquals("abcde", received.last())
     }
 
-    // The cut never splits a surrogate pair: with one unit left, the whole emoji is dropped.
+    
     @Test
     fun maxLength_dropsWholeSurrogatePairAtTheLimit() {
         val received = mutableListOf<String>()

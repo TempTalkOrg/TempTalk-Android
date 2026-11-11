@@ -29,37 +29,22 @@ import org.junit.Before
 import org.junit.Test
 import java.util.Collections
 
-/**
- * [TranslateQueue] — the single-worker serialisation layer. One ML Kit translation runs at a
- * time, and every result is broadcast on `completions` whether or not anyone still awaits the
- * handle it returned.
- *
- * The worker is deliberately started on `Dispatchers.Default` inside `init`, so a test dispatcher
- * could not drive it: every body therefore runs inside `withContext(Dispatchers.Default)`, which
- * also gives `withTimeout` a real clock instead of `runTest`'s virtual one. Determinism comes from a
- * primer job that parks the worker on a gate — everything submitted while the gate is closed is
- * provably still pending when the assertions about pending work are made.
- *
- * What each case asserts:
- *  - T14  priority ordering — a NEW_INCOMING submitted last still runs before queued BACKGROUND work
- *  - T15  same-key dedup — one engine call, one shared handle
- *  - T16  cancelOwner drops that owner's pending work and cancels its handles
- *  - T16b completions are broadcast even when nobody is awaiting the handle any more
- *  - T16c cancelOwner is owner-scoped: the manual owner survives an automatic cancel
- *  - T62  (queue half) cancelAll drops every owner's pending work — the logout path
- *  - T62b a job already inside ML Kit when cancelAll fires has its completion dropped
- *  - a cancelled backend task fails that one job without taking the single worker down with it
- */
+
+
+
+
+
+
 class TranslateQueueTest {
 
     private lateinit var engine: TranslateEngine
     private lateinit var scope: CoroutineScope
     private lateinit var queue: TranslateQueue
 
-    /** Completed by the engine fake the moment the primer job starts running on the worker. */
+    
     private lateinit var primerStarted: CompletableDeferred<Unit>
 
-    /** Released by the test to let the primer — and therefore the worker — continue. */
+    
     private lateinit var gate: CompletableDeferred<Unit>
 
     private val calls = Collections.synchronizedList(mutableListOf<String>())
@@ -77,8 +62,8 @@ class TranslateQueueTest {
                 primerStarted.complete(Unit)
                 gate.await()
             }
-            // How the GMS backend reports a cancelled Task: the continuation is cancelled while the
-            // worker's own job is untouched.
+            
+            
             if (text == CANCELLED_TASK) throw CancellationException("backend task cancelled")
             calls.add(text)
             TranslateResult.Translated("[$text]", "en")
@@ -98,7 +83,7 @@ class TranslateQueueTest {
         unmockkAll()
     }
 
-    /** Real dispatcher + real clock; see the class comment. */
+    
     private fun queueTest(body: suspend CoroutineScope.() -> Unit) = runTest {
         withContext(Dispatchers.Default) { body() }
     }
@@ -118,14 +103,12 @@ class TranslateQueueTest {
         mode = TranslateMode.AUTO,
     )
 
-    /** Parks the worker on [gate] and returns once it is provably inside the engine call. */
+    
     private suspend fun occupyWorker(): Deferred<TranslateResult> {
         val handle = submit(PRIMER, owner = PRIMER_OWNER, priority = TranslateQueue.Priority.NEW_INCOMING)
         withTimeout(TIMEOUT_MS) { primerStarted.await() }
         return handle
     }
-
-    // --- T14 ----------------------------------------------------------------
 
     @Test
     fun `T14 a NEW_INCOMING job jumps the queued BACKGROUND backlog`() = queueTest {
@@ -148,8 +131,6 @@ class TranslateQueueTest {
         assertEquals(listOf(PRIMER, "n1", "b1", "b2", "b3"), calls.toList())
     }
 
-    // --- T15 ----------------------------------------------------------------
-
     @Test
     fun `T15 a second submit of a live key joins the first instead of queueing again`() = queueTest {
         val primer = occupyWorker()
@@ -169,8 +150,6 @@ class TranslateQueueTest {
         coVerify(exactly = 1) { engine.translate("same text", TranslateLang.ZH, TranslateMode.AUTO) }
     }
 
-    // --- T16 ----------------------------------------------------------------
-
     @Test
     fun `T16 cancelOwner drops pending work and cancels the handles so awaiters can roll back`() = queueTest {
         val primer = occupyWorker()
@@ -188,15 +167,13 @@ class TranslateQueueTest {
         assertEquals(listOf(PRIMER), calls.toList())
     }
 
-    // --- T16b ---------------------------------------------------------------
-
     @Test
     fun `T16b a result is broadcast even after the awaiter gave up`() = queueTest {
         val primer = occupyWorker()
 
         queue.completions.test {
             val abandoned = submit("abandoned")
-            // The caller stops waiting — cancelling a wait is NOT cancelling the work.
+            
             abandoned.cancel()
             assertTrue(abandoned.isCancelled)
 
@@ -215,8 +192,6 @@ class TranslateQueueTest {
         withTimeout(TIMEOUT_MS) { primer.await() }
         assertTrue("the work itself still ran", calls.contains("abandoned"))
     }
-
-    // --- T16c ---------------------------------------------------------------
 
     @Test
     fun `T16c cancelOwner leaves other owners alone`() = queueTest {
@@ -237,8 +212,6 @@ class TranslateQueueTest {
 
         assertEquals(listOf(PRIMER, "manual"), calls.toList())
     }
-
-    // --- T62 (queue half) ---------------------------------------------------
 
     @Test
     fun `T62 cancelAll drops every owner`() = queueTest {
@@ -262,21 +235,21 @@ class TranslateQueueTest {
         val primer = occupyWorker()
 
         queue.completions.test {
-            // The running job cannot be interrupted — an ML Kit task has no cancel — so what
-            // cancelAll actually guarantees is that its RESULT never reaches an owner.
+            
+            
             queue.cancelAll()
             gate.complete(Unit)
             withTimeout(TIMEOUT_MS) { primer.await() }
 
-            // The broadcast happens before the handle completes, so anything emitted would already
-            // be here; the delay only covers the collector's own hop.
+            
+            
             delay(BROADCAST_SETTLE_MS)
             expectNoEvents()
             cancelAndIgnoreRemainingEvents()
         }
 
         assertTrue("the work itself still ran to the end", calls.contains(PRIMER))
-        // A job submitted after the bump is a new generation and is broadcast again.
+        
         queue.completions.test {
             submit("after")
             assertEquals("after", awaitItem().key)
@@ -284,7 +257,7 @@ class TranslateQueueTest {
         }
     }
 
-    // --- cancelled backend task ---------------------------------------------
+    
 
     @Test
     fun `a cancelled backend task fails the job but the worker keeps serving the next submission`() =
@@ -305,7 +278,7 @@ class TranslateQueueTest {
             assertEquals(listOf(PRIMER, "after-cancel"), calls.toList())
         }
 
-    // --- barrier ------------------------------------------------------------
+    
 
     @Test
     fun `barrier runs on the worker, never beside a translation`() = queueTest {
@@ -316,7 +289,7 @@ class TranslateQueueTest {
         val barrier = scope.async {
             queue.barrier {
                 barrierRan = true
-                // The worker completes the primer's handle before it polls the next item.
+                
                 overlapped = !primer.isCompleted
             }
         }

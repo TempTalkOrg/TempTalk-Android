@@ -15,10 +15,10 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
-/**
- * [SendScreenVerdicts]: "Start over" on the unconfirmed page must not delete the receipt a pause
- * awaiting the receiver's decision still needs (#1382, design §2.5 "Start over → no change").
- */
+
+
+
+
 class SendScreenVerdictsTest {
 
     private val messaging = TestMessagingPause().open()
@@ -41,7 +41,7 @@ class SendScreenVerdictsTest {
         verdicts.clear()
 
         assertNotNull(store.load(), "the re-check and cold start still need the receipt")
-        // The receiver later answers: the receipt is still there to settle the pause with.
+        
         verdicts.settle(session, Verdict.Ended("failed"))
         assertNull(messaging.pause.record)
         assertNull(store.load())
@@ -72,7 +72,7 @@ class SendScreenVerdictsTest {
         verdicts.settle(session, Verdict.Succeeded)
         store.save(PendingVerdict(session, System.currentTimeMillis()))
 
-        // A confirmed import is final: a late "failed" for it is skipped.
+        
         assertFalse(verdicts.settle(session, Verdict.Ended("failed")))
 
         assertEquals(MigrationPausePhase.AWAITING_LOGIN, messaging.pause.record?.phase)

@@ -12,10 +12,10 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/**
- * Configuration-change relaunches (fold, night mode, locale) never end a prompt session; a real stop
- * afterwards still does (#1355 §4.3).
- */
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = Application::class)
 class PromptSessionTrackerTest {

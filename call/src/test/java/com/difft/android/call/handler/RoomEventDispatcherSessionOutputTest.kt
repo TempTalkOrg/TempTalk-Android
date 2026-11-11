@@ -46,15 +46,15 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
-/**
- * [RoomEventDispatcher]'s writes into the session UI state ([com.difft.android.call.session.CallSessionUiState])
- * through the room-event collector body. Robolectric because the dispatcher reads `SystemClock` and
- * resolves barrage strings. Rows: T3-04, T3-05, T3-06, T3-07, T3-10, T3-12, T3-13.
- * Also the remote-end hand-off to the session (T4-18, T5-13): the call data is dropped first, then the
- * session's end seam is called, and no broadcast is sent. The posted hop behind that seam is pinned
- * in [RoomEventDispatcherRemoteEndHopTest].
- * And the connect / remote-join steps the session hangs its projection writes on (T5-03, T5-04, T5-05).
- */
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [33])
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -73,7 +73,7 @@ class RoomEventDispatcherSessionOutputTest {
     private lateinit var f: RoomEventDispatcherFixture
     private val sharer = MutableStateFlow<RemoteParticipant?>(null)
 
-    /** Ordered trace: `share=<value>` at each sharer write, `reveal sharer=<identity|null>` at each reveal. */
+    
     private val trace = mutableListOf<String>()
     private val events = mutableListOf<CallSessionUiEvent>()
 
@@ -220,7 +220,7 @@ class RoomEventDispatcherSessionOutputTest {
     fun `T4-18 an RTM END_CALL drops the call data, then asks the session to end, with no broadcast`() {
         val order = recordRemoteEndOrder()
         every { f.rtm.handleDataReceived(any(), any(), any(), any(), any(), any(), any()) } answers {
-            arg<() -> Unit>(4).invoke() // onEndCall
+            arg<() -> Unit>(4).invoke() 
         }
         val dispatcher = f.build(roomId = "r1")
 
@@ -236,7 +236,7 @@ class RoomEventDispatcherSessionOutputTest {
         val activeRoom = mockk<Room>(relaxed = true)
         every { f.roomCtl.roomOrNull() } answers { activeRoom }
         every { f.rtm.handleDataReceived(any(), any(), any(), any(), any(), any(), any()) } answers {
-            arg<() -> Unit>(5).invoke() // onServerEndCall
+            arg<() -> Unit>(5).invoke() 
         }
         val dispatcher = f.build(roomId = "r1")
 
@@ -289,7 +289,69 @@ class RoomEventDispatcherSessionOutputTest {
         )
     }
 
-    /** The `Room` surface `onConnected` reads: no local mic publication, value-class ids, [remotes]. */
+    @Test
+    fun `T5-06 a 1v1 connect with the remote already in the room stops the ringing before the call is connected`() {
+        val bob = remote("bob.1", sharing = false)
+        stubConnectedRoom(remotes = mapOf(Participant.Identity("bob.1") to bob))
+        every { f.roomCtl.callStatus } returns MutableStateFlow(CallStatus.CALLING)
+        every { f.roomCtl.startedOneOnOne } returns true
+        val dispatcher = f.build(CallType.ONE_ON_ONE.type)
+
+        f.dispatch(dispatcher, RoomEvent.Connected(f.room))
+
+        assertEquals(
+            listOf(RoomEventDispatcherFixture.STOP_RINGBACK, RoomEventDispatcherFixture.CONNECTED),
+            f.connectStepCalls,
+        )
+        verify(exactly = 0) { f.timeoutMonitor.start1V1Timeout(any()) }
+    }
+
+    @Test
+    fun `T5-07 a started 1v1 that turned instant while connecting still stops the ringing`() {
+        val bob = remote("bob.1", sharing = false)
+        stubConnectedRoom(remotes = mapOf(Participant.Identity("bob.1") to bob))
+        every { f.roomCtl.callStatus } returns MutableStateFlow(CallStatus.CALLING)
+        every { f.roomCtl.startedOneOnOne } returns true
+
+        f.dispatch(f.build(CallType.INSTANT.type), RoomEvent.Connected(f.room))
+
+        assertEquals(
+            listOf(RoomEventDispatcherFixture.STOP_RINGBACK, RoomEventDispatcherFixture.CONNECTED),
+            f.connectStepCalls,
+        )
+    }
+
+    @Test
+    fun `T5-08 a callee connect or a reconnect of a live call leaves another call's ringing alone`() {
+        for (status in listOf(CallStatus.JOINING, CallStatus.CONNECTED, CallStatus.RECONNECTED)) {
+            f = RoomEventDispatcherFixture(scope)
+            val bob = remote("bob.1", sharing = false)
+            stubConnectedRoom(remotes = mapOf(Participant.Identity("bob.1") to bob))
+            every { f.roomCtl.callStatus } returns MutableStateFlow(status)
+            every { f.roomCtl.startedOneOnOne } returns true
+
+            f.dispatch(f.build(CallType.ONE_ON_ONE.type), RoomEvent.Connected(f.room))
+
+            assertEquals(status.name, listOf(RoomEventDispatcherFixture.CONNECTED), f.connectStepCalls)
+        }
+    }
+
+    @Test
+    fun `T5-09 a group or instant caller's connect leaves another call's ringing alone`() {
+        for (type in listOf(CallType.GROUP.type, CallType.INSTANT.type)) {
+            f = RoomEventDispatcherFixture(scope)
+            val bob = remote("bob.1", sharing = false)
+            stubConnectedRoom(remotes = mapOf(Participant.Identity("bob.1") to bob))
+            every { f.roomCtl.callStatus } returns MutableStateFlow(CallStatus.CALLING)
+            every { f.roomCtl.startedOneOnOne } returns false
+
+            f.dispatch(f.build(type), RoomEvent.Connected(f.room))
+
+            assertEquals(type, listOf(RoomEventDispatcherFixture.CONNECTED), f.connectStepCalls)
+        }
+    }
+
+    
     private fun stubConnectedRoom(remotes: Map<Participant.Identity, RemoteParticipant>) {
         val local = mockk<LocalParticipant>(relaxed = true) {
             every { sid } returns Participant.Sid("local-sid")
@@ -301,7 +363,7 @@ class RoomEventDispatcherSessionOutputTest {
         every { f.room.remoteParticipants } returns remotes
     }
 
-    /** `remove <rid>` at each call-data removal and `end <rid>` at each session end request, in order. */
+    
     private fun recordRemoteEndOrder(): List<String> {
         val order = mutableListOf<String>()
         f.callDataManager = mockk(relaxed = true) {

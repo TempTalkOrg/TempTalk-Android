@@ -4,10 +4,10 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * [StaleLayoutDecision] on the #1454 field values (Xiaomi 18 Fold, both panels at 2.75): outer
- * panel 1168x1712 px = 424x622 dp, inner configuration 860x608 dp.
- */
+
+
+
+
 class StaleLayoutDecisionTest {
 
     private fun px(dp: Int, density: Float = DENSITY) = (dp * density).toInt()
@@ -69,7 +69,7 @@ class StaleLayoutDecisionTest {
 
     @Test
     fun `a display size change keeps px, so dp and density moving together are not stale`() {
-        // Larger display size: 2.75 -> 3.0, the configuration's dp shrink with it.
+        
         assertFalse(decide(cfgSwDp = 389, cfgLongDp = 570, cfgDensity = 3.0f))
     }
 

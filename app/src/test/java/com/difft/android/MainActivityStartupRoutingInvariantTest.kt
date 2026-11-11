@@ -4,14 +4,14 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 
-/**
- * #1395 adds a warm-process foreground gate ([com.difft.android.app.WarmProcessResync]) that
- * reuses MainActivity's two session checks without changing MainActivity's routing. This pins
- * that routing in the source: the local-token check and the identity-key check stay separate
- * steps, and a logged-in user with missing identity keys is still logged out passively, after
- * every not-logged-in branch. Source text because the routing runs inside `lifecycleScope` behind
- * the database-health gate, which a unit test cannot reach.
- */
+
+
+
+
+
+
+
+
 class MainActivityStartupRoutingInvariantTest {
 
     private val source = File("src/main/java/com/difft/android/MainActivity.kt").readText()

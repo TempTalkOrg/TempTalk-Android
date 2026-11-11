@@ -28,10 +28,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import com.difft.android.chat.util.Util
 
-/**
- * Fragment for account settings
- * Can be displayed in both Activity (single-pane) and dual-pane mode
- */
+
+
+
+
 @AndroidEntryPoint
 class AccountFragment : Fragment(), SettingsIdiomPage {
 
@@ -65,7 +65,7 @@ class AccountFragment : Fragment(), SettingsIdiomPage {
         applyDetailPageInsets(view)
         val searchKey = "account-search:${globalServices.myId}"
         waitWhileVisibleTop(PageOperations.running(searchKey), searchWait)
-        // A search write from a replaced page can finish while this page shows its older snapshot.
+        
         onOperationEnded(searchKey) { model.dispatch(AccountSettingsContract.Intent.Reload) }
         waitWhileVisibleTop(combine(model.state, logoutWaitRequested) { state, requested -> state.busy && requested }, logoutWait)
         viewLifecycleOwner.lifecycleScope.launch {
@@ -92,7 +92,7 @@ class AccountFragment : Fragment(), SettingsIdiomPage {
             Util.copyToClipboard(requireContext(), binding.tvId.text)
             true
         }
-        // The long-press listener makes the text consume touches, so a tap on the ID itself must forward to the row.
+        
         binding.tvId.setOnClickListener { binding.clId.performClick() }
 
         binding.clLogout.setOnClickListener {
@@ -177,7 +177,6 @@ class AccountFragment : Fragment(), SettingsIdiomPage {
         val emailMasked = userData?.email
         val phoneMasked = userData?.phoneNumber
 
-        // Email UI 更新
         if (!emailMasked.isNullOrEmpty()) {
             binding.tvEmail.text = if (emailMasked.contains("*")) {
                 emailMasked
@@ -194,7 +193,6 @@ class AccountFragment : Fragment(), SettingsIdiomPage {
             }
         }
 
-        // Phone UI 更新
         if (!phoneMasked.isNullOrEmpty()) {
             binding.tvPhone.text = if (phoneMasked.contains("*")) {
                 phoneMasked

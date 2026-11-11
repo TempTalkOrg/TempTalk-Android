@@ -8,12 +8,12 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Test
 
-/**
- * [UnavailableTranslateBackend]: the binding the F-Droid channel compiles.
- *
- * The point of these cases is that the channel's build has NO Google dependency to fall back on, so
- * the backend must answer every question without one and must never pretend a translation happened.
- */
+
+
+
+
+
+
 class UnavailableTranslateBackendTest {
 
     private val backend = UnavailableTranslateBackend()

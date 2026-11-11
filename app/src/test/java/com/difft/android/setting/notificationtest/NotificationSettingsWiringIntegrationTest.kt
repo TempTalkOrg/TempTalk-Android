@@ -83,7 +83,7 @@ import kotlin.test.assertTrue
 import com.difft.android.base.R as BaseR
 import com.difft.android.chat.R as ChatR
 
-/** Real Hilt pages, real host lifecycle, real shell entry points, and real Compose controls. */
+
 @HiltAndroidTest
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -100,7 +100,7 @@ class NotificationSettingsWiringIntegrationTest {
     @BindValue @JvmField val device: NotificationTestDevice = mockk()
     @BindValue @JvmField val runs = NotificationTestRuns()
     @BindValue @JvmField val clock: NotificationTestClock = mockk()
-    // TestUserInfoModule replaces StorageBindings and supplies only the legacy UserManager alias.
+    
     @BindValue @JvmField val strictUsers: StorageBoundUserManager = mockk(relaxed = true)
     @BindValue @JvmField val messageServiceManager: MessageServiceManager = mockk(relaxed = true)
     private val cleanupScope = CoroutineScope(SupervisorJob() + dispatchers.testDispatcher)
@@ -124,7 +124,7 @@ class NotificationSettingsWiringIntegrationTest {
         coEvery { poster.cancel(any(), any()) } returns Unit
         every { device.isDndOn() } returns false
         every { clock.nowMs() } answers { 100_000L + dispatchers.testDispatcher.scheduler.currentTime }
-        // BaseActivity startup accounting and toast rendering are unrelated application services.
+        
         mockkObject(AppStartup, ToastUtil)
         every { AppStartup.onCriticalRenderEventStart() } just Runs
         every { AppStartup.onCriticalRenderEventEnd() } just Runs
@@ -227,7 +227,7 @@ class NotificationSettingsWiringIntegrationTest {
         compose.onNodeWithContentDescription("Back").assertDoesNotExist()
         compose.runOnUiThread { pane!!.get().onBackPressedDispatcher.onBackPressed() }
         idle()
-        // No page callback consumed Back, so the host's own handling (here the Activity default) ran.
+        
         assertTrue(pane!!.get().isFinishing)
     }
 
@@ -330,7 +330,7 @@ class NotificationSettingsWiringIntegrationTest {
         shadowOf(power).setIgnoringBatteryOptimizations(context.packageName, false)
         shadowOf(connectivity).setRestrictBackgroundStatus(ConnectivityManager.RESTRICT_BACKGROUND_STATUS_ENABLED)
         plain = Robolectric.buildActivity(NotificationPlainWiringTestActivity::class.java).setup().visible()
-        // ActivityManager shadows are per instance; mutate the service this actual Activity owns.
+        
         val activityManager = plain!!.get().getSystemService(ActivityManager::class.java)!!
         shadowOf(activityManager).setBackgroundRestricted(true)
         val page = BackgroundConnectionSettingsFragment()
@@ -373,7 +373,7 @@ class NotificationSettingsWiringIntegrationTest {
         compose.onNodeWithTag("background_connection_switch").performClick().assertIsOff()
         assertEquals(stored, users.getUserData()?.autoStartMessageService)
         verify(exactly = 0) { messageServiceManager.startService() }
-        // The switch sends the user to the first failing requirement (battery optimization under Robolectric) instead of refusing.
+        
         verify(exactly = 1) {
             ToastUtil.showLong(context.getString(ChatR.string.background_connection_fix_first, context.getString(ChatR.string.battery_optimization_check)))
         }

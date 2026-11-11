@@ -30,7 +30,7 @@ class ScreenLockSettingsViewModel @Inject constructor(
     private fun restoredPending(): Pending? {
         val pending = saved.get<Pending>("pending")?.copy(verifiedInProcess = false) ?: return null
         if (pending.accountId != repository.accountId()) return null
-        // A new ViewModel from saved state cannot reuse authorization held in the dead process.
+        
         return if (pending.stage == Stage.ReadyForSetup && pending.requiresVerification) {
             pending.copy(stage = Stage.ReadyForVerification)
         } else if (pending.stage == Stage.ChoosingBinding) null else pending
@@ -58,7 +58,7 @@ class ScreenLockSettingsViewModel @Inject constructor(
         }
     }
 
-    /** Called only by the visible page collector, immediately before launching its fixed launcher. */
+    
     fun takeVisibleLaunch(): Pending? {
         val request = state.value.pending ?: return null
         if (request.accountId != repository.accountId()) { pending(null); refresh(); return null }
@@ -117,12 +117,12 @@ class ScreenLockSettingsViewModel @Inject constructor(
             Stage.AwaitingVerification -> {
                 if (!result.success) pending(null)
                 else if (request.action == Action.Delete) {
-                    // Reduce a valid authorization even when hidden; only the feedback waits.
+                    
                     if (repository.disable(request.accountId, request.kind)) _effect.trySend(ScreenLockContract.Effect.Disabled(request.kind))
                     pending(null)
                 } else pending(request.copy(stage = if (repository.needsBinding()) Stage.ChoosingBinding else Stage.ReadyForSetup, verifiedInProcess = true))
             }
-            Stage.AwaitingSetup -> pending(null) // RESULT_CANCELED can still mean setup persisted; always reread.
+            Stage.AwaitingSetup -> pending(null) 
             else -> return
         }
         refresh()

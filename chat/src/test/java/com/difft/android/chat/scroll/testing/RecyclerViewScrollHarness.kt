@@ -14,19 +14,19 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
-/**
- * A real [RecyclerView] + [LinearLayoutManager] under Robolectric, for verifying FRAMEWORK
- * ASSUMPTIONS (scroll-state dispatch, visible-position computation) — not for rebuilding the
- * Fragment.
- *
- * Hosting the real `ChatMessageListFragment` was considered and rejected: `@AndroidEntryPoint`,
- * 2400+ lines, a 12-dependency ViewModel, ViewBinding and four host Activities. The cost lands on
- * the scaffolding, not the production code.
- *
- * SCOPE LIMIT — this harness covers PROGRAMMATIC scroll paths only. `SCROLL_STATE_DRAGGING` is
- * produced exclusively by real touch input, which Robolectric does not faithfully simulate; that
- * half is covered by on-device QA.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [28])
 abstract class RecyclerViewScrollHarness {
@@ -36,7 +36,7 @@ abstract class RecyclerViewScrollHarness {
 
     private val states = mutableListOf<Int>()
 
-    /** Every `onScrollStateChanged` value seen so far, in order. */
+    
     protected val observedStates: List<Int> get() = states.toList()
 
     @Before
@@ -89,7 +89,7 @@ abstract class RecyclerViewScrollHarness {
 
     protected fun lastVisible(): Int = layoutManager().findLastVisibleItemPosition()
 
-    /** No programmatic scroll may ever report a drag; the `userScrolling` gate depends on it. */
+    
     protected fun assertNeverDragged() {
         assertEquals(
             "programmatic scrolling reported DRAGGING; observed=$observedStates",

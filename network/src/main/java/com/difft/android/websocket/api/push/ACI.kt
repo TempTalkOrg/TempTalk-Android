@@ -4,10 +4,10 @@ import com.difft.android.websocket.api.util.UuidUtil
 import com.google.protobuf.ByteString
 import java.util.UUID
 
-/**
- * An ACI is an "Account Identity". They're just UUIDs, but given multiple different things could be UUIDs, this wrapper
- * exists to give us type safety around this *specific type* of UUID.
- */
+
+
+
+
 class ACI private constructor(uuid: UUID) : ServiceId(uuid) {
 
     override fun toByteString(): ByteString = UuidUtil.toByteString(rawUuid)

@@ -26,18 +26,18 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 
-/**
- * T18 / T87 / T88 / T89 — blob cleanup on deselection.
- *
- * T18 is also the automated guard against normalizing `deleteBlobs` through `readableUri()`: a
- * gallery item would then arrive as a content URI, be refused by the scheme gate, and the sandbox
- * item's `deleted=1` would drop to `deleted=0`.
- *
- * Private fixture paths come from [AppPrivateRoots] because production caches the roots for the
- * process lifetime while Robolectric hands every method its own data dir.
- *
- * Run: :chat:testDebugUnitTest --tests "*MediaSelectionRepositoryDeleteBlobsTest"
- */
+
+
+
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [33])
 class MediaSelectionRepositoryDeleteBlobsTest {
@@ -56,13 +56,13 @@ class MediaSelectionRepositoryDeleteBlobsTest {
         unmockkAll()
     }
 
-    // ---------------------------------------------------------------- T18
+    
 
-    /**
-     * T18 — deselecting a gallery item never touches the user's own file, while the sandbox blob
-     * behind an edited item is cleaned up. The refusal is structural: the shared path is rejected
-     * before `File.delete()`, so it is not "a delete that happens to fail".
-     */
+    
+
+
+
+
     @Test
     fun `only sandbox blobs are deleted and the summary counts both`() {
         val gallery = LocalMediaBuilder.gallery(realPath = sharedFile("DCIM/a.jpg").absolutePath)
@@ -80,12 +80,12 @@ class MediaSelectionRepositoryDeleteBlobsTest {
         assertFalse("the sandbox blob was left behind", blob.exists())
     }
 
-    // ---------------------------------------------------------------- T87
+    
 
-    /**
-     * T87 — a blank `realPath` (the field's default) is skipped rather than turned into a URI over
-     * an empty path.
-     */
+    
+
+
+
     @Test
     fun `an item without a real path is skipped entirely`() {
         val blank = LocalMediaBuilder.sandbox(realPath = "")
@@ -94,15 +94,15 @@ class MediaSelectionRepositoryDeleteBlobsTest {
         capture.recording {
             repository.deleteBlobs(listOf(blank))
             awaitLine("summary") { it.contains("[MediaSend] deleteBlobs total=1 deleted=0") }
-            // No provider line at all: the gate was never consulted because delete was never called.
-            // Safe to assert as an absence — the summary is emitted last, and L delivers in order.
+            
+            
             assertFalse(messages.toString(), messages.any { it.contains("[Blob]") })
         }
     }
 
-    // ---------------------------------------------------------------- T88
+    
 
-    /** T88 — `cleanUp` is the same operation, so it inherits the gate and the summary. */
+    
     @Test
     fun `cleanUp behaves exactly like deleteBlobs`() {
         val gallery = LocalMediaBuilder.gallery(realPath = sharedFile("DCIM/b.jpg").absolutePath)
@@ -119,16 +119,16 @@ class MediaSelectionRepositoryDeleteBlobsTest {
         assertFalse(blob.exists())
     }
 
-    // ---------------------------------------------------------------- T89
+    
 
-    /**
-     * T89 — removal hands the deletion to a worker. The gate canonicalizes paths, which is real IO,
-     * and `removeMedia` runs on the UI thread of the review screen.
-     *
-     * The contract is asserted as "not the calling thread" rather than "not yet called after
-     * return": the coroutine runs on the real IO dispatcher, so any check for "hasn't started yet"
-     * would be a race. If the call were still inline, the recorded thread would be this one.
-     */
+    
+
+
+
+
+
+
+
     @Test
     fun `removeMedia deletes blobs off the calling thread`() {
         val media = LocalMediaBuilder.gallery()
@@ -155,10 +155,10 @@ class MediaSelectionRepositoryDeleteBlobsTest {
             writeBytes(byteArrayOf(1, 2, 3))
         }
 
-    /**
-     * A path genuinely outside every app-private root. The precondition is asserted rather than
-     * assumed so these rows can never pass by pointing back inside the sandbox.
-     */
+    
+
+
+
     private fun sharedFile(relative: String): File {
         val file = File(Environment.getExternalStorageDirectory(), relative)
         file.parentFile?.mkdirs()

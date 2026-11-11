@@ -12,7 +12,7 @@ import com.difft.android.chat.R
 private const val MIC_ICON_SIZE_DP = 16
 private const val MIC_ICON_GAP_DP = 2
 
-/** "Tap to type, hold to talk" followed by a 16dp mic glyph in the hint color. */
+
 fun buildHoldToTalkHint(context: Context): CharSequence {
     val text = context.getString(R.string.chat_message_input_hint_hold_to_talk)
     val icon = ContextCompat.getDrawable(context, R.drawable.chat_ic_mic_24)?.mutate() ?: return text

@@ -9,11 +9,11 @@ import difft.android.messageserialization.model.MessageActivityNoticeData
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Shared entry point for activity notices (current type: COPY). All copy surfaces
- * (chat list / preview / derived content) build their (forWhat, authorIds, count)
- * and call dispatchCopyNotice — wraps proto + Job enqueue.
- */
+
+
+
+
+
 @Singleton
 class ActivityNoticeDispatcher @Inject constructor(
     private val factory: PushActivityNoticeSendJobFactory,
@@ -21,18 +21,15 @@ class ActivityNoticeDispatcher @Inject constructor(
     fun dispatchCopyNotice(
         sourceConversation: For,
         sourceAuthorIds: List<String>,
-        // The operator's own id, supplied by the caller (which already holds globalServices.myId).
-        // Passed in rather than read here so this @Singleton stays stateless and unit-testable
-        // without static-mocking the global accessor.
+        
+        
+        
         myId: String,
         messageCount: Int = 1,
         combinedForwardMode: CombinedForwardMode = CombinedForwardMode.UNKNOWN,
     ) {
         if (sourceAuthorIds.isEmpty() || messageCount <= 0) return
-        // PRD v2.0 §改动1 条件②: copying inside the user's own Saved (note-to-self) conversation has no
-        // other audience → never trace. This is NOT subsumed by the author gating: a message saved to
-        // Notes keeps its original (foreign) author in forwardContext, so original-author gating would
-        // otherwise fire here. Central guard mirrors the forward path's guard in sendForwardNotice.
+        
         if (sourceConversation.id == myId) {
             L.i { "[ActivityNotice] skip copy notice — Saved conversation (conv=${sourceConversation.id})" }
             return

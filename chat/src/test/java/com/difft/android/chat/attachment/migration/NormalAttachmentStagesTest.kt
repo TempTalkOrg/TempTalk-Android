@@ -20,15 +20,10 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
 
-/**
- * Stage 4's decisions, the one file primitive it adds — the whole-directory rename — and stage 5's
- * proof that a legacy message directory may be reclaimed.
- *
- * Everything here is answered from a row's own columns, one reference count, and the directories
- * themselves, so the parts that can destroy a user's only copy of a file are pinned against temp
- * directories rather than only on a device (the paged database loop around them needs the native
- * WCDB library, which the JVM does not have — same boundary as version 1's stages).
- */
+
+
+
+
 class NormalAttachmentStagesTest {
 
     @get:Rule
@@ -52,8 +47,8 @@ class NormalAttachmentStagesTest {
     private fun file(key: String, name: String, content: String): File =
         File(directory(key), name).apply { parentFile.mkdirs(); writeText(content) }
 
-    /** A row's claim on [key]'s directory. `expectedSize = 0` skips the own-copy size check — these
-     *  tests are about the directory-level counterpart proof, not the row's own verification. */
+    
+
     private fun rowCopy(key: String, fileName: String) =
         LegacyAttachmentFiles.RowCopy(directory(key), fileName, expectedSize = 0)
 
@@ -71,7 +66,7 @@ class NormalAttachmentStagesTest {
 
     private fun counts(vararg entries: Pair<String, Int>) = mapOf(*entries)
 
-    // region the whole-directory rename decision
+    
 
     @Test
     fun `a directory holding only this row's file is renamed wholesale`() {
@@ -95,9 +90,9 @@ class NormalAttachmentStagesTest {
 
     @Test
     fun `a directory contaminated by a forward copy's legacy file is copied, never renamed`() {
-        // The forward row that wrote `clip.mp4` here carries NO message id of its own (its file hangs
-        // off a Forward), so the reference count cannot see it — the file listing is what does.
-        // Renaming would carry that file off to an address its owner never looks at.
+        
+        
+        
         file("message-7", "photo.jpg", "bytes")
         file("message-7", "clip.mp4", "another row's only copy")
 
@@ -118,7 +113,7 @@ class NormalAttachmentStagesTest {
 
     @Test
     fun `a row nothing counts is copied, never renamed`() {
-        // A count that cannot account for this row is not a proof of sole ownership.
+        
         file("message-7", "photo.jpg", "bytes")
 
         val plan = planFor(row(), counts())
@@ -128,9 +123,9 @@ class NormalAttachmentStagesTest {
 
     @Test
     fun `a foreign file that merely shares the name prefix blocks the rename`() {
-        // "photo.jpg.mp4" is NOT a shape photo.jpg's own storage produces (.encrypt / .migrating /
-        // .encrypt.tmp) — it is another row's file whose user-chosen name happens to extend this
-        // one's. A bare prefix rule would rename it away to an address its owner never looks at.
+        
+        
+        
         file("message-7", "photo.jpg", "bytes")
         file("message-7", "photo.jpg.mp4", "another row's only copy")
 
@@ -152,30 +147,30 @@ class NormalAttachmentStagesTest {
         assertFalse(isSolelyOwnedLegacyDirectory(directory("message-7"), "photo.jpg", referencingRowCount = 1))
     }
 
-    // endregion
+    
 
-    // region the rest of the row decision
+    
 
     @Test
     fun `a send that never finished uploading is copied, never renamed out from under the resend`() {
-        // authorityId == 0 means the upload never landed, so a resend may still be reading the file
-        // at the legacy address. The directory would otherwise pass the sole-ownership proof — a
-        // count of 1 and nothing but this row's file — and be renamed away. Copying settles the row
-        // (so the stage can finish) while leaving the legacy file for anything still holding it;
-        // stage 5 reclaims it only once the copy is verified.
+        
+        
+        
+        
+        
         file("message-7", "photo.jpg", "bytes")
 
         assertEquals(false, (planFor(row(authorityId = 0L), counts("message-7" to 1)) as NormalRowPlan.Move).wholeDirectory)
         assertEquals(false, (planFor(row(authorityId = null), counts("message-7" to 1)) as NormalRowPlan.Move).wholeDirectory)
-        // A row whose upload DID land has nothing reading the legacy address: same directory, rename.
+        
         assertTrue((planFor(row(authorityId = 42L), counts("message-7" to 1)) as NormalRowPlan.Move).wholeDirectory)
     }
 
     @Test
     fun `a dead never-uploaded row with no staged file settles instead of holding the stage forever`() {
-        // No file at the legacy address and none at the target: nothing to move either way. The plan
-        // is still Move, materialize reports NO_SOURCE, and the row settles — a row that can never
-        // settle on its own would keep the stage, and with it the version stamp, open forever.
+        
+        
+        
         val plan = planFor(row(authorityId = 0L), counts("message-7" to 1))
 
         assertTrue(plan is NormalRowPlan.Move)
@@ -193,8 +188,8 @@ class NormalAttachmentStagesTest {
 
     @Test
     fun `a never-uploaded row already at its own address is settled, with nothing left to copy`() {
-        // The address check comes first on purpose: a row whose file is already where it belongs has
-        // nothing left to bring across, whatever its upload state.
+        
+        
         file("local-1", "photo.jpg", "bytes")
 
         assertTrue(planFor(row(authorityId = 0L), counts()) is NormalRowPlan.AlreadyMigrated)
@@ -214,9 +209,9 @@ class NormalAttachmentStagesTest {
         assertEquals(NormalRowPlan.Skip, planFor(row(localId = "message-7"), counts("message-7" to 1)))
     }
 
-    // endregion
+    
 
-    // region the rename itself
+    
 
     @Test
     fun `the rename moves the whole directory and drops the validity cached for it`() {
@@ -236,8 +231,8 @@ class NormalAttachmentStagesTest {
         file("message-7", "photo.jpg", "bytes")
         assertTrue(renameDirectory(directory("message-7"), directory("local-1")))
 
-        // Exactly what the next launch does: the legacy directory is gone, so there is nothing to
-        // rename, and the row is already at its address.
+        
+        
         assertFalse(renameDirectory(directory("message-7"), directory("local-1")))
         assertEquals(
             NormalRowPlan.AlreadyMigrated(File(directory("local-1"), "photo.jpg")),
@@ -248,8 +243,8 @@ class NormalAttachmentStagesTest {
 
     @Test
     fun `the rename refuses a target that already holds something`() {
-        // A download may have landed at the row's own address while the stage was walking towards it;
-        // a rename onto a live directory is not the atomic swap this stage relies on.
+        
+        
         file("message-7", "photo.jpg", "legacy bytes")
         file("local-1", "photo.jpg", "freshly downloaded")
 
@@ -266,14 +261,14 @@ class NormalAttachmentStagesTest {
         assertFalse(directory("local-1").exists())
     }
 
-    // endregion
+    
 
-    // region stage 5 — reclaiming a legacy message directory
+    
 
     @Test
     fun `a legacy directory whose every file is verified elsewhere is reclaimed`() {
-        // Exactly the shape stage 4's copy path leaves behind for a never-uploaded row: the bytes are
-        // at the row's own address AND still at the legacy one. Same name, same length — proven.
+        
+        
         file("message-7", "photo.jpg", "bytes")
         file("local-1", "photo.jpg", "bytes")
 
@@ -282,8 +277,8 @@ class NormalAttachmentStagesTest {
 
     @Test
     fun `a legacy file with no counterpart keeps the whole directory`() {
-        // The only copy of clip.mp4 is here. Deleting the directory for the sake of photo.jpg would
-        // take it with it, so nothing is deleted — the directory is simply kept for the next run.
+        
+        
         file("message-7", "photo.jpg", "bytes")
         file("message-7", "clip.mp4", "another row's only copy")
         file("local-1", "photo.jpg", "bytes")
@@ -301,8 +296,8 @@ class NormalAttachmentStagesTest {
 
     @Test
     fun `a directory no row accounts for is never swept`() {
-        // With no current address to verify against, "every file is elsewhere" would be vacuously
-        // true. An orphan is counted and left alone, never deleted on no evidence.
+        
+        
         file("message-7", "photo.jpg", "bytes")
 
         assertFalse(mayReclaimLegacyMessageDirectory(directory("message-7"), emptyList()))
@@ -310,8 +305,7 @@ class NormalAttachmentStagesTest {
 
     @Test
     fun `verification spans every referencing row, not just the first`() {
-        // Forwarded copies were historically written into their owner message's directory too, so a
-        // file here may be accounted for by a row of another family entirely.
+        
         file("message-7", "photo.jpg", "bytes")
         file("message-7", "clip.mp4", "forwarded bytes")
         file("local-1", "photo.jpg", "bytes")
@@ -333,5 +327,5 @@ class NormalAttachmentStagesTest {
         assertFalse(mayReclaimLegacyMessageDirectory(directory("message-7"), listOf(rowCopy("local-1", "photo.jpg"))))
     }
 
-    // endregion
+    
 }

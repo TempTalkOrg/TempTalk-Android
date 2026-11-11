@@ -15,10 +15,10 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.difft.android.chat.R
 
-/**
- * Edit-mode scrim laid over a circular avatar: 45% black + a white outline camera. The whole
- * circle is the "change avatar" hit area, so this draws only; the caller owns the click.
- */
+
+
+
+
 @Composable
 fun AvatarEditOverlay(
     modifier: Modifier = Modifier,

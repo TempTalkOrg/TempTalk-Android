@@ -39,9 +39,9 @@ class ImageEditorHudV2 @JvmOverloads constructor(
     private var undoAvailability: Boolean = false
     private var isAvatarEdit: Boolean = false
 
-    // Lazy injection: this class is XML-inflated (not @AndroidEntryPoint). Resolves to the
-    // Application's UserManager via Hilt's EntryPointAccessors, which unwraps any
-    // ContextThemeWrapper / FragmentContextWrapper chain.
+    
+    
+    
     private val userManager: UserManager by lazy {
         context.globalHiltServices().userManager
     }
@@ -55,7 +55,6 @@ class ImageEditorHudV2 @JvmOverloads constructor(
     private val cancelButton: View = findViewById(R.id.image_editor_hud_cancel_button)
     private val drawButton: View = findViewById(R.id.image_editor_hud_draw_button)
     private val textButton: View = findViewById(R.id.image_editor_hud_text_button)
-//    private val stickerButton: View = findViewById(R.id.image_editor_hud_sticker_button)
     private val blurButton: View = findViewById(R.id.image_editor_hud_blur_button)
     private val doneButton: View = findViewById(R.id.image_editor_hud_done_button)
     private val drawSeekBar: AppCompatSeekBar = findViewById(R.id.image_editor_hud_draw_color_bar)
@@ -109,7 +108,6 @@ class ImageEditorHudV2 @JvmOverloads constructor(
         drawButton.setOnClickListener { setMode(Mode.DRAW) }
         blurButton.setOnClickListener { setMode(Mode.BLUR) }
         textButton.setOnClickListener { setMode(Mode.TEXT) }
-//    stickerButton.setOnClickListener { setMode(Mode.INSERT_STICKER) }
         brushToggle.setOnClickListener {
             if (currentMode == Mode.DRAW) {
                 setMode(Mode.HIGHLIGHT)
@@ -191,9 +189,7 @@ class ImageEditorHudV2 @JvmOverloads constructor(
         widthSeekBar.thumb = HSVColorSlider.createThumbDrawable(Color.WHITE)
         widthSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                // Hot-write throttling (issue #725 §10.2): `onProgressChanged` fires up to
-                // 100 times/sec during a drag. Keep this path UI-only — update the in-view
-                // brush preview thickness. Persistence happens once in `onStopTrackingTouch`.
+                
                 listener?.onBrushWidthChange()
                 brushPreview.setThickness(getActiveBrushWidth())
             }
@@ -201,8 +197,6 @@ class ImageEditorHudV2 @JvmOverloads constructor(
             override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
 
             override fun onStopTrackingTouch(seekBar: SeekBar?) {
-                // Single persist per drag — replaces the ~100 writes/drag the legacy
-                // implementation produced inside `onProgressChanged`.
                 val progress = seekBar?.progress ?: return
                 when (currentMode) {
                     Mode.DRAW -> userManager.update { imageEditorMarkerPercentage = progress }
@@ -316,7 +310,6 @@ class ImageEditorHudV2 @JvmOverloads constructor(
     private fun setMode(mode: Mode, notify: Boolean) {
         val previousMode: Mode = currentMode
         currentMode = mode
-        // updateVisibilities
         clearSelection()
         modeAnimatorSet?.cancel()
         undoAnimatorSet?.cancel()
@@ -524,8 +517,7 @@ class ImageEditorHudV2 @JvmOverloads constructor(
 
         private const val ANIMATION_DURATION = 250L
 
-        // Inlined from deleted ImageEditorValues — pure constants, no persistence.
-        // Values preserved exactly (see design §3.4).
+        
         private val MARKER_WIDTH_RANGE: Pair<Float, Float> = 0.01f to 0.05f
         private val HIGHLIGHTER_WIDTH_RANGE: Pair<Float, Float> = 0.03f to 0.08f
         private val BLUR_WIDTH_RANGE: Pair<Float, Float> = 0.052f to 0.092f

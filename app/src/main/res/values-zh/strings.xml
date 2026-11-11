@@ -1,5 +1,5 @@
 <resources>
-    <!--    设置-->
+    
     <string name="settings_screen_lock">屏幕锁</string>
     <string name="settings_screen_lock_timeout">屏幕锁超时</string>
     <string name="settings_screen_lock_timeout_instant">立即</string>
@@ -68,7 +68,12 @@
     <string name="search_view_more">查看更多</string>
     <string name="search_more_contacts">更多联系人</string>
     <string name="search_more_groups">更多群组</string>
-    <string name="search_more_messages">更多消息</string>
+    <string name="search_section_messages">聊天记录</string>
+    <plurals name="search_view_all_count">
+        <item quantity="other">查看全部 %d 条</item>
+    </plurals>
+    <string name="search_chats_hint">搜索联系人、群组和聊天记录</string>
+    <string name="search_no_results_for">没有找到“%s”相关结果</string>
     <string name="search_result_inclued">包含: %s</string>
     <string name="language_restart_required">重启后生效</string>
     <string name="language_restart_tips">语言设置将在应用重启后生效。</string>
@@ -92,8 +97,18 @@
     <string name="me_text_size">字体大小</string>
     <string name="me_text_size_default">默认</string>
     <string name="me_text_size_lage">大</string>
+    <string name="me_display_size">显示大小</string>
+    <string name="me_display_size_small">小</string>
+    <string name="me_display_size_standard">标准</string>
+    <string name="me_display_size_large">大</string>
+    <string name="me_navigation_placement">导航位置</string>
+    <string name="me_navigation_placement_default">底部</string>
+    <string name="me_navigation_placement_right">右侧</string>
+    <string name="me_hide_status_bar">隐藏状态栏</string>
+    <string name="me_screen_layout">屏幕与布局</string>
+    <string name="me_screen_layout_note">显示大小影响所有内容（文字、间距、图标、头像），字体大小只影响文字，两者可叠加。</string>
 
-    <!-- 数据库恢复 -->
+    
     <string name="db_recovery_in_progress">正在恢复数据库</string>
     <string name="db_recovery_please_wait">请稍候，这可能需要一点时间…</string>
     <string name="db_recovery_resync_message">数据库已重置，正在重新同步你的账号；本地聊天记录无法恢复。</string>
@@ -105,7 +120,7 @@
     <string name="dual_pane_divider_drag_hint">拖动以调整面板宽度</string>
     <string name="dual_pane_list_expand_hint">展开会话列表</string>
 
-    <!-- 自建代理 -->
+    
     <string name="proxy_settings_title">使用代理</string>
     <string name="proxy_use_proxy">使用代理</string>
     <string name="proxy_use_proxy_desc">通过你信任的代理连接 Quicall，向 Quicall 隐藏真实 IP，并在网络受限时改善连接。通话 IP 保护需单独开启。</string>
@@ -136,9 +151,6 @@
     <string name="proxy_passphrase_confirm">确定</string>
     <string name="proxy_passphrase_cancel">取消</string>
 
-    <!-- Data-migration backup (A3) — notification surface -->
-
-    <!-- Data-migration P2P transfer (I5) — 前台服务通知文案 -->
     <string name="migration_p2p_notification_title_running">正在迁移你的数据…</string>
     <string name="migration_p2p_notification_text_running">请保持 App 打开，直到迁移完成。</string>
     <string name="migration_p2p_notification_action_cancel">取消</string>
@@ -150,16 +162,6 @@
     <string name="migration_p2p_notification_text_unconfirmed">请在新设备上确认迁移是否已完成。</string>
     <string name="migration_p2p_notification_text_pairing_timeout">配对超时</string>
 
-    <!-- Data-migration backup (A3) — Me 入口 + 用户界面文案 -->
-
-    <!-- 数据迁移 v2 (A5) — 登录时导入 UI(选文件 / 口令 / 进度 / 错误)-->
-    <!-- 返回到导入方式选择弹窗(而非登录)— 退出子页会重新弹出选择器 -->
-    <!-- PRD §8.9 错误文案,按 MigrationError code 映射 -->
-    <!-- I4 — P2P 接收(新设备显示二维码) -->
-
-    <!-- P2P 发送（旧设备）— 主页入口 + 发送页文案 -->
-
-    <!-- 统一落地页：两个选项简介 + 已有备份分区标题 -->
     <string name="migration_p2p_send_scan_button">扫描新设备的二维码</string>
     <string name="migration_p2p_send_scanning">正在打开扫描器…</string>
     <string name="migration_p2p_send_scan_not_p2p">这不是迁移二维码。</string>
@@ -181,7 +183,7 @@
     <string name="proxy_protect_call_desc">开启后，通话也会通过代理连接，向 Quicall 隐藏真实 IP，可能降低通话质量。</string>
     <string name="proxy_protect_call_enable_proxy_first">请先开启“使用代理”。</string>
 
-    <!-- Linked Devices -->
+    
     <string name="linked_devices_title">已绑定的设备</string>
     <string name="linked_devices_link_new_title">绑定新设备</string>
     <string name="linked_devices_link_new_subtitle">扫描二维码</string>
@@ -195,7 +197,6 @@
     <string name="linked_devices_unlink_failed">解绑设备失败。</string>
     <string name="linked_devices_list_update_failed">设备列表更新失败。</string>
 
-    <!-- 同设备迁移(旧包 → 同一台手机上的新包) -->
     <string name="migration_p2p_receive_relaunch_legacy">重新打开旧版 App</string>
     <string name="migration_p2p_receive_legacy_open_failed">无法打开旧版 App，请确认已安装官方版本后重试。</string>
     <string name="migration_p2p_receive_scan_not_export_code">这不是电脑的导出二维码。请在电脑上选择「迁移到手机」，再扫描它显示的二维码。</string>
@@ -214,14 +215,12 @@
     <string name="link_login_pin_expired">二维码已刷新，请重新扫描。</string>
     <string name="link_login_failed">登录电脑失败，请重试。</string>
 
-    <!-- 旧包：迁移到新版 App 指引 -->
     <string name="legacy_migration_title">迁移到「%1$s」</string>
     <string name="legacy_migration_why">受 Google 对 Android 应用分发规则的调整影响，Quicall 后续将通过独立的新版 App 提供更新。我们正在积极应对，并尽量减少此次调整带来的影响。\n\n迁移到「%1$s」后，可以继续使用原账号，好友和群组也会保留。如需保留聊天记录，请在卸载当前 App 前完成迁移。迁移完成后，当前 App 将退出登录。</string>
     <string name="legacy_migration_download">前往获取「%1$s」</string>
     <string name="legacy_migration_later">稍后</string>
     <string name="legacy_migration_open_failed">无法打开，请重试。</string>
 
-    <!-- 同机免登录迁移 -->
     <string name="migration_app_name_new">Quicall（新版）</string>
     <string name="migration_app_name_legacy">Quicall（旧版）</string>
     <string name="migration_handoff_entry_title">从「%1$s」迁移？</string>
@@ -241,7 +240,7 @@
     <string name="migration_r1_from_phone">从另一部手机迁移</string>
     <string name="migration_r1_from_desktop">从电脑迁移</string>
     <string name="migration_r1_skip">不迁移并继续</string>
-    <!-- R2 body: the instruction and both network lines as one paragraph (Chinese sentences need no joiner). -->
+    
     <string name="migration_r2_qr_copy">在旧手机上打开 Quicall，扫描上方二维码。请将两台设备连接到同一 Wi-Fi，或让一台连接另一台的热点，并关闭 VPN；建议使用家庭 Wi-Fi 或手机热点。</string>
     <string name="migration_r2_network">请将两台设备连接到同一 Wi-Fi，或让一台连接另一台的热点，并关闭 VPN；建议使用家庭 Wi-Fi 或手机热点。</string>
     <string name="migration_r2_qr_refreshed">二维码已过期，正在刷新。</string>

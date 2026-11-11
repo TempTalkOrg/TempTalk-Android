@@ -20,10 +20,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/**
- * Unit tests for [GifRepository] — the dual-cursor pagination + filter algorithm
- * (ported from difft-android GifViewModel). Covers Test Inventory T1, T2, T3.
- */
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class GifRepositoryTest {
 
@@ -49,9 +46,9 @@ class GifRepositoryTest {
     fun `T1 trending with pagination count plus offset less than total has more`() = runTest {
         val list = listOf(
             GifData(id = "1", original = detail("o1"), preview = detail("p1"), title = "t"),
-            // filtered out: missing original gif
+            
             GifData(id = "2", original = detail(null), preview = detail("p2"), title = "t"),
-            // filtered out: missing preview gif
+            
             GifData(id = "3", original = detail("o3"), preview = detail(null), title = "t")
         )
         coEvery { httpService.getGifsTrending(any(), any(), any(), any(), any()) } returns

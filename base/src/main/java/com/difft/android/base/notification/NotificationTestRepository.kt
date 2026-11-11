@@ -13,10 +13,10 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
-/**
- * Joins the readable notification state with the stored notification test results (#1350). Every
- * read crosses process boundaries, so all of it runs on the IO dispatcher.
- */
+
+
+
+
 @Singleton
 class NotificationTestRepository @Inject constructor(
     private val readinessProvider: NotificationReadinessProvider,
@@ -24,7 +24,7 @@ class NotificationTestRepository @Inject constructor(
     private val clock: NotificationTestClock,
 ) {
 
-    /** The readiness model including the still-valid test results. */
+    
     suspend fun readReadiness(): NotificationReadiness = withContext(Dispatchers.IO) {
         val input = readinessProvider.readInput()
         NotificationReadinessEvaluator.evaluate(
@@ -32,20 +32,20 @@ class NotificationTestRepository @Inject constructor(
         )
     }
 
-    /** The fingerprint of the settings [kind] depends on, read now. */
+    
     suspend fun fingerprint(kind: NotificationTestKind): String = withContext(Dispatchers.IO) {
         NotificationTestFingerprint.of(kind, readinessProvider.readInput(), Build.FINGERPRINT.orEmpty())
     }
 
-    /** Records that the user opened [channelId]'s system settings page; see [ReadinessInput.seenCategories]. */
+    
     suspend fun markCategorySeen(channelId: String) = withContext(Dispatchers.IO) {
         store.markCategorySeen(channelId)
     }
 
-    /**
-     * Stores [outcome] for [kind] under [fingerprint], the settings the test notification was posted
-     * with, so a setting changed before the answer invalidates the result.
-     */
+    
+
+
+
     suspend fun record(
         kind: NotificationTestKind,
         outcome: NotificationTestOutcome,

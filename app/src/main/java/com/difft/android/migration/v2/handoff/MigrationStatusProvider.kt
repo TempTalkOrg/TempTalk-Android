@@ -20,27 +20,27 @@ import com.difft.android.migration.v2.transfer.TransferState
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 
-/**
- * The exported read-only surface of the same-device migration: one `call()` method answering "what
- * account material do you hold" and "did handoff <id> complete". [query], [insert], [update],
- * [delete] and [getType] are inert and no URI is ever served.
- *
- * It is `exported="true"` with no permission, because a `signature`-level permission cannot work
- * across two families signed with different certificates. [PeerApps.trustedCaller] is the whole
- * security boundary — calling uid to exactly one package to the pinned-certificate allow-list — and
- * fails closed on every ambiguity, including a shared-uid caller; a refused call returns `null`, so
- * the caller learns nothing about why.
- *
- * Providers are installed before `Application.onCreate`, so a call can land while the user snapshot
- * is still null. Replies warm the snapshot first and a timeout answers [HandoffState.NONE], which
- * leaves the peer on a normal login rather than promising a migration this install cannot deliver.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 class MigrationStatusProvider : ContentProvider() {
 
-    /**
-     * A `ContentProvider` cannot be `@AndroidEntryPoint` (it is created before the Application), so
-     * it resolves its dependencies through the codebase's nested-`@EntryPoint` pattern.
-     */
+    
+
+
+
     @EntryPoint
     @InstallIn(SingletonComponent::class)
     interface StatusEntryPoint {
@@ -105,7 +105,7 @@ class MigrationStatusProvider : ContentProvider() {
         }
     }
 
-    /** Stop a receiver that is only listening for the peer; anything past pairing keeps running. */
+    
     private fun cancelIdleReceiver(ctx: Context): Bundle {
         val state = MigrationTransferStateHolder.state.value
         val idle = state is TransferState.WaitingForPeer || state == TransferState.Starting
@@ -117,8 +117,8 @@ class MigrationStatusProvider : ContentProvider() {
     private fun handoffReply(entryPoint: StatusEntryPoint, handoffId: String): Bundle {
         val warm = warmUp(entryPoint)
         val adopted = entryPoint.storageBoundUserManager().getUserData()?.migrationHandoffCompletedId.orEmpty()
-        // Fail-closed: a blank id can never match, and a cold snapshot answers UNKNOWN rather than
-        // telling the asker it may wipe on the strength of an unread store.
+        
+        
         val result = if (warm && handoffId.isNotBlank() && handoffId == adopted) {
             HandoffResult.COMPLETED
         } else {
@@ -131,10 +131,10 @@ class MigrationStatusProvider : ContentProvider() {
         }
     }
 
-    /**
-     * Ensure the user snapshot is readable before answering; idempotent and cheap when already warm.
-     * Returning false means the reply must be fail-closed.
-     */
+    
+
+
+
     private fun warmUp(entryPoint: StatusEntryPoint): Boolean {
         val userManager = entryPoint.storageBoundUserManager()
         if (userManager.getUserData() != null) return true
@@ -152,7 +152,7 @@ class MigrationStatusProvider : ContentProvider() {
     }
 
     private companion object {
-        /** Same bound the startup chain gives the identical warm-up call. */
+        
         const val WARM_UP_TIMEOUT_MS = 2_000L
     }
 }

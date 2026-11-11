@@ -47,11 +47,11 @@ class MessageSendRepositoryTest {
     }
     private lateinit var repository: MessageSendRepository
 
-    /**
-     * Hand-written recording fake rather than a mock (mirrors NoOpRefresher in
-     * ProxyConfigProviderTunnelHostsTest). Records the source tags so the auth-failure hook can be
-     * asserted without giving every other test in this file a mock to satisfy.
-     */
+    
+
+
+
+
     private class RecordingSink : AuthFailureSink {
         val sources = mutableListOf<String>()
         override fun onAuthRejected(source: String) {
@@ -76,7 +76,7 @@ class MessageSendRepositoryTest {
         clearMocks(messageApiService, httpClient)
     }
 
-    // --- auth-failure hook: a rejected send reaches SessionAuthGuard ---
+    
 
     @Test
     fun `401 reports the auth failure exactly once`() = runTest {
@@ -118,7 +118,7 @@ class MessageSendRepositoryTest {
         assertTrue(authFailureSink.sources.isEmpty())
     }
 
-    // --- Helper to build error responses with custom headers ---
+    
 
     private fun errorResponseWithHeaders(
         code: Int,
@@ -137,7 +137,7 @@ class MessageSendRepositoryTest {
         return Response.error(responseBody, rawResponse)
     }
 
-    // --- 200 success with valid body ---
+    
 
     @Test
     fun `200 with valid body returns NewSendMessageResponse`() = runTest {
@@ -151,7 +151,7 @@ class MessageSendRepositoryTest {
         assertIs<NewSendMessageResponse>(result)
     }
 
-    // --- 204 No Content returns default NewSendMessageResponse ---
+    
 
     @Test
     fun `204 returns default NewSendMessageResponse without parsing body`() = runTest {
@@ -168,7 +168,7 @@ class MessageSendRepositoryTest {
         assertIs<NewSendMessageResponse>(result)
     }
 
-    // --- 200 with null body -> MalformedResponseException ---
+    
 
     @Test
     fun `200 with null body throws MalformedResponseException`() = runTest {
@@ -179,7 +179,7 @@ class MessageSendRepositoryTest {
         }
     }
 
-    // --- 401 -> AuthorizationFailedException ---
+    
 
     @Test
     fun `401 throws AuthorizationFailedException`() = runTest {
@@ -193,7 +193,7 @@ class MessageSendRepositoryTest {
         assertEquals(401, exception.code)
     }
 
-    // --- 403 -> AuthorizationFailedException ---
+    
 
     @Test
     fun `403 throws AuthorizationFailedException`() = runTest {
@@ -207,7 +207,7 @@ class MessageSendRepositoryTest {
         assertEquals(403, exception.code)
     }
 
-    // --- 404 with status 10105 -> AccountOfflineException ---
+    
 
     @Test
     fun `404 with status 10105 throws AccountOfflineException`() = runTest {
@@ -222,7 +222,7 @@ class MessageSendRepositoryTest {
         assertEquals(10105, exception.status)
     }
 
-    // --- 404 without special status -> UnregisteredUserException ---
+    
 
     @Test
     fun `404 without special status throws UnregisteredUserException`() = runTest {
@@ -237,7 +237,7 @@ class MessageSendRepositoryTest {
         assertEquals("user-123", exception.e164Number)
     }
 
-    // --- 409 with MismatchedDevices body -> MismatchedDevicesException ---
+    
 
     @Test
     fun `409 with valid MismatchedDevices body throws MismatchedDevicesException`() = runTest {
@@ -253,7 +253,7 @@ class MessageSendRepositoryTest {
         assertEquals(listOf(3), exception.mismatchedDevices.extraDevices)
     }
 
-    // --- 410 with StaleDevices body -> StaleDevicesException ---
+    
 
     @Test
     fun `410 with valid StaleDevices body throws StaleDevicesException`() = runTest {
@@ -268,7 +268,7 @@ class MessageSendRepositoryTest {
         assertEquals(listOf(1, 2), exception.staleDevices.staleDevices)
     }
 
-    // --- 413 with Retry-After header -> RateLimitException ---
+    
 
     @Test
     fun `413 with Retry-After header throws RateLimitException with retryAfter`() = runTest {
@@ -282,7 +282,7 @@ class MessageSendRepositoryTest {
         assertEquals(Optional.of(60_000L), exception.retryAfterMilliseconds)
     }
 
-    // --- 429 -> RateLimitException ---
+    
 
     @Test
     fun `429 throws RateLimitException`() = runTest {
@@ -295,7 +295,7 @@ class MessageSendRepositoryTest {
         assertEquals(Optional.empty<Long>(), exception.retryAfterMilliseconds)
     }
 
-    // --- 508 -> ServerRejectedException ---
+    
 
     @Test
     fun `508 throws ServerRejectedException`() = runTest {
@@ -308,7 +308,7 @@ class MessageSendRepositoryTest {
         }
     }
 
-    // --- IOException -> PushNetworkException ---
+    
 
     @Test
     fun `IOException throws PushNetworkException`() = runTest {
@@ -320,7 +320,7 @@ class MessageSendRepositoryTest {
         assertIs<IOException>(exception.cause)
     }
 
-    // --- Routing: group -> sendGroupMessage, 1v1 -> sendMessage ---
+    
 
     @Test
     fun `group recipient routes to sendGroupMessage`() = runTest {
@@ -348,7 +348,7 @@ class MessageSendRepositoryTest {
         coVerify(exactly = 0) { messageApiService.sendGroupMessage(any(), any()) }
     }
 
-    // --- 200 with malformed body -> MalformedResponseException ---
+    
 
     @Test
     fun `200 with malformed JSON body throws MalformedResponseException`() = runTest {
@@ -361,7 +361,7 @@ class MessageSendRepositoryTest {
         }
     }
 
-    // --- Unknown error code -> NonSuccessfulResponseCodeException ---
+    
 
     @Test
     fun `500 throws NonSuccessfulResponseCodeException`() = runTest {

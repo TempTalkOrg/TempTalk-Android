@@ -7,19 +7,18 @@
     android:background="@color/bg1"
     tools:ignore="Overdraw">
 
-    <!-- Full-screen CameraX preview; scaleType=FILL_CENTER set in code (no distortion). -->
+    
     <androidx.camera.view.PreviewView
         android:id="@+id/previewView"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
-    <!-- Dimmed mask + scan rect + corner brackets (replaces BGA's built-in qrcv_* visual). -->
+    
     <com.difft.android.chat.invite.ScanFrameOverlayView
         android:id="@+id/scanOverlay"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
-    <!-- Header 叠加在上层 -->
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/header"
         android:layout_width="match_parent"
@@ -53,7 +52,7 @@
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 
-    <!-- Guidance card from the caller and the declined-code banner (ScanGuidance); empty on the plain home scanner. -->
+    
     <androidx.compose.ui.platform.ComposeView
         android:id="@+id/compose_guidance"
         android:layout_width="match_parent"

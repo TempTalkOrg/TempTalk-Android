@@ -29,16 +29,16 @@ import androidx.compose.ui.unit.dp
 import com.difft.android.base.R
 import com.difft.android.base.ui.theme.DifftTheme
 
-/**
- * Settings cell (Figma `dropdown_plaintext_cell`): 52dp minimum, 16h/10v padding, one line of
- * label, an optional trailing value, and — when [onClick] is non-null — a 16dp chevron.
- *
- * `minHeight` rather than a fixed height, so a row whose label column wraps grows instead of
- * clipping.
- *
- * [enabled] switches the label/value/chevron to `textDisabled` and gates the click; it does not
- * apply an alpha veil (unreadable on the dark palette).
- */
+
+
+
+
+
+
+
+
+
+
 @Composable
 fun DifftSettingsRow(
     label: String,
@@ -62,8 +62,8 @@ fun DifftSettingsRow(
     minHeight = minHeight,
     contentPadding = contentPadding,
 ) {
-    // Label side takes the free space; the value is measured first (unweighted) and hugs the end,
-    // so an unusually long value truncates the label rather than the reverse.
+    
+    
     Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
         Text(
             text = label,
@@ -91,15 +91,15 @@ fun DifftSettingsRow(
     }
 }
 
-/**
- * Slot form for rows whose middle is composed (multi-line label column, coloured status text).
- * [content] must claim the free space itself with `Modifier.weight(1f)`.
- *
- * [enabled] concerns the click only; slot content handles its own disabled look.
- *
- * [trailing] and the chevron are mutually exclusive: a custom trailing slot already occupies that
- * edge. Pass `showChevron = false` for a row that is clickable but carries no chevron.
- */
+
+
+
+
+
+
+
+
+
 @Composable
 fun DifftSettingsRow(
     modifier: Modifier = Modifier,
@@ -120,8 +120,8 @@ fun DifftSettingsRow(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            // Fill before the click so the ripple draws above it; clickable before padding so the
-            // padded area is tappable too (same reasoning as DifftSwitchRow).
+            
+            
             .background(DifftSettingsDefaults.RowSurfaceColor)
             .then(interaction)
             .defaultMinSize(minHeight = minHeight)
@@ -149,8 +149,8 @@ fun DifftSettingsRow(
 
 @Composable
 private fun RowChevron(enabled: Boolean) {
-    // The drawable is autoMirrored, so in RTL the Row places it at the leading edge and the
-    // painter flips the glyph to point left; no manual mirroring here.
+    
+    
     Icon(
         painter = painterResource(R.drawable.base_ic_chevron_right),
         contentDescription = null,

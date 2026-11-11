@@ -29,13 +29,13 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowNetwork
 
-/**
- * How [WebSocketHealthMonitor] feeds the shared host state (#1396): a connect lifts the mark on its
- * host, a heartbeat loss or connect timeout marks it, a proxy-change cancel does not, and a network
- * callback asks the coordinator for a throttled probe.
- *
- * Drives the production monitor on the real `appScope`, so assertions use [verify] with a timeout.
- */
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [31])
 class WebSocketHealthMonitorHostTest {
@@ -56,7 +56,7 @@ class WebSocketHealthMonitorHostTest {
         val userManager = mockk<UserManager>(relaxed = true)
         every { userManager.getUserData() } returns userData
 
-        // The reconnect path reads the login state through the global entry point.
+        
         mockkStatic("com.difft.android.base.utils.ExtensionsKt")
         val globalServices = mockk<GlobalHiltEntryPoint>(relaxed = true)
         every { com.difft.android.base.utils.globalServices } returns globalServices
@@ -115,7 +115,7 @@ class WebSocketHealthMonitorHostTest {
         verify(timeout = TIMEOUT_MS) { urlManager.switchToNextChatWebsocketHost() }
     }
 
-    // T15 — a cancel the app made for a proxy toggle is no host failure.
+    
     @Test
     fun `a proxy change cancel keeps the host`() {
         every { connection.localDisconnectReason } returns LocalDisconnectReason.PROXY_CHANGE
@@ -123,7 +123,7 @@ class WebSocketHealthMonitorHostTest {
 
         monitor.monitor(connection)
 
-        // Negative assertion: give the monitor time to act on the state before checking it did not.
+        
         Thread.sleep(SETTLE_MS)
         verify(exactly = 0) { urlManager.switchToNextChatWebsocketHost() }
         verify(exactly = 0) { coordinator.onWsFailure() }

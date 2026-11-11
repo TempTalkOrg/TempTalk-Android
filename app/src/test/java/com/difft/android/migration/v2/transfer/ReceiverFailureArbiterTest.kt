@@ -6,11 +6,11 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/**
- * A receive that stops short is reported the way iOS reports it: a sender that said it left is the
- * source going away, a link that merely dropped is a connection problem — and because the sender's
- * cancel notice follows its hang-up on the wire, the drop must wait a moment for that notice.
- */
+
+
+
+
+
 class ReceiverFailureArbiterTest {
 
     private val verdicts = mutableListOf<String>()
@@ -32,7 +32,7 @@ class ReceiverFailureArbiterTest {
         val arbiter = ReceiverFailureArbiter(backgroundScope, verdicts::add, cancelGraceMs = 1_500)
 
         arbiter.onFailure(ReceiverFailureArbiter.DROPPED_LINK)
-        // The import's verdict for the same drop arrives while the first is pending: one report, not two.
+        
         arbiter.onFailure(ReceiverFailureArbiter.DROPPED_LINK)
         advanceTimeBy(1_000)
         assertEquals(emptyList<String>(), verdicts)

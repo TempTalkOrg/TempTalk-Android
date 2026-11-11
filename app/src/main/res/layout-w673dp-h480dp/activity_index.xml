@@ -1,14 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-    Dual-pane layout (width >= 673dp AND height >= 480dp).
-    673dp was the pane-budget feasibility floor when a 72dp navigation rail sat beside the
-    panes (72 + 1 + 280 + 320, values/dimens.xml); the home tabs now live in the floating
-    capsule over the list pane, so the gate keeps its historical value (the 600-672dp band
-    is a separate decision). Unfolded book foldables (690-840dp) qualify; h480dp keeps
-    folded/phone-landscape windows out (e.g. Z TriFold folded landscape ~955dp x ~409dp).
-    Pane widths are @dimen references so values-w900dp/ can restore the tablet budget
-    (list 360 / detail_min 360) on genuinely large windows.
--->
+
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
@@ -16,13 +7,7 @@
     android:layout_height="match_parent"
     tools:ignore="InconsistentLayout">
 
-    <!--
-        List pane: initial width from @dimen/dual_pane_list_default_width (280dp compact
-        band, 360dp in the w900dp tablet band). Resized at runtime by
-        IndexActivity.applyListPaneWidth() based on user drag (DualPaneRatioUtil ratio),
-        large-font 50/50 split, or the dimen default. The tag records the dimens band this
-        tree was inflated with (DualPaneReconciler compares it against the current config).
-    -->
+    
     <FrameLayout
         android:id="@+id/list_pane"
         android:layout_width="@dimen/dual_pane_list_default_width"
@@ -32,14 +17,13 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent">
 
-        <!-- Pager plus the floating home tab capsule; frozen as one block at the expanded
-             width while the list pane collapses (IndexActivity.animateListPaneWidth). -->
+        
         <FrameLayout
             android:id="@+id/list_content"
             android:layout_width="match_parent"
             android:layout_height="match_parent">
 
-            <!-- Distinct id — see layout/activity_index.xml. -->
+            
             <androidx.viewpager2.widget.ViewPager2
                 android:id="@+id/index_viewpager"
                 android:layout_width="match_parent"
@@ -47,9 +31,7 @@
                 android:nestedScrollingEnabled="false"
                 android:overScrollMode="never" />
 
-            <!-- Floating home tab capsule + search circle over the list pane's bottom edge. The
-                 list pane runs under the navigation bar; IndexActivity keeps the 28dp gap (iOS),
-                 raised above a 3-button bar. -->
+            
             <FrameLayout
                 android:id="@+id/home_tab_bar"
                 android:layout_width="match_parent"
@@ -67,10 +49,7 @@
             </FrameLayout>
         </FrameLayout>
 
-        <!-- List-pane layer over the tab content (search, folded groups), covering the tab
-             capsule too; the detail pane is untouched. ListPaneLayer shows it while the layer is up. The
-             same id as the one-pane layout lets a fold/unfold recreation restore the layer host
-             into either tree. Clickable so touches never reach the covered list. -->
+        
         <androidx.fragment.app.FragmentContainerView
             android:id="@+id/list_layer"
             android:layout_width="match_parent"
@@ -82,8 +61,7 @@
 
     </FrameLayout>
 
-    <!-- Detail pane: directly follows list_pane (no divider in between).
-         The draggable divider overlays the boundary as a separate floating view below. -->
+    
     <FrameLayout
         android:id="@+id/detail_pane"
         android:layout_width="0dp"
@@ -94,13 +72,13 @@
         app:layout_constraintStart_toEndOf="@id/list_pane"
         app:layout_constraintTop_toTopOf="parent">
 
-        <!-- Placeholder for detail content -->
+        
         <androidx.fragment.app.FragmentContainerView
             android:id="@+id/fragment_container_detail"
             android:layout_width="match_parent"
             android:layout_height="match_parent" />
 
-        <!-- Empty state shown when no conversation is selected -->
+        
         <androidx.appcompat.widget.AppCompatImageView
             android:id="@+id/empty_detail_view"
             android:layout_width="120dp"
@@ -112,27 +90,8 @@
 
     </FrameLayout>
 
-    <!--
-        1dp line between the list and detail panes. Overlays the detail
-        pane's first dp instead of taking layout space, so the pane widths are unchanged.
-    -->
-    <View
-        android:id="@+id/divider_list_detail"
-        android:layout_width="@dimen/dual_pane_divider_width"
-        android:layout_height="0dp"
-        android:background="@color/line"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintStart_toEndOf="@id/list_pane"
-        app:layout_constraintTop_toTopOf="parent" />
 
-    <!--
-        Draggable divider between list and detail panes — floating overlay.
-        24dp wide visually centered on list_pane's right edge via marginStart="-12dp",
-        so it overlaps 12dp into each pane without consuming layout space.
-        Touches only active in the vertical center band (DraggableDividerView).
-        Declared LAST in XML for highest z-order so touches reach it before the panes.
-        Drag is wired up in IndexActivity.setupDualPaneDivider().
-    -->
+    
     <com.difft.android.views.DraggableDividerView
         android:id="@+id/divider_pane"
         android:layout_width="24dp"
@@ -142,6 +101,6 @@
         app:layout_constraintStart_toEndOf="@id/list_pane"
         app:layout_constraintTop_toTopOf="parent" />
 
-    <!-- Dual-pane layout: list_pane (runtime-sized) + detail_pane (remaining space) + draggable overlay divider -->
+    
 
 </androidx.constraintlayout.widget.ConstraintLayout>

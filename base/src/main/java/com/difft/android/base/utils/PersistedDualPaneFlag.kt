@@ -6,15 +6,15 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-/**
- * One per-user persisted boolean of the dual-pane geometry (list pane collapsed, navigation
- * rail collapsed) with a StateFlow surface for the UI.
- *
- * Same store and same load timing as [DualPaneRatioUtil]: UserData is preloaded in memory, so
- * [loadAndEmit] is a synchronous snapshot lookup and the first layout pass already sees the
- * persisted value (no expanded-then-collapse flash). All dual-pane geometry flags must live in
- * this one store — they are halves of a single pane preference.
- */
+
+
+
+
+
+
+
+
+
 class PersistedDualPaneFlag(
     private val tag: String,
     private val read: (UserData) -> Boolean,
@@ -26,7 +26,7 @@ class PersistedDualPaneFlag(
     val value: Boolean
         get() = _state.value
 
-    /** Load the persisted value from UserData and emit. Call once during Activity onCreate. */
+    
     fun loadAndEmit() {
         _state.value = try {
             globalServices.userManager.getUserData()?.let(read) ?: false
@@ -36,7 +36,7 @@ class PersistedDualPaneFlag(
         }
     }
 
-    /** Persist and emit; a no-op when the value is unchanged. */
+    
     fun set(value: Boolean) {
         if (_state.value == value) return
         try {

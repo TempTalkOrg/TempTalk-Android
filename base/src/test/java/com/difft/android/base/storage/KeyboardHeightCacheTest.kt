@@ -27,15 +27,11 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import java.io.IOException
 
-/**
- * [KeyboardHeightCache.get] runs on the main thread inside click handlers, so its contract is:
- * memory only, never a disk wait (Crashlytics ANR 4ef85018). Disk arrives via [KeyboardHeightCache.seed]
- * or a one-shot [KeyboardHeightCache.warm].
- *
- * `appScope` is replaced by an unconfined test scope so launched work runs inline and every assertion
- * is deterministic; a store that never answers would hang a blocking read, which the timeout rule
- * turns into a failure.
- */
+
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 class KeyboardHeightCacheTest {
@@ -89,7 +85,7 @@ class KeyboardHeightCacheTest {
         return context.createConfigurationContext(config)
     }
 
-    /** The ANR shape: the store never answers. get() returns at once and the value arrives later. */
+    
     @Test
     fun `get before the disk answers returns 0 without blocking, then picks up the loaded value`() {
         val store = RecordingPreferencesDataStore(initial = null)
@@ -114,7 +110,7 @@ class KeyboardHeightCacheTest {
         assertEquals("a warm cache must not touch the store", 1, store.reads.get())
     }
 
-    /** The production path: StoragePreloader hands over the snapshot it already read. */
+    
     @Test
     fun `seed fills the cache without a store read and makes warm a no-op`() {
         val store = RecordingPreferencesDataStore(persisted(portrait = PERSISTED, landscape = PERSISTED + 1))
@@ -128,7 +124,7 @@ class KeyboardHeightCacheTest {
         assertEquals("seed must not start a disk load", 0, store.reads.get())
     }
 
-    /** A click before the startup seed lands: warm-up already pending, seed still fills, one read total. */
+    
     @Test
     fun `seed after a pending warm-up fills the cache and keeps a single store read`() {
         val store = RecordingPreferencesDataStore(initial = null)
@@ -167,7 +163,7 @@ class KeyboardHeightCacheTest {
         assertEquals("an identical save must not re-write", 1, store.writeCount.get())
     }
 
-    /** A swallowed write failure must not be frozen in by the dedupe: the next identical save retries. */
+    
     @Test
     fun `a failed persist is retried by the next save of the same height`() {
         val store = RecordingPreferencesDataStore()
@@ -183,7 +179,7 @@ class KeyboardHeightCacheTest {
         assertEquals("once healed, the dedupe applies again", 1, store.writeCount.get())
     }
 
-    /** The retry marker is per orientation: a failed landscape write is not absorbed by a portrait save. */
+    
     @Test
     fun `a failed landscape persist is retried by landscape, not consumed by an unchanged portrait save`() {
         val store = RecordingPreferencesDataStore()
@@ -201,11 +197,11 @@ class KeyboardHeightCacheTest {
         assertEquals(PERSISTED, store.awaitWrite()[AppStateKeys.KEY_KEYBOARD_HEIGHT_LANDSCAPE])
     }
 
-    /**
-     * A height measured in this process must not be clobbered by a slower disk load. The store stays
-     * silent while the warm-up is pending, so the save's write also waits (like a real DataStore) and
-     * the disk value the warm-up finally delivers differs from the live one.
-     */
+    
+
+
+
+
     @Test
     fun `a live save wins over a warm-up that completes later`() {
         val store = RecordingPreferencesDataStore(initial = null)

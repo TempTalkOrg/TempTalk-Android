@@ -16,14 +16,14 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
-/**
- * T1-10: framework-assumption pin for [ComposeActivityMount] — the shared mount/unmount
- * mechanism [E2eeInfoSheet.show] and [ComposeDialogManager] both rely on. Verifies the
- * ComposeView is actually attached to
- * `android.R.id.content` (and detached again) and that ViewTree owners are installed so
- * the hosted Compose content can actually recompose. Also pins that a plain Activity host
- * is skipped.
- */
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class ComposeActivityMountTest {
@@ -51,7 +51,7 @@ class ComposeActivityMountTest {
 
     @Test
     fun `mount on a plain Activity host is a no-op and unmount stays safe`() {
-        // A plain Activity has no ViewTree owners, so mounting would crash on first attach.
+        
         val controller = Robolectric.buildActivity(Activity::class.java).setup()
         val activity = controller.get()
         val composeView = ComposeView(activity).apply {

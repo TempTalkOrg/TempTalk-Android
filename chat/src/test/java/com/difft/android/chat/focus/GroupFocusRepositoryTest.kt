@@ -18,7 +18,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
-/** Version gate, GET-only `featureEnabled`, coalesced GET, local expiry and write error mapping. */
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class GroupFocusRepositoryTest {
 
@@ -47,7 +47,7 @@ class GroupFocusRepositoryTest {
 
     private fun failed(status: Int) = BaseResponse<FocusResponse>(ver = 1, status = status, reason = "err", data = null)
 
-    // ---------------------------------------------------------------- version gate
+    
 
     @Test
     fun `a snapshot replaces the cache only when its version is greater`() = runTest {
@@ -60,7 +60,7 @@ class GroupFocusRepositoryTest {
         assertTrue(repo.state.value.focus.enabled)
         assertEquals(2, repo.state.value.focus.version)
 
-        repo.apply(snap(2, enabled = false), "USER") // local echo of the same version
+        repo.apply(snap(2, enabled = false), "USER") 
         assertTrue(repo.state.value.focus.enabled)
 
         repo.apply(snap(3, enabled = false), "EXPIRED")
@@ -82,7 +82,7 @@ class GroupFocusRepositoryTest {
         var me: String? = null
         val repo = GroupFocusRepository({ api }, store, backgroundScope, selfId = { me }, clock = { START + currentTime }).also { runCurrent() }
         repo.ensureLoaded()
-        assertEquals(9, repo.state.value.focus.version) // owner unknown: nothing to judge yet
+        assertEquals(9, repo.state.value.focus.version) 
 
         me = "me"
         coEvery { api.getFocus() } returns ok(true, snap(1))
@@ -90,10 +90,10 @@ class GroupFocusRepositoryTest {
         runCurrent()
 
         assertEquals("me", repo.state.value.ownerUid)
-        assertEquals(1, repo.state.value.focus.version) // the lower own version replaced the foreign one
+        assertEquals(1, repo.state.value.focus.version) 
     }
 
-    // ---------------------------------------------------------------- featureEnabled
+    
 
     @Test
     fun `featureEnabled comes only from a GET`() = runTest {
@@ -108,13 +108,13 @@ class GroupFocusRepositoryTest {
         assertTrue(repo.featureEnabled)
         assertTrue(repo.effective.value.active)
 
-        // A write response claiming the feature is off does not flip it.
+        
         coEvery { api.endFocus() } returns ok(feature = false, focus = snap(2, enabled = false))
         repo.end()
         assertTrue(repo.featureEnabled)
         assertFalse(repo.effective.value.active)
 
-        // A later GET does.
+        
         coEvery { api.getFocus() } returns ok(feature = false, focus = snap(2, enabled = false))
         repo.requestRefresh("test")
         runCurrent()
@@ -138,13 +138,13 @@ class GroupFocusRepositoryTest {
         assertTrue(repo.effective.value.active)
         assertEquals(setOf("A"), repo.effective.value.groupIds)
 
-        // An older notify must not roll the loaded state back.
+        
         repo.apply(snap(4, enabled = false), "USER")
         assertTrue(repo.effective.value.active)
         assertTrue(written.isEmpty())
     }
 
-    // ---------------------------------------------------------------- expiry
+    
 
     @Test
     fun `effective focus ends locally at until and a GET is requested`() = runTest {
@@ -162,7 +162,7 @@ class GroupFocusRepositoryTest {
         runCurrent()
         assertFalse(repo.effective.value.active)
         assertFalse(repo.effectiveNow().active)
-        // Raw snapshot is untouched: expiry needs no new version.
+        
         assertTrue(repo.state.value.focus.enabled)
         coVerify(atLeast = 2) { api.getFocus() }
     }
@@ -185,7 +185,7 @@ class GroupFocusRepositoryTest {
         assertFalse(repo.effective.value.active)
     }
 
-    // ---------------------------------------------------------------- coalescer
+    
 
     @Test
     fun `refresh requests coalesce into one in flight plus one trailing run`() = runTest {
@@ -206,11 +206,11 @@ class GroupFocusRepositoryTest {
         repo.requestRefresh("c")
         repo.requestRefresh("d")
         runCurrent()
-        assertEquals(1, calls) // still the first one
+        assertEquals(1, calls) 
 
         gate.complete(Unit)
         runCurrent()
-        assertEquals(2, calls) // exactly one trailing run, none dropped, none multiplied
+        assertEquals(2, calls) 
         assertEquals(2, repo.state.value.focus.version)
 
         repo.requestRefresh("e")
@@ -237,7 +237,7 @@ class GroupFocusRepositoryTest {
         assertTrue(repo.featureEnabled)
     }
 
-    // ---------------------------------------------------------------- writes
+    
 
     @Test
     fun `start and switch send the right bodies and apply the returned snapshot`() = runTest {
@@ -322,26 +322,26 @@ class GroupFocusRepositoryTest {
 
     @Test
     fun `a same-version GET re-judges effective after the clock moved backwards`() = runTest {
-        var offset = 0L // trusted-clock correction applied on top of the test clock
+        var offset = 0L 
         persisted = GroupFocusState(featureEnabled = true, focus = snap(2, until = START + 10_000L))
         val repo = GroupFocusRepository({ api }, store, backgroundScope, clock = { START + 20_000L + offset + currentTime }).also { runCurrent() }
-        // The device clock ran ahead: the cached running focus derives as ended and no timer is armed.
+        
         assertFalse(repo.effective.value.active)
 
-        offset = -15_000L // a server response re-anchors the clock to the earlier, true time
+        offset = -15_000L 
         coEvery { api.getFocus() } returns ok(true, snap(2, until = START + 10_000L))
         repo.requestRefresh("test")
         runCurrent()
 
         assertTrue(repo.effective.value.active)
-        assertEquals(listOf<GroupFocusState>(), written) // nothing changed, nothing persisted
+        assertEquals(listOf<GroupFocusState>(), written) 
 
-        advanceTimeBy(5_001L) // the re-armed timer fires at until and flips effective again
+        advanceTimeBy(5_001L) 
         runCurrent()
         assertFalse(repo.effective.value.active)
     }
 
-    // ---------------------------------------------------------------- status 32 and the switch epoch
+    
 
     private suspend fun TestScope.repositoryWithFeatureOn(): GroupFocusRepository {
         val repo = repository()
@@ -362,10 +362,10 @@ class GroupFocusRepositoryTest {
         val result = repo.end()
 
         assertEquals(FocusResult.Failure(FocusError.FeatureDisabled), result)
-        assertFalse(repo.featureEnabled) // before any GET answered
-        assertFalse(repo.effective.value.active) // entries hide
+        assertFalse(repo.featureEnabled) 
+        assertFalse(repo.effective.value.active) 
         assertFalse(persisted.featureEnabled)
-        assertEquals(1, persisted.focus.version) // only the switch changed
+        assertEquals(1, persisted.focus.version) 
     }
 
     @Test
@@ -378,7 +378,7 @@ class GroupFocusRepositoryTest {
 
         assertFalse(repo.featureEnabled)
         assertFalse(persisted.featureEnabled)
-        coVerify(exactly = 2) { api.getFocus() } // the init GET and the one that said 32
+        coVerify(exactly = 2) { api.getFocus() } 
     }
 
     @Test
@@ -393,27 +393,27 @@ class GroupFocusRepositoryTest {
         }
         repo.requestRefresh("foreground")
         runCurrent()
-        assertEquals(1, calls) // in flight, started while the feature was on
+        assertEquals(1, calls) 
 
         coEvery { api.endFocus() } returns failed(32)
-        repo.end() // another request meets status 32 meanwhile
+        repo.end() 
         assertFalse(repo.featureEnabled)
 
-        firstGate.complete(ok(feature = true, focus = snap(5))) // the old answer arrives late, still saying "on"
+        firstGate.complete(ok(feature = true, focus = snap(5))) 
         runCurrent()
 
-        assertFalse(repo.featureEnabled) // its feature value is dropped ...
-        assertEquals(5, repo.state.value.focus.version) // ... its focus is still applied by version
-        assertEquals(2, calls) // the trailing GET started by the 32 is now running
+        assertFalse(repo.featureEnabled) 
+        assertEquals(5, repo.state.value.focus.version) 
+        assertEquals(2, calls) 
 
-        trailingGate.complete(ok(feature = true, focus = snap(5))) // started after the 32: it decides
+        trailingGate.complete(ok(feature = true, focus = snap(5))) 
         runCurrent()
         assertTrue(repo.featureEnabled)
     }
 
     @Test
     fun `a successful write response never sets featureEnabled, true or false`() = runTest {
-        val repo = repository() // feature off
+        val repo = repository() 
         coEvery { api.openFocus(any()) } returns ok(feature = true, focus = snap(2))
 
         assertIs<FocusResult.Success>(repo.start("A", 3600))
@@ -422,28 +422,28 @@ class GroupFocusRepositoryTest {
         assertEquals(2, repo.state.value.focus.version)
     }
 
-    // ---------------------------------------------------------------- local recompute and local group exit
+    
 
     @Test
     fun `recomputeLocally re-judges the cached state against the clock and re-arms the timer without a request`() = runTest {
         var offset = 0L
         persisted = GroupFocusState(featureEnabled = true, focus = snap(2, until = START + 10_000L))
-        coEvery { api.getFocus() } returns ok(feature = true, focus = snap(2, until = START + 10_000L)) // for the expiry refresh only
+        coEvery { api.getFocus() } returns ok(feature = true, focus = snap(2, until = START + 10_000L)) 
         val repo = GroupFocusRepository({ api }, store, backgroundScope, clock = { START + offset + currentTime }).also { runCurrent() }
         assertTrue(repo.effective.value.active)
 
-        offset = 20_000L // the process slept through `until`; the timer did not fire
-        assertTrue(repo.effective.value.active) // stale until someone re-derives it
+        offset = 20_000L 
+        assertTrue(repo.effective.value.active) 
         repo.recomputeLocally()
         assertFalse(repo.effective.value.active)
 
-        offset = -5_000L // the trusted clock was corrected backwards
+        offset = -5_000L 
         repo.recomputeLocally()
         assertTrue(repo.effective.value.active)
-        coVerify(exactly = 0) { api.getFocus() } // re-deriving never requests anything itself
+        coVerify(exactly = 0) { api.getFocus() } 
         assertEquals(listOf<GroupFocusState>(), written)
 
-        advanceTimeBy(15_001L) // the re-armed timer flips it again
+        advanceTimeBy(15_001L) 
         runCurrent()
         assertFalse(repo.effective.value.active)
     }

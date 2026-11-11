@@ -18,7 +18,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 
 object IncomingCallControlsDefaults {
-    /** Hit area of each button; the icon is drawn at its own size, centred, never scaled. */
+    
     val HitSize = 72.dp
     val IconSize = 64.dp
     const val DISABLED_ALPHA = 0.5f
@@ -27,11 +27,11 @@ object IncomingCallControlsDefaults {
     const val ACCEPT_TEST_TAG = "incoming_accept_button"
 }
 
-/**
- * The reject / accept tap buttons at the bottom of the incoming-call screen, used when the phone is
- * unlocked and in the person's hand. Each is a 72 dp circular hit area centred in its half of the
- * row with the 64 dp icon inside. A screen the call itself lit up shows [IncomingCallSlider] instead.
- */
+
+
+
+
+
 @Composable
 fun IncomingCallControls(
     rejectIcon: Painter,
@@ -58,8 +58,8 @@ fun IncomingCallControls(
 
 @Composable
 private fun TapButton(icon: Painter, enabled: Boolean, testTag: String, onClick: () -> Unit) {
-    // Transparent circular hit area carries the click and the ripple; the icon inside keeps its
-    // intrinsic size so the bitmap edge is never upscaled.
+    
+    
     Box(
         contentAlignment = Alignment.Center,
         modifier = Modifier

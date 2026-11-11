@@ -21,7 +21,7 @@ import org.robolectric.shadows.ShadowContextImpl
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 
-/** #1354: the logged-out notice moves to OTHER_ALERTS and is posted only on a verified channel. */
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [34])
 class LoggedOutNotifierTest {

@@ -15,10 +15,10 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 
-/**
- * The export's pre-snapshot drain of the retry queues (T18, #1382): it runs as the pause owner
- * while that export is exporting, never otherwise, and a failing queue does not block the export.
- */
+
+
+
+
 class MigrationRetryQueueDrainTest {
 
     private val messaging = TestMessagingPause().open()
@@ -47,7 +47,7 @@ class MigrationRetryQueueDrainTest {
         assertNull(failed.drainAsOwner(OWNER))
         assertNull(pending.drainAsOwner(OWNER))
 
-        messaging.pause.finish(OWNER, null, MigrationPauseOutcome.FAILED) // open again
+        messaging.pause.finish(OWNER, null, MigrationPauseOutcome.FAILED) 
         assertNull(failed.drainAsOwner(OWNER))
 
         verify(exactly = 0) { wcdb.failedMessage }
@@ -61,7 +61,7 @@ class MigrationRetryQueueDrainTest {
         failed.drainAsOwner(OWNER)
         pending.drainAsOwner(OWNER)
 
-        // Every ticket closed: the gate is idle again.
+        
         assertTrue(messaging.gate.closeAndAwaitIdle(OWNER, 1.seconds))
     }
 

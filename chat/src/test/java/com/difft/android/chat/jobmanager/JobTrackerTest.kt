@@ -21,7 +21,7 @@ class JobTrackerTest {
         tracker = JobTracker()
     }
 
-    // -- onStateChange / getFirstMatchingJobState --
+    
 
     @Test
     fun `onStateChange updates job state`() {
@@ -52,7 +52,7 @@ class JobTrackerTest {
         assertEquals(JobTracker.JobState.SUCCESS, state)
     }
 
-    // -- haveAnyFailed --
+    
 
     @Test
     fun `haveAnyFailed returns true if any job has FAILURE state`() {
@@ -86,7 +86,7 @@ class JobTrackerTest {
         assertFalse(tracker.haveAnyFailed(emptyList()))
     }
 
-    // -- Listener notification --
+    
 
     @Test
     fun `listener is notified on matching state change`() {
@@ -139,31 +139,31 @@ class JobTrackerTest {
         tracker.removeListener(listener)
         tracker.onStateChange(job, JobTracker.JobState.RUNNING)
 
-        // Give async executor time to potentially fire (it shouldn't)
+        
         Thread.sleep(200)
         assertEquals(1, notifyCount)
     }
 
-    // -- LRU eviction --
+    
 
     @Test
     fun `oldest entries are evicted when exceeding capacity of 1000`() {
-        // Add 1001 jobs
+        
         for (i in 1..1001) {
             val job = createMockJob("job-$i")
             tracker.onStateChange(job, JobTracker.JobState.SUCCESS)
         }
 
-        // The first job should have been evicted
+        
         assertNull(tracker.getFirstMatchingJobState { it.id == "job-1" })
-        // The last job should still be present
+        
         assertEquals(
             JobTracker.JobState.SUCCESS,
             tracker.getFirstMatchingJobState { it.id == "job-1001" }
         )
     }
 
-    // -- JobState properties --
+    
 
     @Test
     fun `SUCCESS state is complete`() {
@@ -190,7 +190,7 @@ class JobTrackerTest {
         assertFalse(JobTracker.JobState.RUNNING.isComplete)
     }
 
-    // -- Helper --
+    
 
     private fun createMockJob(id: String): Job {
         val params = Job.Parameters.Builder(id)

@@ -13,10 +13,10 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/**
- * `confirmEnabled` contract (issue #1209): a dialog whose content collects a required input must be
- * able to gate its confirm button, and the default must stay enabled for every existing caller.
- */
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34])
@@ -25,7 +25,7 @@ class MessageDialogConfirmEnabledTest {
     @get:Rule
     val composeTestRule = createComposeRule()
 
-    // T17
+    
     @Test
     fun `confirmEnabled false disables the button and swallows the tap`() {
         var confirms = 0

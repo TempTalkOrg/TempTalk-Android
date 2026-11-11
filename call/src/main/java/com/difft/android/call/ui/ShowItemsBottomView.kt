@@ -85,14 +85,14 @@ fun ShowItemsBottomView(
 
     val showCriticalAlertEnable = viewModel.is1v1ShowCriticalAlertEnable(callStatus) || viewModel.isGroupShowCriticalAlertEnable(isCriticalAlertEnable) || viewModel.isInstantCriticalAlertEnable(awaitingJoinInvitees)
 
-    // Quick actions are the controls the current bar plan dropped: Invite always, People too
-    // for groups (when the panel can render), none when the split layout already shows both in the bar. The side rail
-    // (#1451) has its own set: Invite always, plus whatever of People and Emoji it leaves off.
-    // The tabletop dock already shows Invite and Emoji, plus People for group calls when the panel is available, so it adds none.
+    
+    
+    
+    
     val chrome = rememberCallChromeLayout(isGroup = !isOneVOneCall)
     val plannedQuickActions = moreQuickActions(chrome, isGroup = !isOneVOneCall, isScreenShare = isParticipantSharedScreen)
-    // People is offered only where the participants panel can actually render (shared screen
-    // or a wide window); otherwise the toggle would flip with nothing on screen.
+    
+    
     val peopleAvailable = participantsPanelAvailable(isParticipantSharedScreen, rememberParticipantsPanelWide())
     val quickActions = plannedQuickActions.filter { it != ActionBarQuickAction.PEOPLE || peopleAvailable }
     val participants by viewModel.participants.collectAsState(initial = emptyList())

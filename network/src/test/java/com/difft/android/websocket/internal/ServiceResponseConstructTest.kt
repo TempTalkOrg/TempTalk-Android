@@ -5,11 +5,11 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * Guards the constructor-parameter vs Optional-property name-shadowing in ServiceResponse: the init
- * invariant check must operate on the raw nullable params, not the never-null Optional properties.
- * If it resolved to the properties, forResult() would throw IllegalArgumentException.
- */
+
+
+
+
+
 class ServiceResponseConstructTest {
 
     @Test

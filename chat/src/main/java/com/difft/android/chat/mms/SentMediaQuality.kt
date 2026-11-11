@@ -4,9 +4,9 @@ import android.content.Context
 import androidx.annotation.StringRes
 import com.difft.android.chat.R
 
-/**
- * Quality levels to send media at.
- */
+
+
+
 enum class SentMediaQuality(val code: Int, @param:StringRes private val label: Int) {
     STANDARD(0, R.string.DataAndStorageSettingsFragment__standard),
     HIGH(1, R.string.DataAndStorageSettingsFragment__high);
@@ -20,3 +20,6 @@ enum class SentMediaQuality(val code: Int, @param:StringRes private val label: I
             values().map { context.getString(it.label) }.toTypedArray()
     }
 }
+
+
+fun SentMediaQuality.videoConstraintsQuality(): SentMediaQuality = SentMediaQuality.HIGH

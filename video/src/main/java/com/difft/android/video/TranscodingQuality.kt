@@ -6,9 +6,9 @@ package com.difft.android.video
 
 import com.difft.android.video.videoconverter.utils.VideoConstants
 
-/**
- * A data class to hold various video transcoding parameters, such as bitrate.
- */
+
+
+
 class TranscodingQuality private constructor(val outputResolution: Int, val targetVideoBitRate: Int, val targetAudioBitRate: Int, private val durationMs: Long) {
   companion object {
 

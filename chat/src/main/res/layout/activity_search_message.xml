@@ -34,15 +34,6 @@
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toEndOf="@+id/ib_back"
             app:layout_constraintTop_toTopOf="@+id/ib_back" />
-        <!--        <View-->
-        <!--            android:id="@+id/view_separator"-->
-        <!--            android:layout_width="0dp"-->
-        <!--            android:layout_height="1dp"-->
-        <!--            android:layout_marginTop="12dp"-->
-        <!--            android:background="@color/line"-->
-        <!--            app:layout_constraintEnd_toEndOf="parent"-->
-        <!--            app:layout_constraintStart_toStartOf="parent"-->
-        <!--            app:layout_constraintTop_toBottomOf="@+id/edittext_search_input" />-->
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 
@@ -51,7 +42,7 @@
         android:layout_height="match_parent"
         android:layout_marginTop="12dp">
 
-        <!-- Empty state: illustration + tip, centred in the result area. -->
+        
         <LinearLayout
             android:id="@+id/ll_tips"
             android:layout_width="match_parent"

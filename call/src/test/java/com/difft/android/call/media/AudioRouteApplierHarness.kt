@@ -19,18 +19,18 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
 
-/**
- * Hand-written [AudioRouteHost] for the applier tests.
- *
- * Reproduces the manager's `pendingRoute` semantics verbatim — `distinctUntilChanged` on the whole
- * state, so `Applying(D) -> Idle -> Applying(D)` re-emits — and records the terminal reports instead
- * of interpreting them. A mock cannot express the state-flow derivation, and the real manager would
- * mix its own rules into assertions about the applier.
- *
- * [failSnapshotRead] simulates "an unexpected exception escaped the drive loop": every
- * `AudioManager` touch is already guarded by the applier's own safeRead/safeWrite, so a snapshot
- * read is the only remaining unguarded path and therefore the honest way to reach `Failed(ERROR)`.
- */
+
+
+
+
+
+
+
+
+
+
+
+
 internal class FakeAudioRouteHost : AudioRouteHost {
 
     private val snapshot = MutableStateFlow(AudioRouteSnapshot())
@@ -40,7 +40,7 @@ internal class FakeAudioRouteHost : AudioRouteHost {
     val confirmed = mutableListOf<AudioDevice>()
     val failed = mutableListOf<Pair<AudioDevice, AudioRouteFailure>>()
 
-    /** Total terminal reports — the "exactly one outcome per attempt" invariant reads this. */
+    
     val terminalCount: Int get() = confirmed.size + failed.size
 
     override val pendingRoute: Flow<AudioRouteState.Applying> = snapshot
@@ -63,7 +63,7 @@ internal class FakeAudioRouteHost : AudioRouteHost {
         snapshot.value = value
     }
 
-    /** Replaces the reported device list without touching the attempt state. */
+    
     fun setDevices(devices: List<AudioDevice>) {
         snapshot.value = snapshot.value.copy(availableDevices = devices)
     }
@@ -73,7 +73,7 @@ internal class FakeAudioRouteHost : AudioRouteHost {
     }
 }
 
-/** An in-flight attempt for [target] with [devices] enumerable. */
+
 internal fun applyingSnapshot(
     target: AudioDevice,
     devices: List<AudioDevice>,
@@ -85,7 +85,7 @@ internal fun applyingSnapshot(
     state = AudioRouteState.Applying(target),
 )
 
-/** Every distinct target [manager] has published on [AudioDeviceManager.pendingRoute] so far. */
+
 @OptIn(ExperimentalCoroutinesApi::class)
 internal fun TestScope.recordPendingRoutes(manager: AudioDeviceManager): List<AudioDeviceKind> {
     val seen = mutableListOf<AudioDeviceKind>()

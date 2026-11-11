@@ -143,7 +143,7 @@ class DomainSpeedTesterTest {
         val results = tester.testHosts(hosts)
 
         assertEquals(3, results.size)
-        // Available hosts should come before unavailable
+        
         val availableIndices = results.mapIndexedNotNull { i, r -> if (r.isAvailable) i else null }
         val unavailableIndices = results.mapIndexedNotNull { i, r -> if (!r.isAvailable) i else null }
         if (availableIndices.isNotEmpty() && unavailableIndices.isNotEmpty()) {

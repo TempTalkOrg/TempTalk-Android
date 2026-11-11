@@ -25,13 +25,13 @@ import org.robolectric.shadows.ShadowAlarmManager
 import org.robolectric.shadows.ShadowSystemClock
 import java.time.Duration
 
-/**
- * [KeepAliveWakeAlarm] contract (issue #1325): in keep-alive mode it arms exactly one
- * elapsed-realtime wake-up listener alarm one cadence out, re-arming replaces it, cancel
- * disarms it, firing runs the callback; in FCM mode it never touches AlarmManager. The response
- * deadline is a second, independent one-shot that only the deadline cancel and [KeepAliveWakeAlarm.cancel]
- * disarm.
- */
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [31])
 class KeepAliveWakeAlarmTest {

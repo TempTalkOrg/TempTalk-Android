@@ -8,10 +8,6 @@ import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 
-/**
- * Activity相关的Hilt模块
- * 提供ActivityProvider的绑定
- */
 @Module
 @InstallIn(SingletonComponent::class)
 abstract class ActivityModule {

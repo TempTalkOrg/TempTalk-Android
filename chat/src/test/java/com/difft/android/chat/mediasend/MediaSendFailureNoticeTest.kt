@@ -15,15 +15,11 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
-/**
- * T64-T69 — the wording a failure turns into, and the retry entry it may or may not offer.
- *
- * T64 is the constraint row: until an app restart tells the two mechanisms apart, the wording must
- * not assert that a permission was never granted — the reporting devices report full access while
- * still refusing the read.
- *
- * Run: :chat:testDebugUnitTest
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [33])
 class MediaSendFailureNoticeTest {
@@ -35,12 +31,10 @@ class MediaSendFailureNoticeTest {
         context = RuntimeEnvironment.getApplication()
     }
 
-    // ---------------------------------------------------------------- T64
+    
 
-    /**
-     * T64 — full access that still refuses the read, and no attribution at all, both get the wording
-     * that only states the observable fact and offers an app restart.
-     */
+
+
     @Test
     fun `unattributed read denial neither blames a permission nor omits the restart`() {
         val expected = context.getString(R.string.media_send_next_restart_or_file)
@@ -60,9 +54,7 @@ class MediaSendFailureNoticeTest {
         assertFalse(zh, zh.contains("权限"))
     }
 
-    // ---------------------------------------------------------------- T65
-
-    /** T65 — the three attributable denials each get their own actionable next step. */
+    
     @Test
     fun `each attributable denial maps to its own next step`() {
         val expectations = mapOf(
@@ -78,7 +70,7 @@ class MediaSendFailureNoticeTest {
             assertEquals("denialKind=$kind", context.getString(expectedRes), text)
         }
 
-        // "No longer available" must not claim the file was moved or deleted: nothing established that.
+        
         val reselectItem = context.getString(R.string.media_send_next_reselect_item)
         assertFalse(reselectItem, reselectItem.lowercase().contains("moved"))
         assertFalse(reselectItem, reselectItem.lowercase().contains("deleted"))
@@ -86,7 +78,7 @@ class MediaSendFailureNoticeTest {
         assertFalse(reselectItemZh, reselectItemZh.contains("已被移动或删除"))
     }
 
-    /** The other four reasons each own one next step, so no reason falls through to a default. */
+    
     @Test
     fun `every reason other than a read denial has its own next step`() {
         val expectations = mapOf(
@@ -103,12 +95,10 @@ class MediaSendFailureNoticeTest {
         }
     }
 
-    // ---------------------------------------------------------------- T66
+    
 
-    /**
-     * T66 — none of the new wording reuses the existing "file unavailable" string, which would
-     * attribute every failure to a file that was moved or deleted.
-     */
+
+
     @Test
     fun `no new string reuses the file unavailable wording`() {
         val forbidden = context.getString(R.string.file_unavailable)
@@ -118,9 +108,7 @@ class MediaSendFailureNoticeTest {
         }
     }
 
-    // ---------------------------------------------------------------- T67
-
-    /** T67 — both locales carry every key, with identical placeholders. */
+    
     @Test
     fun `both locales define every key with the same placeholders`() {
         val zh = localized("zh")
@@ -135,9 +123,7 @@ class MediaSendFailureNoticeTest {
         }
     }
 
-    // ---------------------------------------------------------------- T68
-
-    /** T68 — retryability and the support code are exhaustive over the enum, by construction. */
+    
     @Test
     fun `retryability and codes are exhaustive and unique`() {
         val nonRetryable = setOf(
@@ -156,9 +142,7 @@ class MediaSendFailureNoticeTest {
         )
     }
 
-    // ---------------------------------------------------------------- T69
-
-    /** T69 — the body lists at most three items, counts the rest, and ends with exactly one next step. */
+    
     @Test
     fun `body lists three items then counts the remainder and gives one next step`() {
         val failures = listOf(
@@ -173,13 +157,13 @@ class MediaSendFailureNoticeTest {
         val body = MediaSendFailureNotice.bodyOf(context, failures)
         val lines = body.lines().filter { it.isNotBlank() }
 
-        assertEquals(body, 5, lines.size)          // 3 items + remainder + one next step
+        assertEquals(body, 5, lines.size)          
         assertEquals(context.getString(R.string.media_send_failed_item_named, 1, "a.mp4", reason), lines[0])
         assertEquals(context.getString(R.string.media_send_failed_item_named, 3, "b.jpg", reason), lines[1])
         assertEquals(context.getString(R.string.media_send_failed_item_unnamed, 5, reason), lines[2])
         assertEquals(context.getString(R.string.media_send_failed_more, 2), lines[3])
         assertEquals(context.getString(R.string.media_send_next_restart_or_file), lines[4])
-        assertFalse(body, body.contains("7"))      // the truncated items are counted, not listed
+        assertFalse(body, body.contains("7"))      
     }
 
     private fun failure(
@@ -195,21 +179,18 @@ class MediaSendFailureNoticeTest {
         return context.createConfigurationContext(configuration)
     }
 
-    /**
-     * Placeholder tokens (`%1$s`, `%2$d`, …), sorted: count and type must match per key, while
-     * source order legitimately differs between locales because word order does.
-     */
+    
+
+
+
     private fun placeholdersOf(value: String): List<String> =
         Regex("""%\d+\$[a-zA-Z]""").findAll(value).map { it.value }.sorted().toList()
 
-    /** Bypasses argument formatting so keys with placeholders can be compared as raw templates. */
+    
     private fun rawString(source: Context, res: Int): String = source.resources.getString(res)
 
     private companion object {
-        /**
-         * Every string this failure surface introduced. Listed explicitly rather than derived from a
-         * count so that adding a key without covering it here is a visible omission.
-         */
+        
         val NEW_STRING_KEYS = listOf(
             R.string.media_send_failed_title_single,
             R.string.media_send_failed_title_all,

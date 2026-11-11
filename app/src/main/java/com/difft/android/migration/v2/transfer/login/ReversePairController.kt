@@ -33,43 +33,43 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withTimeoutOrNull
 
-/**
- * The receiver role's reverse pairing: this device scanned a computer's export code, so instead of
- * waiting to be scanned it asks that computer to connect back to the listener already up here and
- * upload. The bytes still travel the ordinary upload path; only the introduction is reversed.
- *
- * Order matters and is the whole design: the pending pairing session is registered **before** the
- * request goes out, so a `/prepare-upload` that beats the peer's own 200 is already authorized.
- * Nothing in here is persisted — a process death during pairing is a re-scan, as with any listener.
- *
- * The pair token and the scanned transfer key are live credentials and are never logged.
- */
+
+
+
+
+
+
+
+
+
+
+
 internal class ReversePairController(
     private val appContext: Context,
     private val registry: PairingSessionRegistry,
     private val environmentHelper: EnvironmentHelper,
     private val appVersion: String,
     private val account: String,
-    /** Address race seam; the production value is the same one the sender role uses. */
+    
     private val resolve: suspend (QrPayload) -> QrPayload? = { EndpointRace.resolve(it) },
-    /** `/reverse-pair` seam, so the state machine can be driven without a socket. */
+    
     private val pair: suspend (QrPayload, ReversePairRequest) -> ReversePairResponse =
         { target, body -> ReversePairClient(target).reversePair(body, target.pin) },
 ) {
 
-    /** Completed only by a 200; a failure resolves it exceptionally only while the phase is PENDING. */
+    
     private val response = CompletableDeferred<ReversePairResponse>()
 
-    /**
-     * Registers the pairing session, asks [mac] to connect back to [listen], and returns once the
-     * outcome belongs to someone else: the upload path (the computer connected) or a terminal state
-     * written here (it never did, or the request was refused).
-     *
-     * [scope] must be the service scope, not this call's: a `/reverse-pair` response that fails
-     * minutes late — after an upload was accepted and is streaming — must neither cancel the receiver
-     * role nor keep this call from returning, and a `SupervisorJob` child with its own `runCatching`
-     * is what guarantees both.
-     */
+    
+
+
+
+
+
+
+
+
+
     suspend fun run(scope: CoroutineScope, mac: QrPayload, listen: QrPayload) {
         val resolved = resolve(mac)
             ?: throw SocketException("none of the ${mac.candidates.size} advertised addresses answered")
@@ -81,8 +81,8 @@ internal class ReversePairController(
         L.i { "[MigrationV2][P2P][Rx] pairing session registered gen=${handle.generation} (token not logged)" }
         val peerAlias = mac.alias.takeIf { it.isNotBlank() }
 
-        // No dispatcher of its own: [scope] is the service scope, which is already IO-bound, and an
-        // explicit one here would only put the call outside a test's virtual time.
+        
+        
         scope.launch {
             runCatching { pair(resolved, body(handle, listen)) }
                 .onSuccess { response.complete(it) }
@@ -92,28 +92,28 @@ internal class ReversePairController(
         MigrationTransferStateHolder.update(TransferState.AwaitingDesktopConfirm(peerAlias))
         try {
             coroutineScope {
-                // runCatching inside the async: a PairingSuperseded thrown by a child would otherwise
-                // cancel this scope before the select could resolve. The result still has to be
-                // inspected — an evicted session completes this wait too, and is not a connect.
+                
+                
+                
                 val connected = async {
                     runCatching { registry.awaitPhaseAtLeast(handle.generation, PairingSessionRegistry.Phase.CONNECTED) }.isSuccess
                 }
                 val connectWithinMs: Long? = select {
                     response.onAwait { it.connectWithinMs.clampedConnectWindow() }
-                    // The prepare-upload beat the 200: there is nothing left to arm a deadline for.
+                    
                     connected.onAwait { reached -> if (reached) null else throw PairingSuperseded() }
                 }
-                // Release the loser explicitly: coroutineScope joins its children, and the losing one
-                // is parked in awaitPhaseAtLeast, so without this run() would never return.
+                
+                
                 connected.cancel()
                 if (connectWithinMs != null) awaitConnectOrFail(handle, peerAlias, connectWithinMs)
             }
         } catch (e: CancellationException) {
             throw e
         } catch (e: PairingSuperseded) {
-            // A newer scan registered its own session and owns the screen from here. With no newer
-            // session the live one was evicted (the PIN cap): that must fail visibly, or the page
-            // would wait for a connect that can never come.
+            
+            
+            
             if (registry.isActive()) {
                 L.i { "[MigrationV2][P2P][Rx] pairing superseded by a newer scan — this run ends quietly" }
             } else {
@@ -131,16 +131,16 @@ internal class ReversePairController(
         }
     }
 
-    /**
-     * The late-failure gate. Once a `/prepare-upload` for this generation has been accepted, the
-     * upload owns the outcome: a pairing response that fails afterwards is noise and must not abort a
-     * transfer that is already streaming. Never throws — the caller is a fire-and-forget launch.
-     */
+    
+
+
+
+
     private fun onPairCallFailed(generation: Long, e: Throwable) {
         when (registry.phase(generation)) {
             PairingSessionRegistry.Phase.CONNECTED, PairingSessionRegistry.Phase.UPLOADING ->
-                // `response` is deliberately left incomplete: reaching CONNECTED is exactly what makes
-                // the select's other clause fire, so no waiter is left parked on it.
+                
+                
                 L.i {
                     "[MigrationV2][P2P][Rx] reverse-pair response lost after the upload started — " +
                         "ignored (${e.javaClass.simpleName})"
@@ -150,7 +150,7 @@ internal class ReversePairController(
         }
     }
 
-    /** After the confirmation: the computer has this long to open `/prepare-upload` on our listener. */
+    
     private suspend fun awaitConnectOrFail(
         handle: PairingSessionRegistry.Handle,
         peerAlias: String?,
@@ -166,7 +166,7 @@ internal class ReversePairController(
                 registry.invalidate(handle.generation)
                 MigrationTransferStateHolder.update(TransferState.Failed(PrepareUploadReasons.DESKTOP_NOT_CONNECTED))
             }
-            // Superseded or evicted while waiting: run()'s handler decides which of the two it was.
+            
             false -> throw PairingSuperseded()
             true -> Unit
         }
@@ -176,7 +176,7 @@ internal class ReversePairController(
         device = ReversePairDevice(
             alias = DeviceNames.local(appContext),
             appVersion = appVersion,
-            // Our own receiver certificate: what the computer pins when it connects back.
+            
             fingerprint = listen.fp,
         ),
         listen = ReversePairListen(addresses = listen.candidates.take(MAX_ADVERTISED_ADDRESSES), port = listen.port),
@@ -188,11 +188,11 @@ internal class ReversePairController(
         ),
     )
 
-    /** A hostile or buggy peer must not be able to pin the receive screen for an hour. */
+    
     private fun Long?.clampedConnectWindow(): Long =
         (this ?: DEFAULT_CONNECT_MS).coerceIn(MIN_CONNECT_MS, MAX_CONNECT_MS)
 
-    /** 32 bytes of entropy, base64url. Single-use, never logged. */
+    
     private fun randomPairToken(): String =
         Base64.encodeToString(
             ByteArray(PAIR_TOKEN_BYTES).also { SecureRandom().nextBytes(it) },
@@ -202,14 +202,14 @@ internal class ReversePairController(
     companion object {
         const val PAIR_TOKEN_BYTES = 32
 
-        /** Addresses advertised to the peer; more than this is noise on any real LAN. */
+        
         const val MAX_ADVERTISED_ADDRESSES = 4
 
         @VisibleForTesting internal const val MIN_CONNECT_MS = 5_000L
 
         @VisibleForTesting internal const val MAX_CONNECT_MS = 120_000L
 
-        /** What a peer that names no window is assumed to mean. */
+        
         @VisibleForTesting internal const val DEFAULT_CONNECT_MS = 30_000L
     }
 }

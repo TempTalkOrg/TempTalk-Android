@@ -44,14 +44,14 @@ import org.robolectric.annotation.Config
 import util.ScreenLockUtil
 import kotlin.coroutines.CoroutineContext
 
-/**
- * [CallJoinStarter.joinCall], the JOIN entry point behind incoming accept, critical-alert join and
- * chat join: the call page and its session are started through [CallSessionLauncher] from the
- * application context with the JOIN intent and this join's own wait-dialog claim. Only a launch
- * that went through lifts the app lock; a refused launch, or a join that fails before it, releases
- * only its own claim. While a join runs, a critical alert for its room counts as the current call's
- * (#1381); the marker is gone once the join returns, whatever the outcome.
- */
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = CallJoinStarterTest.TestApplication::class, sdk = [33])
 class CallJoinStarterTest {
@@ -80,7 +80,7 @@ class CallJoinStarterTest {
     private val launchedIntent = slot<Intent>()
     private val callDataManager = mockk<CallDataManager>(relaxed = true)
     private val dbRoomStore = mockk<DBRoomStore>(relaxed = true)
-    // No active call: the gate only sees this join's in-flight marker.
+    
     private val gate = spyk(CriticalAlertCallGate(OnGoingCallStateManager(), CriticalAlertRoomRegistry()))
     private val launchedSession = mockk<CallSession> { every { id } returns SESSION_ID }
     private val sessionHolder = mockk<CallSessionHolder> {

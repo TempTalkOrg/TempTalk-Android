@@ -13,9 +13,9 @@ import com.difft.android.chat.mediasend.v2.MediaSelectionViewModel
 
 private const val GIF_TAG = "media.send.gif.fragment"
 
-/**
- * Fragment which ensures we fire off ResumeEntryTransition when viewing a non-video gif.
- */
+
+
+
 class MediaReviewGifPageFragment : androidx.fragment.app.Fragment(R.layout.fragment_container) {
 
     private lateinit var mediaSendGifFragment: MediaSendGifFragment

@@ -1,10 +1,10 @@
 package difft.android.messageserialization
 
-/**
- * type:
- * 0: single chat
- * 1: group chat
- */
+
+
+
+
+
 sealed class For(val id: String, val typeValue: Int) {
     override fun hashCode(): Int {
         return id.hashCode() + typeValue

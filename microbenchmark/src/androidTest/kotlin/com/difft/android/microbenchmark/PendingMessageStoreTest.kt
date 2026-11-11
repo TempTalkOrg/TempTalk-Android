@@ -16,19 +16,19 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/**
- * The real WCDB predicates behind the pending-message replay (#1382): consuming one row deletes
- * that row by its opaque messageId plus the target it was loaded with, and nothing else on the same
- * target; a row re-saved under the same id for another target survives; the survivors are still there
- * after the database is reopened. `PendingMessageProcessorConsumeTest` (JVM) proves which keys the
- * processor hands to [WcdbPendingMessageStore.deleteConsumed]; this proves the delete
- * itself, which WCDB's native winq cannot run on the JVM.
- *
- * A correctness test in the benchmark module because it is the one instrumented source set with a
- * real WCDB; run it on a device or emulator with
- * `./gradlew :microbenchmark:connectedReleaseAndroidTest
- * -Pandroid.testInstrumentationRunnerArguments.class=com.difft.android.microbenchmark.PendingMessageStoreTest`.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
 @RunWith(AndroidJUnit4::class)
 class PendingMessageStoreTest {
 
@@ -49,8 +49,8 @@ class PendingMessageStoreTest {
 
     @After
     fun tearDown() {
-        // Delete directly rather than via wcdb.deleteDatabaseFile(): its catch block calls
-        // FirebaseCrashlytics unguarded, which is not initialized in this process.
+        
+        
         wcdb.db.close()
         context.deleteDatabase(WCDB.DATABASE_NAME)
     }
@@ -75,7 +75,7 @@ class PendingMessageStoreTest {
     fun consumingOneRowKeepsItsSiblingOnTheSameTargetAcrossAReopen() {
         seed()
 
-        // The `ios:` row was applied, the Android row on the same target failed transiently.
+        
         WcdbPendingMessageStore(wcdb).deleteConsumed(listOf(PendingRowKey(iosId, target)))
         assertEquals(setOf(androidId, otherId), storedIds(wcdb))
 
@@ -85,7 +85,7 @@ class PendingMessageStoreTest {
         assertEquals(setOf(androidId, otherId), storedIds(wcdb))
         assertEquals(2, reopened.count())
 
-        // The retry succeeds on the next process.
+        
         reopened.deleteConsumed(listOf(PendingRowKey(androidId, target)))
         assertEquals(setOf(otherId), storedIds(wcdb))
     }
@@ -102,7 +102,7 @@ class PendingMessageStoreTest {
     @Test
     fun aRowReSavedForAnotherTargetSurvivesTheConsumeOfItsLoadedTarget() {
         seed()
-        // Replay loaded iosId waiting on `target`, then re-saved the same id for `otherTarget + 1`.
+        
         val reSavedTarget = otherTarget + 1
         wcdb.pendingMessageNew.insertOrReplaceObject(row(iosId, reSavedTarget))
 

@@ -22,7 +22,7 @@ object AccountSettingsContract {
     data class State(val user: UserData? = null, val busy: Boolean = false)
     sealed interface Intent {
         data object Refresh : Intent
-        /** Re-read the stored snapshot without a network round trip. */
+        
         data object Reload : Intent
         data class SetSearch(val enabled: Boolean) : Intent
         data class Logout(val beforeLogout: () -> Unit) : Intent
@@ -51,7 +51,7 @@ class AccountSettingsViewModel @Inject constructor(
                 try { accounts.refresh() }
                 catch (e: CancellationException) { throw e }
                 catch (e: Exception) {
-                    // The stored snapshot stays when the refresh is unavailable.
+                    
                     L.w { "[Account] refresh_failed ${e.stackTraceToString()}" }
                 }
                 _state.update { it.copy(user = users.getUserData()) }

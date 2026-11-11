@@ -5,13 +5,13 @@ import org.junit.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 
-/**
- * Verify all Kotlin-converted model classes deserialize correctly via JsonUtil.fromJson.
- * These tests guard against regressions from Java-to-Kotlin data class conversions.
- */
+
+
+
+
 class JacksonDeserializationTest {
 
-    // --- MismatchedDevices ---
+    
 
     @Test
     fun `MismatchedDevices deserializes with populated lists`() {
@@ -40,7 +40,7 @@ class JacksonDeserializationTest {
         assertEquals(emptyList(), result.extraDevices)
     }
 
-    // --- StaleDevices ---
+    
 
     @Test
     fun `StaleDevices deserializes with populated list`() {
@@ -66,7 +66,7 @@ class JacksonDeserializationTest {
         assertEquals(emptyList(), result.staleDevices)
     }
 
-    // --- SocketResponse ---
+    
 
     @Test
     fun `SocketResponse deserializes with all fields`() {
@@ -105,7 +105,7 @@ class JacksonDeserializationTest {
         assertEquals("", result.reason)
     }
 
-    // --- AuthCredentials ---
+    
 
     @Test
     fun `AuthCredentials deserializes with username and password`() {
@@ -123,7 +123,7 @@ class JacksonDeserializationTest {
         assertNotNull(result)
         val basic = result.asBasic()
         assertNotNull(basic)
-        // Basic auth format: "Basic <base64(user:pass)>"
+        
         assert(basic.startsWith("Basic ")) { "Expected Basic auth prefix, got: $basic" }
     }
 
@@ -136,7 +136,7 @@ class JacksonDeserializationTest {
         assertEquals("", result.password)
     }
 
-    // --- RegistrationLockFailure ---
+    
 
     @Test
     fun `RegistrationLockFailure deserializes with all fields`() {
@@ -170,7 +170,7 @@ class JacksonDeserializationTest {
         assertEquals(null, result.backupCredentials)
     }
 
-    // --- NewSendMessageResponse ---
+    
 
     @Test
     fun `NewSendMessageResponse deserializes with all fields`() {

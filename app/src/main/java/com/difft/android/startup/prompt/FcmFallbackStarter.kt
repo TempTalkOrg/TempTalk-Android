@@ -6,10 +6,10 @@ import com.difft.android.chat.messages.MessageForegroundService
 import com.difft.android.chat.messages.MessageServiceManager
 import javax.inject.Inject
 
-/**
- * Starts the background connection silently when FCM is unavailable and nothing stops it. When it
- * cannot start, the BACKGROUND_CONNECTION startup prompt explains why; this class never shows UI.
- */
+
+
+
+
 class FcmFallbackStarter internal constructor(
     private val userManager: UserManager,
     private val messageServiceManager: MessageServiceManager,
@@ -20,7 +20,7 @@ class FcmFallbackStarter internal constructor(
     constructor(userManager: UserManager, messageServiceManager: MessageServiceManager) :
         this(userManager, messageServiceManager, { MessageForegroundService.isRunning })
 
-    /** Called on every unavailable FCM result, including replays; idempotent. */
+    
     fun onFcmUnavailable() {
         if (isServiceRunning()) return
         val autoStart = userManager.getUserData()?.autoStartMessageService ?: true

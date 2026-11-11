@@ -73,11 +73,11 @@ class MagicalView @JvmOverloads constructor(
         magicalWrapper = MagicalViewWrapper(contentLayout)
     }
 
-    /**
-     * setBackgroundColor
-     *
-     * @param color
-     */
+    
+
+
+
+
     override fun setBackgroundColor(color: Int) {
         backgroundView.setBackgroundColor(color)
     }
@@ -120,9 +120,6 @@ class MagicalView @JvmOverloads constructor(
         start(true)
     }
 
-    /**
-     * getScreenSize
-     */
     private fun getScreenSize() {
         screenWidth = DensityUtil.getRealScreenWidth(context)
         screenHeight = if (isPreviewFullScreenMode) {
@@ -132,12 +129,12 @@ class MagicalView @JvmOverloads constructor(
         }
     }
 
-    /**
-     * changeRealScreenHeight
-     *
-     * @param imageWidth  image width
-     * @param imageHeight image height
-     */
+    
+
+
+
+
+
     fun changeRealScreenHeight(imageWidth: Int, imageHeight: Int, showImmediately: Boolean) {
         if (isPreviewFullScreenMode || screenWidth > screenHeight) {
             return
@@ -307,9 +304,9 @@ class MagicalView @JvmOverloads constructor(
         backgroundView.animate().alpha(0f).setDuration(animationDuration).start()
     }
 
-    /**
-     * @param isAlpha 是否透明
-     */
+    
+
+
     private fun changeBackgroundViewAlpha(isAlpha: Boolean) {
         val end = if (isAlpha) 0f else 1f
         val valueAnimator = ValueAnimator.ofFloat(mAlpha, end)
@@ -354,7 +351,7 @@ class MagicalView @JvmOverloads constructor(
         val childView = contentLayout.getChildAt(0)
         var viewPager2: ViewPager2? = null
         if (childView is ViewPager2) {
-            // 如果MagicalView包含的是ViewPage2 需要处理一下滑动事件冲突，主要是针对长图可以上下滑动时会与左右滑动冲突
+            
             viewPager2 = childView
         }
         when (event.action) {

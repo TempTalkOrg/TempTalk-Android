@@ -20,18 +20,18 @@ import java.util.concurrent.atomic.AtomicReference
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 
-/**
- * Fresh-install cipher-key create-fail on a headless path: DB file absent, `wcdb_key.bin` absent,
- * `generateKey()` throws, and a headless `appScope.launch { … }` touches WCDB before MainActivity's
- * routing. Acceptance: no FATAL — the shared [com.difft.android.base.utils.dbKeyFailSoftExceptionHandler]
- * wired into the real [appScope] swallows the [WCDBKeyUnavailableException]; the DB directory stays
- * empty so the next process retry can re-attempt the key create.
- *
- * The headless touch is driven through the `resolveCipherKeyOnce()` choke point — the same
- * exception a real `appScope.launch { wcdb.<table>… }` surfaces once the `db` lazy runs
- * `setCipherKey` on a device (a DEBUG unit build skips `setCipherKey` and would need the native
- * WCDB lib, so this drives the equivalent choke point directly).
- */
+
+
+
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class WcdbFreshInstallFailSoftTest {
@@ -43,14 +43,14 @@ class WcdbFreshInstallFailSoftTest {
     @Before
     fun setUp() {
         ctx = ApplicationProvider.getApplicationContext()
-        ctx.deleteDatabase(WCDB.DATABASE_NAME) // fresh install: ensure no DB file present
+        ctx.deleteDatabase(WCDB.DATABASE_NAME) 
 
         mockkObject(WCDBKeyManager)
-        // Fresh-install create-fail: generateKey() throws (dead TEE / daemon).
+        
         every { WCDBKeyManager.getOrCreateKey(any()) } throws
             WCDBKeyUnavailableException("create failed", IllegalStateException("TEE dead"))
 
-        // Capture any throwable that escapes to a FATAL (the CEH must swallow ours instead).
+        
         previousDefault = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { _, throwable -> forwarded.set(throwable) }
     }
@@ -67,7 +67,7 @@ class WcdbFreshInstallFailSoftTest {
         val wcdb = WCDB(ctx, TestScope())
         val dbFile = ctx.getDatabasePath(WCDB.DATABASE_NAME)
 
-        // Headless coroutine on the REAL appScope (which carries dbKeyFailSoftExceptionHandler).
+        
         val job = appScope.launch { wcdb.resolveCipherKeyOnce() }
         runBlocking { job.join() }
 

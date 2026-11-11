@@ -17,21 +17,21 @@ import org.robolectric.annotation.Config
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos
 import org.whispersystems.signalservice.internal.push.attachmentPointer
 
-/**
- * D4-D6 — Unit tests for the REAL [MessageContentProcessor.createQuoteThumbnailAttachment]
- * (②, wire receive/parse) plus the proto→domain list-mapping + `ifEmpty { null }` collapse.
- *
- * [MessageContentProcessor] has a 16-dependency constructor but its body starts directly with
- * methods (no heavy init), and `createQuoteThumbnailAttachment` reads only its `pointer` arg —
- * so a relaxed-mock instance lets us exercise production code directly. Robolectric is used only
- * to satisfy the `@ApplicationContext` parameter; the method itself touches no Android framework.
- *
- * D6 asserts the documented list-mapping contract (`attachmentsList.map { ... }.ifEmpty { null }`)
- * exactly as wired in `handleDataMessage` — text-only quote (empty list) collapses to null;
- * each proto element maps to one [QuotedAttachment] preserving contentType/fileName/flags.
- *
- * Verify: :chat:testDebugUnitTest
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33])
 class CreateQuoteThumbnailAttachmentTest {
@@ -61,7 +61,7 @@ class CreateQuoteThumbnailAttachmentTest {
         )
     }
 
-    // ── D4: inline thumbnail bytes present ───────────────────────────────────────
+    
 
     @Test
     fun `D4 creates Attachment with inline thumbnail bytes`() {
@@ -90,7 +90,7 @@ class CreateQuoteThumbnailAttachmentTest {
         assertEquals(AttachmentStatus.SUCCESS.code, result.status)
     }
 
-    // ── D5: edge cases (no thumbnail / empty bytes / no fileName / voice) ─────────
+    
 
     @Test
     fun `D5 creates Attachment without thumbnail when pointer has no thumbnail`() {
@@ -163,7 +163,7 @@ class CreateQuoteThumbnailAttachmentTest {
         assertEquals("audio/aac", result.contentType)
     }
 
-    // ── D6: proto attachmentsList → List<QuotedAttachment> mapping + ifEmpty{null} ─
+    
 
     @Test
     fun `D6 empty attachmentsList collapses to null via ifEmpty`() {
@@ -171,7 +171,7 @@ class CreateQuoteThumbnailAttachmentTest {
             .setId(123L)
             .setAuthor("alice")
             .setText("hi")
-            .build() // no attachments
+            .build() 
 
         val mapped = mapQuotedAttachments(quoteMessage)
 
@@ -201,40 +201,40 @@ class CreateQuoteThumbnailAttachmentTest {
             .addAttachments(
                 SignalServiceProtos.DataMessage.Quote.QuotedAttachment.newBuilder()
                     .setContentType("audio/aac")
-                    .setFlags(1) // voice, no thumbnail
+                    .setFlags(1) 
             )
             .addAttachments(
                 SignalServiceProtos.DataMessage.Quote.QuotedAttachment.newBuilder()
                     .setContentType("application/pdf")
                     .setFileName("doc.pdf")
-                    .setFlags(0) // file, no thumbnail
+                    .setFlags(0) 
             )
             .build()
 
         val mapped = mapQuotedAttachments(quoteMessage)
 
         assertEquals(3, mapped!!.size)
-        // image: has inline thumbnail bytes
+        
         assertEquals("image/jpeg", mapped[0].contentType)
         assertEquals("p.jpg", mapped[0].fileName)
         assertEquals(0, mapped[0].flags)
         assertArrayEquals(byteArrayOf(9, 9), mapped[0].thumbnail?.thumbnail)
-        // voice: flags preserved, no thumbnail attachment
+        
         assertEquals("audio/aac", mapped[1].contentType)
         assertEquals(1, mapped[1].flags)
         assertNull(mapped[1].thumbnail)
-        // file: contentType/fileName preserved, no thumbnail attachment
+        
         assertEquals("application/pdf", mapped[2].contentType)
         assertEquals("doc.pdf", mapped[2].fileName)
         assertNull(mapped[2].thumbnail)
     }
 
-    /**
-     * Mirrors the exact list-wiring in [MessageContentProcessor.handleDataMessage] quote block:
-     * `attachmentsList.map { ... createQuoteThumbnailAttachment(...) ... }.ifEmpty { null }`.
-     * Calls the REAL [MessageContentProcessor.createQuoteThumbnailAttachment] for each element so
-     * a change to that production method is reflected here.
-     */
+    
+
+
+
+
+
     private fun mapQuotedAttachments(
         quoteMessage: SignalServiceProtos.DataMessage.Quote
     ): List<QuotedAttachment>? = quoteMessage.attachmentsList.map { protoQa ->

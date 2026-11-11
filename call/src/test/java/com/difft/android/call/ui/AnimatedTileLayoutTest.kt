@@ -28,15 +28,15 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/** Mid-animation sample point. */
+
 private const val HALF_WAY_MS = TILE_MOVE_ANIM_MS / 2L
 
-/**
- * [AnimatedTileLayout] moves keyed tiles between the rects it is given without re-creating them,
- * snaps when told to, keeps a leaving tile composed while it fades out, places rects absolutely in
- * RTL, and sizes a fill tile from the layout pass. Each tile is a tagged [Box] counting its own
- * creations.
- */
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [30], qualifiers = "w900dp-h900dp-xhdpi")
@@ -63,7 +63,7 @@ class AnimatedTileLayoutTest {
     private fun placed(id: String, left: Int, top: Int = 0, size: Int = 100, z: Float = 0f) =
         TilePlacement(id, IntRect(left, top, left + size, top + size), z)
 
-    /** Writes harness state on the UI thread and publishes it, so the next frame recomposes. */
+    
     private fun update(write: () -> Unit) = composeTestRule.runOnIdle {
         write()
         Snapshot.sendApplyNotifications()
@@ -93,7 +93,7 @@ class AnimatedTileLayoutTest {
         assertTrue("$message: $actual not strictly between $from and $to", actual > minOf(from, to) && actual < maxOf(from, to))
     }
 
-    /** Asserts [id] is mid-way from [from] to [to] on every edge that moves. */
+    
     private fun assertMidway(id: String, from: IntRect, to: IntRect) {
         val mid = bounds(id)
         if (from.left != to.left) assertStrictlyBetween("$id left", from.left.toFloat(), to.left.toFloat(), mid.left)

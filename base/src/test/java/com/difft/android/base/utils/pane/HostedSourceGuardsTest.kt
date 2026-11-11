@@ -7,11 +7,11 @@ import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * The hosted-page source rules ([HostedSourceGuards]) on fixtures: each rejects what it guards
- * against and accepts the intended form, so the real guards over the hosted pages cannot pass
- * vacuously.
- */
+
+
+
+
+
 class HostedSourceGuardsTest {
 
     @Test

@@ -9,7 +9,6 @@ import io.livekit.android.util.flow
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -26,21 +25,25 @@ private data class TrackFieldSnapshot(
     val screenSharing: Boolean,
 )
 
+
+
+
+
+
+
+
 class ScreenShareFloatingSpeakerStateHolder(
     private val scope: CoroutineScope,
     private val participantManager: ParticipantManager,
     private val speakingEnabled: StateFlow<Boolean>,
     private val contactorCacheManager: ContactorCacheManager,
     private val explicitFallback: StateFlow<Participant>,
+    private val layoutSpeaker: StateFlow<String?>,
 ) : ScreenShareFloatingSpeakerStatePort {
 
-    private var holdJob: Job? = null
-    private var holdBaseline: ResolutionInputs? = null
     private var trackCollectJob: Job? = null
     private var displayInfoJob: Job? = null
     private var resolutionCollectJob: Job? = null
-
-    private var lastValidatedPrimaryWhileSpeaking: Participant? = null
 
     private fun initialUiState(): ScreenShareFloatingSpeakerUiState {
         val p = explicitFallback.value
@@ -64,71 +67,13 @@ class ScreenShareFloatingSpeakerStateHolder(
         resolutionCollectJob = scope.launch {
             yield()
             combine(
-                participantManager.primary,
+                layoutSpeaker,
                 participantManager.participants,
                 participantManager.screenSharingUser,
                 explicitFallback,
-                speakingEnabled,
-            ) { primary, participants, sharer, fallback, speakingOn ->
-                ResolutionInputs(
-                    primary = primary,
-                    participants = participants,
-                    sharer = sharer,
-                    fallback = fallback,
-                    speakingOn = speakingOn,
-                )
-            }.collect { onResolutionTick(it) }
-        }
-    }
-
-    private fun latestInputs(): ResolutionInputs = ResolutionInputs(
-        primary = participantManager.primary.value,
-        participants = participantManager.participants.value,
-        sharer = participantManager.screenSharingUser.value,
-        fallback = explicitFallback.value,
-        speakingOn = speakingEnabled.value,
-    )
-
-    private fun onResolutionTick(inputs: ResolutionInputs) {
-        val validatedPrimary = inputs.primary?.takeIf { it.isStillIn(inputs.participants) }
-        if (validatedPrimary != null) {
-            holdJob?.cancel()
-            holdBaseline = null
-            val cur = _uiState.value
-            if (cur.videoParticipant.sid == validatedPrimary.sid &&
-                cur.selectionSource == FloatingSpeakerSelectionSource.PRIMARY_ACTIVE_SPEAKER
-            ) {
-                lastValidatedPrimaryWhileSpeaking = validatedPrimary
-                return
-            }
-            emitResolved(validatedPrimary, FloatingSpeakerSelectionSource.PRIMARY_ACTIVE_SPEAKER)
-            return
-        }
-
-        val stillHeld = holdJob?.isActive == true
-        val baseline = holdBaseline
-        if (stillHeld && baseline != null && !meaningfulHoldRestart(inputs, baseline)) {
-            return
-        }
-
-        holdJob?.cancel()
-        holdBaseline = inputs
-        val held = lastValidatedPrimaryWhileSpeaking?.takeIf { it.isStillIn(inputs.participants) }
-        if (held != null) {
-            emitResolved(held, FloatingSpeakerSelectionSource.HOLD_LAST_PRIMARY)
-        }
-
-        holdJob = scope.launch {
-            delay(ScreenShareSpeakerConstants.FALLBACK_HOLD_MS)
-            val latest = latestInputs()
-            holdBaseline = null
-            val vp = latest.primary?.takeIf { it.isStillIn(latest.participants) }
-            val fallbackNow = resolveFallback(latest.sharer, latest.fallback, latest.participants)
-            if (vp != null) {
-                emitResolved(vp, FloatingSpeakerSelectionSource.PRIMARY_ACTIVE_SPEAKER)
-            } else {
-                emitResolved(fallbackNow, FloatingSpeakerSelectionSource.FALLBACK_SCREEN_SHARER)
-            }
+            ) { speakerId, participants, sharer, fallback ->
+                resolveShareSpeaker(speakerId, participants, sharer, fallback)
+            }.collect { (participant, source) -> emitResolved(participant, source) }
         }
     }
 
@@ -136,9 +81,6 @@ class ScreenShareFloatingSpeakerStateHolder(
         participant: Participant,
         source: FloatingSpeakerSelectionSource,
     ) {
-        if (source == FloatingSpeakerSelectionSource.PRIMARY_ACTIVE_SPEAKER) {
-            lastValidatedPrimaryWhileSpeaking = participant
-        }
         val prev = _uiState.value
         val sidChanged = prev.videoParticipant.sid != participant.sid
         if (sidChanged) {
@@ -216,10 +158,7 @@ class ScreenShareFloatingSpeakerStateHolder(
 
     fun cancel() {
         resolutionCollectJob?.cancel()
-        holdJob?.cancel()
         trackCollectJob?.cancel()
         displayInfoJob?.cancel()
-        holdBaseline = null
-        lastValidatedPrimaryWhileSpeaking = null
     }
 }

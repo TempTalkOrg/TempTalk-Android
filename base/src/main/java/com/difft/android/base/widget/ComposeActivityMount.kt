@@ -12,14 +12,14 @@ import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.difft.android.base.log.lumberjack.L
 
-/**
- * Mounts/unmounts a [ComposeView] directly onto an Activity's root content view, outside of
- * any Fragment/View hierarchy.
- *
- * The host may never have called `setContentView`, so the ViewTree owners are installed on
- * the wrapper here. A host that is not a [LifecycleOwner] is skipped: it has no owners, and
- * Compose would crash on first attach.
- */
+
+
+
+
+
+
+
+
 internal object ComposeActivityMount {
     fun mount(activity: Activity, composeView: ComposeView) {
         if (activity !is LifecycleOwner) {

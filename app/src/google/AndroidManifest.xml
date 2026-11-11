@@ -1,7 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Google Play policy: no in-app self-update (REQUEST_INSTALL_PACKAGES) and no exact alarms
-     (SCHEDULE_EXACT_ALARM, declared by :chat; the keep-alive falls back to inexact alarms).
-     The first removal is defensive: the sideload manifest never merges into this channel. -->
+
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 

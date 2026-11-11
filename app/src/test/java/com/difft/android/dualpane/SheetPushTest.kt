@@ -23,12 +23,11 @@ import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import java.util.concurrent.TimeUnit
 
-/**
- * Pushing from a sheet (design §3.6): a sheet shown on a conversation page's FragmentManager pushes
- * onto that page's stack through [detailNavigationUnderDialog]; a sheet shown on the Activity has
- * no page and goes through the navigator's [PaneNavigator.pushOnVisibleStack], which pushes only
- * while the conversation it was shown over is still the root.
- */
+
+
+
+
+
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [33], qualifiers = "w840dp-h900dp")
 class SheetPushTest {

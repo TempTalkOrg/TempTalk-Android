@@ -45,21 +45,21 @@ class JobManagerInitTest {
 
         val jobManager = JobManager(application, buildConfiguration())
 
-        // flush() launches on managementDispatcher which awaits initDeferred
-        // Run flush on a separate thread since it blocks
+        
+        
         Thread {
             jobManager.flush()
             flushCompleted.countDown()
         }.start()
 
-        // Verify: flush has NOT completed yet (init is blocked)
+        
         val completedBeforeInit = flushCompleted.await(300, TimeUnit.MILLISECONDS)
         assertEquals(false, completedBeforeInit, "flush() should not complete before init")
 
-        // Unblock init
+        
         initBlocker.countDown()
 
-        // Verify: flush completes after init
+        
         val completedAfterInit = flushCompleted.await(5, TimeUnit.SECONDS)
         assertTrue(completedAfterInit, "flush() should complete after init")
     }
@@ -71,7 +71,7 @@ class JobManagerInitTest {
         val flushCompleted = CountDownLatch(1)
         val jobManager = JobManager(application, buildConfiguration())
 
-        // flush() should complete even though init threw an exception
+        
         Thread {
             jobManager.flush()
             flushCompleted.countDown()
@@ -85,10 +85,10 @@ class JobManagerInitTest {
     fun `getDebugInfo returns result after init`() {
         val jobManager = JobManager(application, buildConfiguration())
 
-        // Wait for init to complete
+        
         jobManager.flush()
 
-        // getDebugInfo should return a result without timing out
+        
         val result = jobManager.getDebugInfo()
         assertTrue(result.isNotEmpty(), "getDebugInfo should return a non-empty string")
         assertTrue(

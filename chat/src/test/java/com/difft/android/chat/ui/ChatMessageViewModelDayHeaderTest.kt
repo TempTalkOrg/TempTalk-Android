@@ -22,24 +22,24 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import util.TimeFormatter
 
-/**
- * Cases #74..#76 — the day-header assignment, after it became a single forward pass.
- *
- * What the assertions compare against is the algorithm this replaced: for every row, rescan
- * everything before it for the last non-notify row, falling back to the before-anchor. It is
- * reimplemented here deliberately — it is the golden output, and the values it is compared with come
- * out of the real [ChatMessageViewModel] pipeline.
- *
- * Notify-style rows are built as screenshot messages rather than `NotifyChatMessage`s: an
- * empty-content notify row is filtered out before this logic runs, and giving one real content would
- * drag notice parsing into a case about day headers.
- */
+
+
+
+
+
+
+
+
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28])
 class ChatMessageViewModelDayHeaderTest : ChatMessageViewModelTestBase() {
 
-    // #74 — six list shapes, each against all three before-anchor shapes.
+    
     @Test
     fun `single-pass day headers match the rescan algorithm on every list shape`() = runTest {
         val shapes = listOf<Pair<String, List<MessageModel>>>(
@@ -65,9 +65,9 @@ class ChatMessageViewModelDayHeaderTest : ChatMessageViewModelTestBase() {
         }
     }
 
-    // #75 — pathological input: a long notify run in front of the rows that carry the headers. This
-    // is the shape the rescan turned quadratic on, and the one where an off-by-one in the forward
-    // cursor is most visible.
+    
+    
+    
     @Test
     fun `single-pass day headers match the rescan algorithm on a long notify run`() = runTest {
         val rows = List(NOTIFY_RUN) { notifyRow(DAY_1) } +
@@ -77,8 +77,8 @@ class ChatMessageViewModelDayHeaderTest : ChatMessageViewModelTestBase() {
         assertDayHeadersMatchReference("long notify run", rows, anchor = null)
     }
 
-    // #76 (pipeline half) — the pass keeps no state between emissions: the same window emitted twice
-    // produces the same headers.
+    
+    
     @Test
     fun `the same window emitted twice produces the same day headers`() = runTest {
         val rows = listOf(row(DAY_1), notifyRow(DAY_1), row(DAY_2), row(DAY_2))
@@ -89,9 +89,9 @@ class ChatMessageViewModelDayHeaderTest : ChatMessageViewModelTestBase() {
         assertEquals(first, second)
     }
 
-    // #76 (predicate half) — the pass writes showDayTime / showName / showTime, and its only input
-    // besides timeStamp is this predicate. If the predicate ever started reading those flags, the
-    // forward cursor would depend on values written earlier in the same pass.
+    
+    
+    
     @Test
     fun `notify-style detection ignores the display flags the pass writes`() {
         val plain = TextChatMessage().apply {
@@ -110,7 +110,7 @@ class ChatMessageViewModelDayHeaderTest : ChatMessageViewModelTestBase() {
         assertTrue(screenshot.isNotifyStyleMessage())
     }
 
-    // --- helpers ---
+    
 
     private suspend fun assertDayHeadersMatchReference(
         label: String,
@@ -125,14 +125,14 @@ class ChatMessageViewModelDayHeaderTest : ChatMessageViewModelTestBase() {
         assertEquals(label, expected, actual)
     }
 
-    /** Drives the real ViewModel pipeline and returns the `showDayTime` sequence it produced. */
+    
     private suspend fun showDayTimeFromPipeline(
         rows: List<MessageModel>,
         anchor: MessageModel?,
     ): List<Boolean> {
-        // `behaviorFlow` is shared across the invocations of one case: leaving the previous window in
-        // it would make the fresh ViewModel's combine fire on THAT window first (the pipeline filters
-        // null behaviors, so clearing it means the first emission is this one).
+        
+        
+        
         behaviorFlow.value = null
         val vm = viewModel(For.Account(PEER_ID))
         var result: List<Boolean> = emptyList()
@@ -140,8 +140,8 @@ class ChatMessageViewModelDayHeaderTest : ChatMessageViewModelTestBase() {
             behaviorFlow.value = ChatMessageListBehavior(
                 messageList = rows,
                 anchorMessageBefore = anchor,
-                // false: a shown E2EE header prepends a notify-style row of its own, which belongs
-                // to the header cases rather than here.
+                
+                
                 hasReachedHistoryStart = false,
                 updateTimestamp = System.nanoTime(),
             )
@@ -154,10 +154,10 @@ class ChatMessageViewModelDayHeaderTest : ChatMessageViewModelTestBase() {
         return result
     }
 
-    /**
-     * The pre-optimisation algorithm: rescan everything before each row for the last non-notify one,
-     * falling back to the before-anchor when that scan finds nothing.
-     */
+    
+
+
+
     private fun referenceShowDayTime(rows: List<ChatMessage>, anchor: ChatMessage?): List<Boolean> =
         rows.mapIndexed { index, message ->
             if (message.isNotifyStyleMessage()) {
@@ -170,10 +170,10 @@ class ChatMessageViewModelDayHeaderTest : ChatMessageViewModelTestBase() {
             }
         }
 
-    /**
-     * The row as the reference algorithm sees it. Only the two properties that algorithm reads have
-     * to agree with what the pipeline builds: the timestamp and whether the row is notify-style.
-     */
+    
+
+
+
     private fun asChatMessage(model: MessageModel): ChatMessage = TextChatMessage().apply {
         id = model.id
         timeStamp = model.timeStamp
@@ -181,11 +181,11 @@ class ChatMessageViewModelDayHeaderTest : ChatMessageViewModelTestBase() {
         isScreenShotMessage = model.screenShot() != null
     }
 
-    /**
-     * A plain TEXT row on [dayMillis]. Timestamps are strictly increasing across every row this
-     * class builds, so the pipeline's `sortedBy { systemShowTimestamp }` cannot reorder a window
-     * relative to the list it was handed (which is what the reference is computed against).
-     */
+    
+
+
+
+
     private fun row(dayMillis: Long): MessageModel {
         sequence += 1
         return MessageModel().apply {
@@ -196,7 +196,7 @@ class ChatMessageViewModelDayHeaderTest : ChatMessageViewModelTestBase() {
         }
     }
 
-    /** A notify-style row: a TEXT row whose `screenShot()` resolves, exactly as production checks. */
+    
     private fun notifyRow(dayMillis: Long): MessageModel =
         row(dayMillis).also { every { it.screenShot() } returns ScreenShot(null) }
 

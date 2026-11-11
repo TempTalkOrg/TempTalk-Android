@@ -23,17 +23,7 @@ object ResUtils {
         return application.getString(id, *formatArgs)
     }
 
-//    @JvmStatic
-//    @ColorInt
-//    fun getColor(id: Int): Int {
-//        return com.difft.android.base.utils.application.resources.getColor(id)
-//    }
 
-//    @JvmStatic
-//    @ColorInt
-//    fun getColor(context: Context, id: Int): Int {
-//        return ContextCompat.getColor(context, id)
-//    }
 
     fun getDrawable(id: Int): Drawable {
         return ResourcesCompat.getDrawable(application.resources, id, application.theme)
@@ -56,12 +46,11 @@ object ResUtils {
         return application.resources.getStringArray(id)
     }
 
-    /**
-     * 根据资源 id 获取资源名
-     *
-     * @param id
-     * @return
-     */
+    
+
+
+
+
     fun getResourceEntryName(id: Int): String {
         return application.resources.getResourceEntryName(id)
     }

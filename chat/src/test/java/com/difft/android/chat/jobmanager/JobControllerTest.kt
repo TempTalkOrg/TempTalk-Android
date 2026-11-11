@@ -50,7 +50,7 @@ class JobControllerTest {
         )
     }
 
-    // -- submitJob --
+    
 
     @Test
     fun `submitJob stores job in storage`() {
@@ -108,7 +108,7 @@ class JobControllerTest {
         assertEquals(0, fullSpecSlot.captured.single().jobSpec.runAttempt)
     }
 
-    // -- submitJob: maxInstancesForFactory exceeded -> IGNORED --
+    
 
     @Test
     fun `submitJob ignores job when maxInstancesForFactory exceeded`() {
@@ -137,7 +137,7 @@ class JobControllerTest {
         verify(exactly = 0) { job.onSubmit() }
     }
 
-    // -- submitJob: maxInstancesForQueue exceeded -> IGNORED --
+    
 
     @Test
     fun `submitJob ignores job when maxInstancesForQueue exceeded`() {
@@ -186,7 +186,7 @@ class JobControllerTest {
         verify { jobStorage.insertJobs(any()) }
     }
 
-    // -- onSuccess --
+    
 
     @Test
     fun `onSuccess deletes job from storage and tracks SUCCESS`() {
@@ -198,7 +198,7 @@ class JobControllerTest {
         verify { jobTracker.onStateChange(job, JobTracker.JobState.SUCCESS) }
     }
 
-    // -- onFailure --
+    
 
     @Test
     fun `onFailure deletes job from storage and tracks FAILURE`() {
@@ -210,7 +210,7 @@ class JobControllerTest {
         verify { jobTracker.onStateChange(job, JobTracker.JobState.FAILURE) }
     }
 
-    // -- onRetry --
+    
 
     @Test
     fun `onRetry updates job in storage with incremented attempt and backoff`() {
@@ -290,7 +290,7 @@ class JobControllerTest {
         controller.onRetry(job, -100L)
     }
 
-    // -- cancelAllInQueue --
+    
 
     @Test
     fun `cancelAllInQueue cancels inactive jobs via cancelJob`() {
@@ -313,12 +313,12 @@ class JobControllerTest {
 
     @Test
     fun `cancelAllInQueue sets canceled flag on running jobs`() {
-        // First submit a job so it enters runningJobs map (via submitJob only puts in storage,
-        // pullNextEligibleJobForExecution puts into runningJobs, but that blocks).
-        // Instead, we test via cancelJob: if a job's id is in runningJobs, cancel() is called on it.
-        // We need to get a job into runningJobs first. The only public way is pullNextEligibleJobForExecution,
-        // which blocks. So we test the cancelJob path for the non-running case, and verify cancel() is called
-        // on instantiated jobs (cancelJob calls job.cancel() for both running and non-running jobs).
+        
+        
+        
+        
+        
+        
 
         val jobSpec = buildJobSpec("running-1", queueKey = "q")
         every { jobStorage.getJobsInQueue("q") } returns listOf(jobSpec)
@@ -330,14 +330,14 @@ class JobControllerTest {
 
         controller.cancelAllInQueue("q")
 
-        // For non-running jobs, cancelJob instantiates a new job, calls cancel() on it, then onFailure
+        
         verify { recreatedJob.cancel() }
         verify { recreatedJob.onFailure() }
         verify { jobStorage.deleteJob("running-1") }
         verify { jobTracker.onStateChange(recreatedJob, JobTracker.JobState.FAILURE) }
     }
 
-    // -- onJobFinished --
+    
 
     @Test
     fun `onJobFinished removes job from running jobs`() {
@@ -347,10 +347,10 @@ class JobControllerTest {
         controller.submitJob(job)
         controller.onJobFinished(job)
 
-        // No direct assertion on private runningJobs, but no exception means success
+        
     }
 
-    // -- init --
+    
 
     @Test
     fun `init updates all jobs to pending`() {
@@ -359,7 +359,7 @@ class JobControllerTest {
         verify { jobStorage.updateAllJobsToBePending() }
     }
 
-    // -- getDebugInfo --
+    
 
     @Test
     fun `getDebugInfo returns formatted string with jobs and constraints`() {
@@ -386,7 +386,7 @@ class JobControllerTest {
         assertTrue(info.contains("None"))
     }
 
-    // -- submit / retry keep using the composite scheduler --
+    
 
     @Test
     fun `submitJob schedules on the composite scheduler and not the persistent one`() {
@@ -417,7 +417,7 @@ class JobControllerTest {
         verify(exactly = 0) { persistentScheduler.schedule(any(), any()) }
     }
 
-    // -- Helpers --
+    
 
     private fun createTestJob(id: String, params: Job.Parameters? = null): Job {
         val parameters = params ?: Job.Parameters.Builder(id).build()

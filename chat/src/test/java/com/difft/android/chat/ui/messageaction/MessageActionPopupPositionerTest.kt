@@ -6,12 +6,12 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * Pure-JVM tests for [MessageActionPopupPositioner] (#1294).
- *
- * Row rects are literal and already knob-extended. Portrait content `(0,100,1000,2100)` gives the
- * band `108..2092`; landscape content `(0,100,2000,900)` gives `108..892`.
- */
+
+
+
+
+
+
 class MessageActionPopupPositionerTest {
 
     private val positioner = MessageActionPopupPositioner
@@ -33,7 +33,7 @@ class MessageActionPopupPositionerTest {
         isOutgoing: Boolean = true,
     ) = positioner.place(input, content, width, height, isOutgoing, metrics)
 
-    // region A — anchor resolution
+    
 
     @Test
     fun `A1 no rows anchors to bubble`() {
@@ -124,9 +124,9 @@ class MessageActionPopupPositionerTest {
         assertEquals(end, a.rect)
     }
 
-    // endregion
+    
 
-    // region N — row clip
+    
 
     @Test
     fun `N1 start row fully above content is dropped`() {
@@ -152,9 +152,9 @@ class MessageActionPopupPositionerTest {
         assertEquals(input, positioner.clipRows(input, portrait))
     }
 
-    // endregion
+    
 
-    // region Y — vertical placement
+    
 
     private fun placeY(anchor: PopupRect, bubble: PopupRect = anchor, band: VerticalBand = portraitBand) =
         positioner.placeY(anchor, bubble, band)
@@ -284,9 +284,9 @@ class MessageActionPopupPositionerTest {
         assertEquals(YPlacement(108, false, PlacementMode.PINNED_TOP), y)
     }
 
-    // endregion
+    
 
-    // region P — end-to-end X and arrow (placeX / arrowOffsetX rows: MessageActionPopupPositionerXTest)
+    
 
     @Test
     fun `P7 placement is translation invariant in y`() {
@@ -310,15 +310,15 @@ class MessageActionPopupPositionerTest {
 
     @Test
     fun `P14 x follows the bubble and not the resolved selection anchor`() {
-        // S1: incoming, bubble.left = 72 while the anchored start row begins at 95.
+        
         val p = s1Placement()
         assertEquals(S1_START, p.anchor.rect)
         assertEquals(72, p.x)
     }
 
-    // endregion
+    
 
-    // region S — #1294 regression
+    
 
     @Test
     fun `S1 the 1294 geometry places below the first selected line`() {
@@ -337,13 +337,13 @@ class MessageActionPopupPositionerTest {
         isOutgoing = false,
     )
 
-    // endregion
+    
 
-    // region C — handle-coverage contract
+    
 
     private enum class Row { START, END }
 
-    /** [rows] are the clipped rows; covered means half-open vertical overlap with `[y, y + height)`. */
+    
     private fun assertCoverage(p: PopupPlacement, height: Int, rows: Map<Row, PopupRect>, expectedCovered: Set<Row>) {
         val menu = PopupRect(p.x, p.y, p.x + 1, p.y + height)
         val covered = rows.filterValues { menu.overlapsVertically(it) }.keys
@@ -456,14 +456,14 @@ class MessageActionPopupPositionerTest {
         input.endRow?.let { put(Row.END, it) }
     }
 
-    // endregion
+    
 
-    // region F4 — legacy equivalence of the failed-message popup placement
+    
 
-    /**
-     * Logic copy of the pre-#1294 `FailedMessageActionPopup.calculatePopupY`, taking [PopupRect]
-     * instead of `android.graphics.Rect` and without its unused `arrowHeightPx` parameter.
-     */
+    
+
+
+
     private fun legacyCalculatePopupY(
         anchorBounds: PopupRect,
         popupHeight: Int,
@@ -510,12 +510,12 @@ class MessageActionPopupPositionerTest {
                     val clampWindow = bottom + gap < minY || top - gap > maxY
                     when {
                         height > maxY - minY -> {
-                            // Taller-than-content guard: the menu top stays at minY.
+                            
                             assertEquals(cell, minY, p.y)
                             tallerThanBand++
                         }
                         clampWindow -> {
-                            // Band clamp: the menu stays inside [minY, maxY].
+                            
                             assertTrue(cell, p.y >= minY && p.y + height <= maxY)
                         }
                         else -> {
@@ -532,9 +532,9 @@ class MessageActionPopupPositionerTest {
         assertTrue(tallerThanBand > 0)
     }
 
-    // endregion
+    
 
-    // region PopupRect
+    
 
     @Test
     fun `PopupRect helpers`() {
@@ -549,7 +549,7 @@ class MessageActionPopupPositionerTest {
         assertNull(r.clipVerticallyTo(rect(0, 70, 10, 90)))
     }
 
-    // endregion
+    
 
     private fun PopupRect.shiftY(dy: Int) = copy(top = top + dy, bottom = bottom + dy)
 
@@ -565,7 +565,7 @@ class MessageActionPopupPositionerTest {
             endRow = PopupRect(60, 1600, 500, 1660),
         )
 
-        // #1294 screenshot geometry: band 278..1482 with the 8px edge padding.
+        
         val S1_CONTENT = PopupRect(0, 270, 1080, 1490)
         val S1_BUBBLE = PopupRect(72, 280, 1058, 1040)
         val S1_START = PopupRect(95, 330, 580, 395)

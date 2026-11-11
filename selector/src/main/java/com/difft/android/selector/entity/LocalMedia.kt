@@ -13,55 +13,55 @@ import kotlinx.parcelize.IgnoredOnParcel
 import kotlinx.parcelize.Parcelize
 import java.io.File
 
-/**
- * Every constructor property is parceled (mirrors the fields the original writeToParcel wrote).
- * The three private *Flag properties carry the raw booleans that back the computed [isCut] /
- * [isOriginal] / [isEditorImage] states, so the parcel round-trip stays value-identical to the
- * original (which parceled the raw flag, not the path-gated computed value). Two of the original's
- * fields are absent from this parcel set: [compareLocalMedia] is kept as a class-body property so
- * @Parcelize excludes it (matching the original writeToParcel), and the original's
- * videoThumbnailPath was deleted outright with the video-thumbnail feature (zero callers) — it is
- * neither a property nor parceled here.
- */
+
+
+
+
+
+
+
+
+
+
 @Parcelize
-// EqualsOrHashCode: identity hashCode is deliberate — the OR-based equals admits no
-// contract-consistent hashCode, and identity-keyed Map<LocalMedia, …> sites depend on it (see equals KDoc).
+
+
 @Suppress("LongParameterList", "EqualsOrHashCode")
 class LocalMedia(
     var id: Long = 0,
-    /** original path (always populated by the loaders / factory before external reads) */
+    
     var path: String = "",
-    /** real path; not accessible from AndroidQ but always populated before external reads */
+    
     var realPath: String = "",
-    /** original path — only set when the "original" toggle is checked, else absent */
+    
     var originalPath: String? = null,
-    /** compress path — absent until a compress engine runs */
+    
     var compressPath: String? = null,
-    /** cut path — absent until a crop engine runs */
+    
     var cutPath: String? = null,
-    /**
-     * watermark path — never assigned since the watermark feature was removed (no writers remain);
-     * retained read-only because [isWatermarkPath] / [availablePath] still reference it.
-     */
+    
+
+
+
     var watermarkPath: String? = null,
-    /** app sandbox path — absent unless copied into the sandbox */
+    
     var sandboxPath: String? = null,
     var duration: Long = 0,
-    /** whether the item is selected (internal use) */
+    
     var isChecked: Boolean = false,
-    /** raw cut flag; effective state is [isCut] (adds a non-empty [cutPath] guard) */
+    
     private var cutFlag: Boolean = false,
-    /** media position in the list */
+    
     var position: Int = 0,
-    /** the media number of qq choose styles */
+    
     var num: Int = 0,
-    /** media resource type — coalesced to a concrete type by the loaders, never absent */
+    
     var mimeType: String = "",
-    /** gallery selection mode */
+    
     var chooseModel: Int = 0,
-    /** camera-generated data source, only for taking photos once */
+    
     var isCameraSource: Boolean = false,
-    /** raw compressed flag; effective state is [isCompressed] (adds a non-empty [compressPath] guard) */
+    
     var compressed: Boolean = false,
     var width: Int = 0,
     var height: Int = 0,
@@ -71,48 +71,86 @@ class LocalMedia(
     var cropOffsetY: Int = 0,
     var cropResultAspectRatio: Float = 0f,
     var size: Long = 0,
-    /** raw original flag; effective state is [isOriginal] (adds a non-empty [originalPath] guard) */
+    
     private var originalFlag: Boolean = false,
-    /** file name — coalesced to a derived name by the loaders, never absent */
+    
     var fileName: String = "",
-    /** parent folder name — coalesced by the loaders, never absent */
+    
     var parentFolderName: String = "",
     var bucketId: Long = PictureConfig.ALL.toLong(),
-    /** media create time */
+    
     var dateAddedTime: Long = 0,
-    /** custom data — user-defined, absent by default */
+    
     var customData: String? = null,
-    /** isMaxSelectEnabledMask (internal use only) */
+    
     var isMaxSelectEnabledMask: Boolean = false,
-    /** isGalleryEnabledMask (internal use only) */
+    
     var isGalleryEnabledMask: Boolean = false,
-    /** raw editor-image flag; effective state is [isEditorImage] (adds a non-empty [cutPath] guard) */
+    
     private var editorImageFlag: Boolean = false,
 ) : Parcelable {
 
-    /** The object matched by the last [equals] comparison (internal use); never parceled. */
+    
     @IgnoredOnParcel
     var compareLocalMedia: LocalMedia? = null
 
-    /** Effective "is cut" state: raw flag AND a non-empty cut path. */
+    
+    fun copyForTransform(): LocalMedia = LocalMedia(
+        id = id,
+        path = path,
+        realPath = realPath,
+        originalPath = originalPath,
+        compressPath = compressPath,
+        cutPath = cutPath,
+        watermarkPath = watermarkPath,
+        sandboxPath = sandboxPath,
+        duration = duration,
+        isChecked = isChecked,
+        cutFlag = cutFlag,
+        position = position,
+        num = num,
+        mimeType = mimeType,
+        chooseModel = chooseModel,
+        isCameraSource = isCameraSource,
+        compressed = compressed,
+        width = width,
+        height = height,
+        cropImageWidth = cropImageWidth,
+        cropImageHeight = cropImageHeight,
+        cropOffsetX = cropOffsetX,
+        cropOffsetY = cropOffsetY,
+        cropResultAspectRatio = cropResultAspectRatio,
+        size = size,
+        originalFlag = originalFlag,
+        fileName = fileName,
+        parentFolderName = parentFolderName,
+        bucketId = bucketId,
+        dateAddedTime = dateAddedTime,
+        customData = customData,
+        isMaxSelectEnabledMask = isMaxSelectEnabledMask,
+        isGalleryEnabledMask = isGalleryEnabledMask,
+        editorImageFlag = editorImageFlag,
+    ).also { it.compareLocalMedia = compareLocalMedia }
+
+    
     var isCut: Boolean
         get() = cutFlag && !cutPath.isNullOrEmpty()
         set(value) {
             cutFlag = value
         }
 
-    /** Effective "is compressed" state: raw flag AND a non-empty compress path. */
+    
     val isCompressed: Boolean
         get() = compressed && !compressPath.isNullOrEmpty()
 
-    /** Effective "is original" state: raw flag AND a non-empty original path. */
+    
     var isOriginal: Boolean
         get() = originalFlag && !originalPath.isNullOrEmpty()
         set(value) {
             originalFlag = value
         }
 
-    /** Effective "is editor image" state: raw flag AND a non-empty cut path. */
+    
     var isEditorImage: Boolean
         get() = editorImageFlag && !cutPath.isNullOrEmpty()
         set(value) {
@@ -125,7 +163,7 @@ class LocalMedia(
     val isWatermarkPath: Boolean
         get() = !watermarkPath.isNullOrEmpty()
 
-    /** Real, effective resource path, applying cut / compress / sandbox / original / watermark. */
+    
     val availablePath: String
         get() {
             var result = path
@@ -137,14 +175,14 @@ class LocalMedia(
             return result
         }
 
-    /**
-     * Value-based equality matching on path OR realPath OR id. Deliberately does NOT override
-     * hashCode (identity hashCode preserved from upstream), for two reasons:
-     *  1. This OR-based equals admits no contract-consistent hashCode — equal instances (e.g. same
-     *     id, different path) could not be forced to share a hash over {path, realPath, id}.
-     *  2. LocalMedia is an identity-keyed map key (MediaSelectionRepository / LocalMediaExtensions);
-     *     a value-based hashCode would merge distinct selections that compare equal.
-     */
+    
+
+
+
+
+
+
+
     @Suppress("EqualsWithHashCodeExist")
     override fun equals(other: Any?): Boolean {
         if (this === other) return true

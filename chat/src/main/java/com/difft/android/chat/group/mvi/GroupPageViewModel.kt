@@ -4,6 +4,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.storage.user.CredentialChangeSignal
 import com.difft.android.chat.group.GroupWriteSession
@@ -35,6 +36,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import kotlin.coroutines.cancellation.CancellationException
+import com.difft.android.chat.group.canInviteGroupMembers
 
 @HiltViewModel
 class GroupPageViewModel @Inject constructor(
@@ -70,6 +72,12 @@ class GroupPageViewModel @Inject constructor(
                         _effect.send(Effect.CloseSubject)
                     } else load(refresh = false)
                 }
+            }
+        }
+        
+        viewModelScope.launch {
+            ContactorUtil.contactsUpdate.collect { ids ->
+                if (_state.value.allRows.any { it.uid in ids }) load(refresh = false)
             }
         }
     }
@@ -125,7 +133,7 @@ class GroupPageViewModel @Inject constructor(
 
     private fun submit(change: GroupMutationRepository.Change, acceptedSetting: Pair<Setting, Boolean>? = null) {
         _state.update { it.copy(busy = true, generation = it.generation + 1) }
-        // The deferred is owned by the repository's application scope, not this page.
+        
         val operation = mutations.submit(gid, change)
         viewModelScope.launch {
             val outcome = operation.await()
@@ -198,7 +206,7 @@ class GroupPageViewModel @Inject constructor(
                     val self = members.firstOrNull { it.uid == accountId }
                     val allowed = group.status == 0 && self != null && when (page) {
                         Page.MANAGEMENT, Page.MODERATORS -> self.role == GROUP_ROLE_OWNER
-                        Page.MEMBERS -> memberAction == MemberAction.REMOVE || group.invitationRule == 2 || self.role <= GROUP_ROLE_ADMIN
+                        Page.MEMBERS -> memberAction == MemberAction.REMOVE || canInviteGroupMembers(self.role, group.invitationRule)
                     }
                     val existing = members.mapNotNullTo(mutableSetOf()) { it.uid }
                     val rows: List<GroupMemberModel> = when (page) {
@@ -231,7 +239,7 @@ class GroupPageViewModel @Inject constructor(
                 }
                 if (_state.value.generation != generation || !isCurrentSession()) return@launch
                 if (loaded == null) {
-                    // Absence after a failed/deduplicated fetch is not evidence of deletion.
+                    
                     _state.update { it.copy(loaded = true, allowed = false) }
                     return@launch
                 }
@@ -274,7 +282,7 @@ class GroupPageViewModel @Inject constructor(
         .filter { it.matches(state.query) }
         .map { it.copy(isSelected = if (it.checkBoxEnable) it.uid in state.selectedIds else it.isSelected) })
 
-    /** Display name, raw contact names (remark, publicName, name) and uid, case-insensitive like the contactor search. */
+    
     private fun GroupMemberModel.matches(query: String): Boolean = query.isBlank() ||
         (listOfNotNull(name, uid) + searchNames).any { it.contains(query, ignoreCase = true) }
 

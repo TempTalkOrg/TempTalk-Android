@@ -7,11 +7,11 @@ import com.difft.android.p2p.engine.io.FileSource
 import okio.Source
 import okio.source
 
-/**
- * [FileSource] over a picked Android content [Uri] (sender side). Reads name/size/MIME from
- * the [Context.getContentResolver]; [openRead] opens a fresh `InputStream` each time. The
- * SHA-256 is computed lazily on demand by the caller (engine [com.difft.android.p2p.engine.io.Sha256]).
- */
+
+
+
+
+
 class UriFileSource(
     private val context: Context,
     private val uri: Uri,

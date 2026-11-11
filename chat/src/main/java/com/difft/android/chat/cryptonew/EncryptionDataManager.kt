@@ -15,9 +15,9 @@ class EncryptionDataManager @Inject constructor(
     private val userManager: UserManager
 ) {
 
-    /**
-     * 获取ACI身份密钥对，如果不存在则抛出异常
-     */
+    
+
+
     fun getAciIdentityKey(): IdentityKeyPair {
         val userData = userManager.getUserData() ?: throw IllegalStateException("User data not available")
 
@@ -39,9 +39,6 @@ class EncryptionDataManager @Inject constructor(
         }
     }
 
-    /**
-     * 如果需要，生成ACI身份密钥对
-     */
     fun generateAciIdentityKeyIfNecessary() {
         val userData = userManager.getUserData() ?: throw IllegalStateException("User data not available")
 
@@ -65,9 +62,9 @@ class EncryptionDataManager @Inject constructor(
         L.i { "[UserManagerKeyValue] Generated new ACI identity key pair." }
     }
 
-    /**
-     * 获取旧ACI身份密钥对
-     */
+    
+
+
     fun getAciIdentityOldKey(): IdentityKeyPair {
         val userData = userManager.getUserData() ?: throw IllegalStateException("User data not available")
 
@@ -92,9 +89,6 @@ class EncryptionDataManager @Inject constructor(
         }
     }
 
-    /**
-     * 更新ACI身份密钥对
-     */
     fun updateAciIdentityKey(identityKeyPair: IdentityKeyPair) {
         val publicKeyBase64 = Base64.encodeBytes(identityKeyPair.publicKey.serialize())
         val privateKeyBase64 = Base64.encodeBytes(identityKeyPair.privateKey.serialize())
@@ -108,9 +102,6 @@ class EncryptionDataManager @Inject constructor(
         L.i { "[UserManagerKeyValue] Updated ACI identity key" }
     }
 
-    /**
-     * 设置旧ACI身份密钥对
-     */
     fun setOldAciIdentityKey(identityKeyPair: IdentityKeyPair?) {
         if (identityKeyPair == null) {
             userManager.update {
@@ -130,30 +121,24 @@ class EncryptionDataManager @Inject constructor(
         L.i { "[UserManagerKeyValue] Set old ACI identity key" }
     }
 
-    /**
-     * 检查是否有ACI身份密钥
-     */
     fun hasAciIdentityKey(): Boolean {
         val userData = userManager.getUserData()
         return !userData?.aciIdentityPublicKey.isNullOrEmpty() &&
                 !userData?.aciIdentityPrivateKey.isNullOrEmpty()
     }
 
-    /**
-     * 检查是否有旧ACI身份密钥
-     */
     fun hasOldAciIdentityKey(): Boolean {
         val userData = userManager.getUserData() ?: return false
         return !userData.aciIdentityOldPublicKey.isNullOrEmpty() && !userData.aciIdentityOldPrivateKey.isNullOrEmpty()
     }
 
-    /**
-     * 检查旧ACI身份密钥是否过期（超过1天）
-     */
+    
+
+
     fun checkOldAciIdentityExpired(): Boolean {
         val userData = userManager.getUserData() ?: return true
         if (userData.aciIdentityKeyGenTime != 0L) {
-            // 86400000 = 1 day in milliseconds
+            
             return (System.currentTimeMillis() - userData.aciIdentityKeyGenTime) > 24 * 3600 * 1000
         }
         return true

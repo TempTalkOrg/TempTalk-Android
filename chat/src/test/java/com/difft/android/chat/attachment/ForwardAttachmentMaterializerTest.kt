@@ -20,13 +20,13 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
 
-/**
- * The forward-send local copy: a forwarded attachment the user already has must land in the new
- * copy's own directory and be marked SUCCESS, and every failure mode must degrade to LOADING rather
- * than propagate.
- *
- * Real files in a temp folder — the whole point of the step is filesystem behaviour.
- */
+
+
+
+
+
+
+
 class ForwardAttachmentMaterializerTest {
 
     @get:Rule
@@ -45,12 +45,12 @@ class ForwardAttachmentMaterializerTest {
 
     @After
     fun tearDown() {
-        // Registered globally by the migration module on a device; never leak one test's stand-in.
+        
         AttachmentPathResolver.migrator = null
         unmockkAll()
     }
 
-    /** A structurally valid ciphertext: `[IV16][16*n][HMAC32]`. */
+    
     private fun writeCiphertext(file: File, blocks: Int = 2) {
         file.parentFile?.mkdirs()
         file.writeBytes(ByteArray(16 + 16 * blocks + 32) { 7 })
@@ -164,12 +164,12 @@ class ForwardAttachmentMaterializerTest {
         assertEquals(AttachmentStatus.SUCCESS.code, nestedCopy.status)
     }
 
-    // region the legacy-address fallback
+    
 
-    /**
-     * A stand-in for the migration seam: brings the original's file from `attachment/<ownerId>/` to
-     * the address the resolver reports, exactly as `migrateIfNeeded` does on a real device.
-     */
+    
+
+
+
     private class FakeMigrator(private val root: File) : AttachmentPathResolver.Migrator {
         var calls = 0
 
@@ -209,9 +209,9 @@ class ForwardAttachmentMaterializerTest {
 
     @Test
     fun `a copy whose capture found nothing is still rescued from the original's legacy address`() {
-        // The capture runs on the main thread and may only LOOK at the current address; the original's
-        // file is still where it was written before per-copy addressing. Without this the forward
-        // silently degrades to a re-download for a file the user already has.
+        
+        
+        
         writeCiphertext(File(sourceBasePath("msg-1") + ".encrypt"))
         val migrator = FakeMigrator(root)
         AttachmentPathResolver.migrator = migrator
@@ -259,16 +259,16 @@ class ForwardAttachmentMaterializerTest {
         assertEquals(1, result.copied)
     }
 
-    // endregion
+    
 
     @Test
     fun `a copy that cannot land leaves nothing under the real name and no temp behind`() {
-        // The copy goes through a temp name for exactly this reason: a partial file under the name
-        // readers trust would be marked SUCCESS by this very flow and render broken forever, since
-        // the forward path never re-downloads a copy it believes it already has.
-        //
-        // The failure is provoked at the final rename: a non-empty DIRECTORY sits at the target name,
-        // so the copy into the temp succeeds and `renameTo` cannot replace it.
+        
+        
+        
+        
+        
+        
         val source = sourceBasePath("msg-1")
         writeCiphertext(File("$source.encrypt"))
         val target = File(targetBasePath("local-new") + ".encrypt")
@@ -313,7 +313,7 @@ class ForwardAttachmentMaterializerTest {
 
         assertEquals(0, result.copied)
         assertEquals(AttachmentStatus.SUCCESS.code, copy.status)
-        // Untouched: still the pre-existing 5-block file.
+        
         assertEquals(16L + 16 * 5 + 32, File(targetBasePath("local-new") + ".encrypt").length())
     }
 }

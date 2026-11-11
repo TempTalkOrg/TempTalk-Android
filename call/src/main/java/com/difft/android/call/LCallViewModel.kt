@@ -37,20 +37,22 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import io.livekit.android.room.participant.Participant
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
-/**
- * Activity-scoped facade over the call's [CallSession], which the page resolved and hands in. The
- * view model attaches to the session in its constructor and detaches in [onCleared]; only the
- * page's end path ([doExitClear]) ends the session. Everything else forwards to the session on
- * every read (never cached), so lazy / fail-loud / first-touch semantics are those of the session
- * itself.
- *
- * Owns the [CallUiController], bound to the session's UI state, and is the only collector of the
- * session's UI output: events and the group critical-alert flag are applied here, on main.
- */
-@Suppress("TooManyFunctions") // one-line forwards consumed by the call UI
+
+
+
+
+
+
+
+
+
+
+@Suppress("TooManyFunctions") 
 @HiltViewModel(assistedFactory = LCallViewModelFactory::class)
 class LCallViewModel @AssistedInject constructor(
     application: Application,
@@ -67,13 +69,13 @@ class LCallViewModel @AssistedInject constructor(
 
     val callUiController = CallUiController(session.uiState)
 
-    /** Lays out the call's cards; fed by [layoutInputs] and the page's reporter. */
+    
     val layout = CallLayoutController()
     internal val layoutInputs = CallLayoutInputs(layout)
 
     init {
-        // UNDISPATCHED: both subscribe inside this constructor (on main). The first page to subscribe
-        // receives, in order, the events the session emitted before any page existed.
+        
+        
         viewModelScope.launch(start = CoroutineStart.UNDISPATCHED) {
             session.uiState.events.collect(::applySessionUiEvent)
         }
@@ -81,7 +83,7 @@ class LCallViewModel @AssistedInject constructor(
             session.uiState.groupCriticalAlert.collect(callUiController::setCriticalAlertEnable)
         }
         startLayout()
-        // Once per view model: a configuration change keeps it, so the page stays attached across one.
+        
         session.attachUi()
         onGoingCallStateManager.callPageAttached()
         L.i { "[Call][SessionUi] attached session=${session.id}" }
@@ -113,13 +115,13 @@ class LCallViewModel @AssistedInject constructor(
     val screenShareFloatingSpeaker: ScreenShareFloatingSpeakerStatePort get() = session.screenShareFloatingSpeaker
     val audioRoute get() = audioDeviceManager.routeSnapshot
 
-    /** The session's room setup; the page shows the call once it is [CallRoomState.Ready]. */
+    
     val roomState: StateFlow<CallRoomState> get() = session.roomState
 
-    /** Whether the session has ended (main-confined read). */
+    
     val isSessionEnded: Boolean get() = session.isEnded
 
-    /** Releases the entry point's wait-dialog claim; idempotent. */
+    
     fun releaseEntryWaitDialog() = session.releaseEntryWaitDialog()
 
     fun getE2eeKey(): ByteArray? = session.getE2eeKey()
@@ -142,10 +144,10 @@ class LCallViewModel @AssistedInject constructor(
     fun applyInviteUpgrade() = session.applyInviteUpgrade()
     fun stopRingToneAndTimeoutCheck() = session.stopRingToneAndTimeoutCheck()
 
-    /** The session's log-correlation id. */
+    
     val sessionId: Long get() = session.id
 
-    // --- end path (see CallEndController) ---
+    
     fun markEnding(): Boolean = session.markEnding()
     val finishRequest: StateFlow<CallFinishRequest?> get() = session.finishRequest
 
@@ -153,7 +155,7 @@ class LCallViewModel @AssistedInject constructor(
 
     fun doExitClear() = session.end(CallSessionEndReason.EXIT_CLEAR)
 
-    /** The page went away for good (not a configuration change): it detaches, the call goes on. */
+    
     override fun onCleared() {
         super.onCleared()
         layoutInputs.stop()
@@ -186,7 +188,7 @@ class LCallViewModel @AssistedInject constructor(
 
     fun isControlButtonClickEnabled(): Boolean = session.isControlButtonClickEnabled()
 
-    /** Total: never throws, so one bad event cannot stop barrages for the rest of the call. */
+    
     private fun applySessionUiEvent(event: CallSessionUiEvent) = when (event) {
         is CallSessionUiEvent.Barrage -> event.renderable.dispatchTo(callUiController)
         is CallSessionUiEvent.Toast -> showToastSafely(event.message)
@@ -199,15 +201,17 @@ class LCallViewModel @AssistedInject constructor(
 
     private fun startLayout() {
         layout.start(viewModelScope) { L.e { "[Call] layout tick failed: ${it.stackTraceToString()}" } }
-        // The controls' visibility outside a share is the controller's; the bars mirror it.
+        
         callUiController.setControlsOwner(LayoutControlsOwner(layout))
         viewModelScope.launch {
             layout.state.layoutControls().collect { controls ->
                 if (controls.laidOut) callUiController.applyLayoutControls(controls.hidden, controls.docked)
             }
         }
-        // Picture in picture takes the shape of what it shows, recomputed from every layout state.
+        
         viewModelScope.launch { layout.state.collect(layoutInputs::onLayoutState) }
+        
+        viewModelScope.launch { layout.state.map { it.speaker }.distinctUntilChanged().collect(session::setShareSpeaker) }
         viewModelScope.launch { layoutInputs.pipContentAspect.collect(callUiController::setPipContentAspect) }
         viewModelScope.launch {
             val room = (roomState.first { it != CallRoomState.Pending } as? CallRoomState.Ready)?.room ?: return@launch
@@ -227,7 +231,7 @@ class LCallViewModel @AssistedInject constructor(
 
     private fun logLayoutState(state: ControllerState) {
         val plan = state.plan ?: return
-        // The focus as its tile's index, never an identity.
+        
         val focus = state.focus?.let { id -> plan.tiles.indexOfFirst { it.id == id } }
         val page = state.pager?.let { "${it.page + 1}/${it.pages}" } ?: "1/1"
         L.i {

@@ -26,12 +26,12 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.time.Duration
 
-/**
- * LS6, LS9-LS14 (#1294): a rebind of the anchor item. The same ViewHolder rendering the same text
- * (also after a long-text re-truncation in the bind's pre-draw) keeps the selection and re-anchors to
- * the new geometry; an item without text keeps the menu; a text change or a new ViewHolder dismisses.
- * Until the check runs, nothing reads the selection against the layout.
- */
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(application = TestScopeApplication::class, sdk = [34], qualifiers = "w411dp-h891dp-xxhdpi")
@@ -77,7 +77,7 @@ class MessageActionCoordinatorRebindTest {
 
         val bubbleBefore = f.popup.bubbleBounds
         val rowsBefore = f.popup.selectionRows
-        // A payload rebind (receipts, reactions) of the anchor and its taller neighbour above moves the text.
+        
         f.adapter.leadHeight = FILLER_HEIGHT + LEAD_GROWTH
         f.adapter.notifyItemRangeChanged(0, ANCHOR + 1, "receipt")
         idle()
@@ -110,13 +110,13 @@ class MessageActionCoordinatorRebindTest {
         f.adapter.notifyItemChanged(ANCHOR)
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(16))
 
-        // The old ViewHolder stays attached while its change animation runs, so the detach path did not fire.
+        
         assertTrue("change animation started", animator.changes > 0)
         assertTrue("old holder still attached", f.bubble.isAttachedToWindow)
         assertFalse(f.coordinator.isShowing)
     }
 
-    /** Starts change animations but never finishes them, so the old ViewHolder stays attached. */
+    
     private class HeldChangeAnimator : DefaultItemAnimator() {
         var changes = 0
 
@@ -194,7 +194,7 @@ class MessageActionCoordinatorRebindTest {
         val f = fixture()
         f.showAndIdle()
 
-        // No adapter notification: the selection still holds the offsets of the long text.
+        
         f.textView.text = "Short"
         f.rv.scrollBy(0, 50)
         f.settle()

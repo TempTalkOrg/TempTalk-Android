@@ -15,8 +15,13 @@ import dagger.hilt.android.AndroidEntryPoint
 @AndroidEntryPoint
 class ChatActivity : BaseActivity(), ChatMessageListProvider, ChatInputFocusable {
 
-    // Disable BaseActivity bottom padding - ChatFragment handles IME and navigation bar
+    
     override fun shouldApplyNavigationBarPadding(): Boolean = false
+
+    
+    override fun shouldApplyStatusBarPadding(): Boolean = false
+
+    override fun participatesInSideChrome(): Boolean = true
 
     companion object {
         const val BUNDLE_KEY_CONTACT_ID = "BUNDLE_KEY_CONTACT_ID"
@@ -29,8 +34,8 @@ class ChatActivity : BaseActivity(), ChatMessageListProvider, ChatInputFocusable
             source: String? = null,
             jumpMessageTimeStamp: Long? = null
         ) {
-            // Routed: the home detail stack when it is in front or the window is two-pane,
-            // otherwise this full-window shell (ConversationShells).
+            
+            
             ConversationShells.open(
                 activity,
                 ConversationTarget(ConversationTarget.Kind.ONE_ON_ONE, contactID, jumpMessageTimeStamp, sourceType, source),
@@ -68,7 +73,9 @@ class ChatActivity : BaseActivity(), ChatMessageListProvider, ChatInputFocusable
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        window.setBackgroundDrawable(ChatBackgroundDrawable(this, mBinding.root, true))
+        
+        mBinding.root
+        window.setBackgroundDrawable(ChatBackgroundDrawable(this))
 
         if (savedInstanceState == null) {
             chatFragment = ChatFragment.newInstance(

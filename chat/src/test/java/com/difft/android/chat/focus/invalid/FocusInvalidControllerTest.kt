@@ -28,10 +28,10 @@ import java.io.File
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
-/**
- * The persisted marks behind the dialog and the strip: load gating, per-episode answers, survival of a restart.
- * The DataStore does its file IO on a real dispatcher, so loads are awaited on the flows, not on the test clock.
- */
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class FocusInvalidControllerTest {
 
@@ -59,7 +59,7 @@ class FocusInvalidControllerTest {
 
     @Test
     fun `the dialog is pending until its episode is handled, and the answer survives a restart`() = runTest(UnconfinedTestDispatcher()) {
-        val store = dataStore("marks.preferences_pb") // one store per file: a restart is a new controller over it
+        val store = dataStore("marks.preferences_pb") 
         val first = controller(store)
         val pending = first.pendingDialog.first { it != null }
         assertEquals(FocusInvalidKind.DISBANDED, pending?.kind)
@@ -68,10 +68,10 @@ class FocusInvalidControllerTest {
         assertNull(first.pendingDialog.first { it == null })
 
         val second = controller(store)
-        assertEquals(true, second.stripVisible.first { it }) // marks loaded (the strip mark was never set)
+        assertEquals(true, second.stripVisible.first { it }) 
         assertNull(second.pendingDialog.first { it == null })
 
-        // A different invalidation is owed again.
+        
         effective.value = invalid(1, version = 6)
         assertEquals(FocusInvalidKind.REMOVED, second.pendingDialog.first { it != null }?.kind)
     }
@@ -82,7 +82,7 @@ class FocusInvalidControllerTest {
         controller.markDialogHandled(controller.pendingDialog.first { it != null }!!.episode).join()
         controller.dismissStrip(controller.currentEpisode()).join()
 
-        effective.value = invalid(0, version = 9) // an option edit: new version, same reason and group
+        effective.value = invalid(0, version = 9) 
         assertNull(controller.pendingDialog.first { it == null })
         assertEquals(false, controller.stripVisible.first { !it })
     }
@@ -92,9 +92,9 @@ class FocusInvalidControllerTest {
         val controller = controller(dataStore("marks5.preferences_pb"))
         controller.markDialogHandled(controller.pendingDialog.first { it != null }!!.episode).join()
 
-        effective.value = valid("B", version = 6) // reselected
+        effective.value = valid("B", version = 6) 
         assertNull(controller.pendingDialog.first { it == null })
-        effective.value = invalid(0, version = 7, gid = "A") // "A" is the same group and reason as the answered episode
+        effective.value = invalid(0, version = 7, gid = "A") 
         assertEquals("0:A", controller.pendingDialog.first { it != null }?.episode)
         assertEquals(true, controller.stripVisible.first { it })
     }
@@ -149,10 +149,10 @@ class FocusInvalidControllerTest {
             it[AppStateKeys.FOCUS_INVALID_STRIP_DISMISSED_EPISODE] = "me|0:A"
         }
         val controller = controller(store)
-        effective.value = invalid(1, version = 6) // a different episode: owed, and its dialog shows only once the marks are loaded
+        effective.value = invalid(1, version = 6) 
         controller.pendingDialog.first { it != null }
 
-        effective.value = invalid(0, version = 7) // back to the answered one
+        effective.value = invalid(0, version = 7) 
         assertNull(controller.pendingDialog.first { it == null })
         assertEquals(false, controller.stripVisible.first { !it })
 
@@ -167,23 +167,23 @@ class FocusInvalidControllerTest {
         val controller = controller(store)
         val episode = controller.pendingDialog.first { it != null }!!.episode
 
-        // Another device ended the focus while the picker was open: a late cancel must not leave a mark behind.
+        
         effective.value = EffectiveFocus.INACTIVE
         controller.markDialogHandled(episode).join()
         assertNull(store.data.first()[AppStateKeys.FOCUS_INVALID_DIALOG_HANDLED_EPISODE])
 
-        // The focus became valid on another group.
+        
         effective.value = valid("B", version = 7)
         controller.markDialogHandled(episode).join()
         assertNull(store.data.first()[AppStateKeys.FOCUS_INVALID_DIALOG_HANDLED_EPISODE])
 
-        // Invalid again, but a different episode than the one the picker was opened for.
+        
         effective.value = invalid(1, version = 8)
         controller.markDialogHandled(episode).join()
         assertNull(store.data.first()[AppStateKeys.FOCUS_INVALID_DIALOG_HANDLED_EPISODE])
-        assertEquals(FocusInvalidKind.REMOVED, controller.pendingDialog.first { it != null }?.kind) // still owed
+        assertEquals(FocusInvalidKind.REMOVED, controller.pendingDialog.first { it != null }?.kind) 
 
-        // The same episode is current: written.
+        
         controller.markDialogHandled("1:A").join()
         assertEquals("me|1:A", store.data.first()[AppStateKeys.FOCUS_INVALID_DIALOG_HANDLED_EPISODE])
         assertNull(controller.pendingDialog.first { it == null })

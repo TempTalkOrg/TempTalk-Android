@@ -24,8 +24,8 @@ class TouchFrameLayout @JvmOverloads constructor(
             val current = Date().time - time
             if (current < 300) {
                 false
-            } else { //大于1000视为长按
-                longClickListener?.onLongClick(this) //长按事件
+            } else {
+                longClickListener?.onLongClick(this)
                 true
             }
         }

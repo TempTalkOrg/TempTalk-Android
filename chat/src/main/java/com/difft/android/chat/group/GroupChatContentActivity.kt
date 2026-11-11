@@ -18,8 +18,13 @@ import dagger.hilt.android.AndroidEntryPoint
 @AndroidEntryPoint
 class GroupChatContentActivity : BaseActivity(), ChatMessageListProvider {
 
-    // Disable BaseActivity bottom padding - GroupChatFragment handles IME and navigation bar
+    
     override fun shouldApplyNavigationBarPadding(): Boolean = false
+
+    
+    override fun shouldApplyStatusBarPadding(): Boolean = false
+
+    override fun participatesInSideChrome(): Boolean = true
     companion object {
         const val INTENT_EXTRA_GROUP_ID = "INTENT_EXTRA_GROUP_ID"
 
@@ -34,7 +39,7 @@ class GroupChatContentActivity : BaseActivity(), ChatMessageListProvider {
             groupID: String,
             jumpMessageTimeStamp: Long? = null
         ) {
-            // Routed like ChatActivity.startActivity (ConversationShells).
+            
             ConversationShells.open(
                 activity,
                 ConversationTarget(ConversationTarget.Kind.GROUP, groupID, jumpMessageTimeStamp),
@@ -49,7 +54,9 @@ class GroupChatContentActivity : BaseActivity(), ChatMessageListProvider {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        window.setBackgroundDrawable(ChatBackgroundDrawable(this, mBinding.root, true))
+        
+        mBinding.root
+        window.setBackgroundDrawable(ChatBackgroundDrawable(this))
 
         if (savedInstanceState == null) {
             groupChatFragment = GroupChatFragment.newInstance(

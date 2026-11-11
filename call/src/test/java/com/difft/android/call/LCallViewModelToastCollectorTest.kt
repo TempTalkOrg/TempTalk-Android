@@ -28,11 +28,11 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/**
- * Toast handling of the VM's session-event collector. Robolectric only because `ToastUtil` builds a
- * main-Looper `Handler` when its object initializes; the session and VM are the same JVM fixtures
- * as `LCallViewModelDelegationTest`. Rows: T3-09, T3-24.
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [33])
 class LCallViewModelToastCollectorTest {

@@ -20,10 +20,10 @@ import kotlinx.coroutines.launch
 import livekit.org.webrtc.CameraXHelper
 import javax.inject.Inject
 
-/**
- * Builds the session pieces that load native code or reach framework services, so a
- * [CallSession] can be constructed on the plain JVM in tests.
- */
+
+
+
+
 interface CallSessionComponentsFactory {
     fun audioStack(params: CallSessionParams, scope: CoroutineScope, isDenoiseEnabled: () -> Boolean): CallAudioStack
     fun roomController(
@@ -33,14 +33,14 @@ interface CallSessionComponentsFactory {
     ): CallRoomController
     fun selfId(): String
 
-    /** Registers the process-global camera provider; launches its work on IO inside [scope]. */
+    
     fun registerCameraProvider(scope: CoroutineScope)
 
-    /** The call's proximity screen-off lock, held in [scope] while [shouldHold] is true. */
+    
     fun proximity(scope: CoroutineScope, shouldHold: Flow<Boolean>): ProximityScreenOffController
 }
 
-/** The audio collaborators of one call, built together in their original construction order. */
+
 class CallAudioStack(
     val processor: AudioPipelineProcessor,
     val deviceManager: AudioDeviceManager,
@@ -60,7 +60,7 @@ internal class DefaultCallSessionComponentsFactory @Inject constructor(
         val application = deps.application
         val processor = AudioPipelineProcessor(application)
         val deviceManager = AudioDeviceManager(application, params.callIntent.callType, deps.userManager)
-        // Drives and verifies every route target the manager publishes; holds no route state itself.
+        
         val routeApplier = AudioRouteApplier(
             appContext = application,
             host = deviceManager,

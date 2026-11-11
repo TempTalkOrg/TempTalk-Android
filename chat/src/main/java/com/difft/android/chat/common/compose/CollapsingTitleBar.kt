@@ -1,5 +1,9 @@
 package com.difft.android.chat.common.compose
 
+import androidx.compose.foundation.layout.Spacer
+import com.difft.android.base.ui.sidechrome.SideChromeModel
+import com.difft.android.base.ui.sidechrome.RailAction
+import com.difft.android.base.ui.sidechrome.PublishSideChrome
 import androidx.annotation.DrawableRes
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -7,7 +11,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -15,33 +18,42 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.material3.Icon
+import com.difft.android.base.ui.compose.FloatingIconButton
+import com.difft.android.base.ui.compose.FloatingIconButtonEdge
+import com.difft.android.base.ui.compose.FloatingIconButtonTitleGap
+import com.difft.android.base.ui.compose.FloatingTextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.difft.android.base.ui.theme.DifftTheme
 
-/**
- * Right-hand slot of [CollapsingTitleBar]. Icon and Text share one slot so swapping keeps layout
- * stable; both are tinted `icon`, like the back button.
- */
+
+
+
+
 sealed interface TitleBarAction {
-    data class Icon(@DrawableRes val iconRes: Int, val onClick: () -> Unit) : TitleBarAction
-    data class Text(val label: String, val onClick: () -> Unit) : TitleBarAction
+    
+    data class Icon(@DrawableRes val iconRes: Int, val label: String = "", val onClick: () -> Unit) : TitleBarAction
+
+    
+
+
+
+    data class Text(val label: String, @DrawableRes val sideBarIcon: Int? = null, val onClick: () -> Unit) : TitleBarAction
 }
 
-/**
- * Settings-page top bar that shows no title until the identity header scrolls out of view.
- * When [collapsed] the name fades/slides in (160ms, 8dp) and the bar background dissolves into a
- * top-to-bottom gradient instead of drawing a divider, so content scrolls "under" it.
- */
+
+
+
+
+
 @Composable
 fun CollapsingTitleBar(
     title: String,
@@ -57,6 +69,13 @@ fun CollapsingTitleBar(
         Brush.verticalGradient(listOf(page, page))
     }
     val slideOffset = with(LocalDensity.current) { TITLE_SLIDE.roundToPx() }
+    val barAction = when (action) {
+        is TitleBarAction.Icon -> RailAction(id = "action", icon = action.iconRes, contentDescription = action.label, onClick = action.onClick)
+        is TitleBarAction.Text -> action.sideBarIcon?.let { RailAction(id = "action", icon = it, contentDescription = action.label, onClick = action.onClick) }
+        null -> null
+    }
+    
+    val onSideBar = PublishSideChrome(SideChromeModel(back = onBack, actions = listOfNotNull(barAction)))
 
     Row(
         modifier = modifier
@@ -65,20 +84,21 @@ fun CollapsingTitleBar(
             .background(background),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(
-            painter = painterResource(com.difft.android.base.R.drawable.chative_ic_back),
-            contentDescription = null,
-            modifier = Modifier
-                .clickable { onBack() }
-                .padding(ICON_PADDING)
-                .size(DifftTheme.spacing.iconMedium),
-            tint = DifftTheme.colors.icon
-        )
+        if (onSideBar) {
+            Spacer(modifier = Modifier.width(SIDE_BAR_TITLE_INSET))
+        } else {
+            FloatingIconButton(
+                iconRes = com.difft.android.base.R.drawable.chative_ic_back,
+                contentDescription = null,
+                onClick = onBack,
+                modifier = Modifier.padding(start = FloatingIconButtonEdge, end = FloatingIconButtonTitleGap),
+            )
+        }
 
-        // The Box keeps the weighted slot alive while the title is hidden; AnimatedVisibility drops
-        // its own layout node once fully exited, which would let the action slot slide left.
-        // Fully qualified: inside the Box the RowScope overload is unreachable (DslMarker), so a plain
-        // import makes the call ambiguous.
+        
+        
+        
+        
         Box(modifier = Modifier.weight(1f)) {
             androidx.compose.animation.AnimatedVisibility(
                 visible = collapsed,
@@ -101,24 +121,20 @@ fun CollapsingTitleBar(
                 .widthIn(min = ACTION_MIN_WIDTH),
             contentAlignment = Alignment.Center
         ) {
-            when (action) {
-                is TitleBarAction.Icon -> Icon(
-                    painter = painterResource(action.iconRes),
+            when (val shown = action.takeUnless { onSideBar && barAction != null }) {
+                is TitleBarAction.Icon -> FloatingIconButton(
+                    iconRes = shown.iconRes,
                     contentDescription = null,
-                    modifier = Modifier
-                        .clickable { action.onClick() }
-                        .padding(ICON_PADDING)
-                        .size(DifftTheme.spacing.iconMedium),
-                    tint = DifftTheme.colors.icon
+                    onClick = shown.onClick,
+                    modifier = Modifier.padding(end = FloatingIconButtonEdge),
                 )
 
-                is TitleBarAction.Text -> Text(
-                    text = action.label,
+                is TitleBarAction.Text -> FloatingTextButton(
+                    text = shown.label,
+                    onClick = shown.onClick,
                     style = DifftTheme.typography.p2,
                     color = DifftTheme.colors.icon,
-                    modifier = Modifier
-                        .clickable { action.onClick() }
-                        .padding(horizontal = ICON_PADDING, vertical = ACTION_TEXT_VERTICAL_PADDING)
+                    modifier = Modifier.padding(end = FloatingIconButtonEdge),
                 )
 
                 null -> Unit
@@ -128,8 +144,9 @@ fun CollapsingTitleBar(
 }
 
 private const val ANIM_MS = 160
+
+
+private val SIDE_BAR_TITLE_INSET = 16.dp
 private val BAR_HEIGHT = 52.dp
-private val ICON_PADDING = 12.dp
 private val ACTION_MIN_WIDTH = 48.dp
-private val ACTION_TEXT_VERTICAL_PADDING = 8.dp
 private val TITLE_SLIDE = 8.dp

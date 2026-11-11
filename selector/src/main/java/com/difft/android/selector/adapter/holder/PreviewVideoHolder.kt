@@ -30,7 +30,7 @@ class PreviewVideoHolder(itemView: View) : BasePreviewHolder(itemView) {
     init {
         ivPlayButton = itemView.findViewById(R.id.iv_play_video)
         progress = itemView.findViewById(R.id.progress)
-        // Hide custom play button since ExoPlayer has built-in controls
+        
         ivPlayButton!!.visibility = View.GONE
         if (selectorConfig.videoPlayerEngine == null) {
             selectorConfig.videoPlayerEngine = MediaPlayerEngine()
@@ -119,7 +119,7 @@ class PreviewVideoHolder(itemView: View) : BasePreviewHolder(itemView) {
     }
 
     fun onPause() {
-        // Keep play button hidden since ExoPlayer has built-in controls
+        
         videoEngine()?.onPause(videoPlayer!!)
     }
 
@@ -142,19 +142,19 @@ class PreviewVideoHolder(itemView: View) : BasePreviewHolder(itemView) {
         }
 
         override fun onPlayerEnd() {
-            // Don't hide PlayerView on video end - keep it visible so user can:
-            // 1. Tap to show/hide controls
-            // 2. Replay via the control bar
-            // playerDefaultUI() will be called when view is detached
+            
+            
+            
+            
         }
 
         override fun onPlayerTap() {
-            // Handle tap on video player to toggle UI visibility
+            
             mPreviewEventListener?.onBackPressed()
         }
 
         override fun onPlayerLongPress() {
-            // Handle long press on video player for save/download
+            
             val l = mPreviewEventListener
             val m = media
             if (l != null && m != null) {
@@ -214,7 +214,7 @@ class PreviewVideoHolder(itemView: View) : BasePreviewHolder(itemView) {
 
     private fun playerDefaultUI() {
         isPlayed = false
-        // Keep play button hidden since ExoPlayer has built-in controls
+        
         progress!!.visibility = View.GONE
         coverImageView!!.visibility = View.VISIBLE
         videoPlayer!!.visibility = View.GONE
@@ -239,8 +239,8 @@ class PreviewVideoHolder(itemView: View) : BasePreviewHolder(itemView) {
     override fun onViewDetachedFromWindow() {
         val engine = videoEngine()
         if (engine != null) {
-            // Stop listening first: tearing the player down hides its control bar, and that event
-            // must not reach the page that is now on screen.
+            
+            
             engine.removePlayListener(mPlayerListener)
             engine.onPlayerDetachedFromWindow(videoPlayer!!)
         }

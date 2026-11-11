@@ -15,13 +15,11 @@ import com.difft.android.base.utils.ResUtils
 import com.difft.android.call.R
 import com.difft.android.call.data.FeedbackCallInfo
 
-/**
- * Bottom action bar of the post-call feedback sheets (Figma `Two_Button`, Yelling-Metting
- * `10860:7860` / `10860:7581`): an outlined Not Now and a filled Submit of equal width, 16dp apart,
- * on a 16dp inset. The row takes its height from the buttons (80dp at the default font scale) so a
- * larger font scale grows the labels instead of clipping them. Submit is disabled until the sheet
- * has something to send, so a premature tap does nothing — no toast.
- */
+
+
+
+
+
 @Composable
 internal fun CallFeedbackActions(
     onCancel: () -> Unit,
@@ -50,7 +48,7 @@ internal fun CallFeedbackActions(
     }
 }
 
-/** The feedback request for this call: the ids come from the call, the score and reasons from the user. */
+
 internal fun FeedbackCallInfo.toRequestBody(
     rating: Int,
     reasons: Map<String, List<Int>> = emptyMap(),

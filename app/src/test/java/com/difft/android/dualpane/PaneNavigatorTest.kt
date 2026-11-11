@@ -28,11 +28,11 @@ import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import java.util.concurrent.TimeUnit
 
-/**
- * [PaneNavigator] and [DetailTabHostFragment] against the real `activity_index.xml` layouts on
- * [PaneNavigatorTestHost]. `@Config(qualifiers)` picks two-pane (w840dp-h900dp) or one-pane
- * (w400dp-h800dp) the way a device configuration does.
- */
+
+
+
+
+
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [33])
 class PaneNavigatorTest {
@@ -53,7 +53,7 @@ class PaneNavigatorTest {
 
     private fun idle() = shadowOf(Looper.getMainLooper()).idle()
 
-    // Lets the one-pane layer slide finish.
+    
     private fun settle() = shadowOf(Looper.getMainLooper()).idleFor(1, TimeUnit.SECONDS)
 
     private fun open(id: String, tab: Int = nav.currentTab, jump: Long? = null) {
@@ -75,7 +75,7 @@ class PaneNavigatorTest {
 
     private fun labels(tab: Int) = host.pages(tab).map { it.label }
 
-    // ---------------------------------------------------------------- stack operations
+    
 
     @Test
     @Config(qualifiers = "w840dp-h900dp")
@@ -157,7 +157,7 @@ class PaneNavigatorTest {
         assertEquals(View.VISIBLE, host.findViewById<View>(R.id.empty_detail_view).visibility)
     }
 
-    // ---------------------------------------------------------------- tabs
+    
 
     @Test
     @Config(qualifiers = "w840dp-h900dp")
@@ -212,7 +212,7 @@ class PaneNavigatorTest {
         assertEquals(listOf("conv:g:0"), labels(TAB_CHATS))
     }
 
-    // ---------------------------------------------------------------- back owners
+    
 
     @Test
     @Config(qualifiers = "w840dp-h900dp")
@@ -256,7 +256,7 @@ class PaneNavigatorTest {
         assertEquals(2, nav.depth())
     }
 
-    // ---------------------------------------------------------------- one-pane layer
+    
 
     @Test
     @Config(qualifiers = "w400dp-h800dp")
@@ -282,7 +282,7 @@ class PaneNavigatorTest {
         assertEquals(View.IMPORTANT_FOR_ACCESSIBILITY_AUTO, list.importantForAccessibility)
     }
 
-    // ---------------------------------------------------------------- restore and state save
+    
 
     @Test
     @Config(qualifiers = "w840dp-h900dp")

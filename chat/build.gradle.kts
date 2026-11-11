@@ -39,8 +39,8 @@ android {
 
     testOptions {
         unitTests.isIncludeAndroidResources = true
-        // Gradle's 512m default overflows once Robolectric has loaded the several android-all
-        // framework jars this suite spans (API 27–34); mirrors :call.
+        
+        
         unitTests.all { it.maxHeapSize = "2g" }
     }
 }
@@ -64,20 +64,20 @@ dependencies {
     implementation(project(":selector"))
     implementation(project(":call"))
 
-    // Voice message dual-candidate recorder (denoise + voice changer pipeline).
-    // :call already transitively pulls this for the RTC voice changer, but
-    // :chat needs it as a direct dependency to compile against the new
-    // OfflineAudioPipeline / PipelineTapConfig types in `voice/`.
+    
+    
+    
+    
     implementation(libs.denoise.filter)
 
-    // Lottie: image-editor HUD / text entry and the message-list loading animation.
+    
     implementation(libs.lottie)
 
-    // Hilt
+    
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
 
-    // Test dependencies
+    
     testImplementation(libs.junit)
     testImplementation(libs.kotlin.test)
     testImplementation(libs.kotlinx.coroutines.test)
@@ -88,32 +88,29 @@ dependencies {
     kspTest(libs.hilt.compiler)
     testImplementation(testFixtures(project(":base")))
     testImplementation(testFixtures(project(":database")))
-    // Compose test
+    
     testImplementation(platform(libs.compose.bom))
     testImplementation(libs.compose.ui.test.junit4)
-    // Roborazzi
+    
     testImplementation(libs.roborazzi)
     testImplementation(libs.roborazzi.compose)
     testImplementation(libs.roborazzi.junit.rule)
 
-    // WorkManager dependencies
+    
     implementation(libs.bundles.androidx.work)
-
-    // Image compression (Luban)
-    implementation(libs.picture.selector.compress)
 
     implementation(libs.bundles.signal)
     implementation(libs.bundles.jackson)
     
 
-    // SQLite
+    
     implementation(libs.androidx.sqlite)
     implementation(libs.androidx.sqlite.ktx)
 
-    // Preference
+    
     implementation(libs.androidx.preference)
 
-    // Other dependencies
+    
     implementation(libs.annimon.stream)
     implementation(libs.keyboard.visibility.event)
     implementation(libs.circle.imageview)

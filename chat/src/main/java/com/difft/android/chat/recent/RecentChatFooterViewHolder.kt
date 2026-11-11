@@ -15,12 +15,12 @@ import com.difft.android.chat.R
 import com.difft.android.chat.databinding.ChatFragmentRecentChatFooterItemBinding
 import com.difft.android.base.R as BaseR
 
-/**
- * Chat-list footer row explaining that messages and calls are end-to-end encrypted. Stateless —
- * bound to the singleton [ListItem.E2eeFooter]; the whole row is the tap target, "Learn more" is a
- * color+bold [Spannable] run only — no [android.text.style.ClickableSpan] anywhere (E11 regression
- * guard: a nested clickable span inside a clickable row swallows the row's own click).
- */
+
+
+
+
+
+
 class RecentChatFooterViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
 
     private val binding = ChatFragmentRecentChatFooterItemBinding.bind(itemView)

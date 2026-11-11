@@ -10,11 +10,11 @@ import com.difft.android.migration.v2.model.NeutralRecord
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-/**
- * Import side of the read-time ladder: the tri-state `expireStartedAt` lands in `readTime`
- * distinguishably, and the ladder is expanded over the rows that carry no anchor — the same
- * watermark-to-per-row expansion the live read path performs.
- */
+
+
+
+
+
 class ReadLadderImportTest {
 
     private val selfUid = "u-self"
@@ -48,11 +48,11 @@ class ReadLadderImportTest {
         )
     )
 
-    /**
-     * A ladder with two rungs plus a watermark above both, imported together with messages spread
-     * across every band: below the first rung, between the rungs, between the top rung and the
-     * watermark, and above the watermark.
-     */
+    
+
+
+
+
     private fun importLadderFixture(records: List<NeutralRecord>): InMemoryWcdbWriteTarget {
         val target = InMemoryWcdbWriteTarget()
         val importer = NeutralImporter(target, messageAttachmentDir = { "/t/$it/" }, selfUid = selfUid)
@@ -82,8 +82,8 @@ class ReadLadderImportTest {
 
     @Test
     fun `an explicit zero becomes the not-started sentinel and the ladder leaves it alone`() {
-        // -1 matches neither archive branch, so the message never expires by message time until a
-        // real read event releases it.
+        
+        
         val target = importLadderFixture(listOf(message("m-not-started", serverAt = 50, expireStartedAt = 0)))
 
         assertEquals(-1L, readTimeOf(target, "m-not-started"))
@@ -91,8 +91,8 @@ class ReadLadderImportTest {
 
     @Test
     fun `a message covered by two rungs takes the smaller read time`() {
-        // Rungs are applied by ascending readAt, so the write-once guard leaves the first (smallest)
-        // covering value in place — the ladder lookup rule expressed as a sequence of writes.
+        
+        
         val target = importLadderFixture(
             listOf(message("m-low", serverAt = 50), message("m-mid", serverAt = 200))
         )
@@ -107,7 +107,7 @@ class ReadLadderImportTest {
             listOf(message("m-gap", serverAt = 400), message("m-unread", serverAt = 900))
         )
 
-        // The watermark carries no readAt, so its own server time stands in as the read moment.
+        
         assertEquals(500L, readTimeOf(target, "m-gap"))
         assertEquals(0L, readTimeOf(target, "m-unread"), "above the watermark → unread, no anchor")
     }

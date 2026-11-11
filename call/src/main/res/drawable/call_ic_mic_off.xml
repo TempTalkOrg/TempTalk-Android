@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Two-tone glyph (no background): mic in dark-theme primary text, slash in error red.
-     Rendered untinted so the red slash survives; the action bar draws its own circle. -->
+
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="49dp"
     android:height="48dp"

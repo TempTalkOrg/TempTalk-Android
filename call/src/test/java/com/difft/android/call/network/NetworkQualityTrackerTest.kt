@@ -7,40 +7,28 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
-/**
- * Unit tests for [NetworkQualityTracker] — the polling-shaped weak-network state machine.
- *
- * Every case drives the tracker through its PUBLIC API only (feed a reading, advance `now`, read
- * [NetworkQualityTracker.view]). Reaching into the entry table would let a rewritten
- * implementation pass while the five cross-platform regression guards below silently break:
- *  - repeated same-tier events must not restart the worsening timer;
- *  - suppression rule 1 hides remotes instead of deleting them;
- *  - suppression rule 1 applies to the BAD tier only;
- *  - a published verdict never times out on its own (the hint is state-driven, not a toast);
- *  - an improvement lands on the current raw tier, so `BAD -> GOOD` lands on GOOD.
- *
- * Which SURFACE renders a verdict — banner vs tile badge — is covered in `NetworkQualityResolveTest`
- * and `WeakNetworkBannerTest`.
- *
- * Both hysteresis boundaries are asserted from both sides (2_900/3_000 and 4_900/5_000) so writing
- * `>` instead of `>=` fails here rather than in the field.
- *
- * Pure JVM tier: the tracker has no clock, no Android and no coroutine dependency.
- */
+
+
+
+
+
+
+
+
 class NetworkQualityTrackerTest {
 
     private val tracker = NetworkQualityTracker()
 
-    /** The local key is opaque to the tracker — `isLocal` is what selects the local entry. */
+    
     private fun feedLocal(level: NetworkQualityLevel, now: Long): Boolean =
         tracker.onQualityChanged(LOCAL_KEY, level, isLocal = true, now = now)
 
     private fun feedRemote(identity: String, level: NetworkQualityLevel, now: Long): Boolean =
         tracker.onQualityChanged(identity, level, isLocal = false, now = now)
 
-    // -----------------------------------------------------------------------------------------
-    // Worsening hysteresis (3 s)
-    // -----------------------------------------------------------------------------------------
+    
+    
+    
     @Test
     fun `worsening publishes at 3000 not 2900`() {
         feedLocal(NetworkQualityLevel.BAD, now = 0)
@@ -65,9 +53,9 @@ class NetworkQualityTrackerTest {
         }
     }
 
-    // -----------------------------------------------------------------------------------------
-    // Improving hysteresis (5 s)
-    // -----------------------------------------------------------------------------------------
+    
+    
+    
     @Test
     fun `recovery publishes at 5000 not 4900`() {
         feedLocal(NetworkQualityLevel.BAD, now = 0)
@@ -85,10 +73,10 @@ class NetworkQualityTrackerTest {
 
     @Test
     fun `recovery lands on the current raw tier not excellent`() {
-        // The landing tier is externally observable on a REMOTE entry: view() keeps a GOOD one and
-        // filters an EXCELLENT one out, so hardcoding the improvement target to EXCELLENT would drop
-        // the entry from the snapshot entirely. On the local entry both tiers render nothing, which
-        // is why this case is driven through a remote.
+        
+        
+        
+        
         feedRemote("alice", NetworkQualityLevel.BAD, now = 0)
         tracker.evaluate(3_000)
         assertEquals(NetworkQualityLevel.BAD, tracker.view().remote["alice"])
@@ -105,9 +93,9 @@ class NetworkQualityTrackerTest {
         assertTrue(view.badRemoteIdentities.isEmpty(), "GOOD is not a fault, so nothing renders")
     }
 
-    // -----------------------------------------------------------------------------------------
-    // UNKNOWN is not a fault
-    // -----------------------------------------------------------------------------------------
+    
+    
+    
     @Test
     fun `unknown never renders`() {
         val unknown = ConnectionQuality.UNKNOWN.toNetworkQualityLevel()
@@ -120,17 +108,16 @@ class NetworkQualityTrackerTest {
         assertTrue(tracker.view().badRemoteIdentities.isEmpty())
     }
 
-    // -----------------------------------------------------------------------------------------
-    // Long-term display: the hint has no lifetime of its own
-    // -----------------------------------------------------------------------------------------
+    
+    
+    
     @Test
     fun `a published bad verdict never times out on its own`() {
         feedLocal(NetworkQualityLevel.BAD, now = 0)
         tracker.evaluate(3_000)
         assertEquals(NetworkQualityLevel.BAD, tracker.view().local)
 
-        // No further readings: the link is simply still bad. This is the only automatable guard on
-        // the product rule that the hint is state-driven and must not fade, expire or self-dismiss.
+        
         for (now in longArrayOf(10_000, 60_000, 300_000)) {
             assertFalse(tracker.evaluate(now), "a settled verdict must not report a change (now=$now)")
             assertEquals(
@@ -143,8 +130,8 @@ class NetworkQualityTrackerTest {
 
     @Test
     fun `a second worsening step earns its own 3s`() {
-        // The intermediate tier is an internal detail (nothing below bad renders); what is asserted
-        // is that arriving at bad through two steps still costs a full 3 s from the second one.
+        
+        
         feedLocal(NetworkQualityLevel.GOOD, now = 0)
         tracker.evaluate(3_000)
 
@@ -157,9 +144,9 @@ class NetworkQualityTrackerTest {
         assertEquals(NetworkQualityLevel.BAD, tracker.view().local)
     }
 
-    // -----------------------------------------------------------------------------------------
-    // Suppression rule 1 — a bad local verdict hides the remote ones
-    // -----------------------------------------------------------------------------------------
+    
+    
+    
     @Test
     fun `local bad hides all remotes`() {
         feedLocal(NetworkQualityLevel.BAD, now = 0)
@@ -184,9 +171,9 @@ class NetworkQualityTrackerTest {
         assertEquals(setOf("alice"), view.badRemoteIdentities)
     }
 
-    // -----------------------------------------------------------------------------------------
-    // Suppression rule 2 — the room is not connected
-    // -----------------------------------------------------------------------------------------
+    
+    
+    
     @Test
     fun `suppressed view is empty`() {
         feedLocal(NetworkQualityLevel.BAD, now = 0)
@@ -228,9 +215,9 @@ class NetworkQualityTrackerTest {
         assertEquals(NetworkQualityLevel.BAD, tracker.view().local, "a still-bad link lights up 3 s later")
     }
 
-    // -----------------------------------------------------------------------------------------
-    // Lifecycle
-    // -----------------------------------------------------------------------------------------
+    
+    
+    
     @Test
     fun `participant left drops its entry`() {
         feedRemote("alice", NetworkQualityLevel.BAD, now = 0)
@@ -282,22 +269,22 @@ class NetworkQualityTrackerTest {
 
     @Test
     fun `retainRemotes prunes stale remotes and keeps local`() {
-        // A verdict left over from a previous call on a reused Room object.
+        
         feedLocal(NetworkQualityLevel.GOOD, now = 0)
         feedRemote("stale", NetworkQualityLevel.BAD, now = 0)
         tracker.evaluate(3_000)
         assertEquals(setOf("stale"), tracker.view().badRemoteIdentities)
 
-        // Re-seed this call's members first, prune afterwards.
+        
         feedRemote("bob", NetworkQualityLevel.BAD, now = 3_000)
         tracker.retainRemotes(setOf("bob"))
         tracker.evaluate(6_000)
 
         val view = tracker.view()
         assertEquals(setOf("bob"), view.remote.keys, "the stale remote is gone, the freshly seeded one stays")
-        // A non-excellent, non-bad reading is the only observable marker that the local entry
-        // survived: excellent is indistinguishable from "pruned", and bad would fire suppression
-        // rule 1 and hide the remote this case is about. The tier itself renders nothing.
+        
+        
+        
         assertEquals(
             NetworkQualityLevel.GOOD,
             view.local,

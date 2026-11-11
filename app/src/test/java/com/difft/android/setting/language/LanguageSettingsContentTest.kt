@@ -23,11 +23,11 @@ import org.robolectric.annotation.GraphicsMode
 import java.util.Locale
 import kotlin.math.abs
 
-/**
- * [LanguageSettingsContent] contract (issue #1223): the rows render in the order given, the
- * checkmark follows [LanguageData.selected] alone, and a tap reports the entry object itself so the
- * host decides whether a restart is needed.
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34])
@@ -53,7 +53,7 @@ class LanguageSettingsContentTest {
     private fun label(text: String): SemanticsNodeInteraction =
         composeTestRule.onNodeWithText(text, useUnmergedTree = true)
 
-    // P5
+    
     @Test
     fun `both languages render in order with the checkmark on the selected entry`() {
         setContent(listOf(english(selected = true), chinese()), mutableListOf())
@@ -81,7 +81,7 @@ class LanguageSettingsContentTest {
         )
     }
 
-    // P6
+    
     @Test
     fun `a tap reports the entry object itself`() {
         val reported = mutableListOf<LanguageData>()
@@ -94,7 +94,7 @@ class LanguageSettingsContentTest {
         assertSame(chineseEntry, reported[0])
     }
 
-    // P7
+    
     @Test
     fun `no entry selected marks no row`() {
         setContent(listOf(english(), chinese()), mutableListOf())

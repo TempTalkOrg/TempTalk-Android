@@ -10,9 +10,9 @@ import android.media.MediaExtractor
 import com.difft.android.video.interfaces.MediaInput
 import java.io.IOException
 
-/**
- * [MediaInput] implementation that adds support for the system framework's media data source.
- */
+
+
+
 class MediaDataSourceMediaInput(private val mediaDataSource: MediaDataSource) : MediaInput {
   @Throws(IOException::class)
   override fun createExtractor(): MediaExtractor {

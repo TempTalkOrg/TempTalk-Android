@@ -21,9 +21,9 @@ import java.util.ArrayList
 
 object SandboxFileLoader {
 
-    /**
-     * Query images in the app's internal directory.
-     */
+    
+
+
     fun loadInAppSandboxFolderFile(context: Context, sandboxDir: String?): LocalMediaFolder? {
         val list = loadInAppSandboxFile(context, sandboxDir)
         var folder: LocalMediaFolder? = null
@@ -41,12 +41,12 @@ object SandboxFileLoader {
         return folder
     }
 
-    /**
-     * Query images in the app's internal directory.
-     *
-     * 1:1 Java→Kotlin port (issue #1077); filter/MediaStore logic kept verbatim,
-     * structural split deferred — see #1077 future work.
-     */
+    
+
+
+
+
+
     @Suppress("LongMethod")
     fun loadInAppSandboxFile(context: Context, sandboxDir: String?): ArrayList<LocalMedia>? {
         if (TextUtils.isEmpty(sandboxDir)) {
@@ -141,15 +141,15 @@ object SandboxFileLoader {
 
                 if (PictureMimeType.isHasVideo(mimeType) || PictureMimeType.isHasAudio(mimeType)) {
                     if (config.filterVideoMinSecond > 0 && duration < config.filterVideoMinSecond) {
-                        // If you set the minimum number of seconds of video to display
+                        
                         continue
                     }
                     if (config.filterVideoMaxSecond > 0 && duration > config.filterVideoMaxSecond) {
-                        // If you set the maximum number of seconds of video to display
+                        
                         continue
                     }
                     if (duration == 0L) {
-                        // If the length is 0, the corrupted video is processed and filtered out
+                        
                         continue
                     }
                 }

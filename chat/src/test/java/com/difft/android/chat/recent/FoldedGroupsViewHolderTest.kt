@@ -18,7 +18,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 
-/** The folded-groups row on the real chat-list row layout: content, grey badge and its single "End Focus" action. */
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33])
 class FoldedGroupsViewHolderTest {
@@ -61,7 +61,7 @@ class FoldedGroupsViewHolderTest {
         assertEquals("[@You]", view.text(R.id.textview_at))
         assertEquals("46", view.text(R.id.textview_missed_number))
         assertEquals("15:01", view.text(R.id.textview_date))
-        // No end time: no resume label after the name, and never the focus-row icon.
+        
         assertEquals(View.GONE, view.findViewById<View>(R.id.textview_fold_resume).visibility)
         assertEquals(View.GONE, view.findViewById<View>(R.id.imageview_fold_resume).visibility)
         assertEquals(View.GONE, view.findViewById<View>(R.id.imageview_focus).visibility)

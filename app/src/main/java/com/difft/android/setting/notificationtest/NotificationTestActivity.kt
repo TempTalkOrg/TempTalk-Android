@@ -12,7 +12,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import kotlinx.coroutines.launch
 
-/** Compatibility shell; normal Me navigation uses NotificationTestDestination. */
+
 @AndroidEntryPoint
 class NotificationTestActivity : DetailShellActivity() {
     @Inject lateinit var returns: NotificationTestReturns
@@ -30,7 +30,7 @@ class NotificationTestActivity : DetailShellActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         val route = NotificationTestReturnRoute.read(intent) ?: return
-        // A stale return never restarts a timer or takes ownership of an unrelated live run.
+        
         val pages = supportFragmentManager.fragments
         if (returns.decide(route, pages) is NotificationTestReturns.Decision.Existing) return
         replaceIdleAfterStale(route, pages.filterIsInstance<NotificationTestFragment>().firstOrNull())

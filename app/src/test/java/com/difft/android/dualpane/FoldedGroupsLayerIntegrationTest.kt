@@ -63,12 +63,12 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/**
- * Home-screen stand-in for the real folded-groups page: the real `activity_index` tree, a
- * navigator with plain conversation roots, the production list-pane layer with
- * [IndexDetailPages]' roots, the opener the chat list's folded row calls, and the router's home
- * callback recording what a row asked to open.
- */
+
+
+
+
+
+
 @AndroidEntryPoint
 class FoldedLayerWiringTestActivity :
     FragmentActivity(),
@@ -133,12 +133,12 @@ class FoldedLayerWiringTestActivity :
     }
 }
 
-/**
- * The real [FoldedGroupsFragment] as the root of the list-pane layer (folded groups as a layer
- * §3.2, §5): the folded rows of the supplied chat-list source, a group tap routed to the home
- * screen, the two-pane selection on its row, and the self-close when focus stops folding, also
- * across a restore (R1-F1: the collector waits for STARTED; a not-yet-loaded focus is not judged).
- */
+
+
+
+
+
+
 @HiltAndroidTest
 @UninstallModules(ChatListSourceModule::class)
 @RunWith(RobolectricTestRunner::class)
@@ -171,7 +171,7 @@ class FoldedGroupsLayerIntegrationTest {
         mockkObject(AppStartup)
         every { AppStartup.onCriticalRenderEventStart() } just Runs
         every { AppStartup.onCriticalRenderEventEnd() } just Runs
-        // The test Application is no ConversationOpener: hand the open to the production router.
+        
         mockkObject(ConversationShells)
         every { ConversationShells.open(any(), any()) } answers { ConversationRouter.open(firstArg(), secondArg()) }
         every { focusRepository.effective } returns effective
@@ -190,7 +190,7 @@ class FoldedGroupsLayerIntegrationTest {
         compose.waitForIdle()
     }
 
-    /** The rows are assembled off the main thread: idles until [done] or a timeout. */
+    
     private fun idleUntil(done: () -> Boolean) {
         repeat(200) {
             idle()
@@ -231,7 +231,7 @@ class FoldedGroupsLayerIntegrationTest {
         roomId = id,
         type = if (group) RoomViewData.Type.Group else RoomViewData.Type.OneOnOne,
         roomName = "name-$id",
-        // A known member count keeps the group avatar off its WCDB count query.
+        
         groupMembersNumber = 3,
         lastActiveTime = sortTime,
         sortTime = sortTime,
@@ -297,7 +297,7 @@ class FoldedGroupsLayerIntegrationTest {
         controller!!.pause().saveInstanceState(saved).stop().destroy()
         idle()
         controller = null
-        // What a process restore sees: the INACTIVE placeholder until the cache loads.
+        
         loaded = CompletableDeferred()
         effective.value = EffectiveFocus.INACTIVE
 
@@ -318,7 +318,7 @@ class FoldedGroupsLayerIntegrationTest {
         controller!!.pause().saveInstanceState(saved).stop().destroy()
         idle()
         controller = null
-        // Loaded and inactive by the time the Activity is recreated.
+        
         effective.value = EffectiveFocus.INACTIVE
 
         launch(saved)

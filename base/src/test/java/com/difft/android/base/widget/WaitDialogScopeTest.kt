@@ -30,13 +30,13 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/**
- * The wait-dialog entry points (issue #1208). Their whole reason to exist is that the release runs
- * on *every* exit — return, exception, scope cancellation, a finishing owner, a composable leaving
- * the composition — because the dialog is a non-cancelable modal, so a missed release is a screen
- * the user cannot leave; and that a release only ever closes the dialog its own flow raised, since
- * one global slot serves every flow on every screen.
- */
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34])
@@ -54,7 +54,7 @@ class WaitDialogScopeTest {
 
     private fun idle() = shadowOf(Looper.getMainLooper()).idle()
 
-    // ---------- T21 / T22 / T23: withWait pairs on every exit ----------
+    
 
     @Test
     fun `withWait shows while the block runs and releases on return`() {
@@ -99,7 +99,7 @@ class WaitDialogScopeTest {
         assertEquals("a cancelled scope must still release the modal", baseline, contentRoot.childCount)
     }
 
-    // ---------- T24 / T25: ownership and a finishing owner ----------
+    
 
     @Test
     fun `withWait leaves a dialog another screen owns alone and releases its own`() {
@@ -131,12 +131,12 @@ class WaitDialogScopeTest {
         controller.destroy()
     }
 
-    /**
-     * Why every screen must release the wait dialog BEFORE raising a message dialog (issue #1208):
-     * showing another dialog does not touch the wait slot, so a non-cancelable wait dialog outlives
-     * the message dialog and keeps covering the screen with no way out. This pins the mechanism the
-     * call-site ordering depends on.
-     */
+    
+
+
+
+
+
     @Test
     fun `showing a message dialog does not release the wait dialog`() {
         val baseline = contentRoot.childCount
@@ -153,13 +153,13 @@ class WaitDialogScopeTest {
         assertEquals("the wait dialog survives the message dialog", baseline + 1, contentRoot.childCount)
     }
 
-    // ---------- T26 / T27: WaitDialogHandle ----------
+    
 
-    /**
-     * A repeat show is the chained-request case (verify a code, then sign in): the second leg asks
-     * for the dialog while the first leg's is still up, so the handle keeps the live window rather
-     * than rebuilding it, and the modal cannot blink between the two legs.
-     */
+    
+
+
+
+
     @Test
     fun `a handle shows once and releasing twice is harmless`() {
         val baseline = contentRoot.childCount
@@ -180,13 +180,13 @@ class WaitDialogScopeTest {
         assertEquals(baseline, contentRoot.childCount)
     }
 
-    /**
-     * The whole point of the token: a screen runs several flows through one global slot, so its
-     * flows share the one window, reference counted — a flow releasing cannot pull the modal out
-     * from under a flow still in flight, and the window closes when the last claim goes. Both
-     * `VerifyCodeActivity` handles (next, resend) live on one Activity, so a second show must not
-     * turn the first flow's release into a no-op that leaves the non-cancelable modal up.
-     */
+    
+
+
+
+
+
+
     @Test
     fun `two flows on one screen share the window until the last one releases`() {
         val baseline = contentRoot.childCount
@@ -216,7 +216,7 @@ class WaitDialogScopeTest {
         assertFalse(second.isShowing)
     }
 
-    /** The blanket release closes the window and drops every claim on it. */
+    
     @Test
     fun `a blanket release drops every claim on the window`() {
         val baseline = contentRoot.childCount
@@ -232,10 +232,10 @@ class WaitDialogScopeTest {
         assertFalse(second.isShowing)
     }
 
-    /**
-     * The release a Fragment owner gets for free: the handle is bound to the view lifecycle, which
-     * is destroyed while the Activity lives on, so nothing else would take the modal down.
-     */
+    
+
+
+
     @Test
     fun `destroying the bound lifecycle releases the handle's claim`() {
         val baseline = contentRoot.childCount
@@ -252,13 +252,13 @@ class WaitDialogScopeTest {
         assertFalse(handle.isShowing)
     }
 
-    /** A lifecycle this test drives directly, standing in for a Fragment's view lifecycle. */
+    
     private class FakeLifecycleOwner : LifecycleOwner {
         val registry = LifecycleRegistry(this).apply { currentState = Lifecycle.State.RESUMED }
         override val lifecycle: Lifecycle get() = registry
     }
 
-    // ---------- T28 / T29: WaitDialogEffect ----------
+    
 
     @Test
     fun `an invisible WaitDialogEffect leaves another flow's dialog alone`() {
@@ -267,7 +267,7 @@ class WaitDialogScopeTest {
         var mounted by mutableStateOf(true)
         composeTestRule.setContent { if (mounted) WaitDialogEffect(visible = false) }
         composeTestRule.waitForIdle()
-        // Only the rule's own host view landed: composing invisible must raise nothing.
+        
         val baseline = contentRoot.childCount
         assertEquals(beforeContent + 1, baseline)
 
@@ -285,7 +285,7 @@ class WaitDialogScopeTest {
         var visible by mutableStateOf(false)
         composeTestRule.setContent { WaitDialogEffect(visible) }
         composeTestRule.waitForIdle()
-        // After setContent: the rule's own host view is part of the baseline.
+        
         val baseline = contentRoot.childCount
 
         visible = true
@@ -299,8 +299,8 @@ class WaitDialogScopeTest {
 
     @Test
     fun `WaitDialogEffect releases when it leaves the composition while still visible`() {
-        // The only release path a screen whose callback fires before its loading flag clears has:
-        // the flag never reaches false in a live composition.
+        
+        
         var mounted by mutableStateOf(false)
         composeTestRule.setContent { if (mounted) WaitDialogEffect(visible = true) }
         composeTestRule.waitForIdle()

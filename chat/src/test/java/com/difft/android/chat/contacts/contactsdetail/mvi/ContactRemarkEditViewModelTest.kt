@@ -35,10 +35,10 @@ import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
-/**
- * Remark edit state machine: draft seeding from the remark chain, submit / discard, wire format
- * (`V1|` cipher, "" clears) and avatar-click routing (action sheet vs. picker).
- */
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class ContactRemarkEditViewModelTest {
 
@@ -88,7 +88,7 @@ class ContactRemarkEditViewModelTest {
         vm.dispatch(Intent.DiscardEdit)
         vm.dispatch(Intent.Load(contact(remark = null, name = "Alice")))
         vm.dispatch(Intent.EnterEdit)
-        // The real name is never prefilled — it is offered by the quick-fill row instead.
+        
         assertEquals("", vm.state.value.editingName)
         assertEquals("", vm.state.value.editBaseline)
         assertEquals("Alice", vm.state.value.quickFillName)
@@ -104,13 +104,13 @@ class ContactRemarkEditViewModelTest {
         vm.dispatch(Intent.QuickFillName)
         assertEquals("Alice", vm.state.value.editingName)
         assertFalse(vm.state.value.showQuickFill)
-        assertTrue(vm.state.value.hasUnsavedChanges) // filling counts as a change
+        assertTrue(vm.state.value.hasUnsavedChanges) 
 
-        // Deleting what was filled in does not bring the shortcut back within this edit.
+        
         vm.dispatch(Intent.ChangeName(""))
         assertFalse(vm.state.value.showQuickFill)
 
-        // Re-entering edit mode decides again.
+        
         vm.dispatch(Intent.DiscardEdit)
         vm.dispatch(Intent.EnterEdit)
         assertTrue(vm.state.value.showQuickFill)
@@ -144,20 +144,20 @@ class ContactRemarkEditViewModelTest {
     @Test
     fun `quick fill offer is decided by exact equality, not containment`() = runTest(dispatcher) {
         val vm = vm()
-        // Remark contains the name but is not equal to it -> still offered.
+        
         vm.dispatch(Intent.Load(contact(remark = "同事 Alice", name = "Alice")))
         vm.dispatch(Intent.EnterEdit)
         assertTrue(vm.state.value.showQuickFill)
         vm.dispatch(Intent.QuickFillName)
         assertEquals("同事 Alice Alice", vm.state.value.editingName)
 
-        // Different case is not equal either -> still offered.
+        
         vm.dispatch(Intent.DiscardEdit)
         vm.dispatch(Intent.Load(contact(remark = "alice", name = "Alice")))
         vm.dispatch(Intent.EnterEdit)
         assertTrue(vm.state.value.showQuickFill)
 
-        // Exactly the name -> not offered.
+        
         vm.dispatch(Intent.DiscardEdit)
         vm.dispatch(Intent.Load(contact(remark = "Alice", name = "Alice")))
         vm.dispatch(Intent.EnterEdit)
@@ -175,7 +175,7 @@ class ContactRemarkEditViewModelTest {
 
         vm.dispatch(Intent.QuickFillName)
 
-        // "draft" + " " + "Alice" overflows; the shortcut truncates the same way typing/pasting does.
+        
         assertEquals(ContactRemarkEditViewModel.MAX_REMARK_LENGTH, vm.state.value.editingName.length)
         assertEquals("$draft A", vm.state.value.editingName)
     }
@@ -240,7 +240,7 @@ class ContactRemarkEditViewModelTest {
         vm.dispatch(Intent.EnterEdit)
 
         vm.effect.test {
-            // Nothing typed: the draft equals the (empty) baseline → close without asking.
+            
             vm.dispatch(Intent.RequestClose)
             assertEquals(Effect.HideKeyboard, awaitItem())
             assertEquals(Effect.Close, awaitItem())
@@ -378,7 +378,7 @@ class ContactRemarkEditViewModelTest {
         vm.dispatch(Intent.Load(contact()))
 
         vm.effect.test {
-            vm.dispatch(Intent.AvatarClick) // browse mode: preview is the host's job, no effect here
+            vm.dispatch(Intent.AvatarClick) 
             expectNoEvents()
 
             vm.dispatch(Intent.EnterEdit)

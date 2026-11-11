@@ -17,11 +17,11 @@ import androidx.compose.ui.unit.dp
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.chat.R
 
-/**
- * Edit-mode shortcut under the remark input: the contact's real name plus an arrow, both tappable,
- * appending that name to whatever is already typed. Whether it appears is decided once, when edit
- * mode opens ([shouldOfferQuickFill]); tapping it hides it for the rest of that edit.
- */
+
+
+
+
+
 @Composable
 internal fun RemarkQuickFillRow(
     originalName: String,
@@ -29,14 +29,14 @@ internal fun RemarkQuickFillRow(
     modifier: Modifier = Modifier,
 ) {
     Row(
-        // Role.Button so TalkBack announces the name as actionable, not as a plain label.
+        
         modifier = modifier.clickable(role = Role.Button) { onFill() },
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
             text = originalName,
             style = DifftTheme.typography.h7,
-            color = DifftTheme.colors.textInfo,
+            color = DifftTheme.colors.primary,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f, fill = false)
@@ -46,25 +46,25 @@ internal fun RemarkQuickFillRow(
             painter = painterResource(R.drawable.chat_ic_arrow_up_left),
             contentDescription = null,
             modifier = Modifier.size(ICON_SIZE),
-            tint = DifftTheme.colors.textInfo
+            tint = DifftTheme.colors.primary
         )
     }
 }
 
-/**
- * Decided once, as edit mode opens: offered when the contact has a real name and the initial remark
- * is not exactly that name. The comparison is a case-sensitive equality check on the trimmed values —
- * deliberately not "contains" or any fuzzy match, so `alice` still gets the shortcut for `Alice`.
- * Typing afterwards never brings it back or takes it away; only re-entering edit mode re-decides.
- */
+
+
+
+
+
+
 internal fun shouldOfferQuickFill(originalName: String, initialRemark: String): Boolean =
     originalName.isNotBlank() && initialRemark.trim() != originalName.trim()
 
-/**
- * Appends the name to the draft: an empty draft becomes the name, otherwise the draft's trailing
- * spaces are dropped and the name is joined with a single space. A draft that already equals the
- * name is left untouched — the row still disappears, it just has nothing to add.
- */
+
+
+
+
+
 internal fun appendQuickFill(draft: String, originalName: String): String {
     val trimmedDraft = draft.trimEnd()
     return when {

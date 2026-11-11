@@ -1,23 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="wrap_content"
-    android:layout_height="24dp"
-    android:layout_marginEnd="3dp"
+    android:layout_height="28dp"
+    android:layout_marginEnd="4dp"
     android:layout_marginBottom="4dp"
-    android:background="@drawable/chat_reaction_item_selector"
-    android:paddingHorizontal="8dp">
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingHorizontal="10dp">
 
     <androidx.appcompat.widget.AppCompatTextView
         android:id="@+id/tv_emoji"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:textColor="@color/t.primary"
-        android:textSize="12sp"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
+        android:includeFontPadding="false"
+        android:textSize="14sp"
+        app:lineHeight="20sp"
         tools:text="👍" />
 
     <androidx.appcompat.widget.AppCompatTextView
@@ -26,13 +26,10 @@
         android:layout_height="wrap_content"
         android:layout_marginStart="4dp"
         android:ellipsize="end"
+        android:includeFontPadding="false"
         android:lines="1"
-        android:textColor="@color/t.primary"
-        android:textSize="12sp"
-        app:layout_constraintBottom_toBottomOf="@+id/tv_emoji"
-        app:layout_constraintLeft_toRightOf="@+id/tv_emoji"
-        app:layout_constraintTop_toTopOf="@+id/tv_emoji"
+        android:textSize="14sp"
+        app:lineHeight="20sp"
         tools:text="12" />
 
-
-</androidx.constraintlayout.widget.ConstraintLayout>
+</LinearLayout>

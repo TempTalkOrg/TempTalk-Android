@@ -48,8 +48,7 @@ import javax.inject.Singleton
 
 @Singleton
 class WCDB @Inject constructor(
-    // internal (was private): the probe/telemetry extensions in WCDBHealthProbe.kt
-    // (same module :database) read `context` via the WCDB receiver.
+    
     @param:ApplicationContext internal val context: Context,
     @param:Named("application") private val applicationScope: CoroutineScope,
 ) {
@@ -57,147 +56,142 @@ class WCDB @Inject constructor(
     companion object {
         const val DATABASE_NAME = "tt_wcdb_database.db"
 
-        // #971 write-throughput main fix. WCDB's encrypted+WAL pool reports synchronous=NORMAL
-        // via PRAGMA query but its C++ layer actually fsyncs every commit (FULL-like, ~90 msgs/s
-        // measured). Explicitly executing `PRAGMA synchronous=1` on every handle overrides that
-        // layer so fsync is deferred to WAL checkpoint — on-device benchmark: 7.3x on the real
-        // production init path (autoBackup + corruption callback). See wcdb-benchmark-results.md.
+        
+        
         private const val SYNCHRONOUS_CONFIG_NAME = "tt_synchronous_normal"
-        private const val SYNCHRONOUS_NORMAL = 1 // SQLite: 0=OFF 1=NORMAL 2=FULL 3=EXTRA
+        private const val SYNCHRONOUS_NORMAL = 1 
     }
 
-    /**
-     * Process-level corruption flag. Set by [probeHealthy] when the DB is unreadable,
-     * or by [markCorrupted] just before MainActivity's recovery closes the handle.
-     *
-     * DB-touching early/headless consumers should fast-skip their read when this is
-     * `true` to avoid racing MainActivity's recovery (`retrieve`/`close`/delete). The
-     * flag resets implicitly on the next process start after recovery's `restartApp()`.
-     */
+    
+
+
+
+
+
+
+
     @Volatile
     var dbCorrupted: Boolean = false
         private set
 
-    /**
-     * Explicit setter for the pre-close path in MainActivity.resetDatabaseAndResync():
-     * flip the flag BEFORE `db.close()` so any straggler background consumer fast-skips
-     * a closed handle (RACE-2). [probeHealthy] also sets it internally on detection.
-     */
+    
+
+
+
+
     fun markCorrupted() {
         dbCorrupted = true
     }
 
-    /**
-     * Fail-soft cipher-key-unavailable flag, distinct from file corruption ([dbCorrupted]). The
-     * wipe trigger reads [dbCorrupted] only — never this flag, never [isDbInaccessible] — so a
-     * key failure never wipes. One-way / process-lifetime; resets on the next cold start.
-     */
+    
+
+
+
+
     @Volatile
     var keyUnavailable: Boolean = false
         private set
 
-    /** Monotonic set-true helper for [keyUnavailable]; also called by the probes in WCDBHealthProbe.kt. */
+    
     internal fun markKeyUnavailable() {
         keyUnavailable = true
     }
 
-    /** Fast-skip predicate for early/headless DB consumers. The wipe trigger must not read this — it reads [dbCorrupted] only. */
+    
     val isDbInaccessible: Boolean get() = dbCorrupted || keyUnavailable
 
-    /**
-     * Telemetry: `true` once [probeHealthy] has confirmed the DB readable this process.
-     * Lets [reportCorruptionOnce] classify a later corruption as genuinely *mid-session*
-     * (corruption appeared AFTER a healthy probe) vs *startup_open* (corrupt at first open).
-     */
-    // internal (was private): read/written by probeHealthy/reportCorruptionOnce in WCDBHealthProbe.kt.
+    
+
+
+
+
+    
     @Volatile
     internal var healthyProbePassed = false
 
-    /** Read-only view of [healthyProbePassed] for gates outside this module (#1395). */
+    
     val isHealthyProbed: Boolean get() = healthyProbePassed
 
     private val probeFinishedState = MutableStateFlow(false)
 
-    /**
-     * `true` once any [probeHealthy] call has returned this process, whatever its outcome. Lets a
-     * gate tell "not probed yet" (worth a bounded wait) from "probed and not healthy" (#1395).
-     */
+    
+
+
+
     val probeFinished: StateFlow<Boolean> = probeFinishedState.asStateFlow()
 
-    /** Called from every exit of [probeHealthy]. */
+    
     internal fun markProbeFinished() {
         probeFinishedState.value = true
     }
 
-    /**
-     * One-shot guard — the WCDB corruption notification can fire repeatedly AND
-     * [reportCorruptionOnce] is called from two threads (IO probe + WCDB notification
-     * callback). AtomicBoolean.compareAndSet makes the check-then-set atomic so only one
-     * Crashlytics non-fatal is emitted per process.
-     */
-    // internal (was private): read by reportCorruptionOnce in WCDBHealthProbe.kt.
+    
+
+
+
+
+
+    
     internal val corruptionReported = AtomicBoolean(false)
 
-    /**
-     * Process-lifetime one-shot cache of the cipher-key resolution outcome (success →
-     * cached key, failure → cached exception). `by lazy` does NOT cache a *failed*
-     * initializer, so without this every re-touch of [db] after a key failure would
-     * re-hit the Keystore — a retry storm on a permanently-dead Keystore (ARCH-CRIT-1).
-     */
+    
+
+
+
+
+
     @Volatile
     private var cipherKeyResult: Result<ByteArray>? = null
 
-    @VisibleForTesting // was private — internal so the cache+cause contract is unit-testable
-    @Synchronized // cheap defensive guard against any future second entry point bypassing the db-lazy lock
+    @VisibleForTesting 
+    @Synchronized 
     internal fun resolveCipherKeyOnce(): ByteArray {
         cipherKeyResult?.let { cached ->
             return cached.getOrElse { cachedFailure ->
-                // Cache holds the original failure Result; rethrow a new exception here so the
-                // stack captures this call site.
+                
+                
                 throw WCDBKeyUnavailableException(
                     "WCDB cipher key unavailable (rethrow of cached failure)", cachedFailure
                 )
             }
         }
-        val r = runCatching { WCDBKeyManager.getOrCreateKey(context) } // hits Keystore at most ONCE per process
+        val r = runCatching { WCDBKeyManager.getOrCreateKey(context) } 
         cipherKeyResult = r
         if (r.isFailure) markKeyUnavailable()
-        return r.getOrThrow() // first-time throw already has a live stack
+        return r.getOrThrow() 
     }
 
-    /**
-     * The single DB handle. Open-only responsibility: construct + cipher + autoBackup.
-     *
-     * The first real open is heavy (cipher/PBKDF + header I/O) — first touch must be
-     * OFF the main thread; it is owned by MainActivity.checkDatabaseIntegrity() on IO.
-     * Any startup/headless DB touch launched onto a no-CEH scope must `runCatching`
-     * the access and check [dbCorrupted] first (see ContactRemarkCache.preload).
-     *
-     * No PRAGMA probe, no corruption callback, no restart here — corruption is detected
-     * later by [probeHealthy] (called by the MainActivity gate and the early
-     * "probe db health" startup task).
-     */
+    
+
+
+
+
+
+
+
+
+
+
+
     val db: Database by lazy {
         val path = context.getDatabasePath(DATABASE_NAME).absolutePath
         Database(path).apply {
             if (!BuildConfig.DEBUG) {
-                setCipherKey(resolveCipherKeyOnce()) // may throw cached WCDBKeyUnavailableException
+                setCipherKey(resolveCipherKeyOnce()) 
             }
             enableAutoBackup(true)
-            // Runtime corruption detection (e.g. a write from a headless FCM/WS wake
-            // corrupts the DB after the MainActivity probe already passed). WCDB invokes
-            // this asynchronously on its own thread AFTER confirming corruption via
-            // PRAGMA integrity_check. We ONLY flip the @Volatile flag — no restart, no
-            // persisted flag, no DB touch. Consumers fast-skip; the next foreground
-            // MainActivity launch drives the real recovery via probeHealthy().
+            
+            
+            
+            
+            
+            
             setNotificationWhenCorrupted {
                 reportCorruptionOnce("notification_callback")
                 markCorrupted()
             }
-            // #971 write-throughput fix: force synchronous=NORMAL. setConfig runs per-handle so it
-            // reaches the write handle (a one-shot execute might hit a read one); high priority runs
-            // after the cipher config. WAL+NORMAL never corrupts the DB but may drop writes committed
-            // after the last checkpoint on power loss (IM messages are resendable) — team sign-off, see PR.
+            
+            
             setConfig(
                 SYNCHRONOUS_CONFIG_NAME,
                 { handle -> handle.execute("PRAGMA synchronous=$SYNCHRONOUS_NORMAL") },
@@ -206,11 +200,11 @@ class WCDB @Inject constructor(
         }
     }
 
-    /**
-     * Diagnostic only: log-confirms `synchronous=NORMAL` reached a write handle. WCDB's PRAGMA query
-     * can report NORMAL while writes still fsync like FULL, so we read it back through `getHandle(true)`.
-     * Mismatch is a soft `L.w` (perf-only, no Crashlytics). Once per process; call off the main thread.
-     */
+    
+
+
+
+
     private val synchronousVerifyAttempted = AtomicBoolean(false)
 
     fun verifySynchronousApplied() {
@@ -359,7 +353,7 @@ class WCDB @Inject constructor(
         db.getTable("favorite_gifs", DBFavoriteGifModel)
     }
 
-    // Map from lowercase tableName to the actual table
+    
     val tablesMap by lazy {
         listOf(
             room,
@@ -399,12 +393,7 @@ class WCDB @Inject constructor(
         }
     }
 
-    /**
-     * 模拟数据库损坏: 直接破坏数据库文件头部
-     *
-     * Debug-only: hard floor `if (!BuildConfig.DEBUG) return` so this destructive
-     * hook can never run in a release artifact even if its entry point ships.
-     */
+    
     fun testCorruptDatabase() {
         if (!BuildConfig.DEBUG) return
         try {
@@ -414,7 +403,7 @@ class WCDB @Inject constructor(
                 return
             }
 
-            // 破坏数据库文件的前16字节（包含SQLite魔数）
+            
             RandomAccessFile(dbFile, "rw").use { raf ->
                 raf.seek(0)
                 val randomBytes = ByteArray(16)

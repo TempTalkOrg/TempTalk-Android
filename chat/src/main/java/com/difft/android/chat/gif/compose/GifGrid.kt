@@ -29,16 +29,9 @@ import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.chat.R
 import com.difft.android.chat.gif.GifUiItem
 
-/**
- * 2-column staggered grid of GIF cells (cell gap 8dp, aspect-ratio sized) for the trending and
- * search surfaces. Triggers [onLoadNextPage] when the last item becomes visible (上拉加载).
- *
- * No pull-to-refresh: the trending/search grids live inside the input panel and the search
- * bottom-sheet, where a pull gesture would fight the sheet's swipe-to-dismiss (Issue 4b). A
- * centered loading spinner ([isLoading]) is shown instead while the first page is fetching.
- * Long-press a cell opens a one-row floating menu ("Add to Favorite") that, when tapped, calls
- * [onAddToFavorite] (Issue 4). Shows an empty-state label when [emptyResult] is true.
- */
+
+
+
 @Composable
 fun GifGrid(
     items: List<GifUiItem>,
@@ -53,9 +46,9 @@ fun GifGrid(
     onAddToFavorite: (GifUiItem) -> Unit = {}
 ) {
     val gridState = rememberLazyStaggeredGridState()
-    // Read the item count from layoutInfo (reactive snapshot state), NOT the captured [items]
-    // parameter: a `remember { derivedStateOf { ... items ... } }` freezes [items] to its first
-    // composition value (empty), so the threshold never updates and load-more never fires.
+    
+    
+    
     val shouldLoadMore by remember {
         derivedStateOf {
             val info = gridState.layoutInfo
@@ -68,9 +61,9 @@ fun GifGrid(
         if (shouldLoadMore) onLoadNextPage()
     }
 
-    // Long-press opens the floating menu for this item id (null = closed). Tracked by id (not
-    // index) so it survives list updates / paging. menuPosition = the press point in the grid root's
-    // local pixels (converted from the cell's window coordinates), so the menu pops up at the finger.
+    
+    
+    
     var menuItemId by remember { mutableStateOf<String?>(null) }
     var menuPosition by remember { mutableStateOf(Offset.Zero) }
     var rootCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
@@ -82,15 +75,15 @@ fun GifGrid(
         contentAlignment = Alignment.Center
     ) {
         when {
-            // First-page load (no items yet): centered spinner instead of an empty grid.
+            
             isLoading && items.isEmpty() ->
                 androidx.compose.material3.CircularProgressIndicator(
                     color = DifftTheme.colors.textTertiary,
                     modifier = Modifier.size(28.dp)
                 )
 
-            // First-page fetch failed (no items): centered "couldn't load" label (same style as the
-            // empty-result label), so a network failure isn't a blank panel.
+            
+            
             loadError && items.isEmpty() ->
                 Text(
                     text = stringResource(R.string.gif_load_failed),
@@ -127,8 +120,8 @@ fun GifGrid(
                 }
         }
 
-        // Long-press floating menu, rendered once at the grid root (un-clipped, same window as the
-        // grid) so it lands at the finger in both the inline panel and the search bottom sheet.
+        
+        
         GifFavoriteMenu(
             visible = menuItemId != null,
             position = menuPosition,

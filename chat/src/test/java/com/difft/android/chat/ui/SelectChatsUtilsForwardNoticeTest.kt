@@ -6,21 +6,21 @@ import difft.android.messageserialization.model.ForwardNoticeData
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/**
- * Pure-logic test for the notice aggregation rules used inside
- * `SelectChatsUtils.sendForwardNotice`. The private method itself reads
- * `List<ForwardContext>` and produces a `ForwardNoticeData` via the same
- * aggregation formulae we pin here — so if the design intent drifts
- * (e.g., someone starts traversing nested `Forward.forwards`), these
- * tests break.
- *
- * The test replicates the aggregation inline (the private method takes
- * a JobManager side effect, so mirroring the formula here is the simplest
- * way to exercise the contract in isolation).
- */
+
+
+
+
+
+
+
+
+
+
+
+
 class SelectChatsUtilsForwardNoticeTest {
 
-    /** Mirror of the aggregation inside SelectChatsUtils.sendForwardNotice. */
+    
     private fun aggregate(forwardedContexts: List<ForwardContext>): Pair<List<String>, Int> {
         val authorIds = forwardedContexts
             .flatMap { it.forwards.orEmpty() }
@@ -42,7 +42,7 @@ class SelectChatsUtilsForwardNoticeTest {
             mentions = null
         )
 
-    // ----- top-level author aggregation -----
+    
 
     @Test
     fun `single forward context with 3 top-level forwards from 3 authors — 3 authors, count=3`() {
@@ -75,7 +75,7 @@ class SelectChatsUtilsForwardNoticeTest {
         assertEquals(4, count)
     }
 
-    // ----- nested forwards: do NOT contribute to authors or count -----
+    
 
     @Test
     fun `nested forwards are NOT flattened into authors or count`() {
@@ -96,7 +96,7 @@ class SelectChatsUtilsForwardNoticeTest {
         assertEquals("count is top-level only — nested containers count as 1", 2, count)
     }
 
-    // ----- empty cases -----
+    
 
     @Test
     fun `forwards is null — authors empty, count=0`() {
@@ -116,8 +116,8 @@ class SelectChatsUtilsForwardNoticeTest {
 
     @Test
     fun `empty aggregation — the production code must skip enqueuing`() {
-        // When authors.isEmpty() OR totalCount == 0 → SelectChatsUtils.sendForwardNotice
-        // returns early (logs a warning, does not enqueue a Job).
+        
+        
         val (authors, count) = aggregate(
             listOf(ForwardContext(emptyList(), false))
         )
@@ -125,13 +125,13 @@ class SelectChatsUtilsForwardNoticeTest {
         assertEquals(true, shouldSkip)
     }
 
-    // ----- ForwardNoticeData construction with scene -----
+    
 
     @Test
     fun `data class carries the scene verbatim`() {
-        // Production code calls:
-        //   ForwardNoticeData(scene, authorIds, totalCount)
-        // — the scene field MUST match what the entry-point passes down.
+        
+        
+        
         val contexts = listOf(
             ForwardContext(listOf(mkForward("+A"), mkForward("+B")), false)
         )

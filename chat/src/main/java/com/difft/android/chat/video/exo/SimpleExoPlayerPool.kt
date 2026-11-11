@@ -13,9 +13,9 @@ import util.AppForegroundObserver
 import com.difft.android.chat.util.DeviceProperties
 import kotlin.time.Duration.Companion.seconds
 
-/**
- * ExoPlayerPool concrete instance which helps to manage a pool of ExoPlayer objects
- */
+
+
+
 @OptIn(markerClass = [UnstableApi::class])
 class SimpleExoPlayerPool(context: Context) : ExoPlayerPool<ExoPlayer>(MAXIMUM_RESERVED_PLAYERS) {
     private val context: Context = context.applicationContext
@@ -24,10 +24,10 @@ class SimpleExoPlayerPool(context: Context) : ExoPlayerPool<ExoPlayer>(MAXIMUM_R
         AppForegroundObserver.addListener(this)
     }
 
-    /**
-     * Tries to get the max number of instances that can be played back on the screen at a time, based off of
-     * the device API level and decoder info.
-     */
+    
+
+
+
     override fun getMaxSimultaneousPlayback(): Int {
         val maxInstances = try {
             val info = MediaCodecUtil.getDecoderInfo(MimeTypes.VIDEO_H264, false, false)
@@ -67,14 +67,14 @@ class SimpleExoPlayerPool(context: Context) : ExoPlayerPool<ExoPlayer>(MAXIMUM_R
     }
 }
 
-/**
- * ExoPlayer pool which allows for the quick and efficient reuse of ExoPlayer instances instead of creating and destroying them
- * as needed. This class will, if added as an AppForegroundObserver.Listener, evict players when the app is backgrounded to try to
- * make sure it is a good citizen on the device.
- *
- * This class also supports reserving a number of players, which count against its total specified by getMaxSimultaneousPlayback. These
- * players will be returned first when a player is requested via require.
- */
+
+
+
+
+
+
+
+
 abstract class ExoPlayerPool<T : ExoPlayer>(
     private val maximumReservedPlayers: Int
 ) : AppForegroundObserver.Listener {
@@ -85,32 +85,32 @@ abstract class ExoPlayerPool<T : ExoPlayer>(
 
     private val pool: MutableMap<T, PoolState> = mutableMapOf()
 
-    /**
-     * Try to get a player from the non-reserved pool.
-     *
-     * @return A player if one is available, otherwise null
-     */
+    
+
+
+
+
     @MainThread
     fun get(tag: String): T? {
         return get(allowReserved = false, tag = tag)
     }
 
-    /**
-     * Get a player, preferring reserved players.
-     *
-     * @return A non-null player instance. If one is not available, an exception is thrown.
-     * @throws IllegalStateException if no player is available.
-     */
+    
+
+
+
+
+
     @MainThread
     fun require(tag: String): T {
         return checkNotNull(get(allowReserved = true, tag = tag)) { "Required exoPlayer could not be acquired for $tag! :: ${poolStats()}" }
     }
 
-    /**
-     * Returns a player to the pool. If the player is not from the pool, an exception is thrown.
-     *
-     * @throws IllegalArgumentException if the player passed is not in the pool
-     */
+    
+
+
+
+
     @MainThread
     fun pool(exoPlayer: T) {
         val poolState = pool[exoPlayer]

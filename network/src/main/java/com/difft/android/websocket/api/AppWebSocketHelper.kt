@@ -19,14 +19,14 @@ import javax.inject.Inject
 import javax.inject.Named
 import javax.inject.Singleton
 
-/**
- * Provide a general interface to the WebSocket for making requests and reading messages sent by the server.
- * Where appropriate, it will handle retrying failed unidentified requests on the regular WebSocket.
- */
+
+
+
+
 @Singleton
 class AppWebSocketHelper
 @Inject constructor(
-    // chat socket
+    
     @param:Named("chat-data")
     val chatDataWebSocketConnection: WebSocketConnection,
     private val messagingGate: MessagingGate,
@@ -38,21 +38,21 @@ class AppWebSocketHelper
         return chatDataWebSocketConnection.sendRequestAwaitResponse(requestMessage)
     }
 
-    /**
-     *
-     *
-     * A blocking call that reads a message off the pipe. When this call returns, the message has been
-     * acknowledged and will not be retransmitted. This will return [Optional.empty] when an
-     * empty response is hit, which indicates the WebSocket is empty.
-     *
-     *
-     * Important: The empty response will only be hit once for each connection. That means if you get
-     * an empty response and call readOrEmpty() again on the same instance, you will not get an empty
-     * response, and instead will block until you get an actual message. This will, however, reset if
-     * connection breaks (if, for instance, you lose and regain network).
-     *
-     * @return The message read (same as the message sent through the callback).
-     */
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     @Throws(WebSocketUnavailableException::class, IOException::class)
     fun readOrEmptyFromChatDataWebSocket(): Pair<Long, Any?>? {
         while (true) {
@@ -106,12 +106,12 @@ class AppWebSocketHelper
     }
 
 
-    /**
-     * ACKs a frame that is consumed here, only while messaging is open (#1382). A refused frame
-     * is neither ACKed nor handed on, so the server keeps it queued.
-     *
-     * @return whether the frame was admitted and ACKed.
-     */
+    
+
+
+
+
+
     @Throws(IOException::class)
     private fun ackIfAdmitted(requestId: Long, what: String): Boolean {
         val admission = messagingGate.tryAdmit(AdmissionKind.RECEIVE, "ws-$what")

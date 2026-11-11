@@ -21,12 +21,12 @@ import com.difft.android.migration.ui.component.MigrationReasonCard
 import com.difft.android.migration.ui.component.MigrationResultPage
 import com.difft.android.migration.ui.component.MigrationResultTone
 
-/**
- * The new package's first-launch page: brand mark, one question and two buttons. "Use another
- * sign-in method" goes through the irreversible-skip confirmation, because everyone who sees this
- * page has history that would otherwise be left behind. Blocked states and a too-old old app render
- * as the shared block page instead.
- */
+
+
+
+
+
+
 @Composable
 fun MigrationHandoffEntryScreen(
     state: MigrationHandoffEntryState,
@@ -66,8 +66,8 @@ fun MigrationHandoffEntryScreen(
         MigrationHandoffEntryState.PeerTooOld -> MigrationResultPage(
             tone = MigrationResultTone.WARNING,
             title = stringResource(R.string.migration_m3_title),
-            // The old package has no store listing to open, so the reason card is the whole
-            // instruction and the only action left is the other way to sign in.
+            
+            
             primary = MigrationAction(stringResource(R.string.migration_handoff_entry_secondary)) {
                 onIntent(MigrationHandoffEntryIntent.ChooseNormalLogin)
             },

@@ -5,11 +5,11 @@ import android.view.ViewGroup
 import android.widget.TextView
 import com.difft.android.databinding.MeFragmentBinding
 
-/**
- * The Me page's "Text size" setting: every text of the page content scales (24sp large / 16sp
- * default, the profile line 21/14). The page header (title, rail toggle) is not content and keeps
- * the layout's size, so the title stays aligned with the other tabs' and the detail pane's titles.
- */
+
+
+
+
+
 internal object MeTextScaling {
 
     fun apply(binding: MeFragmentBinding, isLarger: Boolean) {

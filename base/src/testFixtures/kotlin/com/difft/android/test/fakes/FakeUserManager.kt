@@ -3,12 +3,12 @@ package com.difft.android.test.fakes
 import com.difft.android.base.user.UserData
 import com.difft.android.base.user.UserManager
 
-/**
- * In-memory UserManager for tests. No SharedPreferences dependency.
- *
- * Pre-populated with a default test user. Set via [setUserData] to null
- * to simulate logged-out state.
- */
+
+
+
+
+
+
 class FakeUserManager(
     private var userData: UserData? = DEFAULT_USER_DATA
 ) : UserManager {

@@ -30,6 +30,7 @@ import com.difft.android.dualpane.ListPaneLayerRoot
 import com.difft.android.dualpane.PaneNavigator
 import com.difft.android.search.mvi.GlobalSearchContract
 import com.difft.android.search.mvi.GlobalSearchViewModel
+import com.difft.android.search.mvi.SearchRow
 import com.difft.android.test.TestDispatcherRule
 import com.difft.android.test.di.FakeGlobalSearchSource
 import com.difft.android.test.rules.GlobalStaticMockRule
@@ -69,11 +70,11 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
-/**
- * Home-screen stand-in for the real search pages: the real `activity_index` tree, a navigator
- * with plain conversation roots, the production search layer with [IndexDetailPages]'s search
- * root, and the router's home callback recording what a result asked to open.
- */
+
+
+
+
+
 @AndroidEntryPoint
 class SearchLayerWiringTestActivity : FragmentActivity(), PaneNavigator.Owner, ListPaneLayer.Owner, ConversationNavigationCallback {
     lateinit var navigator: PaneNavigator
@@ -126,12 +127,12 @@ class SearchLayerWiringTestActivity : FragmentActivity(), PaneNavigator.Owner, L
     }
 }
 
-/**
- * The real [GlobalSearchFragment] as the root of the list pane's search layer (design "global
- * search in the list pane" §4.3; R1-F2, R1-F3): the layout autofocus is off, the back arrow
- * closes the layer, a result opens on the home screen through the router with the layer kept,
- * and a multi-hit row pushes the message search onto the layer with the trimmed query.
- */
+
+
+
+
+
+
 @HiltAndroidTest
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -154,7 +155,7 @@ class GlobalSearchLayerIntegrationTest {
         mockkObject(AppStartup)
         every { AppStartup.onCriticalRenderEventStart() } just Runs
         every { AppStartup.onCriticalRenderEventEnd() } just Runs
-        // The pushed message search queries WCDB (native) on its first load: answer it empty.
+        
         mockkStatic("org.difft.app.database.WCDBExtensionsKt")
         coEvery { any<WCDB>().loadPaginatedMessagesByKeyword(any(), any(), any(), any()) } returns PaginatedMessageSearchResult(emptyList(), false, null)
         mockkObject(SearchUtils)
@@ -189,9 +190,22 @@ class GlobalSearchLayerIntegrationTest {
     private fun search(page: GlobalSearchFragment, raw: String) {
         binding(page).searchInput.query = raw
         ViewModelProvider(page)[GlobalSearchViewModel::class.java].dispatch(GlobalSearchContract.Intent.QueryChanged(raw))
-        dispatchers.testDispatcher.scheduler.advanceTimeBy(301)
+        dispatchers.testDispatcher.scheduler.advanceTimeBy(GlobalSearchViewModel.DEBOUNCE_MS + 1)
         dispatchers.testDispatcher.scheduler.runCurrent()
         idle()
+        awaitRendered(page)
+    }
+
+    
+    private fun awaitRendered(page: GlobalSearchFragment) {
+        val rows = ViewModelProvider(page)[GlobalSearchViewModel::class.java].state.value.rows
+        val adapter = binding(page).vContent.adapter as GlobalSearchResultsAdapter
+        val deadline = System.currentTimeMillis() + 5_000
+        while (adapter.currentList != rows && System.currentTimeMillis() < deadline) {
+            Thread.sleep(10)
+            idle()
+        }
+        assertEquals(rows, adapter.currentList)
     }
 
     private fun clickRow(list: RecyclerView, position: Int) {
@@ -218,18 +232,18 @@ class GlobalSearchLayerIntegrationTest {
         assertEquals(View.GONE, activity.findViewById<View>(R.id.list_layer).visibility)
     }
 
-    /**
-     * The test Application is no ConversationOpener, so the routed open shows as the shell intent
-     * here; with the real Application the router's rule 1 hands the same target to the home
-     * screen's `openConversation` (ConversationRouterTest). Either way the layer stays.
-     */
+    
+
+
+
+
     @Test
     fun `a result opens its conversation through the router and keeps the layer`() {
         FakeGlobalSearchSource.history = listOf(history("u1", single = true))
         val page = openLayer()
         search(page, "abc")
 
-        clickRow(binding(page).recyclerviewChatHistory, 0)
+        clickRow(binding(page).vContent, HISTORY_ROW)
 
         val started = assertNotNull(shadowOf(activity).nextStartedActivity, "the conversation open left the page")
         assertEquals(ChatActivity::class.java.name, started.component?.className)
@@ -245,7 +259,7 @@ class GlobalSearchLayerIntegrationTest {
         val page = openLayer()
         search(page, " abc ")
 
-        clickRow(binding(page).recyclerviewChatHistory, 0)
+        clickRow(binding(page).vContent, HISTORY_ROW)
 
         val host = layer.host!!
         assertEquals(2, host.depth)
@@ -260,11 +274,11 @@ class GlobalSearchLayerIntegrationTest {
 
     private fun keyboardShown(): Boolean = shadowOf(imm()).isSoftInputVisible
 
-    /**
-     * The keyboard itself is driven through Compose's keyboard controller, which the Robolectric
-     * IMM shadow does not see; the fresh-open / no-keyboard-after-recreation rule is
-     * `detailKeyboard`'s (DetailKeyboardTest), which the page calls with its saved state.
-     */
+    
+
+
+
+
     @Test
     fun `a recreation keeps the query and its results in the restored page`() {
         FakeGlobalSearchSource.history = listOf(history("u1", single = true))
@@ -279,11 +293,11 @@ class GlobalSearchLayerIntegrationTest {
         val state = ViewModelProvider(restored)[GlobalSearchViewModel::class.java].state.value
         assertEquals("abc", state.query)
         assertEquals(listOf("u1"), state.history.map { it.conversationId })
-        assertEquals(View.VISIBLE, binding(restored).llChatHistory.visibility)
+        assertEquals(state.rows.size, binding(restored).vContent.adapter!!.itemCount)
         assertFalse(binding(restored).searchInput.autoFocus)
     }
 
-    /** A finger drag on [view] from ([x], [y]): down, then a move beyond the touch slop, then up. */
+    
     private fun drag(view: View, x: Float = 100f, y: Float = 100f) {
         val t = android.os.SystemClock.uptimeMillis()
         view.dispatchTouchEvent(MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, x, y, 0))
@@ -293,41 +307,43 @@ class GlobalSearchLayerIntegrationTest {
     }
 
     @Test
-    fun `a finger drag on the results hides the keyboard, a programmatic or clamp scroll does not (D2, S-1)`() {
+    fun `a finger drag on the results hides the keyboard, a programmatic scroll does not (D2, S-1)`() {
+        FakeGlobalSearchSource.history = (1..30).map { history("u$it", single = true) }
+        val page = openLayer()
+        search(page, "abc")
+        
+        imm().showSoftInput(binding(page).root, 0)
+        assertTrue(keyboardShown())
+        
+        val list = binding(page).vContent
+        list.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY))
+        list.layout(0, 0, 1080, 400)
+
+        
+        list.scrollBy(0, 50)
+        idle()
+        assertTrue(keyboardShown(), "typing must not lose the keyboard to a layout clamp")
+
+        drag(list)
+        assertFalse(keyboardShown(), "a drag on the results hides the keyboard")
+    }
+
+    @Test
+    fun `a drag on results too short to scroll still hides the keyboard (D2)`() {
         FakeGlobalSearchSource.history = listOf(history("u1", single = true))
         val page = openLayer()
         search(page, "abc")
-        // The shadow IMM only sees the framework calls: raise it here, the drag must lower it.
         imm().showSoftInput(binding(page).root, 0)
         assertTrue(keyboardShown())
-        // A short viewport, so the results overflow and the scroll position can move at all.
-        val results = binding(page).vContent
-        results.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(100, View.MeasureSpec.EXACTLY))
-        results.layout(0, 0, 1080, 100)
-        assertTrue(results.getChildAt(0).height > results.height, "the results overflow the viewport")
+        val list = binding(page).vContent
+        list.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(2000, View.MeasureSpec.EXACTLY))
+        list.layout(0, 0, 1080, 2000)
+        assertFalse(list.canScrollVertically(1), "the results fit the page")
 
-        // What a shrinking results list does under a narrower query: NestedScrollView clamps its offset.
-        results.scrollTo(0, 1)
-        idle()
-        assertEquals(1, results.scrollY)
-        assertTrue(keyboardShown(), "typing must not lose the keyboard to a layout clamp")
+        
+        drag(list, y = 1500f)
 
-        val list = binding(page).recyclerviewChatHistory
-        list.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(2000, View.MeasureSpec.AT_MOST))
-        list.layout(0, 0, list.measuredWidth, list.measuredHeight)
-        drag(list)
-        assertFalse(keyboardShown(), "a drag on a results list hides the keyboard")
-
-        // A drag that starts on a section heading is handled by the outer scroll container (R2-F1).
-        imm().showSoftInput(binding(page).root, 0)
-        assertTrue(keyboardShown())
-        val heading = binding(page).tvChatHistoryTitle
-        assertTrue(heading.isShown && heading.height > 0, "the history heading is laid out")
-        // The list sits under the heading again (clickRow's layout put it at the section's top).
-        list.layout(0, heading.bottom, list.measuredWidth, heading.bottom + list.measuredHeight)
-        drag(results, x = 100f, y = heading.top + heading.height / 2f)
-
-        assertFalse(keyboardShown(), "a drag on a heading hides the keyboard too")
+        assertFalse(keyboardShown())
     }
 
     @Test
@@ -338,7 +354,7 @@ class GlobalSearchLayerIntegrationTest {
         imm().showSoftInput(binding(page).root, 0)
         assertTrue(keyboardShown())
 
-        // A notification or link: the navigator opens the conversation layer, no result row was tapped.
+        
         activity.navigator.replaceRoot(PaneNavigator.TAB_CHATS, Fragment(), selectionId = "u1")
         idle()
 
@@ -360,7 +376,69 @@ class GlobalSearchLayerIntegrationTest {
 
         val fresh = assertIs<GlobalSearchFragment>(layer.host!!.rootPage())
         assertTrue(fresh !== page)
-        assertEquals(GlobalSearchContract.State(), ViewModelProvider(fresh)[GlobalSearchViewModel::class.java].state.value)
+        val freshState = ViewModelProvider(fresh)[GlobalSearchViewModel::class.java].state.value
+        assertEquals("", freshState.query)
+        assertEquals(listOf(SearchRow.Scopes(GlobalSearchContract.Scope.ALL), SearchRow.Empty("")), freshState.rows)
         assertEquals("", binding(fresh).searchInput.query)
+    }
+
+    @Test
+    fun `opening from the search circle reveals the layer and holds the keyboard until it covers`() {
+        controller = Robolectric.buildActivity(SearchLayerWiringTestActivity::class.java).setup().visible()
+        idle()
+        var focused = false
+
+        layer.open(ListPaneLayerRoot.SEARCH, revealFrom = android.graphics.Rect(700, 800, 762, 862))
+        layer.runAfterReveal { focused = true }
+        assertFalse(focused, "held while the circle grows")
+
+        idle()
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(REVEAL_SETTLE_MS))
+        idle()
+        assertTrue(focused)
+        val container = activity.findViewById<View>(R.id.list_layer)
+        assertEquals(View.VISIBLE, container.visibility)
+        assertFalse(container.clipToOutline, "the circle clip is released once the layer is covered")
+
+        layer.close()
+        idle()
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(REVEAL_SETTLE_MS))
+        idle()
+        assertEquals(View.GONE, container.visibility)
+        assertEquals(1f, container.alpha)
+    }
+
+    @Test
+    fun `closing before the reveal ends drops the held keyboard request`() {
+        controller = Robolectric.buildActivity(SearchLayerWiringTestActivity::class.java).setup().visible()
+        idle()
+        var focused = false
+
+        layer.open(ListPaneLayerRoot.SEARCH, revealFrom = android.graphics.Rect(700, 800, 762, 862))
+        layer.runAfterReveal { focused = true }
+        layer.close()
+        idle()
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(REVEAL_SETTLE_MS))
+        idle()
+
+        assertFalse(focused, "the closing search must not raise its keyboard")
+    }
+
+    @Test
+    fun `the close circle beside the bottom search bar closes the layer`() {
+        val binding = binding(openLayer())
+
+        assertEquals(View.VISIBLE, binding.searchBarRow.visibility)
+        binding.ibBack.performClick()
+        idle()
+
+        assertFalse(layer.active)
+    }
+
+    private companion object {
+        
+        const val HISTORY_ROW = 2
+
+        const val REVEAL_SETTLE_MS = 700L
     }
 }

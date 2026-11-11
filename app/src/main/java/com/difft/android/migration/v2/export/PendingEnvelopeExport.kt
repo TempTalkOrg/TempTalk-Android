@@ -7,15 +7,15 @@ import com.difft.android.migration.v2.model.NeutralPendingEnvelope
 import com.difft.android.migration.v2.model.NeutralRecord
 import org.difft.app.database.models.PendingMessageModelNew
 
-/**
- * Which `pending_message_new` rows a device-replacement export carries (#1382): every row the
- * receive path would still apply. Expired rows (the [PendingMessageProcessor] expiry on the target
- * message's timestamp) and rows whose bytes do not parse as an envelope (a permanent failure there)
- * stay behind, as do rows with no id.
- */
+
+
+
+
+
+
 object PendingEnvelopeExport {
 
-    /** The rows to carry, in the snapshot's order. */
+    
     fun select(rows: List<PendingMessageModelNew>, nowMs: Long): List<NeutralRecord.PendingEnvelope> {
         var expired = 0
         var invalid = 0

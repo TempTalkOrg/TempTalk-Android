@@ -1,5 +1,16 @@
 package com.difft.android.chat.recent
 
+import com.difft.android.base.utils.avoidCornerCutout
+import com.difft.android.base.ui.topchrome.TopChromeOwner
+import com.difft.android.base.ui.topchrome.TopChromeStyle
+import com.difft.android.base.ui.sidechrome.padForSideChrome
+import com.difft.android.base.utils.DualPaneUtils.isInDualPaneMode
+import com.difft.android.base.ui.sidechrome.sideChromeBar
+import com.difft.android.base.ui.sidechrome.SideChromeViewBar
+import com.difft.android.base.widget.floatAsTopBarButton
+import com.difft.android.base.widget.floatAsTopBarTextButton
+import com.difft.android.base.ui.glass.GlassMode
+import com.difft.android.base.ui.glass.installAppBarOverlayChrome
 import android.annotation.SuppressLint
 import android.content.Intent
 import android.content.res.Configuration
@@ -27,7 +38,7 @@ import com.difft.android.base.widget.ChativePopupWindow
 import com.difft.android.call.manager.CallDataManager
 import com.difft.android.chat.R
 import com.difft.android.chat.databinding.ChatFragmentRecentChatBinding
-import com.difft.android.chat.group.CreateGroupActivity
+import com.difft.android.chat.group.create.openCreateGroupFromList
 import com.difft.android.chat.group.GroupChatContentActivity
 import com.difft.android.chat.invite.InviteCodeActivity
 import com.difft.android.chat.invite.InviteUtils
@@ -69,7 +80,10 @@ import kotlinx.coroutines.launch
 
 @ExperimentalCoroutinesApi
 @AndroidEntryPoint
-class RecentChatFragment : Fragment(), DualPaneSelectionListener {
+class RecentChatFragment : Fragment(), DualPaneSelectionListener, TopChromeOwner {
+
+    override val topChromeStyle: TopChromeStyle get() = TopChromeStyle.Band
+
 
     @Inject
     lateinit var userManager: UserManager
@@ -127,7 +141,7 @@ class RecentChatFragment : Fragment(), DualPaneSelectionListener {
 
             override fun onFocusToggle(roomViewData: RoomViewData) = rowActions.toggleFocus(roomViewData)
 
-            // The home screen is the chat list's only host, so there is no Activity fallback.
+            
             override fun onFoldedGroupsClicked() {
                 if ((activity as? ListPaneLayerOpener)?.openFoldedGroupsLayer() != true) {
                     L.w { "[ChatList] folded_open_ignored reason=no_opener" }
@@ -143,12 +157,12 @@ class RecentChatFragment : Fragment(), DualPaneSelectionListener {
                 roomViewData: RoomViewData,
                 position: Int
             ) {
-                // Skip processing for instant calls as they don't require chat room navigation
+                
                 if (roomViewData.isInstantCall) {
                     return
                 }
 
-                // Check if parent Activity supports dual-pane navigation
+                
                 val navigationCallback = activity as? ConversationNavigationCallback
 
                 when (roomViewData.type) {
@@ -223,11 +237,11 @@ class RecentChatFragment : Fragment(), DualPaneSelectionListener {
     private fun submitSortedChatRooms(rows: List<ListItem>) {
         val items = mutableListOf<ListItem>()
         items.addAll(rows)
-        items.add(ListItem.E2eeFooter) // shown even on an empty list, deliberately not gated on room count
+        items.add(ListItem.E2eeFooter) 
         mAdapter.submitListKeepingTop(binding.recyclerViewRecentMessage, items)
     }
 
-    /** Assembles the list off the main thread ([ChatListAssembler]) and submits it. */
+    
     private suspend fun assembleAndSubmit(source: ChatListSource, callingList: Map<String, CallData>?) {
         val input = ChatListInput(
             rooms = source.rooms,
@@ -277,12 +291,34 @@ class RecentChatFragment : Fragment(), DualPaneSelectionListener {
                 extraPx = HomeHeaderCollapser.collapseRangePx(binding.homeHeader, collapsibleHeader),
             )
         }
+        binding.homeHeader.avoidCornerCutout()
+        
+        
+        installAppBarOverlayChrome(
+            viewLifecycleOwner, binding.root, binding.homeAppBar,
+            binding.recyclerViewRecentMessage.parent as View, binding.recyclerViewRecentMessage,
+            covered = (activity as? ConversationNavigationCallback)?.detailCoversList,
+            windowLifecycle = requireActivity().lifecycle,
+        )
+        (binding.chatTitle.layoutParams as androidx.constraintlayout.widget.ConstraintLayout.LayoutParams).apply {
+            bottomToBottom = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.PARENT_ID
+            binding.chatTitle.layoutParams = this
+        }
+        if (GlassMode.isLive(requireContext())) {
+            
+            
+            binding.addOptions.floatAsTopBarButton(leading = false, glass = true)
+            binding.ivProxyStatus.floatAsTopBarButton(leading = false, glass = true)
+        }
 
         recentChatViewModel.retrieveCallingList()
 
-        // The home screen's one-pane detail layer covers this list without pausing it.
+        
         (activity as? ConversationNavigationCallback)?.detailCoversList
-            ?.onEach { listVisibility.onCoveredChanged(it) }
+            ?.onEach {
+                listVisibility.onCoveredChanged(it)
+                updateHeaderEligibility()
+            }
             ?.launchIn(viewLifecycleOwner.lifecycleScope)
 
         observeChatWSConnection()
@@ -319,8 +355,8 @@ class RecentChatFragment : Fragment(), DualPaneSelectionListener {
                 if (nextUnreadItemPosition == -1) {
                     nextUnreadItemPosition = 0
                 }
-                // A programmatic jump is not a nested scroll: bring a collapsed title back with
-                // it when the jump lands on the top of the list.
+                
+                
                 if (nextUnreadItemPosition == 0) binding.homeAppBar.setExpanded(true, true)
                 binding.recyclerViewRecentMessage.post {
                     if (canScrollDown) {
@@ -337,8 +373,8 @@ class RecentChatFragment : Fragment(), DualPaneSelectionListener {
             .onEach { mAdapter.notifyDataSetChanged() }
             .launchIn(viewLifecycleOwner.lifecycleScope)
 
-        // Re-bind the official-account badge when the cache populates (preload / full sync).
-        // StateFlow replays the current value so a collector started before preload self-heals.
+        
+        
         OfficialAccountCache.state
             .flowWithLifecycle(viewLifecycleOwner.lifecycle, Lifecycle.State.STARTED)
             .onEach { mAdapter.notifyDataSetChanged() }
@@ -360,31 +396,32 @@ class RecentChatFragment : Fragment(), DualPaneSelectionListener {
         super.onResume()
 
         listVisibility.onResumedChanged(true)
+        updateHeaderEligibility()
         onReturnedToList()
     }
 
-    /**
-     * Refresh for "the user is back on the list": from onResume, and when the home screen's
-     * one-pane detail layer uncovers the still-resumed list (closing a conversation there does not
-     * resume this fragment the way closing ChatActivity did).
-     */
+    
+
+
+
+
     private fun onReturnedToList() {
-        // Proxy toggle may have changed in settings while we were away — re-gate the shield.
+        
         updateProxyStatusIcon()
         refreshLegacyMigrationEntry()
 
         recentChatViewModel.retrieveCallingList()
-        // The retained texts may predate a language, 12/24-hour or time-zone change (#1395).
+        
         recentChatViewModel.refreshIfFormatChanged()
 
-        // Restore selected state for dual-pane mode
+        
         val navigationCallback = activity as? ConversationNavigationCallback
         if (navigationCallback?.isDualPaneMode == true) {
             mAdapter.selectedId = navigationCallback.currentSelectedConversationId
         }
-        // Adapter updates delivered while this ViewPager2 page was detached (another tab shown)
-        // leave the list's layout request stuck below the page root, so after the page is
-        // re-attached later updates stay unapplied until the next scroll. Re-request from the root.
+        
+        
+        
         view?.requestLayout()
     }
 
@@ -405,7 +442,7 @@ class RecentChatFragment : Fragment(), DualPaneSelectionListener {
                     drawable = ResUtils.getDrawable(R.drawable.chat_tabler_create_group),
                     label = getString(R.string.chat_option_create_group)
                 ) {
-                    startActivity(Intent(activity, CreateGroupActivity::class.java))
+                    openCreateGroupFromList(this@RecentChatFragment)
                     popupWindow?.dismiss()
                 })
             add(
@@ -442,55 +479,78 @@ class RecentChatFragment : Fragment(), DualPaneSelectionListener {
                     popupWindow?.dismiss()
                 })
         }
-        binding.addOptions.setOnClickListener {
-            popupWindow = ChativePopupWindow.showAsDropDown2(
-                binding.addOptions,
-                popupItemList
-            )
+        val showAddOptions = {
+            
+            val onBar = headerBar?.barBoundsInWindow(ACTION_ADD_OPTIONS)
+            popupWindow = if (onBar != null) {
+                ChativePopupWindow.showBesideBarButton(binding.root, onBar, popupItemList)
+            } else {
+                ChativePopupWindow.showAsDropDown2(binding.addOptions, popupItemList)
+            }
         }
+        binding.addOptions.setOnClickListener { showAddOptions() }
         setupLegacyMigrationEntry()
-        binding.ivProxyStatus.setOnClickListener {
-            startActivity(
-                Intent(
-                    requireContext(),
-                    globalServices.activityProvider.getActivityClass(ActivityType.PROXY_SETTINGS)
-                )
-            )
+        binding.ivProxyStatus.setOnClickListener { openProxySettings() }
+        
+        
+        if (!isInDualPaneMode()) padForSideChrome(binding.root)
+        headerBar = if (isInDualPaneMode()) null else sideChromeBar(base = true).also { bar ->
+            bar.setAction(ACTION_ADD_OPTIONS, binding.addOptions, R.drawable.chat_add_options, getString(R.string.chat_add_options), visible = true, onClick = showAddOptions)
         }
+        if (headerBar == null) {
+            binding.addOptions.floatAsTopBarButton(leading = false, glass = true)
+            binding.ivProxyStatus.floatAsTopBarButton(leading = false, glass = true)
+        }
+        updateHeaderEligibility()
+        updateProxyStatusIcon()
     }
 
-    /** Last observed IM WebSocket state; drives the proxy shield colour. */
+    private var headerBar: SideChromeViewBar? = null
+
+    private fun updateHeaderEligibility() {
+        headerBar?.setEligible((activity as? ConversationNavigationCallback)?.detailCoversList?.value != true)
+    }
+
+    private fun openProxySettings() {
+        startActivity(Intent(requireContext(), globalServices.activityProvider.getActivityClass(ActivityType.PROXY_SETTINGS)))
+    }
+
+    
     private var lastWebSocketState: WebSocketConnectionState? = null
 
-    /**
-     * Refreshes the toolbar proxy shield (proxy design — homepage status icon).
-     * Gated by [ProxyConfigProvider.isEnabled]: hidden while the proxy is off.
-     * When on, the IM WebSocket state drives three distinct shields (traffic is
-     * tunnelled, so a live connection == connected through the proxy):
-     *  - CONNECTED            → GREEN  (connected through proxy)
-     *  - CONNECTING / unknown → GREY, no mark (checking / connecting in progress)
-     *  - otherwise            → GREY + ✕ (unavailable / not connected)
-     *
-     * A neutral mark-less shield is used for the in-progress state so the "✕"
-     * cannot be misread as "failed" while the connection is still being established.
-     */
+    
+
+
+
+
+
+
+
+
+
+
+
     private fun updateProxyStatusIcon() {
-        // View-lifecycle guard: getView() is null before onCreateView and after
-        // onDestroyView, and binding is assigned in onCreateView — so a non-null
-        // view guarantees a live binding. (this::binding.isInitialized is useless
-        // here: the lateinit binding is never nulled, so it stays true after detach.)
+        
+        
+        
+        
         if (view == null) return
-        if (!proxyConfigProvider.isEnabled) {
-            binding.ivProxyStatus.visibility = View.GONE
-            return
-        }
-        binding.ivProxyStatus.visibility = View.VISIBLE
         val icon = when (lastWebSocketState) {
             WebSocketConnectionState.CONNECTED -> R.drawable.chat_ic_proxy_shield_connected
             WebSocketConnectionState.CONNECTING, null -> R.drawable.chat_ic_proxy_shield_checking
             else -> R.drawable.chat_ic_proxy_shield_unavailable
         }
         binding.ivProxyStatus.setImageResource(icon)
+        val bar = headerBar
+        if (bar != null) {
+            bar.setAction(
+                ACTION_PROXY, binding.ivProxyStatus, icon, getString(R.string.chat_proxy_status),
+                visible = proxyConfigProvider.isEnabled, onClick = ::openProxySettings, tinted = false,
+            )
+        } else {
+            binding.ivProxyStatus.visibility = if (proxyConfigProvider.isEnabled) View.VISIBLE else View.GONE
+        }
     }
 
     private fun observeChatWSConnection() {
@@ -503,8 +563,8 @@ class RecentChatFragment : Fragment(), DualPaneSelectionListener {
                 lastWebSocketState = state
                 updateProxyStatusIcon()
                 when (state) {
-                    // Display only: the kick-out decision (AUTHENTICATION_FAILED) and the
-                    // activation prompt (INACTIVE_FAILED) are owned app-wide by SessionAuthGuard.
+                    
+                    
                     WebSocketConnectionState.DISCONNECTED,
                     WebSocketConnectionState.FAILED,
                     WebSocketConnectionState.AUTHENTICATION_FAILED,
@@ -531,16 +591,16 @@ class RecentChatFragment : Fragment(), DualPaneSelectionListener {
             .launchIn(viewLifecycleOwner.lifecycleScope)
     }
 
-    /**
-     * Retiring package only: the title-bar entry into the "move to the new app" guide. The guide opens
-     * once automatically, through the startup prompt coordinator, whatever the new app's install state;
-     * after that the pill is the only entry. [LegacyMigrationGate] decides whether the entry is open, re-evaluated
-     * on every resume so a flag flipped while the app runs takes effect without a restart.
-     */
+    
+
+
+
+
+
     private fun setupLegacyMigrationEntry() {
         if (!PeerApps.isLegacy(requireContext())) return
         binding.migrateEntry.setContent {
-            DifftTheme { LegacyMigrationEntryChip(onClick = ::openLegacyMigrationGuide) }
+            DifftTheme(applyWindowBackground = false) { LegacyMigrationEntryChip(onClick = ::openLegacyMigrationGuide, glass = true) }
         }
         refreshLegacyMigrationEntry()
     }
@@ -549,11 +609,16 @@ class RecentChatFragment : Fragment(), DualPaneSelectionListener {
         if (!PeerApps.isLegacy(requireContext())) return
         val open = LegacyMigrationGate.isOpen(requireContext(), globalConfigsManager)
         binding.migrateEntry.visibility = if (open) View.VISIBLE else View.GONE
-        // The one automatic opening of the guide is the first startup-prompt slot (#1355), so it
-        // never stacks with another startup prompt.
+        
+        
     }
 
     private fun openLegacyMigrationGuide() {
         startActivity(Intent().setClassName(requireContext().packageName, PeerApps.LEGACY_GUIDE_ACTIVITY))
+    }
+
+    private companion object {
+        const val ACTION_ADD_OPTIONS = "add_options"
+        const val ACTION_PROXY = "proxy"
     }
 }

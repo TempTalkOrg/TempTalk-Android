@@ -19,38 +19,22 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
 
-/**
- * Integration test: real XML inflate of `v2_media_image_editor_hud.xml` → manipulate seekbar →
- * assert writes reach UserData (design §3.9 table row 2, plus issue #725 §10.2 hot-write throttling).
- *
- * Approach:
- *   - Uses Robolectric so `LayoutInflater` has a live Android runtime.
- *   - Stubs Hilt's `EntryPointAccessors.fromApplication` so the lazy `userManager`
- *     property in ImageEditorHudV2 (resolved via `context.globalHiltServices()`,
- *     which internally calls `EntryPointAccessors.fromApplication`) returns an
- *     in-memory UserManager without bringing up a full Hilt graph.
- *
- * Uses a local in-memory UserManager implementation rather than `FakeUserManager`
- * from `:base` testFixtures because the testFixtures Kotlin source set is not
- * compiled for downstream consumers (see base/build.gradle.kts workaround comment).
- *
- * **Hot-write throttling (issue #725 §10.2)**: writes are deferred to
- * `onStopTrackingTouch` — `onProgressChanged` now updates only the in-view preview.
- * Tests fire the seekbar's `OnSeekBarChangeListener.onStopTrackingTouch` to assert
- * persistence; setting `widthSeekBar.progress` alone is not expected to persist.
- *
- * Covers all affected paths:
- *   - Write path (3 modes): setupWidthSeekBar onStopTrackingTouch → UserData via userManager.update
- *   - Read path (3 modes): presentMode{Draw|Highlight|Blur} → widthSeekBar.progress from UserData
- */
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(manifest = Config.NONE)
 class ImageEditorHudV2SeekbarTest {
 
-    /**
-     * In-memory UserManager for this test. Mirrors `FakeUserManager` in :base testFixtures
-     * but lives in the chat module to avoid the testFixtures Kotlin compilation gap.
-     */
+    
+
+
+
     private class InMemoryUserManager(
         private var data: UserData? = UserData()
     ) : UserManager {
@@ -71,15 +55,15 @@ class ImageEditorHudV2SeekbarTest {
         val globalEntry = mockk<GlobalHiltEntryPoint>(relaxed = true)
         every { globalEntry.userManager } returns userManager
 
-        // ImageEditorHudV2#userManager calls context.globalHiltServices(), which internally
-        // calls EntryPointAccessors.fromApplication(context). Stub that static so the View's
-        // lazy property resolves to our InMemoryUserManager.
+        
+        
+        
         mockkStatic(EntryPointAccessors::class)
         every {
             EntryPointAccessors.fromApplication(any<Context>(), GlobalHiltEntryPoint::class.java)
         } returns globalEntry
 
-        // Wrap ApplicationContext with an AppCompat theme so AppCompatSeekBar can inflate.
+        
         val appCtx = RuntimeEnvironment.getApplication()
         themedContext = ContextThemeWrapper(
             appCtx,
@@ -92,17 +76,11 @@ class ImageEditorHudV2SeekbarTest {
         unmockkStatic(EntryPointAccessors::class)
     }
 
-    /**
-     * Retrieves the [android.widget.SeekBar.OnSeekBarChangeListener] installed by
-     * `ImageEditorHudV2.setupWidthSeekBar` via reflection. The Android SeekBar
-     * does not expose a getter for this listener, so we walk the class hierarchy
-     * to find the field whose type matches `OnSeekBarChangeListener`.
-     *
-     * Robolectric/Android internally store this on different ancestor classes
-     * across SDK versions, so matching by type (rather than a hardcoded field
-     * name) is more portable. Issue #725 §10.2 throttling means tests must invoke
-     * `onStopTrackingTouch` to verify persistence.
-     */
+    
+
+
+
+
     private fun listenerOf(
         seekBar: android.widget.SeekBar,
     ): android.widget.SeekBar.OnSeekBarChangeListener? {
@@ -128,8 +106,8 @@ class ImageEditorHudV2SeekbarTest {
             com.difft.android.chat.R.id.image_editor_hud_draw_width_bar
         )
         widthSeekBar.progress = 42
-        // Hot-write throttling: setting progress alone should NOT persist; persistence
-        // happens once on `onStopTrackingTouch`.
+        
+        
         listenerOf(widthSeekBar)?.onStopTrackingTouch(widthSeekBar)
 
         assertEquals(42, userManager.getUserData()!!.imageEditorMarkerPercentage)
@@ -171,9 +149,7 @@ class ImageEditorHudV2SeekbarTest {
 
     @Test
     fun `seekbar progress alone does NOT persist - hot-write throttling`() {
-        // Issue #725 §10.2: `onProgressChanged` fires up to 100 times per drag.
-        // The legacy implementation wrote on every tick. After throttling, only
-        // `onStopTrackingTouch` persists — verify no write fires during drag.
+        
         val hud = ImageEditorHudV2(themedContext)
         hud.setMode(ImageEditorHudV2.Mode.DRAW)
 
@@ -181,7 +157,7 @@ class ImageEditorHudV2SeekbarTest {
             com.difft.android.chat.R.id.image_editor_hud_draw_width_bar
         )
         widthSeekBar.progress = 50
-        // We deliberately do NOT fire onStopTrackingTouch. UserData stays at default.
+        
         assertEquals(0, userManager.getUserData()!!.imageEditorMarkerPercentage)
     }
 

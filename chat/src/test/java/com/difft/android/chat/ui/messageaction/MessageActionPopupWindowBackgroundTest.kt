@@ -22,18 +22,11 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import kotlin.test.assertEquals
 
-/**
- * M25 (issue #1127, family H cleanup): [MessageActionPopup] previously carried the team's
- * production-verified fix for this exact defect class — a `restoreWindowBackground` parameter
- * gating a synchronous snapshot/restore of the host window background immediately after adding
- * its overlay. Both parameter and restore logic are removed: the popup now
- * migrates to `DifftTheme(applyWindowBackground = false)`, which is strictly stronger (there is
- * no write to restore in the first place). No prior regression test existed for this popup
- * pinning the window-background invariant, so this is a new test.
- *
- * `TestScopeApplication` initializes `ApplicationHelper.instance`, required by the popup's
- * `dpToPx` extension (same requirement as `TextSelectionMenuPopupWindowBackgroundTest`).
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(application = TestScopeApplication::class, sdk = [34])

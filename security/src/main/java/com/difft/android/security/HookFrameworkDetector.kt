@@ -32,9 +32,7 @@ internal object HookFrameworkDetector {
         "/cache/.disable_magisk"
     )
 
-    /**
-     * 先按已确认特征包名检测，后续可持续追加。
-     */
+    
     private val suspiciousStackPackagePrefixes = listOf(
         "com.lian.lhook",
         "de.robv.android.xposed",
@@ -48,11 +46,11 @@ internal object HookFrameworkDetector {
         "re.frida"
     )
 
-    /**
-     * 通过当前进程已加载映射信息（/proc/self/maps）匹配常见 Hook 框架关键字；
-     *
-     * @return true 表示检测到 Hook/注入框架风险
-     */
+    
+
+
+
+
     fun isHookFrameworkDetected(): Boolean {
         val isMagiskInstalled = isMagiskInstalled()
         val isHookFrameworkDetected = hasKeywordInProcMaps(hookFrameworkKeywords)
@@ -61,10 +59,7 @@ internal object HookFrameworkDetector {
         return isMagiskInstalled || isHookFrameworkDetected || isHookFrameworkDetectedByStackTrace
     }
 
-    /**
-     * 检测系统是否安装了 Magisk。
-     * /data/adb/magisk 为常见安装路径，存在即视为高风险环境。
-     */
+    
     private fun isMagiskInstalled(): Boolean {
         return magiskPaths.any { path ->
             try {
@@ -75,16 +70,13 @@ internal object HookFrameworkDetector {
         }
     }
 
-    /**
-     * 检测当前线程调用栈中是否出现已知 Hook 包名前缀。
-     */
+    
     fun hasSuspiciousStackTrace(): Boolean = containsHookFrame(Throwable().stackTrace)
 
-    /**
-     * Whether the given stack trace contains a known hook-framework package prefix.
-     * Extracted so ANR-report filtering can reuse the same framework list, keeping
-     * detection and filtering aligned.
-     */
+    
+
+
+
     fun containsHookFrame(stackTrace: Array<StackTraceElement>): Boolean {
         if (stackTrace.isEmpty()) {
             return false

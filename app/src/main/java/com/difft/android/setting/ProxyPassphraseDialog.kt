@@ -28,19 +28,19 @@ import com.difft.android.base.ui.compose.settings.DifftSettingsDefaults
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.widget.MessageDialog
 
-/** Test handle for the in-flight indicator; the glyph carries no text of its own. */
+
 const val PROXY_PASSPHRASE_IN_FLIGHT_TEST_TAG = "proxy_passphrase_in_flight"
 
-/**
- * Collects the out-of-band passphrase used to decrypt an encrypted proxy link.
- *
- * Declarative on purpose: [isSaving] and [isError] must keep updating while the dialog is open, and
- * `ComposeDialogManager.showMessageDialog`'s imperative form would snapshot them once. Confirming
- * does not close the dialog — the host closes it when the ViewModel reports the outcome.
- *
- * The passphrase itself is held in plain `remember`, not `rememberSaveable`: it must not reach the
- * saved-instance bundle.
- */
+
+
+
+
+
+
+
+
+
+
 @Composable
 fun ProxyPassphraseDialog(
     isVisible: Boolean,
@@ -97,9 +97,9 @@ fun ProxyPassphraseDialog(
             }
             if (isSaving) {
                 Spacer(Modifier.height(8.dp))
-                // In-flight feedback lives in the content, not the confirm button: the global wait
-                // dialog is attached to the Activity's content view and would render beneath this
-                // dialog's own window.
+                
+                
+                
                 CircularProgressIndicator(
                     modifier = Modifier
                         .size(14.dp)

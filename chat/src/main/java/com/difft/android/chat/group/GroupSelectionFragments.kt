@@ -1,6 +1,7 @@
 package com.difft.android.chat.group
 
 import android.os.Bundle
+import com.difft.android.base.widget.floatAsTopBarTextButton
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -23,10 +24,11 @@ import com.difft.android.base.utils.pane.dismissWhenLeavingVisibleTop
 import com.difft.android.base.utils.pane.isVisibleTopNow
 import com.difft.android.base.utils.pane.hideDetailKeyboardBeforeLeaving
 import com.difft.android.base.utils.pane.waitWhileVisibleTop
+import com.difft.android.base.utils.pane.ownsWindow
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.chat.R
-import com.difft.android.chat.contacts.contactsdetail.ContactDetailDestination
+import com.difft.android.chat.contacts.contactsdetail.showContactCard
 import com.difft.android.chat.contacts.data.FriendSourceType
 import com.difft.android.chat.databinding.ChatActivityGroupSelectMemberBinding
 import com.difft.android.chat.group.mvi.GroupPageContract.Effect
@@ -40,7 +42,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
-/** Existing member rows, driven entirely by one retained selection set. */
+
 abstract class GroupSelectionPageFragment : Fragment() {
     private val vm: GroupPageViewModel by viewModels()
     private var _binding: ChatActivityGroupSelectMemberBinding? = null
@@ -53,12 +55,14 @@ abstract class GroupSelectionPageFragment : Fragment() {
         restoringQuery = true
         _binding = ChatActivityGroupSelectMemberBinding.inflate(inflater, container, false)
         binding.searchInput.autoFocus = false
-        // SavedStateHandle owns query; framework restoration posts an older onQueryChanged.
+        
         binding.searchInput.isSaveFromParentEnabled = false
         return binding.root
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        
+        if (ownsWindow()) requireActivity().window.setBackgroundDrawableResource(com.difft.android.base.R.color.bg1)
         setupBackButton(binding.ibBack)
         applyDetailPageInsets(view, ime = true)
         detailKeyboard(showOnFirstOpen = false, focus = { binding.searchInput.focusAndShowKeyboard() }, savedInstanceState = savedInstanceState)
@@ -78,13 +82,12 @@ abstract class GroupSelectionPageFragment : Fragment() {
             override fun onMemberClicked(model: GroupMemberModel, position: Int) {
                 model.uid?.let { uid ->
                     hideDetailKeyboardBeforeLeaving()
-                    detailNavigation().push(this@GroupSelectionPageFragment,
-                        ContactDetailDestination(uid, FriendSourceType.FROM_GROUP, vm.gid))
+                    showContactCard(this@GroupSelectionPageFragment, uid, FriendSourceType.FROM_GROUP, vm.gid)
                 }
             }
             override fun onCheckBoxClicked(model: GroupMemberModel, position: Int) {
                 model.uid?.let { vm.dispatch(Intent.Select(it)) }
-                // Checkbox taps mutate the widget before the VM can reject; always restore from VM truth.
+                
                 notifyItemChanged(position)
             }
         }.apply { stateRestorationPolicy = RecyclerView.Adapter.StateRestorationPolicy.PREVENT_WHEN_EMPTY }
@@ -94,6 +97,7 @@ abstract class GroupSelectionPageFragment : Fragment() {
         binding.searchInput.query = vm.state.value.query
         binding.searchInput.onQueryChanged = { if (!restoringQuery && !applyingQuery) vm.dispatch(Intent.Search(it.trim())) }
         binding.searchInput.onClear = { if (!restoringQuery && !applyingQuery) vm.dispatch(Intent.Search("")) }
+        binding.doneButton.floatAsTopBarTextButton(leading = false)
         binding.doneButton.setOnClickListener {
             if (vm.state.value.pending != null) vm.dispatch(Intent.Retry)
             else if (vm.page == Page.MODERATORS && vm.moderatorAction == ModeratorAction.TRANSFER) {
@@ -125,7 +129,7 @@ abstract class GroupSelectionPageFragment : Fragment() {
                     binding.doneButton.isEnabled = !state.busy && (state.pending != null || (state.allowed && state.selectedIds.isNotEmpty() && state.completionPopCount == null))
                     binding.doneButton.setText(if (state.pending != null) R.string.chat_translate_retry else R.string.group_operation_done)
                     binding.doneButton.setTextColor(ContextCompat.getColor(requireContext(),
-                        if (binding.doneButton.isEnabled) com.difft.android.base.R.color.t_info else com.difft.android.base.R.color.t_disable))
+                        if (binding.doneButton.isEnabled) com.difft.android.base.R.color.primary else com.difft.android.base.R.color.t_disable))
                 }
             }
         }
@@ -134,8 +138,8 @@ abstract class GroupSelectionPageFragment : Fragment() {
                 vm.state.map { it.completionPopCount }.distinctUntilChanged().collect { count ->
                     if (count != null) {
                         hideDetailKeyboardBeforeLeaving()
-                        // Keep completion in the VM until the page is actually removed. A fold can
-                        // destroy a queued navigation request after it was accepted by the host.
+                        
+                        
                         detailNavigation().pop(this@GroupSelectionPageFragment, count)
                     }
                 }
@@ -191,7 +195,7 @@ class GroupSelectMemberFragment : GroupSelectionPageFragment() {
     }
 }
 
-/** Resource-backed messages win over server text; the default depends on whether the change was accepted. */
+
 internal fun Effect.Message.resolve(page: Fragment): String = when {
     messageRes != null -> page.getString(messageRes, messageArg.orEmpty())
     text != null -> text

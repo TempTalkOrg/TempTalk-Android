@@ -18,12 +18,12 @@ import java.nio.ByteBuffer
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicReference
 
-/**
- * Streaming video-track transcoder. Ported 1:1 from the Signal-derived Java implementation as
- * part of the Kotlin port campaign (#1093). The drain/feed MediaCodec state machine in [step]
- * and the encoder-setup constructor are preserved verbatim, so the class and those members
- * exceed detekt size thresholds by design.
- */
+
+
+
+
+
+
 @Suppress("LargeClass")
 internal class VideoTrackConverter {
 
@@ -76,7 +76,7 @@ internal class VideoTrackConverter {
 
         val videoCodecInfo = MediaConverter.selectCodec(videoCodec)
         if (videoCodecInfo == null) {
-            // Don't fail CTS if they don't have an AVC codec (not here, anyway).
+            
             L.e { TAG + "Unable to find an appropriate codec for " + videoCodec }
             throw FileNotFoundException()
         }
@@ -106,7 +106,7 @@ internal class VideoTrackConverter {
             outputHeight = videoResolution
             outputWidth = width * outputHeight / height
         }
-        // many encoders do not work when height and width are not multiple of 16 (also, some iPhones do not play some heights)
+        
         outputHeight = (outputHeight + 7) and 0xF.inv()
         outputWidth = (outputWidth + 7) and 0xF.inv()
 
@@ -122,8 +122,8 @@ internal class VideoTrackConverter {
 
         val outputVideoFormat = MediaFormat.createVideoFormat(videoCodec, outputWidthRotated, outputHeightRotated)
 
-        // Set some properties. Failing to specify some of these can cause the MediaCodec
-        // configure() call to throw an unhelpful exception.
+        
+        
         outputVideoFormat.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
         outputVideoFormat.setInteger(MediaFormat.KEY_BIT_RATE, videoBitrate)
         outputVideoFormat.setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR)
@@ -134,13 +134,13 @@ internal class VideoTrackConverter {
         }
         L.i { TAG + "Video encoder config: " + outputVideoFormat.toString() }
 
-        // Create a MediaCodec for the desired codec, then configure it as an encoder with
-        // our desired properties. Request a Surface to use for input.
+        
+        
         val inputSurfaceReference = AtomicReference<Surface>()
         mVideoEncoder = createVideoEncoder(videoCodecInfo, outputVideoFormat, inputSurfaceReference)
         mInputSurface = InputSurface(inputSurfaceReference.get())
         mInputSurface.makeCurrent()
-        // Create a MediaCodec for the decoder, based on the extractor's format.
+        
         mOutputSurface = OutputSurface()
 
         mOutputSurface.changeFragmentShader(
@@ -168,7 +168,7 @@ internal class VideoTrackConverter {
             val colorInfo = inputVideoFormat.getInteger(MediaFormat.KEY_COLOR_TRANSFER)
             colorInfo == MediaFormat.COLOR_TRANSFER_ST2084 || colorInfo == MediaFormat.COLOR_TRANSFER_HLG
         } catch (npe: NullPointerException) {
-            // color transfer key does not exist, no color data supplied
+            
             false
         }
     }
@@ -185,9 +185,9 @@ internal class VideoTrackConverter {
     @Suppress("LongMethod", "CyclomaticComplexMethod", "NestedBlockDepth")
     @Throws(IOException::class, TranscodingException::class)
     fun step() {
-        // Extract video from file and feed to decoder.
-        // Do not extract video if we have determined the output format but we are not yet
-        // ready to mux the frames.
+        
+        
+        
         while (!mVideoExtractorDone &&
             (mEncoderOutputVideoFormat == null || mMuxer != null)
         ) {
@@ -228,11 +228,11 @@ internal class VideoTrackConverter {
             }
             mVideoExtractor.advance()
             mVideoExtractedFrameCount++
-            // We extracted a frame, let's try something else next.
+            
             break
         }
 
-        // Poll output frames from the video decoder and feed the encoder.
+        
         while (!mVideoDecoderDone && (mEncoderOutputVideoFormat == null || mMuxer != null)) {
             val decoderOutputBufferIndex =
                 mVideoDecoder.dequeueOutputBuffer(
@@ -282,7 +282,7 @@ internal class VideoTrackConverter {
             if (render) {
                 if (VERBOSE) L.d { TAG + "output surface: await new image" }
                 mOutputSurface.awaitNewImage()
-                // Edit the frame and send it to the encoder.
+                
                 if (VERBOSE) L.d { TAG + "output surface: draw image" }
                 mOutputSurface.drawImage()
                 mInputSurface.setPresentationTime(mVideoDecoderOutputBufferInfo.presentationTimeUs * 1000)
@@ -296,17 +296,17 @@ internal class VideoTrackConverter {
                 mVideoEncoder.signalEndOfInputStream()
             }
             mVideoDecodedFrameCount++
-            // We extracted a pending frame, let's try something else next.
+            
             break
         }
 
-        // Poll frames from the video encoder and send them to the muxer.
+        
         while (!mVideoEncoderDone && (mEncoderOutputVideoFormat == null || mMuxer != null)) {
             val encoderOutputBufferIndex = mVideoEncoder.dequeueOutputBuffer(mVideoEncoderOutputBufferInfo, TIMEOUT_USEC.toLong())
             if (encoderOutputBufferIndex == MediaCodec.INFO_TRY_AGAIN_LATER) {
                 if (VERBOSE) L.d { TAG + "no video encoder output buffer" }
                 if (mVideoDecoderDone) {
-                    // on some devices and encoder stops after signalEndOfInputStream
+                    
                     L.w { TAG + "mVideoDecoderDone, but didn't get BUFFER_FLAG_END_OF_STREAM" }
                     mVideoEncodedFrameCount = mVideoDecodedFrameCount
                     mVideoEncoderDone = true
@@ -332,7 +332,7 @@ internal class VideoTrackConverter {
             val encoderOutputBuffer = mVideoEncoderOutputBuffers[encoderOutputBufferIndex]
             if ((mVideoEncoderOutputBufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG) != 0) {
                 if (VERBOSE) L.d { TAG + "video encoder: codec config buffer" }
-                // Simply ignore codec config buffers.
+                
                 mVideoEncoder.releaseOutputBuffer(encoderOutputBufferIndex, false)
                 break
             }
@@ -349,7 +349,7 @@ internal class VideoTrackConverter {
             }
             mVideoEncoder.releaseOutputBuffer(encoderOutputBufferIndex, false)
             mVideoEncodedFrameCount++
-            // We enqueued an encoded frame, let's try something else next.
+            
             break
         }
     }
@@ -445,7 +445,7 @@ internal class VideoTrackConverter {
         if (tonemapRequested && !isTonemapEnabled(format)) {
             L.d { TAG + "HDR tone-mapping requested but not supported by the decoder." }
         }
-        // Must be called before start()
+        
         surfaceReference.set(encoder.createInputSurface())
         encoder.start()
         return encoder
@@ -453,17 +453,17 @@ internal class VideoTrackConverter {
 
     companion object {
         private const val TAG = "media-converter"
-        private const val VERBOSE = false // lots of logging
+        private const val VERBOSE = false 
 
-        private const val OUTPUT_VIDEO_IFRAME_INTERVAL = 1 // 1 second between I-frames
-        private const val OUTPUT_VIDEO_FRAME_RATE = 30 // needed only for MediaFormat.KEY_I_FRAME_INTERVAL to work; the actual frame rate matches the source
+        private const val OUTPUT_VIDEO_IFRAME_INTERVAL = 1 
+        private const val OUTPUT_VIDEO_FRAME_RATE = 30 
 
         private const val TIMEOUT_USEC = 10000
 
         private const val MEDIA_FORMAT_KEY_DISPLAY_WIDTH = "display-width"
         private const val MEDIA_FORMAT_KEY_DISPLAY_HEIGHT = "display-height"
 
-        private const val FRAME_RATE_TOLERANCE = 0.05f // tolerance for transcoding VFR -> CFR
+        private const val FRAME_RATE_TOLERANCE = 0.05f 
 
         @Throws(IOException::class, TranscodingException::class)
         fun create(
@@ -497,7 +497,7 @@ internal class VideoTrackConverter {
             if (kernelSizeX <= 2 && kernelSizeY <= 2) {
                 shader =
                     "#extension GL_OES_EGL_image_external : require\n" +
-                        "precision mediump float;\n" + // highp here doesn't seem to matter
+                        "precision mediump float;\n" + 
                         "varying vec2 vTextureCoord;\n" +
                         "uniform samplerExternalOES sTexture;\n" +
                         "void main() {\n" +
@@ -520,7 +520,7 @@ internal class VideoTrackConverter {
                 }
                 shader =
                     "#extension GL_OES_EGL_image_external : require\n" +
-                        "precision mediump float;\n" + // highp here doesn't seem to matter
+                        "precision mediump float;\n" + 
                         "varying vec2 vTextureCoord;\n" +
                         "uniform samplerExternalOES sTexture;\n" +
                         "void main() {\n" +
@@ -541,7 +541,7 @@ internal class VideoTrackConverter {
                 val request = format.getInteger(MediaFormat.KEY_COLOR_TRANSFER_REQUEST)
                 request == MediaFormat.COLOR_TRANSFER_SDR_VIDEO
             } catch (npe: NullPointerException) {
-                // transfer request key does not exist, tone mapping not requested
+                
                 false
             }
         }

@@ -3,7 +3,7 @@ package com.difft.android.base.notification
 import android.annotation.SuppressLint
 import com.difft.android.base.log.lumberjack.L
 
-/** Reads Android system properties through reflection; returns "" when unavailable. */
+
 object SystemProps {
 
     private val VALID_KEY = Regex("^[a-zA-Z0-9._-]+$")

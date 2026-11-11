@@ -15,10 +15,10 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/**
- * Unit tests for [ServerTimeSyncer.ensureAnchored]: early-return when already anchored, swallow generic
- * failures, propagate [CancellationException], and reach the anchored state on a successful probe.
- */
+
+
+
+
 class ServerTimeSyncerTest {
 
     private val httpService = mockk<HttpService>()
@@ -32,7 +32,7 @@ class ServerTimeSyncerTest {
         clearAllMocks()
     }
 
-    /** Clear the anchor and inject deterministic clocks so isAnchored() reflects only this test. */
+    
     private fun resetUnanchored() {
         ServerTimeProvider.resetForTest(wallClock = { 100_000L }, elapsedClock = { 5_000L })
     }
@@ -52,7 +52,7 @@ class ServerTimeSyncerTest {
         resetUnanchored()
         coEvery { httpService.health() } throws RuntimeException("network down")
 
-        syncer.ensureAnchored() // must not throw
+        syncer.ensureAnchored() 
 
         assertFalse(ServerTimeProvider.isAnchored())
         coVerify(exactly = 1) { httpService.health() }
@@ -72,8 +72,8 @@ class ServerTimeSyncerTest {
     fun `unanchored plus successful health leaves provider anchored`() = runTest {
         resetUnanchored()
         val serverTs = 1_700_000_000_000L
-        // In production the converter hook anchors from the response envelope; ServerTimeSyncer does not
-        // parse it. We model that side effect at the mocked HttpService boundary.
+        
+        
         coEvery { httpService.health() } answers {
             val resp = BaseResponse<Any>(ver = 1, status = 0, reason = null, data = null, serverTimestamp = serverTs)
             resp.serverTimestamp?.takeIf { it > 0L }?.let { ServerTimeProvider.update(it, "api") }

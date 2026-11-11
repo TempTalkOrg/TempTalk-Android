@@ -5,7 +5,7 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.VIBRATE" />
 
-    <!-- For services -->
+    
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
@@ -48,7 +48,7 @@
             </intent-filter>
         </receiver>
 
-        <!-- Ongoing-call notification hang-up. No intent filter: reached only by the explicit-component PendingIntent. -->
+        
         <receiver
             android:name=".receiver.CallNotificationActionReceiver"
             android:exported="false" />

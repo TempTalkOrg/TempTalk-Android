@@ -11,7 +11,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
-/** The held sign-in is read back once, exactly as saved, and never when it has gone stale. */
+
 class PendingLoginStoreTest {
 
     private class MemoryConfig : DataStore<GlobalConfigData> {

@@ -7,34 +7,34 @@ import java.io.PrintStream
 
 object ExceptionUtil {
 
-    /**
-     * Joins the stack trace of the inferred call site with the original exception. This is
-     * useful for when exceptions are thrown inside of asynchronous systems (like runnables in an
-     * executor) where you'd otherwise lose important parts of the stack trace. This lets you save a
-     * throwable at the entry point, and then combine it with any caught exceptions later.
-     *
-     * The resulting stack trace will look like this:
-     *
-     * Inferred
-     * Stack
-     * Trace
-     * [[ ↑↑ Inferred Trace ↑↑ ]]
-     * [[ ↓↓ Original Trace ↓↓ ]]
-     * Original
-     * Stack
-     * Trace
-     *
-     * @return The provided original exception, for convenience.
-     */
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     @JvmStatic
     fun <E : Throwable> joinStackTrace(original: E, inferred: Throwable): E {
         original.stackTrace = joinStackTrace(original.stackTrace, inferred.stackTrace)
         return original
     }
 
-    /**
-     * See [joinStackTrace].
-     */
+    
+
+
     @JvmStatic
     fun joinStackTrace(
         originalTrace: Array<StackTraceElement>,
@@ -45,20 +45,20 @@ object ExceptionUtil {
             StackTraceElement("[[ ↓↓ Inferred Trace ↓↓ ]]", "", "", 0)
         ) + inferredTrace
 
-    /**
-     * Joins the stack trace with the exception's [Throwable.getMessage].
-     *
-     * The resulting stack trace will look like this:
-     *
-     * Original
-     * Stack
-     * Trace
-     * [[ ↑↑ Original Trace ↑↑ ]]
-     * [[ ↓↓ Exception Message ↓↓ ]]
-     * Exception Message
-     *
-     * @return The provided original exception, for convenience.
-     */
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
     @JvmStatic
     fun <E : Throwable> joinStackTraceAndMessage(original: E): E {
         var message = Scrubber.scrub(original.message ?: "null").toString()

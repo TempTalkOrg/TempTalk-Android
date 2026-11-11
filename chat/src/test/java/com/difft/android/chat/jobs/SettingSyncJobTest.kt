@@ -31,11 +31,10 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/**
- * Phase machine of [SettingSyncJob] (design §3.2) including the fault-injection cases from the
- * cross-platform review: never SET again after acceptance, superseded jobs and the accepted-version
- * floor, bounded reconcile, and the error classification by HTTP code.
- */
+
+
+
+
 class SettingSyncJobTest {
 
     private val field = SyncField.CONFIDENTIAL_MODE
@@ -85,10 +84,10 @@ class SettingSyncJobTest {
         coEvery { httpService.fetchGetConversationSet(any()) } returnsMany responses
     }
 
-    /** A phase persist: a retry with the minimum positive backoff `JobController.onRetry` accepts. */
+    
     private fun Job.Result.isImmediateRetry() = isRetry() && getBackoffInterval() == SettingSyncJob.PHASE_PERSIST_BACKOFF_MS
 
-    // --- parameters & serialisation ---
+    
 
     @Test
     fun `parameters are per room-and-field queue, immortal, unlimited, network constrained`() {
@@ -116,7 +115,7 @@ class SettingSyncJobTest {
         assertEquals(1_000L, data.getLong(SettingSyncJob.KEY_TS))
     }
 
-    // --- SEND ---
+    
 
     @Test
     fun `SET is deferred without a request while messaging is paused`() = runTest {
@@ -141,7 +140,7 @@ class SettingSyncJobTest {
         coVerify(exactly = 0) { httpService.fetchConversationSet(any()) }
     }
 
-    // #1382 A04: an abandoned change must not keep gating server snapshots for the field.
+    
     @Test
     fun `a SET of another login stops gating the field once it fails`() = runTest {
         acceptSet(version = 11)
@@ -213,7 +212,7 @@ class SettingSyncJobTest {
         coVerify(exactly = 0) { httpService.fetchConversationSet(any()) }
     }
 
-    // --- superseded ---
+    
 
     @Test
     fun `superseded job without an accepted write completes at once in any phase`() = runTest {
@@ -228,7 +227,7 @@ class SettingSyncJobTest {
 
     @Test
     fun `superseded job with an accepted write completes without GET once the local version reached its floor`() = runTest {
-        // v10 review: the floor is already persisted; GET being unavailable must not block the newer job.
+        
         every { dbRoomStore.getRoom(ROOM) } returns room(confidential = 0, version = 11)
         val j = job(phase = SettingSyncJob.Phase.RECONCILE, acceptedVersion = 11)
         q.queue(pendingSpec(j.id, ts = 1_000), pendingSpec("b", ts = 2_000))
@@ -239,7 +238,7 @@ class SettingSyncJobTest {
 
     @Test
     fun `superseded job with an accepted write first raises the local version to its floor`() = runTest {
-        // v9 review: A accepted V11, B replaced it; A must not vanish while the row still says V10.
+        
         val j = job(phase = SettingSyncJob.Phase.RECONCILE, acceptedVersion = 11)
         q.queue(pendingSpec(j.id, ts = 1_000), pendingSpec("b", ts = 2_000))
 
@@ -252,11 +251,11 @@ class SettingSyncJobTest {
         coVerify(exactly = 0) { httpService.fetchConversationSet(any()) }
     }
 
-    // --- RECONCILE / ROLLBACK ---
+    
 
     @Test
     fun `RECONCILE never SETs again and keeps retrying while GET lags behind the accepted version`() = runTest {
-        // v8 review: SET returned V11, GET keeps returning V10 → neither complete nor roll back.
+        
         val j = job(phase = SettingSyncJob.Phase.RECONCILE, acceptedVersion = 11)
         getReturns(10, 10, 11)
         coEvery { applier.applyFinal(match { it.version == 10 }, j.id, 1_000, 11) } returns FinalOutcome.NEEDS_RECONCILE

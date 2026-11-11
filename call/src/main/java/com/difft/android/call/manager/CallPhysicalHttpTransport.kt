@@ -14,11 +14,11 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.suspendCancellableCoroutine
-import org.difft.android.smp.HttpCallback
-import org.difft.android.smp.HttpConfig
-import org.difft.android.smp.HttpConnector
-import org.difft.android.smp.HttpRequest
-import org.difft.android.smp.HttpResponse
+import org.example.android.smp.HttpCallback
+import org.example.android.smp.HttpConfig
+import org.example.android.smp.HttpConnector
+import org.example.android.smp.HttpRequest
+import org.example.android.smp.HttpResponse
 import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton

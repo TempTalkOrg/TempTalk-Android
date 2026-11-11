@@ -4,9 +4,10 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content">
 
+    
     <com.difft.android.chat.widget.VoiceMessageView
         android:id="@+id/voice_message_view"
-        android:layout_width="270dp"
+        android:layout_width="250dp"
         android:layout_height="wrap_content"
         android:paddingHorizontal="12dp"
         android:paddingVertical="18dp"

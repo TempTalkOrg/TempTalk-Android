@@ -23,11 +23,11 @@ import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
-/**
- * The sender's `/status` and `/cancel` against a real receiver: a live session reads back with its
- * progress, a finished one with its terminal, an unknown one (or a wrong token) as null, and the
- * cancel answers with what it did instead of a bare 200.
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 class SenderHttpClientStatusTest {
 
@@ -70,7 +70,7 @@ class SenderHttpClientStatusTest {
         assertNull(client.status(id, "wrong-token"))
         assertNull(client.status("no-such-session", token))
 
-        // Past the commit point the cancel is too late and the session stays live.
+        
         sessions.authorizeUpload(id, "f", prepared.slots.getValue("f").token, "127.0.0.1")
         assertTrue(sessions.committing(id))
         assertEquals(CancelState.TOO_LATE, client.cancel(id, token))
@@ -78,7 +78,7 @@ class SenderHttpClientStatusTest {
 
         sessions.markTerminal(id, TransferTerminal.SUCCEEDED)
         assertEquals(TransferTerminal.SUCCEEDED, client.status(id, token)!!.terminal)
-        // A cancel for a finished session is answered too late as well; an unknown one gives no state.
+        
         assertEquals(CancelState.TOO_LATE, client.cancel(id, token))
         assertNull(client.cancel("no-such-session", token))
     }

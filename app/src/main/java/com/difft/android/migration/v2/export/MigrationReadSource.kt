@@ -36,15 +36,15 @@ import org.difft.app.database.models.SharedContactPhoneModel
 import java.io.Closeable
 import javax.inject.Inject
 
-/**
- * The read surface the [NeutralExporter] needs: exactly the WCDB [Table] accessors the export
- * projection touches, each over the same model and binding the live [WCDB] singleton exposes, so
- * projection code is identical whether it reads the live DB or a snapshot.
- *
- * [LiveReadSource] delegates to the live singleton; [SnapshotReadSource] opens a second encrypted
- * handle over a byte-copy of it. The snapshot lifecycle (take, open, export, close, delete) belongs
- * to the caller, not to this file.
- */
+
+
+
+
+
+
+
+
+
 interface MigrationReadSource {
     val message: Table<MessageModel>
     val attachment: Table<AttachmentModel>
@@ -58,18 +58,18 @@ interface MigrationReadSource {
     val sharedContactPhone: Table<SharedContactPhoneModel>
     val groupCryptoKeys: Table<GroupCryptoKeysModel>
 
-    /**
-     * Others' per-participant read positions (the `read_info` table), which drive the outgoing-message
-     * "read by" indicator on the destination. Queried per room and folded into
-     * [com.difft.android.migration.v2.model.NeutralConversationLocal.participantReadPositions].
-     */
+    
+
+
+
+
     val readInfo: Table<ReadInfoModel>
 
-    /** Consumed envelopes waiting for their target message (#1382); see [PendingEnvelopeExport]. */
+    
     val pendingMessageNew: Table<PendingMessageModelNew>
 }
 
-/** [MigrationReadSource] backed by the live [WCDB] singleton; the Hilt default binding. */
+
 class LiveReadSource @Inject constructor(
     private val wcdb: WCDB,
 ) : MigrationReadSource {
@@ -88,14 +88,14 @@ class LiveReadSource @Inject constructor(
     override val pendingMessageNew: Table<PendingMessageModelNew> get() = wcdb.pendingMessageNew
 }
 
-/**
- * [MigrationReadSource] over a consistent on-disk snapshot of the live WCDB — a byte-copy produced by
- * [com.difft.android.migration.snapshot.BackupSnapshotter], opened with the same cipher key. Reading
- * it rather than the live DB gives the export a point-in-time view while the user keeps chatting.
- *
- * The caller must [close] this (closing the second [Database] handle) and then delete the snapshot
- * file. [close] is idempotent.
- */
+
+
+
+
+
+
+
+
 class SnapshotReadSource(
     private val db: Database,
 ) : MigrationReadSource, Closeable {
@@ -125,12 +125,12 @@ class SnapshotReadSource(
     }
 
     companion object {
-        /**
-         * Open a [SnapshotReadSource] over [snapshotPath], mirroring the live WCDB's encryption
-         * policy for this build: keyed in release, plaintext in debug. Setting a cipher key on a
-         * plaintext snapshot throws `WCDBCorruptOrIOException` Code 26 at the first table access, so
-         * the key is set only when one exists. The caller owns the returned source's lifecycle.
-         */
+        
+
+
+
+
+
         fun open(context: Context, snapshotPath: String): SnapshotReadSource {
             val db = Database(snapshotPath)
             WCDBKeyManager.cipherKeyForCurrentBuild(context)?.let { db.setCipherKey(it) }

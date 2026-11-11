@@ -4,39 +4,34 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="@color/bg1"
+    android:clickable="true"
+    android:clipChildren="false"
+    android:clipToPadding="false"
+    android:focusable="false"
+    android:importantForAccessibility="no"
     tools:ignore="Overdraw">
 
-    <!--    <View-->
-    <!--        android:id="@+id/topLine"-->
-    <!--        android:layout_width="match_parent"-->
-    <!--        android:layout_height="0.5dp"-->
-    <!--        android:background="@color/line"-->
-    <!--        app:layout_constraintEnd_toEndOf="parent"-->
-    <!--        app:layout_constraintStart_toStartOf="parent"-->
-    <!--        app:layout_constraintTop_toTopOf="parent" />-->
+    
 
     <LinearLayout
         android:id="@+id/cl_send_message"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:clipChildren="false"
+        android:clipToPadding="false"
         android:orientation="vertical"
         app:layout_constraintTop_toTopOf="parent">
 
+        
         <androidx.constraintlayout.widget.ConstraintLayout
             android:id="@+id/ll_at"
             android:layout_width="match_parent"
             android:layout_height="210dp"
+            android:layout_marginHorizontal="8dp"
+            android:layout_marginTop="8dp"
             android:orientation="vertical"
             android:visibility="gone"
             tools:visibility="visible">
-
-            <View
-                android:id="@+id/v_line1"
-                android:layout_width="match_parent"
-                android:layout_height="0.5dp"
-                android:background="@color/line"
-                app:layout_constraintTop_toTopOf="parent" />
 
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/rv_at"
@@ -45,17 +40,10 @@
                 android:paddingHorizontal="16dp"
                 android:scrollbarStyle="outsideOverlay"
                 android:scrollbars="vertical"
-                app:layout_constraintBottom_toTopOf="@+id/v_line2"
-                app:layout_constraintTop_toBottomOf="@+id/v_line1"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
                 tools:itemCount="5"
                 tools:listitem="@layout/layout_item_contact_at" />
-
-            <View
-                android:id="@+id/v_line2"
-                android:layout_width="match_parent"
-                android:layout_height="0.5dp"
-                android:background="@color/line"
-                app:layout_constraintBottom_toBottomOf="parent" />
 
             <androidx.appcompat.widget.AppCompatImageView
                 android:id="@+id/iv_at_close"
@@ -69,10 +57,13 @@
 
         </androidx.constraintlayout.widget.ConstraintLayout>
 
+        
         <LinearLayout
             android:id="@+id/quoteZone"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginHorizontal="8dp"
+            android:layout_marginTop="8dp"
             android:gravity="center_vertical"
             android:orientation="horizontal"
             android:paddingHorizontal="16dp"
@@ -134,25 +125,20 @@
 
         </LinearLayout>
 
-        <View
-            android:id="@+id/v_confidential_line"
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="@drawable/chat_confidential_dashed_line"
-            android:layerType="software"
-            android:visibility="gone"
-            app:layout_constraintTop_toTopOf="parent" />
-
         <androidx.constraintlayout.widget.ConstraintLayout
             android:id="@+id/cl_input"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:clipChildren="false"
+            android:clipToPadding="false"
             android:paddingVertical="8dp">
 
             <androidx.constraintlayout.widget.ConstraintLayout
                 android:id="@+id/cl_left_actions"
                 android:layout_width="44dp"
                 android:layout_height="0dp"
+                android:layout_marginStart="@dimen/chat_input_edge_inset"
+                android:clipChildren="false"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="@+id/cl_input_content">
@@ -166,6 +152,7 @@
                     android:visibility="gone"
                     app:layout_constraintTop_toTopOf="parent" />
 
+                
                 <androidx.constraintlayout.widget.ConstraintLayout
                     android:id="@+id/cl_left_buttons"
                     android:layout_width="44dp"
@@ -177,34 +164,28 @@
                         android:id="@+id/button_more_actions"
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
+                        android:contentDescription="@string/chat_action_more"
                         android:enabled="false"
                         android:padding="10dp"
                         android:src="@drawable/chat_more_actions"
                         android:tint="@color/icon" />
 
-                    <androidx.appcompat.widget.AppCompatImageView
-                        android:id="@+id/button_more_actions_close"
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:enabled="false"
-                        android:padding="10dp"
-                        android:src="@drawable/chat_more_actions_close"
-                        android:tint="@color/icon"
-                        android:visibility="gone" />
                 </androidx.constraintlayout.widget.ConstraintLayout>
 
             </androidx.constraintlayout.widget.ConstraintLayout>
 
+            
             <androidx.constraintlayout.widget.ConstraintLayout
                 android:id="@+id/cl_input_content"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:background="@drawable/chat_msg_input_field_bg"
+                android:layout_marginStart="@dimen/chat_input_control_gap"
+                android:layout_marginEnd="@dimen/chat_input_control_gap"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toStartOf="@+id/cl_right_actions"
                 app:layout_constraintStart_toEndOf="@+id/cl_left_actions"
-                app:layout_goneMarginEnd="12dp"
-                app:layout_goneMarginStart="12dp">
+                app:layout_goneMarginEnd="@dimen/chat_input_edge_inset"
+                app:layout_goneMarginStart="@dimen/chat_input_edge_inset">
 
                 <com.difft.android.chat.widget.RichContentEditText
                     android:id="@+id/edittext_input"
@@ -237,11 +218,13 @@
                     app:layout_constraintEnd_toEndOf="parent" />
             </androidx.constraintlayout.widget.ConstraintLayout>
 
-
             <androidx.constraintlayout.widget.ConstraintLayout
                 android:id="@+id/cl_right_actions"
+                android:clipChildren="false"
+                android:clipToPadding="false"
                 android:layout_width="44dp"
                 android:layout_height="0dp"
+                android:layout_marginEnd="@dimen/chat_input_edge_inset"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintTop_toTopOf="@+id/cl_input_content">
@@ -257,381 +240,39 @@
 
                 <androidx.constraintlayout.widget.ConstraintLayout
                     android:id="@+id/cl_right_buttons"
+                    android:clipChildren="false"
+                    android:clipToPadding="false"
                     android:layout_width="44dp"
                     android:layout_height="44dp"
                     app:layout_constraintBottom_toBottomOf="parent"
                     app:layout_constraintEnd_toEndOf="parent">
 
+                    
                     <androidx.appcompat.widget.AppCompatImageView
                         android:id="@+id/button_submit"
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
+                        android:contentDescription="@string/chat_send"
                         android:enabled="false"
-                        android:padding="7dp"
-                        android:src="@drawable/chat_icon_send"
+                        android:padding="10dp"
+                        android:src="@drawable/chat_ic_send_arrow"
                         android:visibility="invisible" />
                 </androidx.constraintlayout.widget.ConstraintLayout>
             </androidx.constraintlayout.widget.ConstraintLayout>
         </androidx.constraintlayout.widget.ConstraintLayout>
 
+        
         <androidx.constraintlayout.widget.ConstraintLayout
             android:id="@+id/ll_chat_actions"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:background="@color/bg1"
             android:paddingHorizontal="16dp"
             android:paddingVertical="16dp"
             android:visibility="gone"
             tools:visibility="visible">
 
-            <View
-                android:id="@+id/v_chat_actions_line"
-                android:layout_width="match_parent"
-                android:layout_height="0.5dp"
-                android:background="@color/line"
-                android:visibility="gone"
-                app:layout_constraintTop_toTopOf="parent" />
-
-            <!-- Photo/media entry, moved from the input row into the more-actions grid as the
-                 first item (M2). Click logic mirrors the former standalone button_media. -->
-            <LinearLayout
-                android:id="@+id/button_photo"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:gravity="center_horizontal"
-                android:orientation="vertical">
-
-                <androidx.constraintlayout.widget.ConstraintLayout
-                    android:id="@+id/cl_media"
-                    android:layout_width="64dp"
-                    android:layout_height="64dp"
-                    android:background="@drawable/chat_msg_input_bg"
-                    android:orientation="horizontal"
-                    app:layout_constraintBottom_toBottomOf="parent"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintStart_toStartOf="parent">
-
-                    <androidx.appcompat.widget.AppCompatImageView
-                        android:layout_width="24dp"
-                        android:layout_height="24dp"
-                        android:src="@drawable/chat_bottom_photos"
-                        android:tint="@color/icon"
-                        app:layout_constraintBottom_toBottomOf="parent"
-                        app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toTopOf="parent" />
-                </androidx.constraintlayout.widget.ConstraintLayout>
-
-                <androidx.appcompat.widget.AppCompatTextView
-                    android:layout_width="70dp"
-                    android:layout_height="40dp"
-                    android:layout_marginTop="5dp"
-                    android:gravity="center_horizontal"
-                    android:text="@string/chat_action_photo"
-                    android:textColor="@color/icon"
-                    android:textSize="12sp"
-                    app:layout_constraintTop_toBottomOf="@+id/cl_media" />
-            </LinearLayout>
-
-            <!-- GIF panel entry: swaps the more-actions grid for the inline GIF panel in place.
-                 Ordered by the Flow (design order: Photos, GIF, @, File, Contact). -->
-            <LinearLayout
-                android:id="@+id/button_gif"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:gravity="center_horizontal"
-                android:orientation="vertical">
-
-                <androidx.constraintlayout.widget.ConstraintLayout
-                    android:id="@+id/cl_gif"
-                    android:layout_width="64dp"
-                    android:layout_height="64dp"
-                    android:background="@drawable/chat_msg_input_bg"
-                    android:orientation="horizontal"
-                    app:layout_constraintBottom_toBottomOf="parent"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintStart_toStartOf="parent">
-
-                    <androidx.appcompat.widget.AppCompatImageView
-                        android:layout_width="24dp"
-                        android:layout_height="24dp"
-                        android:src="@drawable/chat_ic_gif_button"
-                        android:tint="@color/icon"
-                        app:layout_constraintBottom_toBottomOf="parent"
-                        app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toTopOf="parent" />
-                </androidx.constraintlayout.widget.ConstraintLayout>
-
-                <androidx.appcompat.widget.AppCompatTextView
-                    android:layout_width="70dp"
-                    android:layout_height="40dp"
-                    android:layout_marginTop="5dp"
-                    android:gravity="center_horizontal"
-                    android:text="@string/chat_action_gif"
-                    android:textColor="@color/icon"
-                    android:textSize="12sp"
-                    app:layout_constraintTop_toBottomOf="@+id/cl_gif" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:id="@+id/button_contact"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:gravity="center_horizontal"
-                android:orientation="vertical">
-
-                <androidx.constraintlayout.widget.ConstraintLayout
-                    android:id="@+id/cl_contact"
-                    android:layout_width="64dp"
-                    android:layout_height="64dp"
-                    android:background="@drawable/chat_msg_input_bg"
-                    android:orientation="horizontal"
-                    app:layout_constraintBottom_toBottomOf="parent"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintStart_toStartOf="parent">
-
-                    <androidx.appcompat.widget.AppCompatImageView
-                        android:layout_width="24dp"
-                        android:layout_height="24dp"
-                        android:src="@drawable/chat_bottom_contact"
-                        android:tint="@color/icon"
-                        app:layout_constraintBottom_toBottomOf="parent"
-                        app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toTopOf="parent" />
-                </androidx.constraintlayout.widget.ConstraintLayout>
-
-                <androidx.appcompat.widget.AppCompatTextView
-                    android:layout_width="70dp"
-                    android:layout_height="40dp"
-                    android:layout_marginTop="5dp"
-                    android:gravity="center_horizontal"
-                    android:text="@string/chat_action_contact"
-                    android:textColor="@color/icon"
-                    android:textSize="12sp"
-                    app:layout_constraintTop_toBottomOf="@+id/cl_contact" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:id="@+id/button_attachment"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:gravity="center_horizontal"
-                android:orientation="vertical">
-
-                <androidx.constraintlayout.widget.ConstraintLayout
-                    android:id="@+id/cl_attachment"
-                    android:layout_width="64dp"
-                    android:layout_height="64dp"
-                    android:background="@drawable/chat_msg_input_bg"
-                    android:orientation="horizontal"
-                    app:layout_constraintBottom_toBottomOf="parent"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintStart_toStartOf="parent">
-
-                    <androidx.appcompat.widget.AppCompatImageView
-                        android:layout_width="24dp"
-                        android:layout_height="24dp"
-                        android:src="@drawable/chat_attachment_open_button"
-                        android:tint="@color/icon"
-                        app:layout_constraintBottom_toBottomOf="parent"
-                        app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toTopOf="parent" />
-                </androidx.constraintlayout.widget.ConstraintLayout>
-
-                <androidx.appcompat.widget.AppCompatTextView
-                    android:layout_width="70dp"
-                    android:layout_height="40dp"
-                    android:layout_marginTop="5dp"
-                    android:gravity="center_horizontal"
-                    android:text="@string/chat_action_file"
-                    android:textColor="@color/icon"
-                    android:textSize="12sp"
-                    app:layout_constraintTop_toBottomOf="@+id/cl_attachment" />
-            </LinearLayout>
-
-            <!--            <LinearLayout-->
-            <!--                android:id="@+id/button_call"-->
-            <!--                android:layout_width="wrap_content"-->
-            <!--                android:layout_height="wrap_content"-->
-            <!--                android:gravity="center_horizontal"-->
-            <!--                android:orientation="vertical">-->
-
-            <!--                <androidx.constraintlayout.widget.ConstraintLayout-->
-            <!--                    android:id="@+id/cl_call"-->
-            <!--                    android:layout_width="64dp"-->
-            <!--                    android:layout_height="64dp"-->
-            <!--                    android:background="@drawable/chat_msg_input_bg"-->
-            <!--                    android:orientation="horizontal"-->
-            <!--                    app:layout_constraintBottom_toBottomOf="parent"-->
-            <!--                    app:layout_constraintEnd_toEndOf="parent"-->
-            <!--                    app:layout_constraintStart_toStartOf="parent">-->
-
-            <!--                    <androidx.appcompat.widget.AppCompatImageView-->
-            <!--                        android:layout_width="24dp"-->
-            <!--                        android:layout_height="24dp"-->
-            <!--                        android:src="@drawable/chat_bottom_call"-->
-            <!--                        android:tint="@color/icon"-->
-            <!--                        app:layout_constraintBottom_toBottomOf="parent"-->
-            <!--                        app:layout_constraintEnd_toEndOf="parent"-->
-            <!--                        app:layout_constraintStart_toStartOf="parent"-->
-            <!--                        app:layout_constraintTop_toTopOf="parent" />-->
-            <!--                </androidx.constraintlayout.widget.ConstraintLayout>-->
-
-            <!--                <androidx.appcompat.widget.AppCompatTextView-->
-            <!--                    android:layout_width="70dp"-->
-            <!--                    android:layout_height="40dp"-->
-            <!--                    android:layout_marginTop="5dp"-->
-            <!--                    android:gravity="center_horizontal"-->
-            <!--                    android:text="@string/chat_action_call"-->
-            <!--                    android:textColor="@color/icon"-->
-            <!--                    android:textSize="12sp"-->
-            <!--                    app:layout_constraintTop_toBottomOf="@+id/button_new_call" />-->
-            <!--            </LinearLayout>-->
-
-            <!--            <LinearLayout-->
-            <!--                android:id="@+id/button_confidential_mode"-->
-            <!--                android:layout_width="wrap_content"-->
-            <!--                android:layout_height="wrap_content"-->
-            <!--                android:gravity="center_horizontal"-->
-            <!--                android:orientation="vertical">-->
-
-            <!--                <androidx.constraintlayout.widget.ConstraintLayout-->
-            <!--                    android:id="@+id/cl_confidential"-->
-            <!--                    android:layout_width="64dp"-->
-            <!--                    android:layout_height="64dp"-->
-            <!--                    android:background="@drawable/chat_msg_input_bg"-->
-            <!--                    android:orientation="horizontal"-->
-            <!--                    app:layout_constraintBottom_toBottomOf="parent"-->
-            <!--                    app:layout_constraintEnd_toEndOf="parent"-->
-            <!--                    app:layout_constraintStart_toStartOf="parent">-->
-
-            <!--                    <androidx.appcompat.widget.AppCompatImageView-->
-            <!--                        android:id="@+id/iv_confidential"-->
-            <!--                        android:layout_width="24dp"-->
-            <!--                        android:layout_height="24dp"-->
-            <!--                        android:src="@drawable/chat_btn_confidential_mode_disable"-->
-            <!--                        app:layout_constraintBottom_toBottomOf="parent"-->
-            <!--                        app:layout_constraintEnd_toEndOf="parent"-->
-            <!--                        app:layout_constraintStart_toStartOf="parent"-->
-            <!--                        app:layout_constraintTop_toTopOf="parent" />-->
-            <!--                </androidx.constraintlayout.widget.ConstraintLayout>-->
-
-            <!--                <androidx.appcompat.widget.AppCompatTextView-->
-            <!--                    android:layout_width="70dp"-->
-            <!--                    android:layout_height="40dp"-->
-            <!--                    android:layout_marginTop="5dp"-->
-            <!--                    android:gravity="center_horizontal"-->
-            <!--                    android:text="@string/chat_action_confidential_mode"-->
-            <!--                    android:textColor="@color/icon"-->
-            <!--                    android:textSize="12sp"-->
-            <!--                    app:layout_constraintTop_toBottomOf="@+id/cl_confidential" />-->
-            <!--            </LinearLayout>-->
-
-            <!--            <LinearLayout-->
-            <!--                android:id="@+id/button_new_call"-->
-            <!--                android:layout_width="wrap_content"-->
-            <!--                android:layout_height="wrap_content"-->
-            <!--                android:gravity="center_horizontal"-->
-            <!--                android:orientation="vertical"-->
-            <!--                android:visibility="gone">-->
-
-            <!--                <androidx.constraintlayout.widget.ConstraintLayout-->
-            <!--                    android:id="@+id/cl_call_image"-->
-            <!--                    android:layout_width="64dp"-->
-            <!--                    android:layout_height="64dp"-->
-            <!--                    android:background="@drawable/chat_msg_input_bg"-->
-            <!--                    android:orientation="horizontal"-->
-            <!--                    app:layout_constraintBottom_toBottomOf="parent"-->
-            <!--                    app:layout_constraintEnd_toEndOf="parent"-->
-            <!--                    app:layout_constraintStart_toStartOf="parent">-->
-
-            <!--                    <androidx.appcompat.widget.AppCompatImageView-->
-            <!--                        android:layout_width="24dp"-->
-            <!--                        android:layout_height="24dp"-->
-            <!--                        android:src="@drawable/chat_bottom_new_call"-->
-            <!--                        android:tint="@color/icon"-->
-            <!--                        app:layout_constraintBottom_toBottomOf="parent"-->
-            <!--                        app:layout_constraintEnd_toEndOf="parent"-->
-            <!--                        app:layout_constraintStart_toStartOf="parent"-->
-            <!--                        app:layout_constraintTop_toTopOf="parent" />-->
-            <!--                </androidx.constraintlayout.widget.ConstraintLayout>-->
-
-            <!--                <androidx.appcompat.widget.AppCompatTextView-->
-            <!--                    android:layout_width="70dp"-->
-            <!--                    android:layout_height="40dp"-->
-            <!--                    android:layout_marginTop="5dp"-->
-            <!--                    android:gravity="center_horizontal"-->
-            <!--                    android:text="@string/chat_action_newcall"-->
-            <!--                    android:textColor="@color/icon"-->
-            <!--                    android:textSize="12sp"-->
-            <!--                    app:layout_constraintTop_toBottomOf="@+id/cl_at_image" />-->
-            <!--            </LinearLayout>-->
-
-            <LinearLayout
-                android:id="@+id/button_at"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:gravity="center_horizontal"
-                android:orientation="vertical">
-
-                <androidx.constraintlayout.widget.ConstraintLayout
-                    android:id="@+id/cl_at_image"
-                    android:layout_width="64dp"
-                    android:layout_height="64dp"
-                    android:background="@drawable/chat_msg_input_bg"
-                    android:orientation="horizontal"
-                    app:layout_constraintBottom_toBottomOf="parent"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintStart_toStartOf="parent">
-
-                    <androidx.appcompat.widget.AppCompatImageView
-                        android:layout_width="24dp"
-                        android:layout_height="24dp"
-                        android:src="@drawable/chat_btn_at"
-                        android:tint="@color/icon"
-                        app:layout_constraintBottom_toBottomOf="parent"
-                        app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toTopOf="parent" />
-                </androidx.constraintlayout.widget.ConstraintLayout>
-
-                <androidx.appcompat.widget.AppCompatTextView
-                    android:layout_width="70dp"
-                    android:layout_height="40dp"
-                    android:layout_marginTop="5dp"
-                    android:gravity="center_horizontal"
-                    android:text="@string/chat_action_mention"
-                    android:textColor="@color/icon"
-                    android:textSize="12sp"
-                    app:layout_constraintTop_toBottomOf="@+id/cl_at_image" />
-            </LinearLayout>
-
-            <androidx.constraintlayout.helper.widget.Flow
-                android:id="@+id/flow"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                app:constraint_referenced_ids="button_photo,button_gif,button_at,button_attachment,button_contact"
-                app:flow_horizontalAlign="start"
-                app:flow_horizontalStyle="spread_inside"
-                app:flow_maxElementsWrap="4"
-                app:flow_verticalAlign="top"
-                app:flow_verticalGap="0dp"
-                app:flow_wrapMode="aligned"
-                app:layout_constraintTop_toBottomOf="@+id/v_chat_actions_line" />
-
-            <!-- GIF inline panel (M1): hosted in the same ll_chat_actions container as the
-                 more-actions grid, shown mutually exclusive with it (and with keyboard). -->
-            <!-- Height is set to the keyboard height in code (openGifPanel) so the inner
-                 LazyVerticalStaggeredGrid (fillMaxSize) gets a BOUNDED height and fills exactly the
-                 keyboard slot instead of expanding to the whole screen. hideGifPanel restores the
-                 default below. The more-actions grid does not use this view, so its layout is
-                 unaffected. -->
-            <!-- Negative top margin (-20dp) cancels the shared ll_chat_actions top padding
-                 (paddingVertical=20dp) for the GIF panel only, so the GIF Column's own 16dp top
-                 inset is the single gap from the input row to the tab bar (Issue 2). The
-                 more-actions grid keeps the 20dp padding (it does not use this view). -->
+            
             <androidx.compose.ui.platform.ComposeView
                 android:id="@+id/gif_panel_compose"
                 android:layout_width="match_parent"
@@ -657,8 +298,8 @@
         <View
             android:id="@+id/v_friends_top_line"
             android:layout_width="match_parent"
-            android:layout_height="0.5dp"
-            android:background="@color/line"
+            android:layout_height="@dimen/hairline"
+            android:background="@color/divider"
             app:layout_constraintTop_toTopOf="parent" />
 
         <androidx.appcompat.widget.AppCompatTextView
@@ -711,11 +352,12 @@
         android:id="@+id/tv_unblock"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:background="@color/bg1"
         android:gravity="center"
         android:orientation="horizontal"
         android:padding="16dp"
         android:text="@string/contact_unblock_users"
-        android:textColor="@color/t.info"
+        android:textColor="@color/primary"
         android:textSize="14sp"
         android:visibility="gone"
         app:layout_constraintTop_toTopOf="parent"

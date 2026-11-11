@@ -3,10 +3,10 @@ package com.difft.android.base.ui.avatar
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/**
- * Pins the letter sizes every avatar render site depends on. The values below are the ones
- * shipped today; changing any of them is a visual change, not a refactor.
- */
+
+
+
+
 class AvatarLetterSizeTest {
 
     @Test
@@ -27,7 +27,7 @@ class AvatarLetterSizeTest {
 
     @Test
     fun `16dp banner avatar scales to 7dp`() {
-        // The screen-share banner deliberately passes 8 instead of this ratio value.
+        
         assertEquals(7, AvatarLetterSize.forDiameterDp(16))
     }
 

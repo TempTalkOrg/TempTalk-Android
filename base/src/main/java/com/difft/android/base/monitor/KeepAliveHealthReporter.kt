@@ -25,22 +25,22 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.random.Random
 
-/** Single exception type for the daily health report so every report groups into one Crashlytics issue. */
+
 class BackgroundConnectionHealthReport(message: String) : RuntimeException(message)
 
-/**
- * #1328: measure how often the OEM kills the background connection, per brand/model (Crashlytics
- * supplies the device dimensions). The data rides on one Crashlytics non-fatal per 24 h per
- * keep-alive user (Crashlytics reaches mainland China without a proxy), plus a
- * [KeepAliveHealthModel.CONTROL_SAMPLE_PERCENT] sample of keep-alive-off users as the FCM-only
- * control group.
- *
- * Called by [ProcessExitProbe] at cold start with the exits newly seen on that launch, and again on
- * app foreground (`ProcessExitProbe.reportHealthIfDue`) so long-lived processes still report. Exits,
- * FGS start failures and [KeepAliveHealthCounters] events accumulate in app_state across throttled
- * launches; the report goes out when the window reaches [KeepAliveHealthModel.REPORT_INTERVAL_MS],
- * even if all counts are zero (the denominator). Fail-safe: [onProbe] and [process] never throw.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
 @Singleton
 class KeepAliveHealthReporter @Inject constructor(
     @param:ApplicationContext
@@ -50,14 +50,14 @@ class KeepAliveHealthReporter @Inject constructor(
     private val counters: KeepAliveHealthCounters
 ) {
 
-    // Cold-start probe and foreground hook can overlap; one decision at a time avoids a double report.
+    
     private val mutex = Mutex()
 
-    /**
-     * @param keepAliveEnabled null when the user data is not ready yet: no decision is made, but
-     *   [newExits] are stashed in the pending exit counts (the marker already moved past them). A
-     *   later DISABLED decision clears them, so non-reporting installs drop them.
-     */
+    
+
+
+
+
     suspend fun onProbe(keepAliveEnabled: Boolean?, newExits: List<ExitSample>) {
         if (keepAliveEnabled == null) {
             if (newExits.isNotEmpty()) mutex.withLock { stashExits(newExits) }
@@ -74,11 +74,11 @@ class KeepAliveHealthReporter @Inject constructor(
         }
     }
 
-    /**
-     * Whether this install reports (keep-alive on, or sampled into the control group), drawing and
-     * persisting the stable sample slot on first use. Lets [ProcessExitProbe] collect exits for
-     * control-group installs too. Falls back to [keepAliveEnabled] if app_state is unreadable.
-     */
+    
+
+
+
+
     suspend fun isReporting(keepAliveEnabled: Boolean, newSampleSlot: () -> Int = { Random.nextInt(100) }): Boolean =
         runCatching {
             var slot = appStateDataStore.data.first()[AppStateKeys.BG_HEALTH_SAMPLE_SLOT]
@@ -128,7 +128,7 @@ class KeepAliveHealthReporter @Inject constructor(
                         )
                         fgsFails = KeepAliveHealthCodec.decode(prefs[AppStateKeys.BG_HEALTH_FGS_FAILS])
                         putOrRemove(prefs, AppStateKeys.BG_HEALTH_EXIT_COUNTS, exitCounts)
-                        // Also normalises the window (prune / rollback reset), even with nothing to add.
+                        
                         val slots = KeepAliveHealthWindow.mergeEvents(prefs, drained, now)
                         events = KeepAliveHealthCodec.decode(prefs[AppStateKeys.BG_HEALTH_EVENT_COUNTS])
                         verdict = KeepAliveHealthWindow.verdict(slots, now)
@@ -151,8 +151,8 @@ class KeepAliveHealthReporter @Inject constructor(
             sink(message)
             L.i { "[KeepAliveHealth] report $message" }
 
-            // Clear only after the record call returned. Writes landing between the read above and this
-            // edit are lost: at most one FGS failure count and one counter flush batch, acceptable.
+            
+            
             appStateDataStore.edit { prefs ->
                 clearWindow(prefs, clearTs = false)
                 prefs[AppStateKeys.BG_HEALTH_LAST_REPORT_TS] = now
@@ -188,7 +188,7 @@ class KeepAliveHealthReporter @Inject constructor(
         }
     }
 
-    /** Every probe is isolated: one unreadable system service must not blank the rest of the snapshot. */
+    
     private fun collectSnapshot(keepAliveEnabled: Boolean): HealthSnapshot {
         val sdk = Build.VERSION.SDK_INT
         return HealthSnapshot(

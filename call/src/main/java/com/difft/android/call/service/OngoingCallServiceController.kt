@@ -13,36 +13,36 @@ import util.AppForegroundObserver
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Drives the ongoing-call [ForegroundService] for one call session at a time, keyed by the session id
- * ([ForegroundService.ownerSessionId]): only the owning session's stop stops it, so an ended session
- * can never take down the service of the call that replaced it.
- *
- * The first start is issued only while the app is in the foreground: a microphone/camera-typed start
- * from the background is denied by the platform when the service promotes itself. A deferred start
- * is issued by [ensureStarted] (the call page's `onResume`) or by the next app-foreground transition.
- *
- * A stop never brings the service down while a type-update start is still on its way to it
- * ([ForegroundService.pendingTypeUpdates]): that start requires a promotion, and a service destroyed
- * before making it crashes the app. Such a start, like any start that reaches the service after its
- * owner stopped it, promotes and then stops the service itself.
- *
- * No start is issued while no notification channel can carry the foreground notification
- * ([NotificationChannelSpecs.preflightForegroundChannel], #1354): the call goes on without the
- * service rather than crash the app.
- *
- * Every method runs on main; every platform call is caught and logged.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 @Singleton
 class OngoingCallServiceController @Inject constructor(
     private val application: Application,
     private val callToChatController: LCallToChatController,
 ) {
-    // Main-confined.
+    
     private var startIssued = false
     private var foregroundRetry: AppForegroundObserver.Listener? = null
 
-    /** Session [id] owns the service from now on; the start is issued now or once the app is foreground. */
+    
     @MainThread
     fun start(id: Long) {
         ForegroundService.ownerSessionId = id
@@ -55,13 +55,13 @@ class OngoingCallServiceController @Inject constructor(
         }
     }
 
-    /** Issues a deferred or failed start of session [id]; a no-op once issued or after [stop]. */
+    
     @MainThread
     fun ensureStarted(id: Long) {
         if (ForegroundService.ownerSessionId == id && !startIssued) issueStart(id)
     }
 
-    /** The service could not promote itself for session [id]; the next foreground or [ensureStarted] retries. */
+    
     @MainThread
     fun onPromoteFailed(id: Long) {
         if (id == ForegroundService.NO_OWNER || ForegroundService.ownerSessionId != id) return
@@ -70,7 +70,7 @@ class OngoingCallServiceController @Inject constructor(
         armForegroundRetry(id)
     }
 
-    /** Stops the service when session [id] owns it; any other session's stop is skipped. */
+    
     @MainThread
     fun stop(id: Long, tag: String) {
         val owner = ForegroundService.ownerSessionId
@@ -94,11 +94,11 @@ class OngoingCallServiceController @Inject constructor(
         }
     }
 
-    /**
-     * Re-promotes the running service of session [id] with the types the current permissions allow.
-     * Issued with the platform start directly: a start the platform refuses must not be deferred and
-     * delivered later, when it could not be matched against the pending-update count.
-     */
+    
+
+
+
+
     @MainThread
     fun updateServiceType(id: Long) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
@@ -119,10 +119,10 @@ class OngoingCallServiceController @Inject constructor(
         }
     }
 
-    /**
-     * A start that is not issued — no notification channel at either preflight, or a throw — stays
-     * unissued with the foreground retry armed, so [ensureStarted] or the next foreground retries.
-     */
+    
+
+
+
     private fun issueStart(id: Long) {
         if (NotificationChannelSpecs.preflightForegroundChannel(application, SERVICE_TAG) == null) {
             onStartNotIssued(id)
@@ -142,7 +142,7 @@ class OngoingCallServiceController @Inject constructor(
         if (!issued) onStartNotIssued(id)
     }
 
-    /** A start deferred by the starter was not issued either; re-arm unless the session or service moved on. */
+    
     @MainThread
     internal fun onDeferredStartFailed(id: Long) {
         if (ForegroundService.ownerSessionId != id || ForegroundService.isServiceRunning) return
@@ -155,10 +155,10 @@ class OngoingCallServiceController @Inject constructor(
         armForegroundRetry(id)
     }
 
-    /**
-     * Retries on the next foreground transition. The listener ignores the state replayed while it is
-     * being added: a promotion that failed in the foreground must not be retried in a loop.
-     */
+    
+
+
+
     private fun armForegroundRetry(id: Long) {
         disarmForegroundRetry()
         val listener = object : AppForegroundObserver.Listener {

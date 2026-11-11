@@ -18,26 +18,26 @@ import java.io.File
 import java.io.FileNotFoundException
 import java.util.UUID
 
-/**
- * T56-T58 — the one structured failure line stays diagnosable without leaking user content.
- *
- * T56 is the row that pins the reason the line carries a cause-type chain instead of a stack dump:
- * a real `FileNotFoundException` message IS the absolute path, so the normally-whitelisted stack
- * would put the user's file name into the log file.
- *
- * Run: :chat:testDebugUnitTest
- */
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [33])
 class MediaAccessLogTest {
 
-    // ---------------------------------------------------------------- T56
+    
 
     @Test
     fun `denial line keeps the diagnosis and drops the file name`() {
         val fileName = "VID_20260729135409873"
         val uri = Uri.parse("file:///storage/emulated/0/Movies/$fileName.mp4")
-        // Exactly the shape a denied open has on a device: the message is the path.
+        
         val cause = FileNotFoundException("/storage/emulated/0/Movies/$fileName.mp4: open failed: EACCES")
             .apply { initCause(ErrnoException("open", OsConstants.EACCES)) }
         val failure = MediaFailure(
@@ -60,7 +60,7 @@ class MediaAccessLogTest {
         assertFalse(line, line.contains("/storage/"))
     }
 
-    // ---------------------------------------------------------------- T57
+    
 
     @Test
     fun `content uri contributes its authority and leading segments but not the row id`() {
@@ -82,13 +82,13 @@ class MediaAccessLogTest {
         assertFalse(line, line.contains("12345"))
     }
 
-    // ---------------------------------------------------------------- T58
+    
 
     @Test
     fun `sandbox path is reported as private storage without its file name`() {
         val uuid = UUID.randomUUID().toString()
         val sandboxFile = File(AppPrivateRoots.first(), "files/draft_blobs/$uuid.jpg")
-        // Reported first so a wrong fixture path fails here rather than inside the log assertion.
+        
         assertTrue(sandboxFile.path, AppPrivateStorage.isAppPrivate(sandboxFile.path))
         val failure = MediaFailure(
             position = 2,

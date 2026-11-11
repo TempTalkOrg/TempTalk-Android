@@ -8,10 +8,10 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
-/**
- * The attachment progress map: keyed per attachment copy, written from job threads, read from the
- * main thread, and — since the key is now a per-copy id rather than a per-message one — bounded.
- */
+
+
+
+
 class AttachmentProgressMapTest {
 
     private var now = 1_000L
@@ -38,7 +38,7 @@ class AttachmentProgressMapTest {
         useFakeClock()
         FileUtil.emitProgressUpdate("local-done", 100)
 
-        // The bubble that binds right after the last emit must still see the outcome.
+        
         assertEquals(100, FileUtil.getProgress("local-done"))
         now += 29_000L
         assertEquals(100, FileUtil.getProgress("local-done"))
@@ -52,7 +52,7 @@ class AttachmentProgressMapTest {
 
         now += 31_000L
 
-        // Dropped: the file on disk is the durable answer from here on.
+        
         assertNull(FileUtil.getProgress("local-success"))
     }
 
@@ -67,9 +67,9 @@ class AttachmentProgressMapTest {
 
             now += 31_000L
 
-            // Still readable: the job's terminal write goes to the DB row only and the in-memory
-            // bubble status is never refreshed, so evicting the marker would auto-re-download the
-            // failed/expired attachment on every rebind.
+            
+            
+            
             assertEquals(terminal, FileUtil.getProgress(key))
         }
     }

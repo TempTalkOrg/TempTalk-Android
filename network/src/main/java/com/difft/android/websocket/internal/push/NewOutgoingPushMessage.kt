@@ -16,7 +16,7 @@ data class NewOutgoingPushMessage(
     val silent: Boolean,
     val timestamp: Long,
     val recipients: List<Recipient>,
-    val syncContent: String? = null  // v4 API: 1v1 sync content encrypted with own public key
+    val syncContent: String? = null  
 ) {
     data class Recipient(
         val uid: String,
@@ -44,7 +44,9 @@ data class NewOutgoingPushMessage(
     data class Args(
         val gid: String? = null,
         val collapseId: String? = null,
-        val passthrough: String? = null
+        val passthrough: String? = null,
+        
+        val mentionedPersons: List<String>? = null,
     )
 
     data class Notification(

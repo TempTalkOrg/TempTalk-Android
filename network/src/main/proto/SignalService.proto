@@ -1,4 +1,3 @@
-
 syntax = "proto2";
 
 package signalservice;
@@ -8,10 +7,7 @@ option java_outer_classname = "SignalServiceProtos";
 
 message ConversationMsgInfo {
   optional ConversationPreview conversationPreview = 1;
-  optional uint64              oldestMsgSId = 2; // 可拉取最老的消息 sequenceId，用于拉取消息
-  optional uint64              oldestMsgNsId = 3; // 可拉取最老的消息 notifySequenceId，用于拉取消息
-  optional uint64              lastestMsgSId = 4; // 可拉取最新的消息 sequenceId，用于拉取消息
-}
+  optional uint64              oldestMsgSId = 2;   optional uint64              oldestMsgNsId = 3;   optional uint64              lastestMsgSId = 4; }
 
 message ConversationPreview {
   optional ConversationId  conversationId = 1;
@@ -21,13 +17,10 @@ message ConversationPreview {
   repeated Envelope        onePageMsgs = 5;
   optional uint64          lastestMsgNsId = 6;
   optional uint64          maxOutgoingNsId = 7;
-  optional uint64          maxOutgoingSId = 8; // 新增，用于消息拉取
-}
+  optional uint64          maxOutgoingSId = 8; }
 
 message ConversationId{
-  optional string  number = 1; // 1v1 会话，对方号码
-  optional bytes   groupId = 2; // 群组，群组id,
-}
+  optional string  number = 1;   optional bytes   groupId = 2; }
 
 message Envelope {
   enum Type {
@@ -68,16 +61,13 @@ message Envelope {
   optional bytes  legacyMessage = 6;
   optional bytes  content = 8;
   optional bool   lastestMsgFlag = 9;
-  optional uint64 sequenceId = 11; // msg seq number. Note: number 9 and 10 are reserved fields
-  optional uint64 systemShowTimestamp = 12;
+  optional uint64 sequenceId = 11;   optional uint64 systemShowTimestamp = 12;
   optional MsgType msgType = 13;
   optional uint64 notifySequenceId = 14;
   optional string identityKey = 15;
   optional string peerContext = 16;
   optional MsgExtra msgExtra = 17;
-  optional uint64 pushTimestamp = 19; //server推送消息时间戳：与systemShowTimestamp差值 表示消息在server停留时间
-  optional string roomId = 20; // room id,calling消息中roomId为空时，使用该字段;// roomId和CallMessage中roomId都非空时，两者不相等时报错
-
+  optional uint64 pushTimestamp = 19;   optional string roomId = 20; 
 }
 
 message Content {
@@ -89,54 +79,21 @@ message Content {
   optional CallMessage           callMessage    = 8;
   optional GroupKeyMessage       groupKeyMessage = 9;
   optional ForwardNoticeMessage  forwardNotice  = 10;
-  // Generic source-side activity notice. Carries COPY notice in this iteration;
-  // future activity types (PASTE, SCREENSHOT, EXPORT, ...) add new oneof cases.
-  // ForwardNoticeMessage above stays as legacy channel for forward notices.
-  optional MessageActivityNotice activityNotice = 11;
+        optional MessageActivityNotice activityNotice = 11;
 }
 
-// Generic source-side activity notice container.
-//
-// Design intent: long-term carrier for "an activity was initiated against
-// messages in the source conversation" notifications.
-//   This iteration:  COPY
-//   Future:          PASTE, SCREENSHOT, EXPORT, ...
-//
-// Top-level fields are kept minimal — only universally-applicable fields go
-// at this level. Per-type fields live in oneof typeData; the oneof case itself
-// is the type discriminator (no separate `type` field is needed).
-//
-// Receiver compatibility rules (all platforms must honor):
-//   - TYPEDATA_NOT_SET or unrecognized oneof case → drop with warn log
-//   - Each oneof case MUST be handled exhaustively (no default-render fallback)
-//   - For group conversations: verify envelope.source is a member of
-//     conversation.groupId (cross-conversation injection guard, see PR #683)
-//   - Sender MUST always set exactly one typeData case
 message MessageActivityNotice {
-  // Shared by CopyData / ForwardNoticeMessage. Describes how the source selection
-  // relates to combined-forward (a.k.a. "chat history") messages, per PRD §5.3.
-  enum CombinedForwardMode {
-    UNKNOWN                   = 0; // No combined-forward involvement (or sender pre-PRD-v5)
-    CONTAINS_COMBINED_FORWARD = 1; // Main-conversation selection: mixed (regular + CF bubbles)
-    ALL_COMBINED_FORWARD      = 2; // Main-conversation selection: all bubbles are CF
-    SUB_COMBINED_FORWARD      = 3; // Operation target is a sub-message INSIDE a CF (detail view)
-  }
+      enum CombinedForwardMode {
+    UNKNOWN                   = 0;     CONTAINS_COMBINED_FORWARD = 1;     ALL_COMBINED_FORWARD      = 2;     SUB_COMBINED_FORWARD      = 3;   }
 
-  optional ConversationId conversation = 1;   // Source conversation (group: groupId required; 1v1: optional, fallback to envelope.source)
-
+  optional ConversationId conversation = 1;   
   oneof typeData {
     CopyData copyData = 2;
-    // Future:
-    // ForwardData    forwardData    = 3;
-    // PasteData      pasteData      = 4;
-    // ScreenshotData screenshotData = 5;
-  }
+                  }
 }
 
 message CopyData {
-  repeated string                                    sourceAuthorIds     = 1; // Authors of copied source messages, first-seen order; receiver dedupes + truncates
-  optional uint32                                    messageCount        = 2; // Number of copied messages (single/partial copy = 1, multi-select = N)
-  optional MessageActivityNotice.CombinedForwardMode combinedForwardMode = 3;
+  repeated string                                    sourceAuthorIds     = 1;   optional uint32                                    messageCount        = 2;   optional MessageActivityNotice.CombinedForwardMode combinedForwardMode = 3;
 }
 
 message ForwardNoticeMessage {
@@ -148,10 +105,7 @@ message ForwardNoticeMessage {
     SAVE_TO_NOTES = 4;
   }
   optional ForwardScene                              scene               = 1;
-  repeated string                                    sourceAuthorIds     = 2; // deduped, first-seen order, unbounded
-  optional uint32                                    messageCount        = 3; // top-level count; nested forwards count as 1
-  // Source conversation. Sender fills from its own view (groupId / peer uid).
-  optional ConversationId                            conversation        = 4;
+  repeated string                                    sourceAuthorIds     = 2;   optional uint32                                    messageCount        = 3;     optional ConversationId                            conversation        = 4;
   optional MessageActivityNotice.CombinedForwardMode combinedForwardMode = 5;
 }
 
@@ -194,70 +148,39 @@ message MsgExtra {
 
   message ReactionInfo {
     repeated ReactionDetail  reactionDetail = 1;
-    optional RealSource  source = 2;//原始消息源
-  }
+    optional RealSource  source = 2;  }
 
   message ReactionDetail {
-    repeated RealSource source = 1;//emoji来源
-    optional string   emoji = 2; //内容
-    optional uint32   count = 3;//emoji个数
-  }
+    repeated RealSource source = 1;    optional string   emoji = 2;     optional uint32   count = 3;  }
 }
 
 message CallMessage {
-  // calling : 发起Call & 邀请他人时发送
-  message Calling {
-    // roomId,可能为空；请求starting messages时，
-    // client 还不知道room id，邀请人入会时才已知room id
-    optional string roomId = 1;
-    // instant Call时，conversationId为空；1on1 Call同步消息时，conversationId存callee号码；
-    // 发给callee时，conversationId存caller号码
-    optional ConversationId  conversationId = 2;
+    message Calling {
+            optional string roomId = 1;
+            optional ConversationId  conversationId = 2;
     optional string roomName = 3;
-    optional string caller = 4; //  Call creator or 临时邀请人
-    optional bytes emk = 5; // mk的密文，需要用自己私钥解密；
-    optional bytes publicKey = 6; // 临时的ecc公钥
-    optional bool createCallMsg = 7; // 是否创建Call消息
-    optional string  controlType = 8; // call消息类型 start or invite
-    repeated string  callees = 9; // 会议邀请时被邀参会人叫列表
-    optional uint64  timestamp = 10; // 会议创建的时间戳
-  }
+    optional string caller = 4;     optional bytes emk = 5;     optional bytes publicKey = 6;     optional bool createCallMsg = 7;     optional string  controlType = 8;     repeated string  callees = 9;     optional uint64  timestamp = 10;   }
 
-  // caller&callee成功入会时，同步给自己另一端(如果有)
-  // 如果只有一个端无需同步，用不上该消息
-  // 多人 Call时，caller不用发送该消息，因为多人 Call时收到Calling消息后，就可以显示MeetingBar
-  message Joined {
+        message Joined {
     optional string roomId = 1;
-    // 1on1 Call, 主叫Joined将calling一起同步给自己另一端(如果有)；发起call时不要将calling投递给另一端；主叫Cancel时无需发Cancel给自己另外一端； 多人 Call 和 被叫 都无需携带 calling；
-    // optional Calling calling = 2;
-  }
+          }
 
-  // cancel : caller取消 Call
-  // 1on1 Call,同步给自己另一端(如果有)和对方；caller去及时清理数据，callee关闭弹窗
-  // 多人 Call无需该消息，使用Server推送的 Call结束notify消息即可
-  message Cancel {
+        message Cancel {
     optional string roomId = 1;
   }
 
-  // reject : callee拒绝加入 Call,
-  // 1on1 Call,同步给自己另一端(如果有)和caller；callee去关闭弹窗；caller(仅发起一端)关闭弹窗，caller两端清理数据
-  // 多人 Call,同步给自己另一端(如果有)
-  message Reject {
+        message Reject {
     optional string roomId = 1;
   }
 
-  // hangup : 1on1 Call,挂断已经接通的 Call,将消息发给对方, 无需将hangup消息同步给自己另一端
-  // 原因： live sdk不能明确区分 remote participant是点击按钮主动leave call， 还是网络异常导致的participant disconnected
-  // leave多人 Call, 无需发送该消息
-  message Hangup {
+        message Hangup {
     optional string roomId = 1;
   }
 
   optional Calling calling = 1;
   optional Joined joined = 2;
   optional Cancel cancel = 3;
-  // 被多人同时call时，reject可能不止一个;
-  optional Reject reject = 4;
+    optional Reject reject = 4;
   optional Hangup hangup = 5;
 }
 
@@ -467,9 +390,7 @@ message DataMessage {
 
   message Mention {
     enum Type {
-      INTERNAL = 0; //群成员
-      EXTERNAL = 1; //非群成员
-    }
+      INTERNAL = 0;       EXTERNAL = 1;     }
     optional uint32 start = 1;
     optional uint32 length = 2;
     optional string uid = 3;
@@ -535,22 +456,15 @@ message DataMessage {
   optional uint64             timestamp = 7;
   optional Quote              quote = 8;
   optional string             atPersons = 10;
-  optional Sticker            sticker = 110;//此处与11 ForwardContext有冲突
-  optional ForwardContext     forwardContext = 11;
+  optional Sticker            sticker = 110;  optional ForwardContext     forwardContext = 11;
   optional uint32             requiredProtocolVersion = 12;
   repeated Contact            contact = 13;
   optional Recall             recall = 14;
-  optional Delete             delete = 170;//此处与17 BotContext有冲突
-  //  repeated BodyRange          bodyRanges              = 18;
-  optional GroupCallUpdate    groupCallUpdate = 190;//此处与19
-  optional Payment            payment = 200;//此处与20 Reaction有冲突
-  optional StoryContext       storyContext = 210;//此处与21 Card有冲突
-  optional BotContext         botContext = 17;
+  optional Delete             delete = 170;    optional GroupCallUpdate    groupCallUpdate = 190;  optional Payment            payment = 200;  optional StoryContext       storyContext = 210;  optional BotContext         botContext = 17;
   optional ThreadContext      threadContext = 18;
   optional Reaction           reaction = 20;
   optional Card               card = 21;
-  //  optional GiftBadge          giftBadge             = 22;
-  repeated Mention            mentions = 22;
+    repeated Mention            mentions = 22;
   optional Mode               messageMode = 23;
   optional ScreenShot         screenShot = 24;
 }
@@ -579,7 +493,6 @@ message RealSource {
   optional uint64 serverTimestamp = 4;
 }
 
-//客户端通知类型的消息
 message NotifyMessage {
 }
 
@@ -588,8 +501,7 @@ message ReadPosition {
   optional uint64 readAt = 2;
   optional uint64 maxServerTime = 3;
   optional uint64 maxNotifySequenceId = 4;
-  optional uint64 maxSequenceId = 5; // 新增
-}
+  optional uint64 maxSequenceId = 5; }
 
 message Preview {
   optional string            url = 1;
@@ -610,17 +522,12 @@ message TextAttachment {
   }
 
   message Gradient {
-    optional uint32 startColor = 1; // deprecated: this field will be removed in a future release.
-    optional uint32 endColor = 2; // deprecated: this field will be removed in a future release.
-    optional uint32 angle = 3; // degrees
-    repeated uint32 colors = 4;
-    repeated float  positions = 5; // percent from 0 to 1
-  }
+    optional uint32 startColor = 1;     optional uint32 endColor = 2;     optional uint32 angle = 3;     repeated uint32 colors = 4;
+    repeated float  positions = 5;   }
 
   optional string  text = 1;
   optional Style   textStyle = 2;
-  optional uint32  textForegroundColor = 3; // integer representation of hex color
-  optional uint32  textBackgroundColor = 4;
+  optional uint32  textForegroundColor = 3;   optional uint32  textBackgroundColor = 4;
   optional Preview preview = 5;
   oneof background {
     Gradient gradient = 6;
@@ -635,7 +542,7 @@ message Verified {
     UNVERIFIED = 2;
   }
 
-  reserved      /*destinationE164*/ 1;
+  reserved       1;
   optional string destinationUuid = 5;
   optional bytes  identityKey = 2;
   optional State  state = 3;
@@ -656,8 +563,7 @@ message SyncMessage {
 
   message Contacts {
     optional AttachmentPointer blob = 1;
-    // Signal-iOS renamed this property.
-    optional bool              isComplete = 2 [default = false];
+        optional bool              isComplete = 2 [default = false];
   }
 
   message Groups {
@@ -709,18 +615,14 @@ message SyncMessage {
     }
 
     optional ConversationId conversation = 1;
-    optional Flag                   flag = 2; //0、清除设定的未读状态 1、 置未读 2、置全部已读
-  }
+    optional Flag                   flag = 2;   }
 
   message ConversationArchive {
     enum Flag {
-      UNARCHIVE = 0;      //解档
-      ARCHIVE = 1;       //归档
-    }
+      UNARCHIVE = 0;            ARCHIVE = 1;           }
 
     optional ConversationId conversation = 1;
-    optional Flag                 flag = 2; //0 解档 1、 归档
-  }
+    optional Flag                 flag = 2;   }
 
   optional Sent                 sent = 1;
   optional Request              request = 4;
@@ -733,8 +635,7 @@ message SyncMessage {
   optional ConversationArchive  conversationArchive = 12;
   optional uint64                serverTimestamp = 16;
   optional ForwardNoticeMessage  forwardNoticeSync = 18;
-  // Self-sync mirror of Content.activityNotice; same payload semantics.
-  optional MessageActivityNotice activityNoticeSync = 19;
+    optional MessageActivityNotice activityNoticeSync = 19;
 }
 
 message AttachmentPointer {
@@ -759,5 +660,4 @@ message AttachmentPointer {
   optional string  blurHash = 12;
   optional uint64  uploadTimestamp = 13;
   optional uint32  cdnNumber = 14;
-  // Next ID: 16
-}
+  }

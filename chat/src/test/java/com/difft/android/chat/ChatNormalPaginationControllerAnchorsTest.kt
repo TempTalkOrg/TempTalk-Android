@@ -15,20 +15,16 @@ import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * Cases #48..#50 and #52 — anchor completeness on the two emission paths that used to drop the
- * anchors entirely.
- *
- * Losing them is visibly wrong, not merely untidy: with no before-anchor the window's first row
- * decides its day header and name against "nothing", so after any DB change the first bubble grows a
- * long date header and a re-shown nickname it did not have a moment earlier.
- */
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class ChatNormalPaginationControllerAnchorsTest : PaginationTestBase() {
 
-    // #48 — observer tick over a mid-conversation window: both anchors are RE-RESOLVED (the tick's
-    // own re-query can have moved either edge), and the after-anchor probe doubles as the
-    // hasReachedLatest answer.
+    
+    
+    
     @Test
     fun `an observer tick re-resolves both anchors and reports more newer rows exist`() = runTest {
         val rows = buildMessageSequence(100)
@@ -46,8 +42,8 @@ class ChatNormalPaginationControllerAnchorsTest : PaginationTestBase() {
         assertFalse(after.hasReachedLatest)
     }
 
-    // #49 — same tick, opposite polarity: the window already ends on the conversation's newest row,
-    // so the after probe finds nothing. null here means "no such row", not "we did not look".
+    
+    
     @Test
     fun `an observer tick on a window at the newest end reports no after-anchor`() = runTest {
         val rows = buildMessageSequence(100)
@@ -64,9 +60,9 @@ class ChatNormalPaginationControllerAnchorsTest : PaginationTestBase() {
         assertTrue(after.hasReachedLatest)
     }
 
-    // #50 — addOneMessage: carry the before-anchor forward (the oldest row did not move), NULL the
-    // after-anchor (the appended row IS the newest known one, so any carried-forward after-anchor
-    // would be older than it and would corrupt the last row's showTime), and query nothing.
+    
+    
+    
     @Test
     fun `addOneMessage carries the before-anchor forward, nulls the after-anchor and queries nothing`() = runTest {
         val rows = buildMessageSequence(CAP_FILLING_ROWS)
@@ -75,7 +71,7 @@ class ChatNormalPaginationControllerAnchorsTest : PaginationTestBase() {
         controller.jumpToBottom()
         controller.fillWindowToCap()
         val before = controller.behavior()
-        // Precondition: a window with BOTH anchors — only the truncating loadPreviousPage produces it.
+        
         assertEquals(MAX_MESSAGE_COUNT, before.messageList.size)
         val anchorBefore = requireNotNull(before.anchorMessageBefore)
         requireNotNull(before.anchorMessageAfter)
@@ -90,9 +86,9 @@ class ChatNormalPaginationControllerAnchorsTest : PaginationTestBase() {
         assertEquals(callsBefore, source.callLog.size)
     }
 
-    // #52 — seam 1 end to end: the anchors an observer tick resolved really do reach the batch
-    // hydration `IN` set, through `messagesToConvert()`. An anchor outside that set gets empty
-    // sub-data and compares unequal to the same row rendered inside the window.
+    
+    
+    
     @Test
     fun `re-resolved anchors reach the hydration IN set`() = runTest {
         val rows = buildMessageSequence(100)
@@ -113,7 +109,7 @@ class ChatNormalPaginationControllerAnchorsTest : PaginationTestBase() {
     }
 
     private companion object {
-        /** Comfortably more rows than the window cap, so paging back really does truncate. */
+        
         const val CAP_FILLING_ROWS = 400
     }
 }

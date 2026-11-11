@@ -11,7 +11,7 @@ class FocusOwnedMarkTest {
         val raw = FocusOwnedMark.encode("me", "0:A,B")
         assertEquals("0:A,B", FocusOwnedMark.decode(raw, "me"))
         assertNull(FocusOwnedMark.decode(raw, "someone-else"))
-        assertNull(FocusOwnedMark.decode(raw, "m")) // a prefix of the owner is not the owner
+        assertNull(FocusOwnedMark.decode(raw, "m")) 
         assertNull(FocusOwnedMark.decode(raw, null))
         assertNull(FocusOwnedMark.decode(raw, ""))
     }

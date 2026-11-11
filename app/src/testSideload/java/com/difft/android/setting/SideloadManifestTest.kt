@@ -12,7 +12,7 @@ import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/** src/sideload/AndroidManifest.xml is merged into the official and insider channels. */
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [34])
 class SideloadManifestTest {

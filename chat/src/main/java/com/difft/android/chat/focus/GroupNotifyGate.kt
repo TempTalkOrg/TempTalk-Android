@@ -17,30 +17,30 @@ import org.difft.app.database.wcdb
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Feeds [GroupNotifyPolicy] from the local stores for the WebSocket delivery path: the room's mute
- * state and sub-options, the group notification level, and the focus state. Pushes delivered by FCM
- * were already judged by the server and do not come through here.
- */
+
+
+
+
+
 @Singleton
 class GroupNotifyGate @Inject constructor(
     private val userManager: UserManager,
     private val focusRepository: GroupFocusRepository,
 ) {
-    /**
-     * Decision for a new message. [room] is the conversation row (null when it does not exist yet,
-     * which reads as not muted). A null [message] is categorised as [GroupNotifyPolicy.Category.OTHER].
-     */
+    
+
+
+
     suspend fun decideMessage(forWhat: For, message: Message?, room: RoomModel?): GroupNotifyPolicy.Decision {
         focusRepository.ensureLoaded()
         val category = categoryOf(message)
         return withContext(Dispatchers.IO) { decide(forWhat.id, forWhat is For.Group, category, room) }
     }
 
-    /**
-     * Whether a group call invite may ring. With the feature off this is always true: before the focus
-     * rules the client had no local check and the server filtered the push.
-     */
+    
+
+
+
     suspend fun shouldNotifyGroupCall(gid: String): Boolean {
         focusRepository.ensureLoaded()
         if (!focusRepository.effectiveNow().featureEnabled) return true
@@ -69,7 +69,7 @@ class GroupNotifyGate @Inject constructor(
         return GroupNotifyPolicy.categorize(uids, globalServices.myId)
     }
 
-    /** The self member row's level, or the global one when the group follows it (or has no row yet). */
+    
     private fun readLevel(gid: String): GroupNotifyPolicy.NotifyLevel {
         val self = wcdb.groupMemberContactor.getFirstObject(
             DBGroupMemberContactorModel.gid.eq(gid).and(DBGroupMemberContactorModel.id.eq(globalServices.myId))

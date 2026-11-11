@@ -18,14 +18,14 @@ import java.io.File
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 
-/**
- * A real call site forwards the REFRESHED body token, not the rejected one (issues #1235, #1231).
- * [InvalidTokenRetryTest][com.difft.android.chat.fileshare.InvalidTokenRetryTest] covers the retry
- * primitive itself; this covers the wiring — the token the second `DownloadReq` actually carries.
- *
- * [FavoriteCiphertextFetcher] is the smallest of the fileshare call sites: the second attempt is
- * answered with a non-rejection business status, so the OSS/validation half is never entered.
- */
+
+
+
+
+
+
+
+
 class FavoriteCiphertextFetcherTokenRetryTest {
 
     @get:Rule
@@ -54,7 +54,7 @@ class FavoriteCiphertextFetcherTokenRetryTest {
                 Response.success(BaseResponse(ver = 1, status = status, reason = null, data = null))
         }
 
-    // T52 — status 5 on the first download refreshes, and the retry carries the new token.
+    
     @Test
     fun `a rejected download token is retried with the refreshed token`() = runTest {
         val tokens = mutableListOf<String>()
@@ -66,7 +66,7 @@ class FavoriteCiphertextFetcherTokenRetryTest {
         val fetcher = FavoriteCiphertextFetcher(fileShareRepo, provider)
         val dest = File(temp.newFolder(), "favorite.enc")
 
-        // False: the retry's NO_PERMISSION is a terminal business status, which is all this needs.
+        
         assertFalse(fetcher.downloadCiphertextTo(AUTHORIZE_ID, FILE_HASH, dest))
 
         assertEquals(listOf(STALE, FRESH), tokens)

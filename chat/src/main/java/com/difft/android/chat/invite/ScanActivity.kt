@@ -5,6 +5,7 @@ import android.app.Activity
 import android.content.Intent
 import android.content.res.ColorStateList
 import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import android.os.Bundle
@@ -35,32 +36,36 @@ import com.difft.android.selector.utils.ToastUtils
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import com.difft.android.base.migration.LinkMigrationInfo
+import com.difft.android.base.ui.sidechrome.sideChromeBar
+import com.difft.android.base.ui.theme.tokens.ColorTokens
+import com.difft.android.base.widget.floatAsTopBarButton
+import androidx.compose.ui.graphics.toArgb
 import com.difft.android.base.migration.PeerApps
 
 @AndroidEntryPoint
 class ScanActivity : BaseActivity() {
 
     companion object {
-        /** When true, the raw scanned string is returned via setResult instead of being handled in-place. */
+        
         const val EXTRA_RETURN_RESULT = "extra_return_result"
         const val EXTRA_SCAN_RESULT = "extra_scan_result"
 
-        /** Optional page title and one or two lines of guidance under the frame (the migration pairing page's scan state). */
+        
         const val EXTRA_TITLE = "extra_title"
         const val EXTRA_HINT = "extra_hint"
         const val EXTRA_HINT_SECONDARY = "extra_hint_secondary"
 
-        /**
-         * Set by a result caller that sends data (the migration send screen) so a computer's export
-         * code is declined here, with the scanner still open. The home scanner always declines it.
-         */
+        
+
+
+
         const val EXTRA_DECLINE_COMPUTER_EXPORT_CODE = "extra_decline_computer_export_code"
 
-        /**
-         * Set by the migration screens: the page takes the migration design's scan state (black
-         * header and ground, white title and back icon, the corner-only viewfinder). The home
-         * scanner keeps its own look.
-         */
+        
+
+
+
+
         const val EXTRA_MIGRATION_STYLE = "extra_migration_style"
 
         fun startActivity(activity: Activity) {
@@ -68,7 +73,7 @@ class ScanActivity : BaseActivity() {
             activity.startActivity(intent)
         }
 
-        /** Builds an intent that makes ScanActivity return the scanned string to the caller. */
+        
         fun createResultIntent(context: android.content.Context): Intent =
             Intent(context, ScanActivity::class.java).putExtra(EXTRA_RETURN_RESULT, true)
     }
@@ -90,7 +95,7 @@ class ScanActivity : BaseActivity() {
 
     private var cameraController: ScanCameraController? = null
 
-    /** The caution shown under the guidance after this scanner declined a code. */
+    
     private var declinedNotice by mutableStateOf<String?>(null)
     private var orientationListener: OrientationEventListener? = null
 
@@ -98,20 +103,31 @@ class ScanActivity : BaseActivity() {
         onCameraPermissionForScanResult(it)
     }
 
+    
+    override fun participatesInSideChrome(): Boolean = !intent.getBooleanExtra(EXTRA_MIGRATION_STYLE, false)
+
+    override fun padsRootForSideChrome(): Boolean = true
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // check permission
-        // callback to scan in onCameraPermissionForScanResult
+        
+        
         onCameraPermissionForScan.launchSinglePermission(Manifest.permission.CAMERA)
 
-        mBinding.ibBack.setOnClickListener { finish() }
+        if (intent.getBooleanExtra(EXTRA_MIGRATION_STYLE, false)) {
+            
+            mBinding.ibBack.setOnClickListener { finish() }
+            mBinding.ibBack.floatAsTopBarButton(leading = true, fillColor = ColorTokens.Dark.BackgroundTertiary.toArgb())
+        } else {
+            sideChromeBar().setBack(mBinding.ibBack, { finish() })
+        }
         applyCallerGuidance()
     }
 
-    /**
-     * A caller may dress the scanner for its own step; without extras the page is the plain home
-     * scanner. The bottom block is always on the dark camera ground, so it is drawn in dark colours.
-     */
+    
+
+
+
     private fun applyCallerGuidance() {
         intent.getStringExtra(EXTRA_TITLE)?.let { mBinding.tvTitle.text = it }
         if (intent.getBooleanExtra(EXTRA_MIGRATION_STYLE, false)) applyMigrationStyle()
@@ -123,17 +139,19 @@ class ScanActivity : BaseActivity() {
         }
     }
 
-    /** Black page and header with light content, and the migration viewfinder. */
+    
     private fun applyMigrationStyle() {
         val black = ContextCompat.getColor(this, BaseR.color.black)
         val white = ContextCompat.getColor(this, BaseR.color.white)
         mBinding.root.setBackgroundColor(black)
+        
+        window.setBackgroundDrawable(ColorDrawable(black))
         mBinding.header.setBackgroundColor(black)
         mBinding.tvTitle.setTextColor(white)
         mBinding.ibBack.imageTintList = ColorStateList.valueOf(white)
         mBinding.scanOverlay.migrationStyle = true
-        // Dark bar styles, not just light icons: below API 29 the default edge-to-edge paints a
-        // near-white navigation scrim in light mode, which white buttons would vanish into.
+        
+        
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
@@ -145,13 +163,13 @@ class ScanActivity : BaseActivity() {
             context = this,
             lifecycleOwner = this,
             previewView = mBinding.previewView,
-            onResult = { result -> onScanQRCodeSuccess(result) }, // already on the main thread
-            onError = { onScanQRCodeOpenCameraError() }, // already on the main thread
+            onResult = { result -> onScanQRCodeSuccess(result) }, 
+            onError = { onScanQRCodeOpenCameraError() }, 
         ).also {
             cameraController = it
             it.start()
         }
-        // Camera is starting on the permission-granted path — now (and only now) run the scan line.
+        
         mBinding.scanOverlay.startScanLine()
         orientationListener = object : OrientationEventListener(this) {
             override fun onOrientationChanged(orientation: Int) {
@@ -163,24 +181,24 @@ class ScanActivity : BaseActivity() {
 
     override fun onResume() {
         super.onResume()
-        // Resume scan-active sensors/visuals only if scanning has begun (camera bound on the
-        // permission-granted path → orientationListener is non-null). Symmetric with onStop; avoids
-        // running them on the pre-permission / denied paths.
+        
+        
+        
         orientationListener?.let { listener ->
             if (listener.canDetectOrientation()) listener.enable()
             mBinding.scanOverlay.startScanLine()
         }
-        // Re-arm the one-shot scan latch on every foreground edge: if a previous decode took an async
-        // branch that did NOT finish this Activity, the analyzer would otherwise stay latched and dead.
-        // This is a lifecycle edge (not per-frame), so a result currently being handled is not looped.
+        
+        
+        
         cameraController?.rearm()
     }
 
     override fun onStop() {
-        // Stop sensor callbacks while backgrounded: CameraX use cases are paused, so firing
-        // updateTargetRotation would burn CPU/battery on an idle camera. Re-enabled in onResume.
+        
+        
         orientationListener?.disable()
-        mBinding.scanOverlay.stopScanLine() // no scan line while backgrounded — saves CPU
+        mBinding.scanOverlay.stopScanLine() 
         super.onStop()
     }
 
@@ -191,19 +209,19 @@ class ScanActivity : BaseActivity() {
         super.onDestroy()
     }
 
-    /** Camera failed to open/bind: the preview is a dead black surface. Tell the user and bail. */
+    
     private fun onScanQRCodeOpenCameraError() {
         ToastUtils.showToast(this, getString(R.string.scan_camera_open_failed))
         finish()
     }
 
     private fun onScanQRCodeSuccess(result: String) {
-        // A frame decoded just before teardown can post this on the main thread after the Activity is
-        // gone — vibrate/route on a dead context. Drop anything that arrives below STARTED.
+        
+        
         if (!lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return
 
-        // A computer's export code can only be taken by a phone that is signing in. Starting a send
-        // to it fails at the computer, so say where it belongs and keep scanning instead.
+        
+        
         if (declinesComputerExportCode && PeerApps.isComputerExportQr(result)) {
             declineComputerExportCode(result)
             return
@@ -211,15 +229,15 @@ class ScanActivity : BaseActivity() {
 
         ServiceUtil.getVibrator(this).vibrate(50)
 
-        // Caller (e.g. proxy settings) just wants the raw string back.
+        
         if (returnResult) {
             setResult(Activity.RESULT_OK, Intent().putExtra(EXTRA_SCAN_RESULT, result))
             finish()
             return
         }
 
-        // A migration pairing code from another device's receive screen: hand it to the send screen
-        // exactly as its own scanner would, so the general "scan" entry works for migration too.
+        
+        
         if (PeerApps.looksLikeMigrationQr(result)) {
             startActivity(
                 Intent()
@@ -232,7 +250,7 @@ class ScanActivity : BaseActivity() {
 
         val uri = result.toUri()
         if (uri.scheme?.startsWith("http") == true) {
-            //域名白名单检测
+            
             if (urlManager.isTrustedHost(uri.host ?: "")) {
                 if (urlManager.isInviteLinkUrl(result)) {
                     val code = uri.getQueryParameter("pi") ?: ""
@@ -251,8 +269,8 @@ class ScanActivity : BaseActivity() {
                 showResultContent(result)
                 return
             }
-            // The sign-in confirmation page owns the decision about syncing history; it gets the raw
-            // migration query values and decides what the code means.
+            
+            
             startActivity(
                 Intent()
                     .setClassName(packageName, PeerApps.LINK_LOGIN_ACTIVITY)
@@ -314,17 +332,11 @@ class ScanActivity : BaseActivity() {
     }
 }
 
-/**
- * Maps OrientationEventListener sensor degrees (0..359, clockwise from natural) to the
- * [Surface] ROTATION_* constant CameraX expects. Quadrant-centered thresholds (±45° around each
- * cardinal) match the standard Android camera mapping. ORIENTATION_UNKNOWN is filtered by the caller.
- *
- * File-level `internal` so the unit test (T20) can call it directly without reflection. Returns a
- * [Surface] ROTATION_* constant.
- */
+
+
 internal fun Int.toSurfaceRotation(): Int = when (this) {
     in 45..134 -> Surface.ROTATION_270
     in 135..224 -> Surface.ROTATION_180
     in 225..314 -> Surface.ROTATION_90
-    else -> Surface.ROTATION_0 // 315..359 + 0..44 (natural / portrait-up)
+    else -> Surface.ROTATION_0 
 }

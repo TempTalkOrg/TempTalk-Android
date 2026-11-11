@@ -10,16 +10,16 @@ import org.junit.Assert.assertThrows
 import org.junit.Test
 import java.io.IOException
 
-/**
- * Unit tests for [readBoundedBytes] — the shared 10 MB avatar-download failsafe.
- */
+
+
+
 class AvatarDownloadTest {
 
-    /** Body with a known Content-Length (buffered response). */
+    
     private fun knownLengthBody(bytes: ByteArray): ResponseBody =
         bytes.toResponseBody(null)
 
-    /** Body without Content-Length (chunked response, contentLength() == -1). */
+    
     private fun chunkedBody(bytes: ByteArray): ResponseBody = object : ResponseBody() {
         override fun contentType(): MediaType? = null
         override fun contentLength(): Long = -1L
@@ -45,7 +45,7 @@ class AvatarDownloadTest {
     fun `missing content length is still bounded by stream read`() {
         val data = ByteArray(4096)
         val body = chunkedBody(data)
-        // Precondition: no declared length, so the header pre-check cannot catch it.
+        
         check(body.contentLength() == -1L)
         assertThrows(IOException::class.java) {
             body.readBoundedBytes(maxBytes = 1024)

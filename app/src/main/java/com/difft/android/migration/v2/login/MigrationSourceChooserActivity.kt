@@ -34,17 +34,17 @@ import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import kotlinx.coroutines.launch
 
-/**
- * The source chooser the new device shows after the code is verified and before it signs in:
- * another phone or a computer. Tapping a card opens the matching pairing page **from here**, so this
- * page stays on the back stack underneath it: backing out of the pairing page lands straight back on
- * the chooser, with no verify screen flashing in between. The only way past without a transfer is
- * the bottom text button, behind the irreversible-skip confirmation. System back is swallowed: the
- * verify screen behind this page has nothing to go back to.
- *
- * Only two answers ever reach the login flow: the restore that owes a sign-in, and the confirmed
- * skip. Everything else is a return to this page.
- */
+
+
+
+
+
+
+
+
+
+
+
 @AndroidEntryPoint
 class MigrationSourceChooserActivity : BaseActivity() {
 
@@ -55,7 +55,7 @@ class MigrationSourceChooserActivity : BaseActivity() {
         intent.getStringExtra(MigrationImportLauncherImpl.EXTRA_ACCOUNT).orEmpty()
     }
 
-    /** The verified sign-in the pairing page finishes once the data is promoted; absent on a resume. */
+    
     private val pendingSignIn: LoginViewModel.PendingSignIn? by lazy {
         IntentCompat.getParcelableExtra(
             intent,
@@ -64,10 +64,10 @@ class MigrationSourceChooserActivity : BaseActivity() {
         )
     }
 
-    /**
-     * The pairing page, launched for result. Only a promoted restore whose sign-in did not finish is
-     * passed up; a skip or a back out of that page is simply this page becoming visible again.
-     */
+    
+
+
+
     private val receiveLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == MigrationImportLauncher.RESULT_RESTORED) {
             answer(MigrationImportLauncher.RESULT_RESTORED)
@@ -82,7 +82,7 @@ class MigrationSourceChooserActivity : BaseActivity() {
         L.i { "[MigrationV2][SourceChooser] shown" }
         setContent {
             DifftTheme {
-                BackHandler { /* the code is verified; the only exits are the choices on this page */ }
+                BackHandler {  }
                 MigrationSourceChooserScreen(
                     onPhone = { openPairing(scanDesktop = false) },
                     onDesktop = { openPairing(scanDesktop = true) },
@@ -92,11 +92,11 @@ class MigrationSourceChooserActivity : BaseActivity() {
         }
     }
 
-    /**
-     * Open the pairing page with the verified sign-in, which it finishes itself once the data is
-     * promoted. The same sign-in is also held on disk first, so a process that dies during the
-     * transfer can still finish on the next cold start instead of asking for a code again.
-     */
+    
+
+
+
+
     private fun openPairing(scanDesktop: Boolean) {
         L.i { "[MigrationV2][SourceChooser] opening the pairing page scanDesktop=$scanDesktop" }
         val pending = pendingSignIn
@@ -122,7 +122,7 @@ fun MigrationSourceChooserScreen(
     onSkip: () -> Unit,
 ) {
     var confirmSkip by remember { mutableStateOf(false) }
-    // A decision page, not a list: the hero and the card sit in the upper half, the exit at the bottom.
+    
     MigrationPage(
         scrollable = false,
         footer = {

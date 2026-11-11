@@ -16,12 +16,12 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
-/**
- * Contract §7.6 unknown-enum tolerance: an unrecognized `contentKind` string (a newer MINOR's new
- * message type) must decode to the explicit [ContentKind.UNKNOWN] — never Gson's silent null (the
- * NPE path) — and the importer must SILENTLY SKIP the whole record with cascade (its attachment
- * records + byte frames), never abort, never write a placeholder row.
- */
+
+
+
+
+
+
 class UnknownKindToleranceTest {
 
     private val codec = RecordJsonCodec()
@@ -33,12 +33,12 @@ class UnknownKindToleranceTest {
         confidential = false,
     )
 
-    // ── codec layer ─────────────────────────────────────────────────────────────────────────
+    
 
     @Test
     fun `unrecognized contentKind string decodes to UNKNOWN, not null`() {
         val line = codec.encodeRecord(NeutralRecord.Message(neutralMsg("m-1")))
-            .replace("\"TEXT\"", "\"HOLOGRAM\"") // a future MINOR's new kind
+            .replace("\"TEXT\"", "\"HOLOGRAM\"") 
         val decoded = codec.decodeRecord(line) as NeutralRecord.Message
         assertEquals(ContentKind.UNKNOWN, decoded.value.contentKind)
     }
@@ -57,7 +57,7 @@ class UnknownKindToleranceTest {
         }
     }
 
-    // ── importer layer: silent skip + cascade + per-record fault tolerance ─────────────────
+    
 
     @Test
     fun `UNKNOWN message is skipped whole and its attachments cascade-skip`() {
@@ -88,8 +88,8 @@ class UnknownKindToleranceTest {
         val importer = NeutralImporter(target, messageAttachmentDir = { "/t/$it/" })
         importer.onRecord(NeutralRecord.Message(neutralMsg("m-known")))
 
-        // Encode a known attachment, then rewrite its owner to a value outside the enum (a malformed
-        // or newer container); Gson decodes that to null, which must not become a failed record.
+        
+        
         val known = codec.encodeRecord(
             NeutralRecord.Attachment(
                 NeutralAttachment(
@@ -113,7 +113,7 @@ class UnknownKindToleranceTest {
         val target = InMemoryWcdbWriteTarget()
         val importer = NeutralImporter(target, messageAttachmentDir = { throw IllegalStateException("boom") })
 
-        // This attachment record's placement resolution throws inside onRecord → counted + skipped.
+        
         importer.onRecord(
             NeutralRecord.Attachment(
                 NeutralAttachment(
@@ -122,7 +122,7 @@ class UnknownKindToleranceTest {
                 )
             )
         )
-        // The stream continues: a later good record still imports.
+        
         importer.onRecord(NeutralRecord.Message(neutralMsg("m-good")))
         importer.finish()
 
@@ -141,7 +141,7 @@ class UnknownKindToleranceTest {
         verify { target.roomIdsWithMessages() }
     }
 
-    // ── version gate: newer-MAJOR detection (upgrade-guidance UX, contract §7.7) ───────────
+    
 
     @Test
     fun `isNewerThanSupported distinguishes newer MAJOR from older or malformed`() {

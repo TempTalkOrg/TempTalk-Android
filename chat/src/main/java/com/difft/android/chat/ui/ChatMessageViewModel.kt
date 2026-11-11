@@ -113,19 +113,17 @@ import org.difft.app.database.wcdb
 import util.TimeFormatter
 import javax.inject.Inject
 
-/**
- * Everything [ChatMessageViewModel.assembleMessagesUIData] reads from the database, gathered by one
- * `withContext(Dispatchers.IO)` block. Exists so the DB reads stay a single IO hop instead of the
- * three the fields used to be fetched by (one hop for contacts, a blocking call on `Default` for the
- * member count, and ~7-9 blocking point queries per message inside `generateMessageTwo`).
- */
+
+
+
+
 private data class AssembleDbInputs(
     val members: List<ContactorModel>,
     val groupMemberCount: Int,
     val hydration: MessageHydration,
 )
 
-// All wcdb calls in this class run on Dispatchers.IO.
+
 @Suppress("BlockingWcdbInSuspend")
 @HiltViewModel(assistedFactory = ChatMessageViewModelFactory::class)
 class ChatMessageViewModel @AssistedInject constructor(
@@ -152,14 +150,14 @@ class ChatMessageViewModel @AssistedInject constructor(
         L.i { "[message]=========open ${if (forWhat is For.Group) "group" else "one to one"} chat page===========${forWhat.id}." }
     }
 
-    // Set by the first onShown(); onCleared closes the room only when it was opened.
+    
     private var shown = false
 
-    /**
-     * Called from every owner's onResume. The first call opens the room: it supersedes a manual
-     * "unread" mark (CLEAR to the other devices). Not done at creation: a conversation restored
-     * covered or in a hidden tab is created eagerly but is not open until shown.
-     */
+    
+
+
+
+
     fun onShown() {
         if (shown) return
         shown = true
@@ -167,47 +165,48 @@ class ChatMessageViewModel @AssistedInject constructor(
         viewModelScope.launch { conversationUnreadMarker.clearOnOpen(forWhat) }
     }
 
-    /**
-     * The user opened this conversation again while it was kept as a detail stack's root (no new
-     * ViewModel). Supersedes a manual "unread" mark like a fresh open, without counting the room
-     * as opened a second time. Before the first [onShown] there is nothing to redo: it clears.
-     */
+    
+
+
+
+
     fun onReopened() {
         if (!shown) return
         viewModelScope.launch { conversationUnreadMarker.clearOnOpen(forWhat) }
     }
 
-    /** Static E2EE-hint eligibility for THIS conversation (never changes for this ViewModel's
-     * lifetime). 1v1 non-self non-official true, group true, note-to-self false, official
-     * account false. */
+    
+
+
     val isE2eeHintEligible: Boolean = when (forWhat) {
         is For.Group -> true
         is For.Account -> forWhat.id != globalServices.myId && !forWhat.id.isOfficialAccount()
     }
 
-    /** Resource id for the input hint whenever NOT the confidential-mode string. E2EE variant
-     * when [isE2eeHintEligible], the existing generic hint otherwise. Single owner for all 3
-     * call sites that need it (ChatMessageInputFragment ×2, ChatFragment full-screen input) —
-     * all three share this ViewModel instance. isE2eeHintEligible never changes post-construction,
-     * so this property is safe to read once at Fragment setup. */
+    
+
+
+
+
     val neutralInputHintRes: Int
         get() = if (isE2eeHintEligible) R.string.chat_message_input_hint_e2ee else R.string.chat_message_input_hint
 
     private val _dbNonFriend = MutableStateFlow(false)
     private val _optimisticNonFriendOverride = MutableStateFlow<Boolean?>(null)
 
-    /** Single source of truth for "this 1v1 peer is not yet a contact" — used ONLY by this
-     * feature's header (Task 2) and does NOT replace the independent isFriend fields in
-     * ChatMessageInputFragment / ChatFragment / ChatHeaderFragment (unrelated features, out of
-     * scope). Always false for groups/self/official. Merges contactsUpdate (authoritative DB
-     * re-query) with friendStatusUpdate (immediate optimistic flip on accept) so header/footer/
-     * placeholder observe ONE value and flip in lockstep. */
+    
+
+
+
+
     val isNonFriendOneToOne: StateFlow<Boolean> =
         combine(_dbNonFriend, _optimisticNonFriendOverride) { dbValue, override -> override ?: dbValue }
             .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
-    /** Called from the existing observe-contacts init block below — never a second top-level
-     * init {}. No-op for groups/self/official: [isE2eeHintEligible] gates the query entirely. */
+    
+
+
+
     private suspend fun refreshDbNonFriend() {
         try {
             _dbNonFriend.value = !wcdb.isKnownContact(forWhat.id)
@@ -222,10 +221,10 @@ class ChatMessageViewModel @AssistedInject constructor(
             ContactorUtil.contactsUpdate
                 .filter { it.contains(forWhat.id) }
                 .onEach {
-                    // Await the DB re-query BEFORE clearing the override: clearing first opens a
-                    // window where isNonFriendOneToOne's combine() falls back to _dbNonFriend while
-                    // it's still stale, causing a transient flip. onEach suspends the flow's own
-                    // coroutine per emission, so this await is safe here.
+                    
+                    
+                    
+                    
                     withContext(Dispatchers.IO) { refreshDbNonFriend() }
                     _optimisticNonFriendOverride.value = null
                 }
@@ -239,11 +238,9 @@ class ChatMessageViewModel @AssistedInject constructor(
 
     val viewModelCreateTime = System.currentTimeMillis()
 
-    /**
-     * 页面级联系人缓存
-     *
-     * 跟随ViewModel生命周期，页面销毁时自动释放
-     */
+    
+
+
     val contactorCache = com.difft.android.chat.MessageContactsCacheUtil()
 
     val chatUIData = MutableStateFlow(
@@ -260,19 +257,19 @@ class ChatMessageViewModel @AssistedInject constructor(
 
     private val _readInfoList = MutableStateFlow<List<ReadInfoModel>>(emptyList())
 
-    // One-off effects: a StateFlow would replay the last value to the view recreated after a
-    // configuration change and reopen the picker / save the note again (#1440).
+    
+    
     private val _forwardMultiMessage = Channel<ForwardContextData>(Channel.BUFFERED)
     val forwardMultiMessage: Flow<ForwardContextData> = _forwardMultiMessage.receiveAsFlow()
     private val _saveMultiMessageToNote = Channel<ForwardContextData>(Channel.BUFFERED)
     val saveMultiMessageToNote: Flow<ForwardContextData> = _saveMultiMessageToNote.receiveAsFlow()
 
-    /**
-     * Sends on Main.immediate so a collector waiting on the main thread receives and processes the
-     * element in the same frame; a send from IO would resume it through a dispatch that a
-     * lifecycle-driven cancellation can overtake, losing the element. Unreceived elements stay
-     * buffered for the next collector.
-     */
+    
+
+
+
+
+
     private suspend fun sendMultiMessageEffect(channel: Channel<ForwardContextData>, data: ForwardContextData, name: String) {
         withContext(Dispatchers.Main.immediate) {
             if (channel.trySend(data).isFailure) {
@@ -281,57 +278,49 @@ class ChatMessageViewModel @AssistedInject constructor(
         }
     }
 
-    // The trigger (onForwardClick) builds a WCDB winq query that cannot load on the JVM, so unit
-    // tests enter at the send.
+    
+    
     @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
     internal suspend fun sendForwardMultiMessage(data: ForwardContextData) =
         sendMultiMessageEffect(_forwardMultiMessage, data, "forwardMultiMessage")
 
     val selectMessagesState = MutableStateFlow(SelectMessageState(false, emptySet(), 0))
 
-    // Emits the messageId of a checkbox tap that was rejected (e.g. exceeds the cap),
-    // so the list can revert that row's checkbox visual to match selectMessagesState.
+    
+    
     private val _selectionRejected = MutableSharedFlow<String>(extraBufferCapacity = 1)
     val selectionRejected: SharedFlow<String> = _selectionRejected.asSharedFlow()
 
-    // 用于判断消息数据是否真正变化，避免 _readInfoList 变化时重复触发滚动
+    
     private var lastMessageListTimestamp: Long = 0
 
-    /**
-     * Divider anchor for this page session. Captured from the first load that carries a
-     * readPosition and never recomputed, so pagination or an incoming message cannot move or drop
-     * the NEW MESSAGES divider: every non-initial [ChatMessageListBehavior] leaves `readPosition`
-     * null, which previously cleared the divider on the next emission at an unpredictable moment.
-     *
-     * Two writers on different threads, hence `@Volatile`: the capture below runs inside
-     * `assembleMessagesUIData` on `Dispatchers.Default`, while [clearNewMessageDivider] is called
-     * from the send path on Main. Do NOT reason about this like [lastMessageListTimestamp], which is
-     * single-coroutine. Neither field needs to change atomically with the other: the reader checks
-     * `dividerCleared` first, and the only losing interleaving re-captures from a `readPosition`
-     * that is null on every non-first-screen emission anyway.
-     *
-     * Lifetime is the ViewModel, i.e. one conversation-page open; reopening recaptures.
-     */
+    
+
+
+
+
+
+
+
     @Volatile
     private var dividerReadPosition: Long? = null
 
-    /** Set once the divider is dropped, so the capture above cannot resurrect it. */
+    
     @Volatile
     private var dividerCleared = false
 
-    /**
-     * Drop the NEW MESSAGES divider for the rest of this page session, called when the user sends a
-     * message (`ChatMessageInputFragment.sendTextPush`) — matches iOS `clearUnreadMessagesIndicator`.
-     *
-     * Deliberately NOT called for reactions, recalls or resends: none of them is the user composing
-     * a new message, and iOS hooks only its input-toolbar send path either.
-     */
+    
+
+
+
+
+
+
     fun clearNewMessageDivider() {
         dividerReadPosition = null
         dividerCleared = true
     }
 
-    // 添加输入框高度变化事件 Flow
     private val _inputHeightChanged = MutableSharedFlow<Unit>()
     val inputHeightChanged: SharedFlow<Unit> = _inputHeightChanged.asSharedFlow()
     fun emitInputHeightChanged() {
@@ -340,37 +329,30 @@ class ChatMessageViewModel @AssistedInject constructor(
         }
     }
 
-    // 联系人缓存刷新事件（用于触发adapter.notifyDataSetChanged）
-    // extraBufferCapacity=1: 缓冲一个事件，避免因为Fragment生命周期而丢失事件
+    
+    
     private val _contactorCacheRefreshed = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val contactorCacheRefreshed: SharedFlow<Unit> = _contactorCacheRefreshed.asSharedFlow()
 
     init {
-        // 监听联系人更新事件
         observeContactorUpdates()
         initE2eeHintObservers()
     }
 
-    /**
-     * 监听联系人更新事件
-     *
-     * 当联系人信息更新时，检查是否在当前缓存中：
-     * - 如果有交集，重新加载这些联系人并发送刷新事件
-     * - 这样群聊中其他成员、转发消息作者、引用消息作者等的名字也能及时更新
-     */
+    
+
+
+
     private fun observeContactorUpdates() {
         viewModelScope.launch {
             ContactorUtil.contactsUpdate
                 .collect { updatedContactIds ->
                     withContext(Dispatchers.IO) {
-                        // 获取缓存中的所有联系人ID
                         val cachedIds = contactorCache.getCachedIds()
 
-                        // 找出需要更新的联系人（在缓存中的）
                         val idsToRefresh = updatedContactIds.filter { cachedIds.contains(it) }.toSet()
 
                         if (idsToRefresh.isNotEmpty()) {
-                            // 清除缓存中的旧数据并重新加载
                             contactorCache.remove(idsToRefresh)
                             contactorCache.loadContactors(idsToRefresh, (forWhat as? For.Group)?.id)
                             _contactorCacheRefreshed.emit(Unit)
@@ -381,12 +363,12 @@ class ChatMessageViewModel @AssistedInject constructor(
         }
     }
 
-    /**
-     * Directly refresh a specific contact in the message contact cache.
-     *
-     * Used after the chat page fetches latest contact info from server,
-     * bypassing the global event bus (contactsUpdate) to avoid circular refresh.
-     */
+    
+
+
+
+
+
     fun refreshContactorInCache(contactor: ContactorModel) {
         if (contactorCache.getCachedIds().contains(contactor.id)) {
             contactorCache.put(contactor)
@@ -399,7 +381,7 @@ class ChatMessageViewModel @AssistedInject constructor(
     @Inject
     lateinit var userManager: UserManager
 
-    /** Auto-translate for this conversation page; torn down with the ViewModel. */
+    
     private val autoTranslate: AutoTranslateCoordinator =
         autoTranslateCoordinatorFactory.create(forWhat, viewModelScope)
 
@@ -409,11 +391,11 @@ class ChatMessageViewModel @AssistedInject constructor(
         bindCoroutineScope(viewModelScope)
         autoTranslate.start()
 
-        // The <=400ms new-message budget hangs on the message source ALONE. Putting it in the
-        // combine below would delay every read-receipt emission by the same amount; mapLatest also
-        // means a newer window supersedes a wait in progress instead of queueing behind it.
+        
+        
+        
         val behaviorWithTranslateBudget = chatMessagesStateFlow
-            .filterNotNull() // 过滤初始 null 状态
+            .filterNotNull()
             .mapLatest { behavior ->
                 autoTranslate.awaitNewIncoming(behavior)
                 behavior
@@ -422,11 +404,8 @@ class ChatMessageViewModel @AssistedInject constructor(
         combine(
             behaviorWithTranslateBudget,
             _readInfoList,
-            // Third source is intentionally unused in the lambda below (`_`) — assembleMessagesUIData
-            // still reads isNonFriendOneToOne.value internally. This combine addition exists ONLY to
-            // re-trigger the pipeline whenever that StateFlow emits, closing a reactive-staleness
-            // window: without it, a friendStatusUpdate/contactsUpdate flip that resolves after the
-            // last chatMessagesStateFlow emission would never re-render the header's variant.
+            
+            
             isNonFriendOneToOne,
             autoTranslate.overlay,
         ) { chatMessageListBehavior, readInfoList, _, translateOverlay ->
@@ -438,20 +417,17 @@ class ChatMessageViewModel @AssistedInject constructor(
                 _chatMessageListUIState.value = it
             }.launchIn(viewModelScope)
 
-        // PRD §5 recall cleanup: rely on the wcdb query in onCopyClick to drop
-        // deleted/recalled ids — not on chatMessagesStateFlow, which only carries
-        // a paginated window (capped at MAX_MESSAGE_COUNT) and would mis-evict ids
-        // scrolled out of view.
+        
+        
 
         viewModelScope.launch(Dispatchers.IO) {
             initLoadMessage(jumpMessageTimeStamp)
-            // Initial load of read info
+            
             _readInfoList.value = wcdb.getReadInfoList(forWhat.id)
-            // Check and update large group read positions
+            
             checkAndUpdateLargeGroupReadPositions()
         }
 
-        // 监听已读状态更新事件
         viewModelScope.launch(Dispatchers.IO) {
             readInfoSignals(RoomChangeTracker.readInfoUpdates, forWhat.id).collect {
                 _readInfoList.value = wcdb.getReadInfoList(forWhat.id)
@@ -459,22 +435,19 @@ class ChatMessageViewModel @AssistedInject constructor(
         }
     }
 
-    /**
-     * 检查并更新大群的已读位置
-     * 对于大群（群人数 > chatWithoutReceiptThreshold），直接将所有成员的已读位置更新为自己发的最后一条消息的时间戳
-     */
+    
+
+
+
     private suspend fun checkAndUpdateLargeGroupReadPositions() {
-        // 只对群聊进行处理
         if (forWhat !is For.Group) return
 
         try {
             val threshold = globalServices.globalConfigsManager.getNewGlobalConfigs()?.data?.group?.chatWithoutReceiptThreshold ?: Double.MAX_VALUE
             val memberCount = wcdb.getGroupMemberCount(forWhat.id)
 
-            // 只对大群进行处理
             if (memberCount <= threshold) return
 
-            // 获取自己发的最后一条消息的 systemShowTimestamp（使用数据库 MAX 查询）
             val maxTimestamp = wcdb.message.getValue(
                 DBMessageModel.systemShowTimestamp.max(),
                 DBMessageModel.roomId.eq(forWhat.id)
@@ -492,11 +465,11 @@ class ChatMessageViewModel @AssistedInject constructor(
     }
 
 
-    /**
-     * Optimistic add: persist the sent message off-main then append it to the list so it renders
-     * instantly, bypassing JobManager scheduling + the throttled observer re-query. Goes through
-     * putMessageIfNotExists so onAdded() finds the row and skips — no duplicate child rows (#997).
-     */
+    
+
+
+
+
     fun addOneMessage(message: TextMessage) {
         viewModelScope.launch(Dispatchers.IO) {
             _chatMessageListUIState.value?.chatMessages?.lastOrNull()?.systemShowTimestamp?.let {
@@ -531,7 +504,7 @@ class ChatMessageViewModel @AssistedInject constructor(
         listClick.tryEmit(Unit)
     }
 
-    // Channel buffers the emit during Activity recreation so it isn't lost when the new collector subscribes.
+    
     private val _voiceMessageSendChannel = Channel<String>(capacity = Channel.BUFFERED)
     val voiceMessageSend: Flow<String> = _voiceMessageSendChannel.receiveAsFlow()
 
@@ -540,11 +513,6 @@ class ChatMessageViewModel @AssistedInject constructor(
         if (result.isFailure) {
             L.w { "[ChatMessageViewModel] voiceMessageSend channel send failed" }
         }
-    }
-
-    val chatActionsShow: MutableSharedFlow<Unit> = MutableSharedFlow(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
-    fun showChatActions() {
-        chatActionsShow.tryEmit(Unit)
     }
 
     fun startCall(activity: Activity, chatRoomName: String?) {
@@ -556,7 +524,6 @@ class ChatMessageViewModel @AssistedInject constructor(
                 ToastUtil.show(R.string.call_is_calling_tip)
             }
         } else {
-            //判断当前是否有livekit会议，有则join会议
             val callData = callDataManager.getCallDataByConversationId(forWhat.id)
             if (callData != null) {
                 L.i { "[call] Joining existing call with roomId:${callData.roomId}" }
@@ -569,7 +536,6 @@ class ChatMessageViewModel @AssistedInject constructor(
                 }
                 return
             }
-            //否则发起livekit call通话
             L.i { "[call] Starting new call" }
             callManager.get().startCall(activity, forWhat, chatRoomName) { status, message ->
                 if (!status) {
@@ -586,7 +552,7 @@ class ChatMessageViewModel @AssistedInject constructor(
         showOrHideFullInput.tryEmit(show to inputContent)
     }
 
-    // Not replayed: a recreated chat view must not enqueue the last receipt again (#1440).
+    
     private val _confidentialViewReceipt = Channel<ChatMessage>(Channel.BUFFERED)
     val confidentialViewReceipt: Flow<ChatMessage> = _confidentialViewReceipt.receiveAsFlow()
 
@@ -620,14 +586,14 @@ class ChatMessageViewModel @AssistedInject constructor(
         dbMessageStore.deleteMessage(listOf(messageId))
     }
 
-    // ========== Confidential placeholder: auto-delete 3s after displayed, fallback on page close ==========
+    
     private val pendingConfidentialPlaceholders = mutableSetOf<Long>()
 
-    /**
-     * Record a seen confidential placeholder and auto-delete it after 3 seconds.
-     * Each placeholder launches its own coroutine. On successful deletion, it is
-     * removed from the pending set so the fallback in onDestroyView skips it.
-     */
+    
+
+
+
+
     fun markConfidentialPlaceholderAsSeen(timestamp: Long) {
         if (!pendingConfidentialPlaceholders.add(timestamp)) return
         viewModelScope.launch {
@@ -637,10 +603,10 @@ class ChatMessageViewModel @AssistedInject constructor(
         }
     }
 
-    /**
-     * Fallback: batch delete remaining placeholders on page close.
-     * Only processes items that were not yet auto-deleted (e.g., page closed within 3s).
-     */
+    
+
+
+
     suspend fun processPendingConfidentialPlaceholders() {
         if (pendingConfidentialPlaceholders.isEmpty()) return
 
@@ -680,18 +646,17 @@ class ChatMessageViewModel @AssistedInject constructor(
                 return@launch
             }
 
-            // Forward-aware: a forwarded voice message carries its attachment in the forward tree, and
-            // its file is addressed per copy — resolve both here instead of trusting the persisted
-            // `path` column, which the resolver supersedes.
+            
+            
+            
             data.getRelevantAttachment()?.let { attachment ->
-                // 检查 key和digest 是否存在
                 if (attachment.key?.isEmpty() != false || attachment.digest?.isEmpty() != false) {
                     L.w { "[speechToTextManager] Attachment key is null or empty for message: ${data.id}" }
                     return@launch
                 }
-                // Migrating read, off the main thread: speech-to-text is not a download gate — a
-                // voice file still at its pre-per-copy owner-message address would fail the
-                // conversion with a generic toast and never be rescued.
+                
+                
+                
                 val attachmentPath = withContext(Dispatchers.IO) {
                     AttachmentPathResolver.materializedFileFor(attachment, data.id)
                 }
@@ -744,22 +709,22 @@ class ChatMessageViewModel @AssistedInject constructor(
         }
     }
 
-    /** Long-press "translate": the coordinator owns the placeholder, the result and the write. */
+    
     fun translate(data: TextChatMessage, targetLanguage: TranslateTargetLanguage) {
         autoTranslate.translateManually(data, targetLanguage)
     }
 
-    /** Long-press "turn translation off". */
+    
     fun translateOff(data: TextChatMessage) {
         autoTranslate.translateOff(data)
     }
 
-    /** Inline retry tap on a failed translation block. */
+    
     fun onTranslateRetry(messageId: String) {
         autoTranslate.retry(messageId)
     }
 
-    /** Reported by the list whenever the set of messages the user can see changes. */
+    
     fun onVisibleMessages(messageIds: List<String>, reason: VisibleReason) {
         autoTranslate.onVisibleRange(messageIds, reason)
     }
@@ -775,14 +740,11 @@ class ChatMessageViewModel @AssistedInject constructor(
         readInfoList: List<ReadInfoModel>,
         translateOverlay: Map<String, TranslateData>
     ): ChatMessageListUIState {
-        // 1. Window + both anchors — the single owner of "which messages need child-table data".
+        
         val toConvert = chatMessageListBehavior.messagesToConvert()
         val senderIds = chatMessageListBehavior.messageList.mapNotNull { it.fromWho }.distinct()
 
-        // 2. ONE IO hop for every database read this function needs: the sender contacts, the group
-        //    member count (which used to run blocking on Dispatchers.Default) and the batched
-        //    child-row hydration for the whole window. generateMessageTwo below is pure CPU and
-        //    stays on the flowOn(Dispatchers.Default) dispatcher — that flowOn is unchanged.
+        
         val db = withContext(Dispatchers.IO) {
             AssembleDbInputs(
                 members = wcdb.getContactorsFromAllTable(senderIds),
@@ -799,8 +761,7 @@ class ChatMessageViewModel @AssistedInject constructor(
             false
         }
 
-        // 3. Generate ChatMessage — child data is already hydrated by the IO block above, zero queries here.
-        // 转换锚点消息用于计算显示逻辑
+        
         val anchorChatMessageBefore = chatMessageListBehavior.anchorMessageBefore?.let {
             generateMessageTwo(forWhat, it, members, readInfoList, isLargeGroup, groupMemberCount, db.hydration[it.id])
         }
@@ -812,30 +773,28 @@ class ChatMessageViewModel @AssistedInject constructor(
             generateMessageTwo(forWhat, msg, members, readInfoList, isLargeGroup, groupMemberCount, db.hydration[msg.id])
         }
 
-        // 3b. The overlay is authoritative over hydration for the whole page session — a translate
-        //     write is fire-and-forget, so a window re-query in flight would otherwise hand back
-        //     the pre-write value and blink the block away.
+        
+        
+        
         applyTranslateOverlay(chatMessages, translateOverlay)
         autoTranslate.onWindowAssembled(chatMessages)
 
-        // 4. 从已生成的 ChatMessage 中收集所有联系人ID（不触发新查询）
+        
         val allMessagesToCollect = listOfNotNull(anchorChatMessageBefore, anchorChatMessageAfter) + chatMessages
         val allContactIds = com.difft.android.chat.MessageContactsCacheUtil.collectContactIds(allMessagesToCollect)
 
-        // 5. 批量加载联系人到当前页面的缓存（只查询缓存中不存在的）
+        
         contactorCache.loadContactors(allContactIds, (forWhat as? For.Group)?.id)
         val list = chatMessages.sortedBy { message -> message.systemShowTimestamp }
 
-        // 过滤掉错误通知消息
         val listWithoutErrorNotify = list.filterNot {
             it is NotifyChatMessage && it.notifyMessage?.showContent.isNullOrEmpty()
         }
 
-        // E2EE header: prepended unconditionally before the (already-sorted) message list, so it
-        // is always index 0 and any tombstone (sentinel 1L) at listWithoutErrorNotify[0] is always
-        // pushed to index 1 — "header always above tombstone" falls out of insertion order.
-        // EncryptionHeaderChatMessage is a notify-style message (isNotifyStyleMessage()), so the
-        // existing day-header-skip / forced-showName-on-next-item logic below applies automatically.
+        
+        
+        
+        
         val showE2eeHeader = chatMessageListBehavior.hasReachedHistoryStart && isE2eeHintEligible
         val listWithHeader = if (showE2eeHeader) {
             listOf(EncryptionHeaderChatMessage(isNonFriendVariant = isNonFriendOneToOne.value)) + listWithoutErrorNotify
@@ -843,24 +802,21 @@ class ChatMessageViewModel @AssistedInject constructor(
             listWithoutErrorNotify
         }
 
-        // Capture the divider anchor on the first load that carries one, then reuse it for the rest
-        // of the page session — see [dividerReadPosition].
+        
+        
         if (!dividerCleared && dividerReadPosition == null) {
             dividerReadPosition = chatMessageListBehavior.readPosition
         }
         val readPosition = dividerReadPosition
 
-        // 标记是否已经找到第一个未读的非自己发送的消息
         var firstUnreadFound = false
 
-        // Most recent non-notify row seen so far, so the day-header decision is a single forward
-        // pass instead of one backward rescan per row (quadratic on windows with long notify runs).
-        // Seeded with the before-anchor under exactly the condition the rescan's fallback used.
+        
+        
+        
         var lastNonNotify: ChatMessage? = anchorChatMessageBefore?.takeIf { !it.isNotifyStyleMessage() }
 
-        // 处理消息显示逻辑
         val newList = listWithHeader.mapIndexed { index, message ->
-            // 使用锚点消息来计算第一条和最后一条消息的显示逻辑
             val previousMessage = if (index > 0) {
                 listWithHeader[index - 1]
             } else {
@@ -877,23 +833,23 @@ class ChatMessageViewModel @AssistedInject constructor(
 
             message.showName = !isSameDayWithPreviousMessage || previousMessage?.isNotifyStyleMessage() == true || message.authorId != previousMessage?.authorId
 
-            // Notify-style messages (NotifyChatMessage, screenshot) never show the day header.
-            // The day header transfers to the first normal message that follows.
+            
+            
             val isNotifyStyle = message.isNotifyStyleMessage()
             if (isNotifyStyle) {
                 message.showDayTime = false
             } else {
                 message.showDayTime = !TimeFormatter.isSameDay(message.timeStamp, lastNonNotify?.timeStamp ?: 0L)
             }
-            // Advance only AFTER the decision above: lastNonNotify must mean "strictly before this
-            // row". Advancing first would let a row be compared against itself, and every
-            // showDayTime would come out false.
+            
+            
+            
             if (!isNotifyStyle) lastNonNotify = message
 
             message.showTime = !isSameDayWithNextMessage || nextMessage?.isNotifyStyleMessage() == true || message.authorId != nextMessage?.authorId
 
-            // NEW MESSAGES divider: on the first not-mine message after the session-scoped
-            // readPosition anchor. Null anchor (never captured, or cleared by a send) draws nothing.
+            
+            
             if (!firstUnreadFound && readPosition != null && message.systemShowTimestamp > readPosition && !message.isMine) {
                 message.showNewMsgDivider = true
                 firstUnreadFound = true
@@ -904,7 +860,7 @@ class ChatMessageViewModel @AssistedInject constructor(
             message
         }
 
-        // 只有消息数据真正变化时才传递 scrollAction，避免 _readInfoList 变化时重复触发滚动
+        
         val rawScrollAction = if (chatMessageListBehavior.updateTimestamp != lastMessageListTimestamp) {
             lastMessageListTimestamp = chatMessageListBehavior.updateTimestamp
             chatMessageListBehavior.scrollAction
@@ -912,8 +868,8 @@ class ChatMessageViewModel @AssistedInject constructor(
             null
         }
 
-        // The header shifts every real message's actual adapter position by +1 whenever it's
-        // showing — rawScrollAction.position was computed against pageMessages (no header).
+        
+        
         val scrollAction = if (showE2eeHeader && rawScrollAction is ScrollAction.ToPosition) {
             ScrollAction.ToPosition(rawScrollAction.position + 1)
         } else {
@@ -924,7 +880,7 @@ class ChatMessageViewModel @AssistedInject constructor(
         return ChatMessageListUIState(
             chatMessages = newList,
             scrollAction = scrollAction,
-            // Loaded-window size, deliberately NOT newList.size — see the field's KDoc.
+            
             windowSize = chatMessageListBehavior.messageList.size,
             hasReachedHistoryStart = chatMessageListBehavior.hasReachedHistoryStart,
             hasReachedLatest = chatMessageListBehavior.hasReachedLatest
@@ -936,7 +892,7 @@ class ChatMessageViewModel @AssistedInject constructor(
 
     suspend fun updateMessageReadPosition(readPosition: Long, readAt: Long) = withContext(Dispatchers.IO) {
         try {
-            // #1020 Phase 2: readTime = actual read moment (readAt from caller); readPosition selects rows.
+            
             dbRoomStore.updateMessageReadPosition(forWhat, readPosition)
             dbMessageStore.updateMessageReadTime(forWhat.id, readPosition, readAt)
         } catch (e: Exception) {
@@ -944,17 +900,6 @@ class ChatMessageViewModel @AssistedInject constructor(
         }
     }
 
-//    suspend fun updateMessageReceiverIds() = withContext(Dispatchers.IO) {
-//        if (forWhat !is For.Group) return@withContext
-//        val receiverIdList = wcdb.groupMemberContactor.getAllObjects(DBGroupMemberContactorModel.gid.eq(forWhat.id)).map { it.id } - mySelfId
-//        wcdb.message.updateValue(
-//            globalServices.gson.toJson(receiverIdList),
-//            DBMessageModel.receiverIds,
-//            DBMessageModel.roomId.eq(forWhat.id)
-//                .and(DBMessageModel.fromWho.eq(mySelfId))
-//                .and(DBMessageModel.receiverIds.isNull())
-//        )
-//    }
 
     suspend fun getUnreadMessageInfo(): UnreadMessageInfo? {
         return try {
@@ -990,7 +935,7 @@ class ChatMessageViewModel @AssistedInject constructor(
             } else {
                 state.selectedMessageIds - messageId
             }
-            // Recalculate recallable messages based on new selection
+            
             val recallableIds = calculateRecallableMessageIds(newSelectedIds)
             selectMessagesState.value = state.copy(
                 selectedMessageIds = newSelectedIds,
@@ -1001,7 +946,6 @@ class ChatMessageViewModel @AssistedInject constructor(
 
     fun selectModel(enable: Boolean) {
         val totalMessageCount = dbMessageStore.selectableMessageCount(forWhat)
-        // 关闭选择模式时清空已选消息和可撤回消息
         val selectedIds = if (enable) selectMessagesState.value.selectedMessageIds else emptySet()
         val recallableIds = if (enable) selectMessagesState.value.recallableMessageIds else emptySet()
         selectMessagesState.value = selectMessagesState.value.copy(
@@ -1012,13 +956,13 @@ class ChatMessageViewModel @AssistedInject constructor(
         )
     }
 
-    /**
-     * Calculate which selected messages can be recalled
-     * Recall conditions: message.isMine && isWithinRecallTimeout
-     */
+    
+
+
+
     private suspend fun calculateRecallableMessageIds(selectedIds: Set<String>): Set<String> {
         if (selectedIds.isEmpty()) return emptySet()
-        
+
         val myId = globalServices.myId
         val recallTimeoutInterval = (globalServices.globalConfigsManager.getNewGlobalConfigs()?.data?.recall?.timeoutInterval ?: (24 * 60 * 60)) * 1000L
         val currentTime = ServerTimeProvider.nowMillis()
@@ -1026,20 +970,20 @@ class ChatMessageViewModel @AssistedInject constructor(
         val messages = wcdb.message.getAllObjects(
             DBMessageModel.id.`in`(*selectedIds.toTypedArray())
         )
-        
+
         return messages.filter { message ->
             message.fromWho == myId && (currentTime - message.systemShowTimestamp <= recallTimeoutInterval)
         }.map { it.id }.toSet()
     }
 
-    // Event for batch recall using SharedFlow
+    
     private val _batchRecallMessages = MutableSharedFlow<Set<String>>()
     val batchRecallMessages: SharedFlow<Set<String>> = _batchRecallMessages.asSharedFlow()
 
-    /**
-     * Called when user clicks the batch recall button
-     * Emits the set of recallable message IDs for the Fragment to handle
-     */
+    
+
+
+
     fun onBatchRecallClick() {
         val recallableIds = selectMessagesState.value.recallableMessageIds
         if (recallableIds.isNotEmpty()) {
@@ -1049,17 +993,14 @@ class ChatMessageViewModel @AssistedInject constructor(
         }
     }
 
-    /**
-     * Multi-select → Forward. The "Combine & Forward" entry was merged into "Forward":
-     * a single selected message is forwarded on its own (Scene.SINGLE, preserving
-     * chat-history nesting / shared-contact / attachment), while a multi-selection is
-     * always bundled into ONE combined-forward container (Scene.COMBINED). The old
-     * per-message one-by-one path (Scene.ONE_BY_ONE) is no longer produced here; the
-     * enum value + proto mapping stay for wire compatibility with peers/older clients.
-     *
-     * PRD §5.3.4: priority-sort authors (CF sender → count desc → ts desc → authorId asc);
-     * messageCount = selected message count (a CF bubble counts as 1).
-     */
+    
+
+
+
+
+
+
+
     fun onForwardClick() = viewModelScope.launch(Dispatchers.IO) {
         val loadedMessages =
             wcdb.message.getAllObjects(DBMessageModel.id.`in`(*selectMessagesState.value.selectedMessageIds.toTypedArray()))
@@ -1071,26 +1012,26 @@ class ChatMessageViewModel @AssistedInject constructor(
 
         val myId = globalServices.myId
         val mode = NoticeAggregator.computeCombinedForwardModeFromTextMessages(loadedMessages, isSubContext = false)
-        // PRD v2.0 §改动3: pin the operator (myId) last in the source list.
+        
         val sortedAuthorIds = NoticeAggregator.computeSortedSourceAuthorIdsFromTextMessages(loadedMessages, selfIdLast = myId)
-        // PRD v2.0 §改动1/§改动2 条件①④: forward leaves a trace only if it carries someone else's
-        // real message (CF judged by inner authors). The forward ACTION still proceeds either way.
+        
+        
         val carriesForeignContent = NoticeAggregator.forwardCarriesForeignContentFromTextMessages(loadedMessages, myId)
 
         val (forwardContexts, scene) = if (loadedMessages.size == 1) {
-            // Single selection → forward the one message as its own message.
+            
             val message = loadedMessages.first()
-            // Local val enables smart-cast in the != null branch (forwardContext is a
-            // mutable property, so it cannot be smart-cast directly).
+            
+            
             val nestedForward = message.forwardContext
             val singleContext: ForwardContext? = if (!message.sharedContact.isNullOrEmpty()) {
                 val sharedContactId = message.sharedContact?.getOrNull(0)?.phone?.getOrNull(0)?.value
                 val sharedContactName = message.sharedContact?.getOrNull(0)?.name?.displayName
                 ForwardContext(null, false, sharedContactId, sharedContactName)
             } else if (nestedForward != null) {
-                // Deep copy first, then trim: mutating `nestedForward` would edit the ORIGINAL
-                // message's live object (dropping its extra attachments from the open conversation)
-                // and would hand the new message the source's attachment identities.
+                
+                
+                
                 nestedForward
                     .deepCopyWithNewAttachmentIdentities(message.forwardSourceContext())
                     .apply {
@@ -1119,7 +1060,7 @@ class ChatMessageViewModel @AssistedInject constructor(
             }
             listOfNotNull(singleContext) to ForwardNoticeData.Scene.SINGLE
         } else {
-            // Multi-select → bundle selected messages into ONE combined-forward container.
+            
             val combinedContext = ForwardContext(loadedMessages.map { message ->
                 Forward(
                     message.timeStamp,
@@ -1158,22 +1099,12 @@ class ChatMessageViewModel @AssistedInject constructor(
         )
     }
 
-    /**
-     * Multi-select → Copy: format the selected messages and write to the clipboard
-     * inside the ViewModel coroutine (uses [application] context), THEN enqueue the
-     * copy notice. PRD §4.1 requires the trace notice be emitted only after a
-     * successful copy — writing the clipboard inline (rather than via a SharedFlow
-     * + Fragment collector) eliminates the race where the Fragment could be detached
-     * before the collector fires, leaving the clipboard empty while the notice goes
-     * out to peers.
-     *
-     * Order: messages are sorted by display position in the conversation (PRD §3.6),
-     * not by the user's selection order.
-     *
-     * Author names: passed through the message contacts cache with the remark-free
-     * accessor — PRD §3.3 mandates the author's own name in clipboard text (the
-     * trace system message uses remark-name; see Phase 4).
-     */
+    
+
+
+
+
+
     fun onCopyClick() = viewModelScope.launch(Dispatchers.IO) {
         val selectedIds = selectMessagesState.value.selectedMessageIds
         if (selectedIds.isEmpty()) return@launch
@@ -1183,7 +1114,7 @@ class ChatMessageViewModel @AssistedInject constructor(
             .sortedBy { it.systemShowTimestamp }
         if (loadedMessages.isEmpty()) return@launch
 
-        // Pre-warm name resolver for all authors + shared-contact uids in one batch
+        
         val authorIds = loadedMessages.map { it.fromWho.id }.toSet()
         contactorCache.loadContactors(authorIds)
 
@@ -1198,10 +1129,8 @@ class ChatMessageViewModel @AssistedInject constructor(
         )
         if (formatted.isBlank()) return@launch
 
-        // Clipboard write + toast on main thread (Toast.show requires main looper).
-        // Inline write guarantees PRD §4.1: notice is enqueued ONLY after the
-        // clipboard write succeeds in this coroutine — no lifecycle-cancellable
-        // collector indirection between the format and the notice.
+        
+        
         kotlinx.coroutines.withContext(Dispatchers.Main) {
             com.difft.android.chat.util.Util.copyToClipboard(
                 com.difft.android.base.utils.application,
@@ -1209,15 +1138,12 @@ class ChatMessageViewModel @AssistedInject constructor(
             )
         }
 
-        // PRD §4: emit copy notice into the source conversation. Android's multi-select
-        // is single-source, so all selected messages share forWhat as the source.
-        // PRD v2.0 §改动1 条件①④⑤: only leave a trace when the clipboard actually carries
-        // another person's real content. A selection that is all-self, or only placeholder
-        // bubbles (Chat History / single forward / contact card), leaks nothing real.
+        
+        
+        
         val myId = globalServices.myId
         if (NoticeAggregator.copyCarriesForeignContentFromTextMessages(loadedMessages, myId)) {
-            // PRD §5.3: derive mode + sorted authors (isSubContext=false — multi-select copy
-            // is always main-conv); §改动3 pins the operator (myId) last in the source list.
+            
             val mode = NoticeAggregator.computeCombinedForwardModeFromTextMessages(loadedMessages, isSubContext = false)
             val sortedAuthorIds = NoticeAggregator.computeSortedSourceAuthorIdsFromTextMessages(loadedMessages, selfIdLast = myId)
             activityNoticeDispatcher.dispatchCopyNotice(
@@ -1232,23 +1158,19 @@ class ChatMessageViewModel @AssistedInject constructor(
         resetSelectMessageState()
     }
 
-    /**
-     * Entry point for emitting a copy notice from the single-message paths
-     * (single long-press copy / partial text-selection copy / derived-content copy).
-     * Caller invokes this only AFTER the clipboard write actually succeeded (PRD §4.1).
-     *
-     * PRD §5.3: this single-message path is invoked from main-conv surfaces; mode defaults to
-     * UNKNOWN. Caller may override via [combinedForwardMode] when the source message originated
-     * from a CF detail view (Phase 5 wiring through transient `sourceMode`).
-     */
+    
+
+
+
+
     fun sendCopyNotice(
         sourceMessages: List<TextChatMessage>,
         combinedForwardMode: CombinedForwardMode = CombinedForwardMode.UNKNOWN,
     ) {
         if (sourceMessages.isEmpty()) return
-        // PRD v2.0 §改动1/§改动2 条件①⑤: trace only when the clipboard carries another person's
-        // real content. A self message, or a placeholder bubble (Chat History / single forward /
-        // contact card copies as a bracketed placeholder), leaks nothing real.
+        
+        
+        
         val myId = globalServices.myId
         if (!NoticeAggregator.copyCarriesForeignContent(sourceMessages, myId)) return
         activityNoticeDispatcher.dispatchCopyNotice(
@@ -1262,17 +1184,17 @@ class ChatMessageViewModel @AssistedInject constructor(
 
     fun onSaveSelectedMessages() = viewModelScope.launch(Dispatchers.IO) {
         val loadedMessages = wcdb.message.getAllObjects(DBMessageModel.id.`in`(*selectMessagesState.value.selectedMessageIds.toTypedArray())).map { it.convertToTextMessage() }
-        // PRD §5.3: derive mode from main-conv selection (isSubContext=false).
+        
         val saveMode = NoticeAggregator.computeCombinedForwardModeFromTextMessages(loadedMessages, isSubContext = false)
         val myId = globalServices.myId
-        // PRD v2.0 §改动1/§改动2 条件①④: save-to-notes leaves a trace only if it moves someone
-        // else's real message out of the conversation. The save ACTION proceeds either way.
+        
+        
         val carriesForeignContent = NoticeAggregator.forwardCarriesForeignContentFromTextMessages(loadedMessages, myId)
         val saveData: ForwardContextData
         if (loadedMessages.size == 1 && loadedMessages.firstOrNull()?.sharedContact != null) {
             val sharedContactId = loadedMessages.firstOrNull()?.sharedContact?.getOrNull(0)?.phone?.getOrNull(0)?.value
             val sharedContactName = loadedMessages.firstOrNull()?.sharedContact?.getOrNull(0)?.name?.displayName
-            // PRD §5.3.4: priority-sort authors; messageCount = selected count (CF as 1).
+            
             saveData =
                 ForwardContextData(
                     "",
@@ -1299,7 +1221,7 @@ class ChatMessageViewModel @AssistedInject constructor(
                     it.systemShowTimestamp
                 )
             }, forWhat is For.Group)
-            // PRD §5.3.4: priority-sort authors; messageCount = selected count (CF as 1).
+            
             saveData =
                 ForwardContextData(
                     "",
@@ -1335,23 +1257,23 @@ data class ForwardContextData(
     val content: String,
     val forwardContexts: List<ForwardContext>,
     val scene: ForwardNoticeData.Scene,
-    val sourceConversation: For,   // Source conversation (where the forwarded messages originally lived). forwardNotice will be posted here.
-    // Authors of the user-selected messages. PRD §5.3.4: deduped and priority-sorted via
-    // NoticeAggregator.computeSortedSourceAuthorIdsFromTextMessages — CF senders first,
-    // then by contributed count desc, then latest timestamp desc, then authorId asc.
-    // For notice count semantics, use [messageCount] (NOT sourceAuthorIds.size).
+    val sourceConversation: For,   
+    
+    
+    
+    
     val sourceAuthorIds: List<String>,
-    // PRD §5.3: explicit selected-message count (one per user-selected outer message;
-    // a combined-forward bubble counts as 1). Decoupled from sourceAuthorIds.size so
-    // the author list can be deduped+sorted independently.
+    
+    
+    
     val messageCount: Int,
-    // PRD v1.0 §5.3 combined-forward mode derived from the selected messages by the ViewModel
-    // (single source of truth; UI fragment just plumbs through to SelectChatsUtils).
+    
+    
     val combinedForwardMode: CombinedForwardMode = CombinedForwardMode.UNKNOWN,
-    // PRD v2.0 §改动1/§改动2 条件①④: whether the selection includes another person's real message
-    // (by original author — CF/single-forward judged by recursing to the leaf authors). Drives
-    // whether a forward/save notice fires. Callers SHOULD always compute and pass this explicitly via
-    // NoticeAggregator.forwardCarriesForeignContent*; the `true` default exists only for legacy/share
-    // entry points that cannot compute it (conservative: trace rather than silently miss).
+    
+    
+    
+    
+    
     val carriesForeignContent: Boolean = true,
 )

@@ -4,7 +4,7 @@ import org.junit.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
-/** Which requirement the switch opens first, and when returning to the page turns the switch on. */
+
 class BackgroundConnectionRedirectTest {
 
     private fun state(

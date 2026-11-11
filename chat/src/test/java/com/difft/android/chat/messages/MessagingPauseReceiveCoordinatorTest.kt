@@ -14,7 +14,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Test
 import javax.inject.Provider
 
-/** The gate state alone drives the receive side (#1382): socket, deferred pull and local drains. */
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class MessagingPauseReceiveCoordinatorTest {
 
@@ -76,6 +76,6 @@ class MessagingPauseReceiveCoordinatorTest {
         verify(exactly = 1) { webSocketManager.resume() }
     }
 
-    /** Collects eagerly on the test thread and is cancelled with the test. */
+    
     private fun TestScope.unconfined() = CoroutineScope(backgroundScope.coroutineContext + UnconfinedTestDispatcher(testScheduler))
 }

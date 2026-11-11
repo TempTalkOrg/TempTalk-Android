@@ -15,18 +15,18 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
-/**
- * Provides the master key used to encrypt Glide's on-disk RESOURCE cache (see [EncryptedCacheCoder]).
- *
- * The 32-byte master key is generated once, sealed with an AndroidKeyStore AES/GCM key, and stored at
- * `filesDir/glide_cache_key.bin`. This mirrors the proven approach of
- * `org.difft.app.database.WCDBKeyManager`, but is intentionally simpler: a single 32-byte secret, no
- * legacy migration. It is deliberately a separate Keystore alias from the WCDB and attachment keys.
- *
- * Failure policy: if the Keystore is unavailable (locked/reset/unsupported), [getKeyOrNull] returns
- * null and the caller transparently disables the encrypted cache (falls back to no disk cache). The
- * cache is a performance optimization, never a correctness dependency, so we never throw here.
- */
+
+
+
+
+
+
+
+
+
+
+
+
 object GlideCacheKeyManager {
 
     private const val ANDROID_KEY_STORE = "AndroidKeyStore"
@@ -35,20 +35,19 @@ object GlideCacheKeyManager {
     private const val KEY_FILE_NAME = "glide_cache_key.bin"
     private const val KEY_FILE_TMP_NAME = "glide_cache_key.bin.tmp"
 
-    private const val PLAINTEXT_KEY_SIZE = 32 // used as the HMAC-SHA256 master key
+    private const val PLAINTEXT_KEY_SIZE = 32 
     private const val GCM_IV_SIZE = 12
     private const val GCM_TAG_BITS = 128
-    private const val GCM_TAG_BYTES = GCM_TAG_BITS / 8 // 16
-    private const val WIRE_FORMAT_SIZE = GCM_IV_SIZE + PLAINTEXT_KEY_SIZE + GCM_TAG_BYTES // 60
+    private const val GCM_TAG_BYTES = GCM_TAG_BITS / 8 
+    private const val WIRE_FORMAT_SIZE = GCM_IV_SIZE + PLAINTEXT_KEY_SIZE + GCM_TAG_BYTES 
 
     @Volatile
     private var cached: ByteArray? = null
 
-    // Non-blocking readiness state for main-thread UI callers. The blocking keystore path
-    // (getKeyOrNull) runs the expensive AndroidKeyStore key generation via a synchronous binder call,
-    // which must NEVER happen on the main thread (it caused an ANR during RecyclerView layout, see
-    // GroupAvatarView). UI decides its Glide DiskCacheStrategy via [isCacheKeyReady], which only reads
-    // this volatile state and offloads the actual work to [warmUp].
+    
+    
+    
+    
     private const val STATE_UNKNOWN = 0
     private const val STATE_READY = 1
     private const val STATE_UNAVAILABLE = 2
@@ -58,12 +57,12 @@ object GlideCacheKeyManager {
 
     private val warming = AtomicBoolean(false)
 
-    /**
-     * @return the 32-byte cache master key, or null when the Keystore is unavailable.
-     *
-     * BLOCKING — performs keystore + file I/O. Only call off the main thread (Glide module init,
-     * cipher writes, background cleanup). Main-thread UI must use [isCacheKeyReady] instead.
-     */
+    
+
+
+
+
+
     fun getKeyOrNull(context: Context): ByteArray? {
         cached?.let { return it }
         return synchronized(this) {
@@ -74,8 +73,8 @@ object GlideCacheKeyManager {
                     warmState = STATE_READY
                 }
             } catch (e: Throwable) {
-                // Only downgrade readiness while we have never succeeded; once cached is set the fast
-                // path above returns early and this branch is unreachable, so READY is never lost.
+                
+                
                 warmState = STATE_UNAVAILABLE
                 L.w(e) { "[GlideCacheKey] key unavailable, encrypted cache disabled" }
                 null
@@ -83,22 +82,22 @@ object GlideCacheKeyManager {
         }
     }
 
-    /**
-     * BLOCKING availability check (delegates to [getKeyOrNull]). Only for background callers that need
-     * an accurate answer (e.g. LegacyPlaintextAvatarCleanup on Dispatchers.IO). Main-thread UI MUST
-     * use [isCacheKeyReady].
-     */
+    
+
+
+
+
     fun isAvailable(context: Context): Boolean = getKeyOrNull(context) != null
 
-    /**
-     * NON-BLOCKING readiness for main-thread UI. Never touches the keystore synchronously:
-     *  - READY → true (key resolved and available);
-     *  - UNAVAILABLE → false (resolved, keystore not usable — cache stays disabled this session);
-     *  - UNKNOWN → kicks off an async [warmUp] and returns false for now (this one load falls back to
-     *    DiskCacheStrategy.NONE; subsequent binds pick up the resolved state).
-     *
-     * The cache is a pure performance optimization, so a transient false is always safe.
-     */
+    
+
+
+
+
+
+
+
+
     fun isCacheKeyReady(context: Context): Boolean = when (warmState) {
         STATE_READY -> true
         STATE_UNAVAILABLE -> false
@@ -108,7 +107,7 @@ object GlideCacheKeyManager {
         }
     }
 
-    /** Resolve the key off the main thread (idempotent, de-duplicated). Safe to call eagerly at startup. */
+    
     fun warmUp(context: Context) {
         if (warmState != STATE_UNKNOWN) return
         if (!warming.compareAndSet(false, true)) return
@@ -128,10 +127,10 @@ object GlideCacheKeyManager {
             try {
                 return readAndDecrypt(keyFile)
             } catch (e: Throwable) {
-                // Key file present but unreadable (Keystore alias rotated/removed, or a corrupt blob).
-                // Unlike a database key, the cache key is disposable: self-heal by regenerating. Old
-                // cache entries then fail to decrypt → cache miss → re-decoded and re-encrypted under
-                // the new key. (Contrast WCDBKeyManager, which must NEVER regenerate.)
+                
+                
+                
+                
                 L.w(e) { "[GlideCacheKey] key file unreadable, regenerating (old cache invalidated)" }
             }
         }
@@ -182,7 +181,7 @@ object GlideCacheKeyManager {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.ENCRYPT_MODE, secretKey) }
         val iv = cipher.iv
         require(iv.size == GCM_IV_SIZE) { "unexpected IV size=${iv.size}" }
-        // AES/GCM appends the auth tag to the ciphertext. Wire = iv || ciphertext || tag.
+        
         return iv + cipher.doFinal(plaintext)
     }
 

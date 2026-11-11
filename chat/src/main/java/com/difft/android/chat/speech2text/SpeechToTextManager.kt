@@ -56,12 +56,12 @@ class SpeechToTextManager @Inject constructor(
     @ChativeHttpClientModule.Default
     lateinit var defaultHttpClient: ChativeHttpClient
 
-    /**
-     * @param attachmentPath on-disk base path of [attachment], resolved by the caller through
-     *   `AttachmentPathResolver`. Passed in rather than read from `Attachment.path`: that column is a
-     *   frozen absolute path and is not the addressing authority (a forwarded voice message is
-     *   addressed per copy).
-     */
+    
+
+
+
+
+
     fun speechToText(
         scope: CoroutineScope,
         context: Context,
@@ -74,9 +74,9 @@ class SpeechToTextManager @Inject constructor(
     }
 
 
-    /**
-     * Convert speech to text. Uses the caller-provided scope for lifecycle management.
-     */
+    
+
+
     private fun convert(scope: CoroutineScope, attachment: Attachment, attachmentPath: String, onSuccess: (String) -> Unit, onFailure: (Exception) -> Unit) {
         scope.launch {
             try {
@@ -86,33 +86,33 @@ class SpeechToTextManager @Inject constructor(
                     val fileExistResp = requestFileExist(fileHash).data
 
                     if (fileExistResp?.exists == true) {
-                        // Already exists, directly request speech-to-text service
+                        
                         val requestBody = SpeechToTextRequestBody(
                             authorizeId = fileExistResp.authorizeId.toString(),
                             key = Base64.encodeBytes(attachment.key, Base64.NO_OPTIONS)
                         )
                         defaultHttpClient.httpService.voiceToText(requestBody)
                     } else {
-                        // Does not exist, upload audio file first then request speech-to-text service
+                        
                         val urlString = fileExistResp?.url
                         val encryptedFile = File("$attachmentPath.encrypt")
                         if (urlString.isNullOrEmpty() || attachmentPath.isEmpty() || !encryptedFile.exists()) {
                             throw Exception("file is not exist")
                         }
 
-                        // Upload encrypted audio file
+                        
                         val body: RequestBody = ProgressRequestBody(encryptedFile, null, null)
                         val uploadToOSSCallResponse = fileShareRepo.uploadToOSS(urlString, body).execute()
                         if (!uploadToOSSCallResponse.isSuccessful) {
                             throw Exception("uploadToOSSCall execute failed:${uploadToOSSCallResponse.message}")
                         }
 
-                        // Upload file info to server
+                        
                         val keyDigest2 = MessageDigest.getInstance("SHA-256").digest(attachment.key)
                         val fileHash2 = android.util.Base64.encodeToString(keyDigest2, android.util.Base64.NO_WRAP)
                         val uploadInfoEnvelope = requestUploadInfo(attachment, fileExistResp.attachmentId, fileHash2)
 
-                        // Upload succeeded, request speech-to-text service
+                        
                         val authorityId = uploadInfoEnvelope.data?.authorizeId ?: 0
                         val requestBody = SpeechToTextRequestBody(
                             authorizeId = authorityId.toString(),
@@ -142,7 +142,7 @@ class SpeechToTextManager @Inject constructor(
         }
     }
 
-    /** isExist for the voice attachment, with the body token refreshed and retried once (issue #1235). */
+    
     private suspend fun requestFileExist(fileHash: String): BaseResponse<FileExistResp?> =
         authTokenProvider.withInvalidTokenRetry("s2t.isExist") { token ->
             val resp = fileShareRepo.isExist(FileExistReq(token, fileHash, listOf(SPEECH_TO_TEXT))).execute()
@@ -152,10 +152,10 @@ class SpeechToTextManager @Inject constructor(
             resp.body() ?: throw IOException("isExist response body is null")
         }
 
-    /**
-     * uploadInfo for the voice attachment. A SEPARATE retry scope from [requestFileExist]: the OSS
-     * upload happens in between, so one wrapper spanning both would re-upload the audio file.
-     */
+    
+
+
+
     private suspend fun requestUploadInfo(
         attachment: Attachment,
         attachmentId: String,

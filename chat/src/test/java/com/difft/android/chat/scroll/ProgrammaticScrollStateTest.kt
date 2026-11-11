@@ -6,18 +6,18 @@ import com.difft.android.chat.scroll.testing.RecyclerViewScrollHarness
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * Case #12 — FRAMEWORK ASSUMPTION test.
- *
- * Five programmatic landing paths (quote jump, mention jump, search jump, jump-to-bottom,
- * Pop → full-screen hand-off) plus three geometry compensations rely on one unwritten property of
- * AndroidX RecyclerView: a programmatic scroll never dispatches `SCROLL_STATE_DRAGGING`, so
- * `userScrolling` stays false and the IDLE block does not kick off a page load. That property is
- * an AndroidX implementation detail and would break silently on a library upgrade.
- *
- * SCOPE — programmatic paths only. `DRAGGING` is produced exclusively by real touch input, which
- * Robolectric does not faithfully simulate; that half belongs to on-device QA.
- */
+
+
+
+
+
+
+
+
+
+
+
+
 class ProgrammaticScrollStateTest : RecyclerViewScrollHarness() {
 
     @Test

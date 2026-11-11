@@ -12,31 +12,32 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.toAndroidRect
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
+import com.difft.android.base.ui.compose.floatingMenuEntrance
 import com.difft.android.base.utils.dp as dpToPx
 
-/** Off-screen offset of the measure pass. */
+
 private const val MEASURE_OFFSET_PX = -9999
 
-/** Arrow offset used only while measuring; it does not affect the measured size. */
-private const val MEASURE_ARROW_OFFSET_PX = 100
 
-/**
- * Message action menu positioned with Box + offset inside the full-window overlay.
- *
- * Placement comes from [MessageActionPopupPositioner.place] (#1294). [onMenuBoundsChanged]
- * reports the laid-out bounds (overlay-local, RTL-correct), which the overlay uses for touch
- * routing; it reports null while the menu is being measured, so nothing routes to a stale position.
- *
- * The outer full-size Box must never get pointer input (`pointerInput`, `clickable`, tap
- * detection): the menu ComposeView is the highest-Z child of the overlay and is offered every
- * DOWN first, so a pointer modifier here would swallow every touch and the selection handles
- * could no longer be dragged. Touches are routed at View level by [MessageActionOverlayLayout].
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
 @Composable
 internal fun MessageActionPopupOverlay(
     bubbleBounds: PopupRect,
@@ -56,13 +57,13 @@ internal fun MessageActionPopupOverlay(
     val density = LocalDensity.current
     val metrics = remember { PopupMetrics(edgePaddingPx = 8.dpToPx, arrowGapPx = 2.dpToPx, arrowMinInsetPx = 16.dpToPx) }
 
-    // Panel width cap, shared by the measure and display phases so the measured size matches what is drawn.
-    // contentBounds is refreshed when a list scroll settles (#1294).
+    
+    
     val maxPanelWidth = remember(contentBounds.width) {
         computeMaxPanelWidth(contentBounds.width, metrics.edgePaddingPx, density)
     }
-    // Width is re-measured per mode and per width cap to keep the popup close to the bubble; the
-    // measure pass rewrites the height too.
+    
+    
     var popupWidth by remember(menuMode, maxPanelWidth) { mutableIntStateOf(0) }
     var popupHeight by remember { mutableIntStateOf(0) }
     val anchorInput = remember(bubbleBounds, selectionRows) {
@@ -76,7 +77,7 @@ internal fun MessageActionPopupOverlay(
     val quickActions = if (isFullMode) config.quickActions else selectionActions
     val actionClickHandler: (MessageAction) -> Unit = if (isFullMode) onActionClick else onSelectionActionClick
 
-    // No pointer input on this Box (see KDoc).
+    
     Box(modifier = Modifier.fillMaxSize()) {
         if (popupWidth == 0 || popupHeight == 0) {
             SideEffect { onMenuBoundsChanged(null) }
@@ -96,7 +97,6 @@ internal fun MessageActionPopupOverlay(
                     reactions = reactions,
                     selectedEmojis = selectedEmojis,
                     maxPanelWidth = maxPanelWidth,
-                    arrowConfig = ArrowConfig(isBelow = true, arrowOffsetX = with(density) { MEASURE_ARROW_OFFSET_PX.toDp() }),
                     onReactionClick = { _, _ -> },
                     onMoreEmojiClick = { },
                     onActionClick = { }
@@ -109,10 +109,16 @@ internal fun MessageActionPopupOverlay(
             LaunchedEffect(placement.anchor.mode, placement.placementMode, menuMode) {
                 onPlaced(placement, popupHeight)
             }
+            
+            val origin = TransformOrigin(
+                pivotFractionX = (placement.arrowOffsetXPx.toFloat() / popupWidth).coerceIn(0f, 1f),
+                pivotFractionY = if (placement.isBelow) 0f else 1f,
+            )
             Box(
                 modifier = Modifier
                     .offset { IntOffset(placement.x, placement.y) }
                     .onGloballyPositioned { onMenuBoundsChanged(it.boundsInRoot().toAndroidRect()) }
+                    .floatingMenuEntrance(origin)
             ) {
                 MessageActionContent(
                     actions = quickActions,
@@ -120,10 +126,6 @@ internal fun MessageActionPopupOverlay(
                     reactions = reactions,
                     selectedEmojis = selectedEmojis,
                     maxPanelWidth = maxPanelWidth,
-                    arrowConfig = ArrowConfig(
-                        isBelow = placement.isBelow,
-                        arrowOffsetX = with(density) { placement.arrowOffsetXPx.toDp() },
-                    ),
                     onReactionClick = onReactionClick,
                     onMoreEmojiClick = onMoreEmojiClick,
                     onActionClick = actionClickHandler

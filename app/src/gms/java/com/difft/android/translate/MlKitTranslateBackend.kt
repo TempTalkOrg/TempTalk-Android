@@ -18,15 +18,15 @@ import com.google.mlkit.nl.translate.TranslatorOptions
 import kotlinx.coroutines.CancellationException
 import javax.inject.Inject
 
-/**
- * Google ML Kit implementation of [TranslateBackend]. The ONLY place in the app that names ML Kit,
- * and it lives in a source set the F-Droid channel does not compile — which is what lets that
- * channel drop the dependency without a single Kotlin edit anywhere else.
- *
- * Clients are guarded by a plain monitor rather than a `Mutex`: nothing inside a critical section
- * suspends (ML Kit's `getClient` and `close` are synchronous), and [releaseClients] is not a
- * suspending function.
- */
+
+
+
+
+
+
+
+
+
 class MlKitTranslateBackend @Inject constructor() : TranslateBackend {
 
     private val modelManager: RemoteModelManager by lazy { RemoteModelManager.getInstance() }
@@ -53,8 +53,8 @@ class MlKitTranslateBackend @Inject constructor() : TranslateBackend {
         try {
             modelManager.download(remoteModel(model), DownloadConditions.Builder().build()).awaitResult()
         } catch (e: CancellationException) {
-            // ML Kit ends some failures by cancelling the Task; awaitResult turns that into a
-            // coroutine cancellation, which the caller already treats as "attempt abandoned".
+            
+            
             throw e
         } catch (e: Exception) {
             throw TranslateBackendException(classifyMlKitFailure(e), e)
@@ -97,9 +97,9 @@ class MlKitTranslateBackend @Inject constructor() : TranslateBackend {
             }
         }
 
-    /** Raw BCP-47 identification, normalised to a code [TranslateLanguage] accepts. */
+    
     private fun toTranslateCode(tag: String): String? = when {
-        // Pinyin is Latin script; ML Kit's Chinese model cannot read it, English is the closer fit.
+        
         tag.startsWith(CHINESE_LATIN_TAG, ignoreCase = true) -> TranslateLanguage.ENGLISH
         tag.startsWith(TranslateLanguage.CHINESE, ignoreCase = true) -> TranslateLanguage.CHINESE
         else -> TranslateLanguage.fromLanguageTag(tag)
@@ -114,14 +114,14 @@ class MlKitTranslateBackend @Inject constructor() : TranslateBackend {
     }
 }
 
-/**
- * ML Kit's failure vocabulary, expressed in the engine-independent one the store consumes.
- *
- * Top-level and internal so the mapping can be tested without an ML Kit client: it is the piece
- * that decides the retry policy, and it is the piece most likely to drift as the SDK changes.
- */
+
+
+
+
+
+
 internal fun classifyMlKitFailure(e: Throwable): TranslateBackendException.Kind {
-    // ML Kit reports a disabled/absent DownloadManager only in the message, not in an error code.
+    
     if (e.message?.contains("Download manager", ignoreCase = true) == true) {
         return TranslateBackendException.Kind.DOWNLOAD_MANAGER_DISABLED
     }

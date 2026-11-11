@@ -51,7 +51,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
-/** Rendered diameter of `imageviewAvatar` in `chat_fragment_header_call.xml`. */
+
 private const val HEADER_AVATAR_SIZE_DP = 24
 
 
@@ -78,7 +78,7 @@ class ChatHeaderCallFragment : CommonHeaderFragment() {
     private lateinit var stubBinding: ChatFragmentHeaderCallStubBinding
     private var callBinding: ChatFragmentHeaderCallBinding? = null
 
-    /** Room the bar on screen currently shows, null while hidden. */
+    
     private var displayedRoomId: String? = null
 
 
@@ -90,12 +90,12 @@ class ChatHeaderCallFragment : CommonHeaderFragment() {
         registerCallingListener()
     }
 
-    /**
-     * Every chat page creates this fragment anew, and the checked path below needs a `checkCall`
-     * round trip plus a DB read before it renders. When the meeting is the one rendered last, draw
-     * it synchronously from [lastRendered] so a conversation switch shows the bar at once (as iOS
-     * does from its in-memory meeting list); the checked path still runs and reconciles.
-     */
+    
+
+
+
+
+
     private fun renderLastSnapshotIfCurrent() {
         val callData = selectCallData(callDataManager.callingList.value, onGoingCallStateManager.isInCalling())
             ?: return
@@ -135,13 +135,11 @@ class ChatHeaderCallFragment : CommonHeaderFragment() {
         ) { callingList, isInCalling ->
             callingList to isInCalling
         }
-            // 计算当前需要处理的 callData
             .map { (callingList, isInCalling) -> selectCallData(callingList, isInCalling) }
-            // 去重，避免重复请求
             .distinctUntilChanged { old, new ->
                 old?.roomId == new?.roomId
             }
-            // 根据 callData 发起异步请求（自动取消旧请求）
+            
             .flatMapLatest { callData ->
                 if (callData == null || callData.roomId.isEmpty()) {
                     flowOf<Pair<CallData, BaseResponse<RoomState>?>?>(null)
@@ -161,7 +159,6 @@ class ChatHeaderCallFragment : CommonHeaderFragment() {
             }
             .flowOn(Dispatchers.IO)
             .flowWithLifecycle(viewLifecycleOwner.lifecycle, Lifecycle.State.STARTED)
-            // UI 层处理结果
             .onEach { result ->
                 if (result == null) {
                     hideCallBarViews()
@@ -170,8 +167,8 @@ class ChatHeaderCallFragment : CommonHeaderFragment() {
 
                 val (callData, checkCallResult) = result
 
-                // Server unreachable: that does not mean the call ended, so keep a bar (and the
-                // snapshot) that already shows this room; anything else on screen is stale.
+                
+                
                 if (checkCallResult == null) {
                     if (displayedRoomId != callData.roomId) hideCallBarViews()
                     return@onEach
@@ -206,9 +203,7 @@ class ChatHeaderCallFragment : CommonHeaderFragment() {
             .launchIn(viewLifecycleOwner.lifecycleScope)
     }
 
-    /**
-     * 通话显示信息数据类
-     */
+    
     private data class CallDisplayInfo(
         val callerName: String,
         val contact: java.util.Optional<org.difft.app.database.models.ContactorModel>?,
@@ -216,9 +211,7 @@ class ChatHeaderCallFragment : CommonHeaderFragment() {
         val groupModel: org.difft.app.database.models.GroupModel?
     )
 
-    /**
-     * 在 IO 线程加载通话显示信息（群组名称、联系人信息等）
-     */
+    
     private suspend fun loadCallDisplayInfo(
         callType: String?,
         callData: CallData,
@@ -250,9 +243,7 @@ class ChatHeaderCallFragment : CommonHeaderFragment() {
         return CallDisplayInfo(callerName, contact, groupName, groupModel)
     }
 
-    /**
-     * 在主线程更新通话栏视图
-     */
+    
     private fun updateCallBarView(
         callType: String?,
         callData: CallData,
@@ -303,7 +294,7 @@ class ChatHeaderCallFragment : CommonHeaderFragment() {
         binding.buttonJoinCall.text = ResUtils.getString(R.string.call_join)
         binding.buttonJoinCall.setOnClickListener {
             L.i { "[Call] ChatHeaderCallFragment onclick button joinCall roomId:${callData.roomId}" }
-            // In a call this header offers another call: hang up first, as the chat-list call bar says.
+            
             if (onGoingCallStateManager.isInCalling()) {
                 if (onGoingCallStateManager.getCurrentRoomId() == callData.roomId) {
                     LCallManager.bringCallScreenToFront(requireActivity())
@@ -325,7 +316,6 @@ class ChatHeaderCallFragment : CommonHeaderFragment() {
         binding.callBarView.visibility = View.VISIBLE
         displayedRoomId = callData.roomId
 
-        // set call header visible to true
         onGoingCallStateManager.setChatHeaderCallVisibility(true)
     }
 
@@ -344,7 +334,7 @@ class ChatHeaderCallFragment : CommonHeaderFragment() {
         return binding
     }
 
-    /** What the bar last rendered after a successful check; see [renderLastSnapshotIfCurrent]. */
+    
     private data class CallBarSnapshot(
         val roomId: String,
         val callType: String?,
@@ -353,7 +343,7 @@ class ChatHeaderCallFragment : CommonHeaderFragment() {
     )
 
     private companion object {
-        // Process-wide and touched on main only; cleared whenever the bar is hidden.
+        
         var lastRendered: CallBarSnapshot? = null
     }
 

@@ -42,7 +42,6 @@ class InComingCallNotificationReceiver: BroadcastReceiver() {
                     val entryPoint = EntryPointAccessors.fromApplication(
                         context.applicationContext, ReceiverEntryPoint::class.java
                     )
-                    // 如果是1v1 call,则向caller发送reject消息
                     if(callType == CallType.ONE_ON_ONE.type){
                         L.i { "[Call] InComingCallNotificationReceiver onReceive, CALL_NOTIFICATION_OPERATION_REJECT roomId:$roomId" }
                         entryPoint.callDataManager().removeCallData(roomId)

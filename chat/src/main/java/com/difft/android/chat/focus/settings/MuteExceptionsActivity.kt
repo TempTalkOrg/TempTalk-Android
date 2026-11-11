@@ -5,6 +5,7 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.compose.ui.Modifier
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -12,6 +13,8 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.difft.android.ChatSettingViewModelFactory
 import com.difft.android.base.BaseActivity
+import com.difft.android.base.ui.compose.systemBarsWithCutoutPadding
+import com.difft.android.base.ui.sidechrome.sideChromePadding
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.chat.R
 import com.difft.android.chat.focus.GroupNotifyPolicy.MuteOptions
@@ -22,7 +25,7 @@ import difft.android.messageserialization.For
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 
-/** "Still Notify": what a muted group still lets through (@Me / @All / group calls). */
+
 @AndroidEntryPoint
 class MuteExceptionsActivity : BaseActivity() {
 
@@ -35,6 +38,8 @@ class MuteExceptionsActivity : BaseActivity() {
             it.create(For.Group(groupId))
         }
     })
+
+    override fun participatesInSideChrome(): Boolean = true
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -50,6 +55,7 @@ class MuteExceptionsActivity : BaseActivity() {
                     state = state.items,
                     onToggle = { item, on -> viewModel.dispatch(MuteExceptionsContract.Intent.Toggle(item, on)) },
                     onBack = { finish() },
+                    modifier = Modifier.systemBarsWithCutoutPadding().sideChromePadding(),
                 )
             }
         }
@@ -79,7 +85,7 @@ class MuteExceptionsActivity : BaseActivity() {
         )
         lifecycleScope.launch {
             job.join()
-            // Fold the stored value in first so a successful write never flashes the old value back.
+            
             chatSettingViewModel.conversationSet.value?.let {
                 viewModel.dispatch(MuteExceptionsContract.Intent.ConversationChanged(it.toMuteOptions()))
             }

@@ -8,11 +8,11 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/**
- * The read-ladder contract, on both sides: what Android's per-message read times fold into on export,
- * and what a peer's ladder normalizes to on import. Pure JVM — the ladder carries no Android, WCDB or
- * logging dependency, so every case here is exact arithmetic rather than a DB round trip.
- */
+
+
+
+
+
 class ReadLadderTest {
 
     private fun read(serverAt: Long, readTime: Long) = ReadLadderBuilder.IncomingRead(serverAt, readTime)
@@ -20,10 +20,10 @@ class ReadLadderTest {
     private fun row(maxServerTime: Long, readAt: Long) =
         NeutralReadPosition(readAt = readAt, maxServerTime = maxServerTime, maxNotifySequenceId = 0L, maxSequenceId = 0L)
 
-    /** `(maxServerTime, readAt)` pairs, the shape every assertion below reads in. */
+    
     private fun ReadLadder.pairs(): List<Pair<Long, Long>> = rows.map { it.maxServerTime to it.readAt }
 
-    // ── export: rows out of Android's expanded read times ────────────────────────────────────
+    
 
     @Test
     fun `one batch read becomes one rung ending at its last message`() {
@@ -44,7 +44,7 @@ class ReadLadderTest {
 
     @Test
     fun `a later rung read earlier pulls the rungs before it down`() {
-        // Suffix-min: a message can never be handed a read time later than one a covering rung gives.
+        
         val ladder = ReadLadderBuilder.build(
             listOf(read(100, 900), read(200, 300), read(300, 1000)),
             roomReadPosition = 300,
@@ -68,7 +68,7 @@ class ReadLadderTest {
 
     @Test
     fun `the watermark never undercuts the last rung`() {
-        // The gap between the last rung and the watermark must not expire before the rung itself.
+        
         val ladder = ReadLadderBuilder.build(listOf(read(100, 1000)), roomReadPosition = 200)
 
         assertEquals(200L, ladder.watermark?.maxServerTime)
@@ -87,13 +87,13 @@ class ReadLadderTest {
         assertEquals(100L, ladder.derivedStart(MessageDirection.OUTGOING, 100))
     }
 
-    // ── export self-check: which rows still need an explicit anchor ──────────────────────────
+    
 
     @Test
     fun `a late message keeps its own low read time and the batch around it carries exceptions`() {
-        // A message that arrived after the watermark had passed it is inserted with readTime =
-        // roomReadPosition, so it sits as a lower rung inside a batch. The rung is NOT lifted — the
-        // messages whose derived start it pulls down travel an explicit anchor instead.
+        
+        
+        
         val reads = listOf(read(100, 5000), read(150, 300), read(200, 5000), read(300, 5000))
         val ladder = ReadLadderBuilder.build(reads, roomReadPosition = 300)
 
@@ -116,8 +116,8 @@ class ReadLadderTest {
 
     @Test
     fun `a legacy zero row inside the watermark ages by arrival and travels only when that differs`() {
-        // readTime = 0 below the watermark is the pre-#1020 legacy branch: the sweep ages it by
-        // arrival, so its effective start is its own server time.
+        
+        
         val ladder = ReadLadderBuilder.build(listOf(read(300, 500)), roomReadPosition = 300)
 
         assertEquals(150L, anchorOf(readTime = 0, serverAt = 150, ladder = ladder, roomReadPosition = 300))
@@ -158,7 +158,7 @@ class ReadLadderTest {
         )
     }
 
-    // ── import: normalizing whatever a peer sent ─────────────────────────────────────────────
+    
 
     @Test
     fun `fromWire sorts, dedupes and re-normalizes whatever order a peer sent`() {
@@ -167,8 +167,8 @@ class ReadLadderTest {
             readPosition = row(maxServerTime = 400, readAt = 9000),
             readPositions = listOf(
                 row(maxServerTime = 300, readAt = 700),
-                row(maxServerTime = 100, readAt = 900),   // out of order, and read later than a later rung
-                row(maxServerTime = 100, readAt = 950),   // duplicate server time
+                row(maxServerTime = 100, readAt = 900),   
+                row(maxServerTime = 100, readAt = 950),   
             ),
         )
 
@@ -180,8 +180,8 @@ class ReadLadderTest {
 
     @Test
     fun `fromWire clamps a rung that reaches past the watermark`() {
-        // A rung above the watermark would hand an expiry anchor to a message the target still counts
-        // as unread, so it is pulled back to the watermark.
+        
+        
         val wire = NeutralConversationLocal(
             conversationRef = "room-1",
             readPosition = row(maxServerTime = 400, readAt = 0),
@@ -210,8 +210,8 @@ class ReadLadderTest {
 
     @Test
     fun `a rung with no read clock is substituted before normalizing, so its neighbours keep theirs`() {
-        // Substituting first bounds the earlier rungs by the substituted value (200) instead of
-        // collapsing each to its own server time (100), and leaves the rungs above it untouched.
+        
+        
         val wire = NeutralConversationLocal(
             conversationRef = "room-1",
             readPosition = row(maxServerTime = 300, readAt = 0),
@@ -225,8 +225,8 @@ class ReadLadderTest {
         val ladder = ReadLadder.fromWire(wire)
 
         assertEquals(listOf(100L to 200L, 200L to 200L, 300L to 700L), ladder.pairs())
-        // The lookup rule is the minimum readAt over every covering rung, so the substituted 200
-        // still bounds a message below it — but at 200, not at the row's own 100.
+        
+        
         assertEquals(200L, ladder.lookup(50))
         assertEquals(200L, ladder.lookup(150))
         assertEquals(700L, ladder.lookup(250), "a rung above the substituted one is unaffected")
@@ -234,8 +234,8 @@ class ReadLadderTest {
 
     @Test
     fun `the pruning-order counterexample resolves to the smallest covering read time`() {
-        // §2.3: rows (100,300) and (200,210); a message at 90 is covered by both and must get 210.
-        // Dropping the second rung before normalizing would give it 300.
+        
+        
         val wire = NeutralConversationLocal(
             conversationRef = "room-1",
             readPosition = row(maxServerTime = 200, readAt = 0),
@@ -259,12 +259,12 @@ class ReadLadderTest {
         val ladder = ReadLadder.fromWire(wire)
 
         assertEquals(400L, ladder.derivedStart(MessageDirection.INCOMING, 100))
-        // readAt 0 on the watermark means "no read clock", so its own server time stands in.
+        
         assertEquals(900L, ladder.derivedStart(MessageDirection.INCOMING, 500))
         assertNull(ladder.derivedStart(MessageDirection.INCOMING, 901))
     }
 
-    /** The wire `expireStartedAt` an Android row with these values would carry against [ladder]. */
+    
     private fun anchorOf(
         readTime: Long,
         serverAt: Long,

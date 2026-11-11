@@ -14,10 +14,10 @@ import org.junit.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/**
- * [NewMessagingService.innerSend] turns send failures into a [com.difft.android.websocket.internal.ServiceResponse],
- * but real cancellation of the caller must propagate instead of becoming a send error.
- */
+
+
+
+
 class NewMessagingServiceCancellationTest {
 
     private val appWebSocketHelper: AppWebSocketHelper = mockk()

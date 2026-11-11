@@ -29,19 +29,12 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
-/**
- * I0 — `ContainerReader.readStreaming` engine seam (design §3.4 O2, Test Inventory T-CR1..3).
- *
- * Validates the forward-only (P2P no-disk) read path WITHOUT any devices or P2P wiring: a real
- * [ContainerWriterImpl]-produced container (records + an attachment), keyed by a `transferKey`
- * passed in the passphrase position, is fed to [ContainerReaderImpl.readStreaming] over an in-memory
- * [ByteArrayInputStream] (a faithful forward-only stand-in for the upload body — no random access).
- *
- * The crux this guards (R1): the streaming path is verify-BEFORE-COMMIT — records may be emitted to
- * the (here: test) sink before the trailing HMAC is known, but on tamper / truncation / wrong key
- * `readStreaming` MUST THROW (never report success), so the real caller discards staging and never
- * promotes.
- */
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = android.app.Application::class, sdk = [33])
 class ContainerReaderStreamingTest {
@@ -53,8 +46,8 @@ class ContainerReaderStreamingTest {
     private val writer = ContainerWriterImpl(crypto)
     private val reader = ContainerReaderImpl(crypto)
 
-    // P2P keys the envelope with an ephemeral transferKey fed to the KDF in the passphrase position
-    // (design §3.3) — exercise exactly that here (no user passphrase ceremony).
+    
+    
     private val transferKey = "ephemeral-transfer-key-256bit-material-b64=="
     private val sourceAccount = "u_stream"
     private val sourceAppVersion = "0.0.0-stream"
@@ -95,14 +88,14 @@ class ContainerReaderStreamingTest {
         if (ref == "att-1") AttachmentBytes(imageBytes.size.toLong(), ByteArrayInputStream(imageBytes)) else null
     }
 
-    /** Write a valid container to a file and return its raw bytes (what the upload body would carry). */
+    
     private suspend fun writeContainerBytes(): ByteArray {
         val container = File(tmp.root, "c-${System.nanoTime()}.ttmig")
         writer.write(seed().asFlow(), FileArchiveSink(container), transferKey, byteSource(), sourceAccount, sourceAppVersion)
         return container.readBytes()
     }
 
-    /** Collects emitted records + attachment bytes from a read path (file or streaming). */
+    
     private class Sink {
         val records = ArrayList<NeutralRecord>()
         val attachments = HashMap<String, ByteArray>()
@@ -116,7 +109,7 @@ class ContainerReaderStreamingTest {
         }
     }
 
-    // ── T-CR1: round-trip — readStreaming emits the same records/attachments as a valid write ──────
+    
 
     @Test
     fun `readStreaming round-trips a writer container keyed by transferKey`() = runTest {
@@ -141,18 +134,18 @@ class ContainerReaderStreamingTest {
         )
     }
 
-    // ── T-CR3: parity — readStreaming vs read emit identical records + attachments ────────────────
+    
 
     @Test
     fun `readStreaming and read produce identical emitted records for the same container`() = runTest {
         val bytes = writeContainerBytes()
         val container = File(tmp.root, "parity.ttmig").apply { writeBytes(bytes) }
 
-        // File path (verify-before-trust).
+        
         val fileSink = Sink()
         val fileManifest = reader.read(container, transferKey, fileSink.target()) { fileSink.records.add(it) }
 
-        // Streaming path (verify-before-commit) over the SAME bytes.
+        
         val streamSink = Sink()
         val streamManifest = reader.readStreaming(ByteArrayInputStream(bytes), transferKey, streamSink.target()) {
             streamSink.records.add(it)
@@ -161,7 +154,7 @@ class ContainerReaderStreamingTest {
         assertEquals(fileManifest.recordCount, streamManifest.recordCount, "record tally parity")
         assertEquals(fileManifest.attachmentCount, streamManifest.attachmentCount, "attachment tally parity")
         assertEquals(fileManifest, streamManifest, "manifest parity (identity + counts)")
-        // Same records in the same order — compare their JSONL encodings (stable, value-based).
+        
         val codec = RecordJsonCodec()
         assertEquals(
             fileSink.records.map { codec.encodeRecord(it) },
@@ -175,17 +168,17 @@ class ContainerReaderStreamingTest {
         )
     }
 
-    // ── T-CR2: tamper the trailing HMAC → end-of-stream MAC gate rejects, NO success ──────────────
-    //
-    // Flipping a byte INSIDE the trailing 32-byte HMAC leaves the ciphertext body intact: every frame
-    // decrypts + parses cleanly, the END sentinel is reached, and the corruption is caught ONLY by the
-    // end-of-stream constant-time MAC compare. This pins the HMAC gate specifically (the commit gate
-    // that R1 hangs on) — a clean success here would mean the gate is bypassable.
+    
+
+    
+    
+    
+    
 
     @Test
     fun `readStreaming throws HmacMismatch when the trailing HMAC byte is tampered`() = runTest {
         val bytes = writeContainerBytes()
-        // Flip a byte inside the trailing HMAC (last 32 bytes) — body stays valid; only the MAC fails.
+        
         val hmacByteIdx = bytes.size - 5
         bytes[hmacByteIdx] = (bytes[hmacByteIdx].toInt() xor 0x7F).toByte()
 
@@ -197,17 +190,17 @@ class ContainerReaderStreamingTest {
         assertTrue(!succeeded, "no success signal may follow an HMAC mismatch (caller must discard staging)")
     }
 
-    // ── T-CR2: tamper a ciphertext body byte → MUST throw (never silent success) ──────────────────
-    //
-    // A flipped body byte corrupts the decrypted plaintext. Depending on WHERE it lands it surfaces as
-    // either a frame-parse failure DURING decrypt (DecryptionFailed) or an HMAC mismatch AT end-of-
-    // stream — both are failures that throw and gate out promote. The security invariant is "throws,
-    // never reports success", NOT a specific exception subtype.
+    
+
+    
+    
+    
+    
 
     @Test
     fun `readStreaming throws on a tampered body byte and never reports success`() = runTest {
         val bytes = writeContainerBytes()
-        // Flip a byte well inside the encrypted body (after the 42-byte header, before the trailer).
+        
         val idx = 100.coerceIn(0, bytes.size - 1)
         bytes[idx] = (bytes[idx].toInt() xor 0x7F).toByte()
 
@@ -219,7 +212,7 @@ class ContainerReaderStreamingTest {
         assertTrue(!succeeded, "a tampered body must surface as a failure, never a silent success")
     }
 
-    // ── T-CR2: wrong key → fails (HMAC/decrypt), no success ───────────────────────────────────────
+    
 
     @Test
     fun `readStreaming with the wrong transferKey fails`() = runTest {
@@ -233,16 +226,16 @@ class ContainerReaderStreamingTest {
         assertTrue(!succeeded, "a wrong key must never produce a success signal")
     }
 
-    // ── T-CR2: truncation — cut before the trailing HMAC → throws (not silent partial success) ─────
+    
 
     @Test
     fun `readStreaming throws when the stream is truncated before the trailing HMAC`() = runTest {
         val bytes = writeContainerBytes()
-        // Drop the last 10 bytes — part of the trailing HMAC is now missing.
+        
         val truncated = bytes.copyOf(bytes.size - 10)
 
         var succeeded = false
-        // A stream that ends early is the peer or the link, never a verdict on the data.
+        
         assertFailsWith<MigrationException.StreamInterrupted> {
             reader.readStreaming(ByteArrayInputStream(truncated), transferKey, discard()) { }
             succeeded = true
@@ -253,7 +246,7 @@ class ContainerReaderStreamingTest {
     @Test
     fun `readStreaming throws when the stream is cut mid-body (before END sentinel)`() = runTest {
         val bytes = writeContainerBytes()
-        // Cut to just past the header — the body frames + END + HMAC are gone.
+        
         val cut = bytes.copyOf(BackupCrypto.HEADER_SIZE + 16)
 
         assertFailsWith<MigrationException.StreamInterrupted> {
@@ -271,7 +264,7 @@ class ContainerReaderStreamingTest {
             endFrame()
         }.toByteArray()
         val container = craftAuthenticatedContainer(body)
-        // Deep inside the attachment bytes — the shape a peer's cancel takes on a real transfer.
+        
         val cut = container.copyOf(container.size - 10_000)
 
         assertFailsWith<MigrationException.StreamInterrupted> {
@@ -279,7 +272,7 @@ class ContainerReaderStreamingTest {
         }
     }
 
-    // ── streaming source must tolerate small, fragmented reads (real sockets deliver short chunks) ──
+    
 
     @Test
     fun `readStreaming round-trips when the stream yields 1 byte at a time`() = runTest {
@@ -297,18 +290,18 @@ class ContainerReaderStreamingTest {
         )
     }
 
-    // ── version gate (the I0 regression guard for the streaming-path gap) ──────────────────────────
-    //
-    // The file path gates format version externally (RestoreOrchestrator.validate → FormatCompat,
-    // after peekManifest). The streaming path has no such external gate before the promote commit, so
-    // readStreaming must SELF-gate as soon as the manifest frame is parsed — BEFORE any record lands in
-    // staging. A cross-MAJOR container must be rejected fail-fast (DecryptionFailed), never accepted.
+    
+
+    
+    
+    
+    
 
     @Test
     fun `readStreaming rejects a cross-MAJOR formatVersion before emitting any record`() = runTest {
-        // Manifest declares formatVersion "2.0" (cross-MAJOR vs the supported 1.x). The rest of the body is
-        // a perfectly valid record + END, signed with a VALID trailing HMAC, so the ONLY rejection
-        // reason is the version gate (not HMAC, not a structural error).
+        
+        
+        
         val manifest = ContainerManifest(
             bodyFormatVersion = ContainerFormat.BODY_FORMAT_VERSION,
             encoding = ContainerFormat.ENCODING_JSONL,
@@ -334,7 +327,7 @@ class ContainerReaderStreamingTest {
         assertEquals(0, sink.records.size, "fail-fast: no record may reach staging on an incompatible container")
     }
 
-    // ── empty container (manifest + END only) → succeeds, zero counts ──────────────────────────────
+    
 
     @Test
     fun `readStreaming succeeds on an empty container (0 records, manifest + END only)`() = runTest {
@@ -353,7 +346,7 @@ class ContainerReaderStreamingTest {
         assertEquals(0, sink.records.size, "no records emitted")
     }
 
-    // ── multiple attachments (≥2) → all stream + verify (lastAttachmentRef lifecycle across frames) ─
+    
 
     @Test
     fun `readStreaming streams multiple attachments and verifies each`() = runTest {
@@ -378,7 +371,7 @@ class ContainerReaderStreamingTest {
         assertContentEquals(a2, sink.attachments.getValue("att-b"), "second attachment bytes intact")
     }
 
-    // ── zero-length attachment frame → while(remaining>0) loop not entered, succeeds ───────────────
+    
 
     @Test
     fun `readStreaming handles a zero-length attachment frame`() = runTest {
@@ -398,19 +391,19 @@ class ContainerReaderStreamingTest {
         assertEquals(0, sink.attachments.getValue("att-empty").size, "zero-length attachment yields no bytes")
     }
 
-    // ── unknown record TYPE tolerance (contract §7.7 — MINOR is additive-only) ────────────────────
-    //
-    // A newer same-MAJOR exporter may add record types this build has never heard of. Since the
-    // version gate deliberately accepts any MINOR, such a record MUST be skipped, not fatal — and the
-    // skip must not desynchronize the frame stream (frames are length-prefixed, so it cannot). Both
-    // read paths share `parseFrames`, so both are asserted here.
+    
 
-    /** Body: manifest, known record, UNKNOWN-type record, known record, END. */
+    
+    
+    
+    
+
+    
     private fun bodyWithUnknownRecordType(): ByteArray = ByteArrayOutputStream().apply {
         jsonFrame(ContainerFormat.TAG_MANIFEST, RecordJsonCodec().encodeManifest(compatibleManifest()))
         jsonFrame(ContainerFormat.TAG_RECORD, RecordJsonCodec().encodeRecord(msg("m-before", "before the unknown")))
-        // A record type from a hypothetical future MINOR. Hand-written (the codec cannot encode a tag
-        // it does not know) — exactly what a newer exporter's line would look like on the wire.
+        
+        
         jsonFrame(ContainerFormat.TAG_RECORD, """{"type":"future","value":{"whatever":1}}""")
         jsonFrame(ContainerFormat.TAG_RECORD, RecordJsonCodec().encodeRecord(msg("m-after", "after the unknown")))
         endFrame()
@@ -425,9 +418,9 @@ class ContainerReaderStreamingTest {
             sink.records.add(it)
         }
 
-        // 3 record frames on the wire, 1 unknown → 2 consumed. The tally counts only what was emitted,
-        // so recordCount==2 IS the observable proof that exactly one record was skipped (the skipped
-        // count itself is diagnostic-only, logged once at end-of-stream).
+        
+        
+        
         assertEquals(2, manifest.recordCount, "the unknown record is skipped, the known ones are tallied")
         assertEquals(
             listOf("m-before", "m-after"),
@@ -468,12 +461,12 @@ class ContainerReaderStreamingTest {
         assertFailsWith<Exception> { RecordJsonCodec().decodeRecord("not json at all") }
     }
 
-    // ── shared MAX_FRAME_PAYLOAD_BYTES cap also enforced on the streaming path ─────────────────────
+    
 
     @Test
     fun `readStreaming throws when a 4-byte frame length exceeds the cap`() = runTest {
-        // Manifest frame whose declared 4-byte length is one OVER the cap (no payload follows). The cap
-        // check must fire on the length alone, before any allocation — same guard the file path uses.
+        
+        
         val body = ByteArrayOutputStream().apply {
             write(ContainerFormat.TAG_MANIFEST.toInt())
             write(beInt(ContainerFormat.MAX_FRAME_PAYLOAD_BYTES + 1))
@@ -485,13 +478,13 @@ class ContainerReaderStreamingTest {
         }
     }
 
-    // ── undecodable record tolerance: skip the record, drain its byte frame, keep going ─────────────
+    
 
     @Test
     fun `readStreaming skips an attachment record that does not decode and drains its byte frame`() = runTest {
         val good = ByteArray(900) { (it * 3).toByte() }
         val bad = ByteArray(1200) { (it * 5).toByte() }
-        // `size` is a primitive Long on the record, so a non-numeric value is a decode failure.
+        
         val undecodable = RecordJsonCodec().encodeRecord(attachmentRecord("att-bad", bad.size.toLong()))
             .replace("\"size\":${bad.size}", "\"size\":\"not-a-number\"")
         val body = ByteArrayOutputStream().apply {
@@ -543,12 +536,12 @@ class ContainerReaderStreamingTest {
     private fun sha256(b: ByteArray): String =
         MessageDigest.getInstance("SHA-256").digest(b).joinToString("") { "%02x".format(it) }
 
-    // ── hand-crafted container harness (mirrors ContainerReaderFrameLengthTest) ─────────────────────
-    //
-    // Builds a genuinely authenticated container from arbitrary plaintext BODY frames so a test can
-    // craft bodies the writer never would (cross-MAJOR manifest, over-cap length, zero-length
-    // attachment): plaintext header ‖ AES-CTR(body) ‖ HMAC(header ‖ ciphertext). The HMAC is valid, so
-    // readStreaming's end-of-stream MAC gate passes and the crafted body reaches the frame parser.
+    
+
+    
+    
+    
+    
 
     private fun craftAuthenticatedContainer(bodyPlain: ByteArray): ByteArray {
         val salt = crypto.randomBytes(BackupCrypto.SALT_BYTES)
@@ -587,7 +580,7 @@ class ContainerReaderStreamingTest {
         )
     )
 
-    /** Append a 4-byte-length frame `[TAG][LEN(4 BE)][UTF-8 payload]`. */
+    
     private fun ByteArrayOutputStream.jsonFrame(tag: Byte, json: String) {
         val payload = json.toByteArray(Charsets.UTF_8)
         write(tag.toInt())
@@ -595,14 +588,14 @@ class ContainerReaderStreamingTest {
         write(payload)
     }
 
-    /** Append an attachment byte frame `[TAG_ATTACHMENT][LEN(8 BE)][bytes]`. */
+    
     private fun ByteArrayOutputStream.attachmentFrame(bytes: ByteArray) {
         write(ContainerFormat.TAG_ATTACHMENT.toInt())
         write(beLong(bytes.size.toLong()))
         write(bytes)
     }
 
-    /** Append the zero-length END sentinel frame. */
+    
     private fun ByteArrayOutputStream.endFrame() {
         write(ContainerFormat.TAG_END.toInt())
         write(beInt(0))
@@ -614,8 +607,8 @@ class ContainerReaderStreamingTest {
     private fun beLong(v: Long): ByteArray =
         java.nio.ByteBuffer.allocate(8).order(java.nio.ByteOrder.BIG_ENDIAN).putLong(v).array()
 
-    /** A pathological forward-only stream that returns at most ONE byte per read — stresses the
-     *  HMAC tail hold-back logic against the worst-case socket fragmentation. */
+    
+
     private class OneByteAtATimeStream(private val data: ByteArray) : java.io.InputStream() {
         private var pos = 0
         override fun read(): Int = if (pos < data.size) data[pos++].toInt() and 0xFF else -1

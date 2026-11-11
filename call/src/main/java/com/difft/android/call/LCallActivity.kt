@@ -51,23 +51,7 @@ import dagger.hilt.android.lifecycle.withCreationCallback
 import javax.inject.Inject
 
 
-/**
- * Call activity.
- *
- * Owns the call screen lifecycle, UI interactions and resource management.
- * Business logic is delegated to dedicated Manager classes to keep this
- * class small and maintainable.
- *
- * Responsibilities:
- * - Drive the Activity lifecycle.
- * - Hold references to the various Managers (error/exit/service/…).
- * - Orchestrate interactions between those Managers.
- *
- * Initialization and event-handling logic lives in:
- * - `LCallActivityInitializer.kt` — initializeXxx / registerXxx extensions.
- * - `LCallActivityEventHandler.kt` — handleXxx UI event extensions.
- * - [CallScreenshotController] — screenshot detection and notification.
- */
+
 @AndroidEntryPoint
 class LCallActivity : AppCompatActivity(), FoldDiagnostics.Host {
 
@@ -92,13 +76,13 @@ class LCallActivity : AppCompatActivity(), FoldDiagnostics.Host {
     @Inject
     internal lateinit var ongoingCallService: OngoingCallServiceController
 
-    /** The live session this page attaches to, resolved in [onCreate]. */
+    
     internal lateinit var session: CallSession
 
-    /** The call this page shows: the session's start/join intent, whatever intent opened the page. */
+    
     internal lateinit var callIntent: CallIntent
 
-    /** The intent that opened this page; only its wait-dialog flag is read. */
+    
     internal lateinit var launchIntent: CallIntent
 
     internal val callRole: CallRole get() = session.params.callRole
@@ -114,11 +98,7 @@ class LCallActivity : AppCompatActivity(), FoldDiagnostics.Host {
     internal var pictureInPictureManager: PictureInPictureManager? = null
     internal var callLifecycleObserver: CallLifecycleObserver? = null
 
-    /**
-     * 屏幕点击节流时间戳，由 [LCallActivityEventHandler.handleScreenClick]
-     * 使用。绑定到 Activity 实例而不是文件级，避免 Activity 被重建后上一个
-     * session 残留的 uptimeMillis 把新实例的第一次点击静默丢弃。
-     */
+    
     internal var lastScreenClickMs: Long = 0L
     internal var callDialogManager: CallDialogManager? = null
     internal var inviteCallManager: InviteCallHandler? = null
@@ -128,12 +108,12 @@ class LCallActivity : AppCompatActivity(), FoldDiagnostics.Host {
 
     internal lateinit var backPressedCallback: OnBackPressedCallback
 
-    /** Folding features for the tabletop layout, provided to the call UI as `LocalCallFoldReports`. */
+    
     internal val foldTracker = CallFoldTracker(this)
 
-    // Registered at construction time (required before RESUMED). Results route through
-    // LCallActivityMediaPermissions.onMediaPermissionResult; taps come from the Compose toolbar
-    // via onMediaControlTapped.
+    
+    
+    
     private val micPermissionLauncher = registerPermission {
         onMediaPermissionResult(CallMediaPermission.Microphone, it)
     }
@@ -151,32 +131,23 @@ class LCallActivity : AppCompatActivity(), FoldDiagnostics.Host {
         defaultViewModelCreationExtras.withCreationCallback<LCallViewModelFactory> { it.create(session) }
     })
 
-    /**
-     * Activity creation and bootstrapping.
-     *
-     * Sequence (extension implementations live in `LCallActivityInitializer.kt`):
-     * 1. Resolve the live call session, or finish when this page has none.
-     * 2. Attach to the session and bring up the session finish effect.
-     * 3. Initialize call state and UI.
-     * 4. Initialize managers, lifecycle observer and cleanup manager.
-     * 5. Register listeners and configure window attributes.
-     */
+    
     override fun onCreate(savedInstanceState: Bundle?) {
         L.i { "[Call] LCallActivity: onCreate" }
-        // Pre-super, like BaseActivity: the manifest `locked` keeps the rotation the call was
-        // launched over (a landscape app, say) only until this writes the real target, so the
-        // write must land before the first frame. Safe here — this activity is opaque.
+        
+        
+        
         policyAppliedOrientation = OrientationPolicy.applyTo(this)
-        // Created inside a pending unfold (an incoming call as the device opens): applyTo held
-        // this screen open, so it needs the same delayed re-lock BaseActivity's screens get in
-        // case no display switch follows.
+        
+        
+        
         val heldForUnfold = OrientationPolicy.isUnfoldPending()
         super.onCreate(savedInstanceState)
         if (heldForUnfold) OrientationPolicy.scheduleUnfoldRelock(this) { reapplyOrientationPolicyIfOwned() }
 
-        // The call's entry point started the session before launching this page. No live session (a
-        // restore after process death, a call that already ended) or a launch for another session
-        // means there is nothing to show: finish without touching call state.
+        
+        
+        
         val resolved = resolveCallSession(sessionHolder.current.value, CallIntent(intent).sessionKey)
         if (resolved == null) {
             L.w { "[Call] LCallActivity: no live session for this page, finishing restored=${savedInstanceState != null}" }
@@ -186,9 +157,9 @@ class LCallActivity : AppCompatActivity(), FoldDiagnostics.Host {
         session = resolved
         foldTracker.attach()
 
-        // Placeholder content to ensure ViewTreeLifecycleOwner is installed,
-        // avoiding "ViewTreeLifecycleOwner not found" crashes when CallWaitDialogUtil
-        // (via ComposeDialogManager) attaches a ComposeView inside initializeView.
+        
+        
+        
         setContentView(android.widget.FrameLayout(this))
 
         handleIntent(savedInstanceState)
@@ -202,23 +173,23 @@ class LCallActivity : AppCompatActivity(), FoldDiagnostics.Host {
         configureWindow()
     }
 
-    // The orientation value the policy last wrote for this activity (see BaseActivity's
-    // twin field): re-applies happen only while requestedOrientation still equals it, so
-    // a screen that set its own orientation is never clobbered (a share routes through
-    // [screenShareOrientationActive] instead).
+    
+    
+    
+    
     internal var policyAppliedOrientation: Int? = null
 
-    // Set by ScreenSharingView while a remote share is shown: re-applies then go through
-    // applyScreenShareOrientation, so a fold or unfold mid-share is not frozen by the share lock.
-    // Snapshot state so the call's bottom sheets can mirror the share's hidden system bars (#1451).
+    
+    
+    
     internal var screenShareOrientationActive by mutableStateOf(false)
 
-    // The call page's debounced fold is half open (CallContent reports it): a share then keeps the
-    // policy's lock instead of turning landscape (design decision 38).
+    
+    
     internal var foldHalfOpen = false
         private set
 
-    /** Records the debounced half-open state and, while a share is shown, re-decides its orientation. */
+    
     internal fun onFoldHalfOpenChanged(halfOpen: Boolean) {
         if (foldHalfOpen == halfOpen) return
         foldHalfOpen = halfOpen
@@ -227,19 +198,19 @@ class LCallActivity : AppCompatActivity(), FoldDiagnostics.Host {
         }
     }
 
-    // Same display-level replay BaseActivity has: a fold the OS answers with a letterbox delivers
-    // no configuration change at all, and a call is the screen most likely to be open across a fold.
+    
+    
     private val orientationDisplayWatcher = OrientationDisplayWatcher(this) { display ->
         reapplyOrientationPolicyIfOwned(display)
     }
 
-    /**
-     * Re-apply the display-level orientation policy when the configuration changes: this
-     * activity's manifest configChanges swallow every fold key, so a mid-call unfold never
-     * recreates it and the folded posture's portrait lock would otherwise stick on the inner
-     * display. Not a BaseActivity, so it cannot inherit that re-apply. Skipped while pinned
-     * (PiP); while a share is shown the share variant decides.
-     */
+    
+
+
+
+
+
+
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         FoldDiagnostics.onConfigurationArrived(this, via = "onConfigurationChanged")
@@ -263,7 +234,7 @@ class LCallActivity : AppCompatActivity(), FoldDiagnostics.Host {
         orientationDisplayWatcher.start()
     }
 
-    /** #1454 snapshot extras: policy ownership, the share lock and whether the tabletop dock is shown. */
+    
     override fun foldDiagExtras(): String {
         val owned = policyAppliedOrientation?.let { requestedOrientation == it } == true
         val tabletop = if (::session.isInitialized) viewModel.callUiController.dockPinned.value.toString() else "none"
@@ -275,11 +246,11 @@ class LCallActivity : AppCompatActivity(), FoldDiagnostics.Host {
         super.onStop()
     }
 
-    /**
-     * Activity teardown. Delegates to [CallCleanupManager], which releases only this page
-     * instance's resources (the call itself belongs to the session), then nulls out local
-     * references to prevent leaks.
-     */
+    
+
+
+
+
     override fun onDestroy() {
         super.onDestroy()
         L.i { "[Call] LCallActivity onDestroy start. isChangingConfigurations:$isChangingConfigurations" }
@@ -303,13 +274,13 @@ class LCallActivity : AppCompatActivity(), FoldDiagnostics.Host {
         L.i { "[Call] LCallActivity onDestroy end." }
     }
 
-    /**
-     * Invoked when the user leaves the Activity (Home key / task switch).
-     *
-     * Delegates to [enterPipOnUserLeaveHint], which decides whether this hint
-     * reflects an actual intent to leave before entering PIP mode or surfacing
-     * the PIP permission prompt.
-     */
+    
+
+
+
+
+
+
     @SuppressLint("MissingSuperCall")
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
@@ -317,11 +288,11 @@ class LCallActivity : AppCompatActivity(), FoldDiagnostics.Host {
         enterPipOnUserLeaveHint()
     }
 
-    /**
-     * Re-entry (singleInstance) changes no call state and the new Intent is not adopted (no
-     * setIntent). A START/JOIN launched for another session reached this page while it was going
-     * away: this page closes and the launch is replayed so a new page attaches to that session.
-     */
+    
+
+
+
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         val key = CallIntent(intent).sessionKey
@@ -351,8 +322,8 @@ class LCallActivity : AppCompatActivity(), FoldDiagnostics.Host {
     override fun onResume() {
         super.onResume()
         L.i { "[Call] LCallActivity onResume" }
-        // A visible page: issue a start the session deferred, then refresh the service type. Both
-        // are keyed to this page's session and do nothing unless it owns the service.
+        
+        
         val sessionId = viewModel.sessionId
         ongoingCallService.ensureStarted(sessionId)
         ongoingCallService.updateServiceType(sessionId)
@@ -362,8 +333,8 @@ class LCallActivity : AppCompatActivity(), FoldDiagnostics.Host {
         if (viewModel.isRequestingPermission()) {
             viewModel.callUiController.setRequestPermissionStatus(false)
         }
-        // Settings return / any foreground return: refresh badge + tap routing state.
-        // Never auto-enables anything — a fresh grant still waits for the next tap.
+        
+        
         viewModel.mediaPermissions.refresh(this)
         updateScreenshotListeningState()
         window.hideNavigationBar()
@@ -378,20 +349,20 @@ class LCallActivity : AppCompatActivity(), FoldDiagnostics.Host {
             newConfig
         )
         updateScreenshotListeningState()
-        // Backstop for the PiP skips in onConfigurationChanged and the display watcher: a fold
-        // while pinned is ignored on purpose, so re-apply once the window is un-pinned (mirrors
-        // BaseActivity).
+        
+        
+        
         if (!isInPictureInPictureMode) {
             reapplyOrientationPolicyIfOwned()
         }
     }
 
-    /**
-     * Override getResources to force fontScale back to 1.0f so that the
-     * system font-scale setting does not break the call layout.
-     * updateConfiguration is deprecated but has no equivalent per-access
-     * replacement API.
-     */
+    
+
+
+
+
+
     @Suppress("DEPRECATION")
     override fun getResources(): Resources {
         val res = super.getResources()
@@ -403,12 +374,12 @@ class LCallActivity : AppCompatActivity(), FoldDiagnostics.Host {
         return res
     }
 
-    /**
-     * End the call and release resources.
-     *
-     * Marks the exit state, ends the call session (its cleanup, heavy I/O included, runs on
-     * `appScope` + IO) and closes the Activity immediately.
-     */
+    
+
+
+
+
+
     internal fun endCallAndClearResources() {
         viewModel.markEnding()
         runOnUiThread {
@@ -417,11 +388,11 @@ class LCallActivity : AppCompatActivity(), FoldDiagnostics.Host {
         }
     }
 
-    /**
-     * Vibration feedback when the countdown finishes.
-     *
-     * Requires the VIBRATE permission; returns silently if not granted.
-     */
+    
+
+
+
+
     fun countDownEndVibrate() {
         if (checkSelfPermission(android.Manifest.permission.VIBRATE) != PackageManager.PERMISSION_GRANTED) {
             return
@@ -429,42 +400,42 @@ class LCallActivity : AppCompatActivity(), FoldDiagnostics.Host {
         vibrationManager.vibrateOnce(200L, 200)
     }
 
-    /**
-     * Update foreground-service types; called by the Compose UI once
-     * the corresponding runtime permission has been granted.
-     */
+    
+
+
+
     fun updateForegroundServiceType() {
         ongoingCallService.updateServiceType(viewModel.sessionId)
     }
 
-    /**
-     * Show a toast message and run the supplied callback afterwards.
-     */
+    
+
+
     fun showStyledPopTip(message: String, onDismiss: () -> Unit = {}) {
         ToastUtil.show(message)
         onDismiss()
     }
 
-    /**
-     * Refresh the screenshot listening state.
-     *
-     * Delegates to [CallScreenshotController], which decides whether the
-     * detector should be active based on the current call type, PIP mode
-     * and foreground/background state.
-     */
+    
+
+
+
+
+
+
     internal fun updateScreenshotListeningState() {
         screenshotController?.updateListeningState()
     }
 
-    /**
-     * Allow this Activity to be shown over the lock screen.
-     *
-     * API 27+: handled by `android:showWhenLocked` / `android:turnScreenOn`
-     * manifest attributes, which are processed by the system before onCreate()
-     * — no Binder IPC needed at runtime.
-     *
-     * API 26: falls back to deprecated window flags (local, no IPC).
-     */
+    
+
+
+
+
+
+
+
+
     internal fun allowOnLockScreen() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O_MR1) {
             @Suppress("DEPRECATION")
@@ -476,9 +447,9 @@ class LCallActivity : AppCompatActivity(), FoldDiagnostics.Host {
         }
     }
 
-    /**
-     * Check whether the user has configured an app lock (pattern or password).
-     */
+    
+
+
     internal fun isAppLockEnabled(): Boolean {
         if (!::userManager.isInitialized) return false
         val user = userManager.getUserData() ?: return false

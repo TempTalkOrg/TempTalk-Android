@@ -17,7 +17,7 @@ object Base58 {
             result.insert(0, ALPHABET[index])
         }
 
-        // Pad leading zeros
+        
         for (b in input) {
             if (b == 0x00.toByte()) {
                 result.insert(0, ALPHABET[0])
@@ -56,12 +56,12 @@ object Base58 {
 
         var bytes = value.toByteArray()
 
-        // Remove the leading zero byte added by BigInteger.toByteArray()
+        
         if (bytes.isNotEmpty() && bytes[0] == 0.toByte()) {
             bytes = bytes.copyOfRange(1, bytes.size)
         }
 
-        // Pad leading zeros
+        
         for (c in input) {
             if (c == ALPHABET[0]) {
                 val tmp = ByteArray(bytes.size + 1)

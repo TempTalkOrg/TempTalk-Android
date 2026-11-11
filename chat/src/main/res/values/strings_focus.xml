@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Focus on This Group: settings rows -->
+    
     <string name="focus_this_group">Focus on This Group</string>
     <string name="focus_group_chat">Group Focus</string>
     <string name="focus_caption_off">Other groups will be muted</string>
@@ -15,14 +15,14 @@
     <string name="focus_still_notify">Still Notify</string>
     <string name="focus_fold_others">Fold other groups</string>
     <string name="focus_select_group">Select Focus Group</string>
-    <!-- Me > Notifications: secondary row "Focusing on   {group} >" that opens the picker to switch -->
+    
     <string name="focus_focusing">Focusing on</string>
     <string name="focus_item_mention_me">\@Me</string>
     <string name="focus_item_mention_all">\@All</string>
     <string name="focus_item_group_call">Group calls</string>
     <string name="focus_item_separator">", "</string>
 
-    <!-- Paused rows -->
+    
     <string name="focus_paused">Paused</string>
     <string name="focus_paused_returns">Returns to “%1$s” when Focus ends</string>
     <string name="focus_takeover_caption">Taken over by Focus. Returns when Focus ends: Mute “%1$s”, Notifications “%2$s”.</string>
@@ -30,9 +30,9 @@
     <string name="focus_mute_on">On</string>
     <string name="focus_mute_off">Off</string>
 
-    <!-- Duration sheet -->
+    
     <string name="focus_sheet_title">Focus on “%1$s”</string>
-    <!-- %1$s: the items of "Other Groups Still Notify" that are on, e.g. "@Me, Group calls" -->
+    
     <string name="focus_sheet_desc_fold_notify">All messages and group calls from this group will notify. Other groups will be muted and folded; %1$s will still notify.</string>
     <string name="focus_sheet_desc_notify">All messages and group calls from this group will notify. Other groups will be muted; %1$s will still notify.</string>
     <string name="focus_sheet_desc_fold">All messages and group calls from this group will notify. Other groups will be muted and folded.</string>
@@ -42,7 +42,7 @@
     <string name="focus_duration_manual">Until I end it</string>
     <string name="focus_cancel">Cancel</string>
 
-    <!-- Dialogs -->
+    
     <string name="focus_switch_title">Focus on this group?</string>
     <string name="focus_switch_message">Focus will move to “%1$s”. “%2$s” will be muted.</string>
     <string name="focus_switch_confirm">Switch</string>
@@ -55,7 +55,7 @@
     <string name="focus_dialog_end_focus">End Focus</string>
     <string name="focus_dialog_turn_off_mute">Turn Off Mute</string>
 
-    <!-- Group picker -->
+    
     <string name="focus_picker_cancel">Cancel</string>
     <string name="focus_picker_done">Done</string>
     <string name="focus_picker_footer">Only one group can be selected.</string>

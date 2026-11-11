@@ -42,14 +42,14 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 
-/**
- * The session graph's remote-end seam (the `RoomEventHost.onRemoteEndRequested` it binds) always
- * reaches the end controller as a post to the real main Looper on the session's `Job`: from the RTM
- * END_CALL path, whose `RtmMessageHandler` decodes on a real IO worker, and from the server
- * end-call path, which runs on main. Posted, never inline, so the end sequence never runs inside the
- * room-event or RTM handler; a session ended before the post runs drops it.
- * No `TestDispatcherRule`: `Dispatchers.Main` must be the Robolectric main Looper. Rows: T4-31, T4-32.
- */
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [33])
 class RoomEventDispatcherRemoteEndHopTest {
@@ -63,7 +63,7 @@ class RoomEventDispatcherRemoteEndHopTest {
     private lateinit var session: CallSession
     private lateinit var f: RoomEventDispatcherFixture
 
-    /** One entry per end-controller `onRemoteControl`: whether it ran on the main Looper. */
+    
     private val endCalls = Collections.synchronizedList(mutableListOf<Boolean>())
 
     @Before
@@ -142,7 +142,7 @@ class RoomEventDispatcherRemoteEndHopTest {
 
         f.dispatch(dispatcher, serverEndCall())
         session.end(CallSessionEndReason.EXIT_CLEAR)
-        h.cancelScope(session) // the session's last cleanup step
+        h.cancelScope(session) 
         mainLooper.idle()
 
         assertEquals(listOf(ROOM_ID), f.remoteEndRequests)
@@ -151,7 +151,7 @@ class RoomEventDispatcherRemoteEndHopTest {
 
     private fun realRtm() = RtmMessageHandler(f.room, session.mainScope, { _, _ -> null }, { _, _ -> null })
 
-    /** A valid server-injected packet: no participant, inner topic and timestamp matching the outer ones. */
+    
     private fun serverEndCall(): RoomEvent.DataReceived {
         val inner = Json.encodeToString(ServerEndCallRtmMessage(topic = RTM_MESSAGE_TOPIC_SERVER_END_CALL, sendTimestamp = TS))
         val packet = Json.encodeToString(RtmDataPacket(payload = inner, signature = "", sendTimestamp = TS, uuid = "u1"))
@@ -170,7 +170,7 @@ class RoomEventDispatcherRemoteEndHopTest {
         const val TS = 5L
         const val AWAIT_S = 5L
 
-        /** The graph's private `onRemoteEndRequested`, which `RoomEventHost` is bound to in production. */
+        
         val endSeam = CallSessionGraph::class.java.getDeclaredMethod("onRemoteEndRequested", String::class.java)
             .apply { isAccessible = true }
     }

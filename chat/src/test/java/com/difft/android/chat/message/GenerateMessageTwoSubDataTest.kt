@@ -32,15 +32,10 @@ import org.junit.Assert.assertSame
 import org.junit.Before
 import org.junit.Test
 
-/**
- * Cases #36..#38 — `generateMessageTwo`'s zero-DB-access contract.
- *
- * The whole point of the `MessageSubData` parameter is that this function reads no child table at
- * all any more: the eight point queries it used to issue per message (with `forwardContext()` issued
- * TWICE) are replaced by field reads on data the hydrator resolved once for the whole window. The
- * `mockkStatic` here is what makes that observable — with the facade mocked, any surviving point
- * query would either be caught by `verify(exactly = 0)` or blow up as an unstubbed call.
- */
+
+
+
+
 class GenerateMessageTwoSubDataTest {
 
     private val forWhat = For.Account(PEER_ID)
@@ -53,7 +48,7 @@ class GenerateMessageTwoSubDataTest {
         every { com.difft.android.base.utils.globalServices } returns globalServicesMock
         every { globalServicesMock.myId } returns MY_ID
         every { globalServicesMock.gson } returns Gson()
-        // The ONE call generateMessageTwo still makes into this facade: an in-memory json parse.
+        
         every { any<MessageModel>().screenShot() } returns null
     }
 
@@ -63,8 +58,7 @@ class GenerateMessageTwoSubDataTest {
         unmockkStatic("org.difft.app.database.WCDBExtensionsKt")
     }
 
-    // #36 — the double forwardContext() call is gone structurally: the "is this a combined forward"
-    // branch and the assigned field read the SAME reference out of subData.
+    
     @Test
     fun `forward context comes from subData and is never re-queried`() {
         val forwardContext = ForwardContext(emptyList(), false)
@@ -80,7 +74,7 @@ class GenerateMessageTwoSubDataTest {
         assertSame(forwardContext, message.forwardContext)
     }
 
-    // #37 — the zero-DB-access contract in full, plus the one deliberate exception.
+    
     @Test
     fun `no child-table point query runs and screenShot is still read in memory`() {
         val record = buildMessageModel(id = "m1", systemShowTimestamp = 1_000L)
@@ -102,15 +96,14 @@ class GenerateMessageTwoSubDataTest {
         verify(exactly = 0) { any<MessageModel>().translateData() }
         verify(exactly = 0) { any<MessageModel>().speechToTextData() }
         verify(exactly = 1) { any<MessageModel>().screenShot() }
-        // The sub-data really did land on the message (a silently empty result would also satisfy
-        // the verifications above).
+        
+        
         assertEquals(subData.mentions, message.mentions)
         assertEquals(subData.reactions, message.reactions)
         assertEquals("msg-m1", message.message)
     }
 
-    // #38 — the two non-TEXT branches never consume subData; passing EMPTY must produce exactly the
-    // same object as before the parameter existed.
+    
     @Test
     fun `notify branch is unaffected by subData`() {
         val record = buildMessageModel(
@@ -159,8 +152,8 @@ class GenerateMessageTwoSubDataTest {
         verify(exactly = 0) { any<MessageModel>().screenShot() }
     }
 
-    // EMPTY sub-data on a TEXT message must degrade to "no child rows", not to a crash or a stale
-    // read — this is the shape every message without child rows takes.
+    
+    
     @Test
     fun `empty subData yields a text message with no child data`() {
         val record = buildMessageModel(id = "m2", systemShowTimestamp = 4_000L)

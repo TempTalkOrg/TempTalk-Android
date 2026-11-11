@@ -5,23 +5,23 @@ import com.difft.android.base.utils.Base64
 import com.difft.android.migration.v2.model.NeutralIdentity
 import java.io.IOException
 
-/**
- * Checks the identity material a container carries before it is installed and brings it to the one
- * shape Android stores.
- *
- * This must happen before promote, not at login: the restore continuation signs in with the installed
- * identity, and sign-in's first request registers this device — revoking the old one — before its
- * second request decodes the identity. A key that cannot decode therefore leaves the user signed out on
- * both devices, and every retry meets the same key.
- *
- * The shape is libsignal's: a public key is the type byte `0x05` followed by the 32-byte Curve25519
- * point, and a private key is the bare 32 bytes. A bare 32-byte public key is normalized by prepending
- * the type byte, since the material is unambiguous and the alternative strands the user; anything else
- * is rejected.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 internal object CarriedIdentityNormalizer {
 
-    /** The container's identity cannot be turned into a usable key pair; [message] names the field. */
+    
     class InvalidIdentity(message: String) : Exception(message)
 
     fun normalize(identity: NeutralIdentity): NeutralIdentity {
@@ -35,7 +35,7 @@ internal object CarriedIdentityNormalizer {
             oldPublic != null && oldPrivate != null ->
                 normalizePublic(oldPublic, "oldAciPublicKey") to requirePrivate(oldPrivate, "oldAciPrivateKey")
             else -> {
-                // Half a pair decrypts nothing; carrying it would only make the fallback window lie.
+                
                 L.w { "[MigrationV2][Restore] identity carried half an old key pair — dropping it" }
                 null to null
             }
@@ -72,11 +72,11 @@ internal object CarriedIdentityNormalizer {
         try {
             Base64.decode(base64)
         } catch (e: IOException) {
-            // The project's Base64 wraps the JDK decoder's IllegalArgumentException as IOException.
+            
             throw InvalidIdentity("$field: not base64 (${e.message})")
         }
 
-    /** libsignal's Curve25519 key-type marker, the first byte of a serialized public key. */
+    
     const val KEY_TYPE_DJB: Byte = 0x05
     const val RAW_KEY_BYTES = 32
     const val SERIALIZED_PUBLIC_KEY_BYTES = 33

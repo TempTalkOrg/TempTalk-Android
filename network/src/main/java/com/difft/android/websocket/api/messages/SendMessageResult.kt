@@ -22,7 +22,7 @@ class SendMessageResult private constructor(
     class Success internal constructor(
         val isNeedsSync: Boolean,
         val duration: Long,
-//        val content: SignalServiceProtos.Content,
+
         val systemShowTimestamp: Long,
         val notifySequenceId: Long,
         val sequenceId: Long
@@ -31,7 +31,7 @@ class SendMessageResult private constructor(
             return "Success{" +
                     "needsSync=" + isNeedsSync +
                     ", duration=" + duration +
-//                    ", content=" + content +
+
                     ", systemShowTimestamp=" + systemShowTimestamp +
                     ", notifySequenceId=" + notifySequenceId +
                     ", sequenceId=" + sequenceId +
@@ -64,7 +64,7 @@ class SendMessageResult private constructor(
             address: String,
             needsSync: Boolean,
             duration: Long,
-//            content: SignalServiceProtos.Content,
+
             systemShowTimestamp: Long,
             notifySequenceId: Long,
             sequenceId: Long
@@ -74,7 +74,7 @@ class SendMessageResult private constructor(
                 Success(
                     needsSync,
                     duration,
-//                    content,
+
                     systemShowTimestamp,
                     notifySequenceId,
                     sequenceId

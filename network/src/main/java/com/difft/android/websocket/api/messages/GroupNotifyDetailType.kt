@@ -3,9 +3,9 @@ package com.difft.android.websocket.api.messages
 enum class GroupNotifyDetailType(val value: Int) {
     CreateGroup(0),
     JoinGroup(1),
-    LeaveGroup(2), //msgExtra中不带会话id，且不计入sequenceId
+    LeaveGroup(2), 
     InviteJoinGroup(3),
-    KickoutGroup(4), //msgExtra中不带会话id，且不计入sequenceId
+    KickoutGroup(4), 
     DismissGroup(5),
     GroupNameChange(6),
     GroupAvatarChange(7),
@@ -18,7 +18,7 @@ enum class GroupNotifyDetailType(val value: Int) {
     GroupUpdateAnnnouncement(14),
     GroupDeleteAnnnouncement(15),
     GroupOtherChange(16),
-    GroupSelfInfoChange(17),//msgExtra中不带会话id，且不计入sequenceId
+    GroupSelfInfoChange(17),
     GroupAddPin(18),
     GroupDeletePin(19),
     GroupInvitationRuleChange(20),
@@ -35,7 +35,7 @@ enum class GroupNotifyDetailType(val value: Int) {
     GroupAnyoneChangeNameChange(31),
     AnyoneChangeAutoClearChange(32),
     AutoClearChange(33),
-    KickoutAutoClear(34),//msgExtra中不带会话id，且不计入sequenceId
+    KickoutAutoClear(34),
     Destroy(35),
     PrivilegeConfidential(36),
     WeblinkInviteJoin(37),

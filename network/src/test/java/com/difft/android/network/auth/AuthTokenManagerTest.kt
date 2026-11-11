@@ -27,16 +27,16 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/**
- * [AuthTokenManager] read-through, expiry margin, refresh de-duplication and failure cooldown
- * (issue #1231). Robolectric because the expiry test decodes the token with
- * `com.auth0.android.jwt.JWT`, which reads its claims through `android.util.Base64` — a stub that
- * throws "not mocked" on a plain JVM.
- *
- * `UserManager` is a hand-written fake rather than a mock: the post-lock re-check depends on
- * `update {}` mutating the snapshot SYNCHRONOUSLY, and a relaxed mock that dropped the write would
- * make the de-duplication tests pass for the wrong reason.
- */
+
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 class AuthTokenManagerTest {
 
@@ -44,7 +44,7 @@ class AuthTokenManagerTest {
     private val authClient = mockk<ChativeHttpClient>()
     private val fetchCount = AtomicInteger(0)
 
-    /** The refreshed token must itself be usable, or every post-lock re-check refreshes again. */
+    
     private val freshToken = testJwt(expiresInMs = 10 * 60_000L)
 
     private class FakeUserManager(private var data: UserData?) : UserManager {
@@ -64,7 +64,7 @@ class AuthTokenManagerTest {
     private fun manager(userManager: UserManager) =
         AuthTokenManager(authClient, userManager)
 
-    /** Both clocks pinned to [now], so a token's exact expiry instant is comparable. */
+    
     private fun managerAt(now: Long, userManager: UserManager): AuthTokenManager {
         ServerTimeProvider.resetForTest(wallClock = { now }, elapsedClock = { 0L })
         return manager(userManager).apply { nowMs = { now } }
@@ -72,8 +72,8 @@ class AuthTokenManagerTest {
 
     @Before
     fun setUp() {
-        // Anchor-free deterministic clock: nowMillis() == wall clock, so token expiry maths in the
-        // test is relative to System.currentTimeMillis() exactly as testJwt builds it.
+        
+        
         ServerTimeProvider.resetForTest(wallClock = { System.currentTimeMillis() }, elapsedClock = { 0L })
         every { authClient.httpService } returns httpService
         fetchCount.set(0)
@@ -91,7 +91,7 @@ class AuthTokenManagerTest {
         }
     }
 
-    // T1 — cold start with a valid stored token serves it without a refresh.
+    
     @Test
     fun `current returns a stored token that is not expiring`() = runTest {
         stubRefresh()
@@ -103,7 +103,7 @@ class AuthTokenManagerTest {
         assertEquals(0, fetchCount.get())
     }
 
-    // T2 — a token inside the 120 s margin refreshes.
+    
     @Test
     fun `current refreshes a token inside the expiry margin`() = runTest {
         stubRefresh()
@@ -116,7 +116,7 @@ class AuthTokenManagerTest {
         assertEquals(freshToken, users.getUserData()?.microToken)
     }
 
-    // T3 — just outside the margin is still served from storage.
+    
     @Test
     fun `current keeps a token just outside the expiry margin`() = runTest {
         stubRefresh()
@@ -128,7 +128,7 @@ class AuthTokenManagerTest {
         assertEquals(0, fetchCount.get())
     }
 
-    // T4 — no credential means no token and no refresh, even with a valid stored JWT.
+    
     @Test
     fun `current returns empty when there is no credential`() = runTest {
         stubRefresh()
@@ -138,7 +138,7 @@ class AuthTokenManagerTest {
         assertEquals(0, fetchCount.get())
     }
 
-    // T5 — before storage warm-up getUserData() is null; no throw, no refresh.
+    
     @Test
     fun `current returns empty before storage warm up`() = runTest {
         stubRefresh()
@@ -147,7 +147,7 @@ class AuthTokenManagerTest {
         assertEquals(0, fetchCount.get())
     }
 
-    // T6 — an unparsable stored token counts as expiring and is replaced.
+    
     @Test
     fun `current refreshes an unparsable stored token`() = runTest {
         stubRefresh()
@@ -158,7 +158,7 @@ class AuthTokenManagerTest {
         assertEquals(1, fetchCount.get())
     }
 
-    // T7 — concurrent current() on an expired token collapse onto one refresh.
+    
     @Test
     fun `concurrent current calls issue one refresh`() = runTest {
         stubRefresh()
@@ -170,11 +170,11 @@ class AuthTokenManagerTest {
         assertTrue(tokens.all { it == freshToken })
     }
 
-    // T8 — a rejection burst against one stale token collapses onto one refresh.
+    
     @Test
     fun `concurrent refreshRejected calls for the same token issue one refresh`() = runTest {
         stubRefresh()
-        // Distinct from freshToken: the collapse is keyed on the rejected VALUE.
+        
         val stale = testJwt(expiresInMs = 9 * 60_000L, uid = "stale")
         val subject = manager(userManager(microToken = stale))
 
@@ -184,7 +184,7 @@ class AuthTokenManagerTest {
         assertTrue(tokens.all { it == freshToken })
     }
 
-    // T9 — a failing refresh is not amplified: one attempt per cooldown window.
+    
     @Test
     fun `a failed refresh is suppressed for the cooldown window`() = runTest {
         coEvery { httpService.fetchAuthToken(any()) } coAnswers {
@@ -197,7 +197,7 @@ class AuthTokenManagerTest {
         subject.nowMs = { fakeNow }
 
         assertEquals("", subject.refreshRejected(stale))
-        // Inside the cooldown no new attempt is made, and the rejected token is never handed back.
+        
         repeat(3) { assertEquals("", subject.refreshRejected(stale)) }
         assertEquals(1, fetchCount.get())
 
@@ -207,7 +207,7 @@ class AuthTokenManagerTest {
         assertEquals(2, fetchCount.get())
     }
 
-    // T39 — the refresh must not ride the capped @Chat dispatcher.
+    
     @Test
     fun `the refresh client parameter is qualified with AuthToken`() {
         val annotations = AuthTokenManager::class.java.constructors.single().parameterAnnotations
@@ -216,7 +216,7 @@ class AuthTokenManagerTest {
         assertTrue(clientAnnotations.contains(ChativeHttpClientModule.AuthToken::class))
     }
 
-    // Empty result from the server is a failure, not a token.
+    
     @Test
     fun `current returns empty when the server answers with no token`() = runTest {
         coEvery { httpService.fetchAuthToken(any()) } coAnswers {
@@ -229,8 +229,8 @@ class AuthTokenManagerTest {
         coVerify(exactly = 1) { httpService.fetchAuthToken(any()) }
     }
 
-    // T53 — a refresh that fails inside the expiry margin hands out the still-valid stored token,
-    // never "" (an unauthenticated request); the failure still arms the cooldown.
+    
+    
     @Test
     fun `a failed refresh inside the margin keeps the still-valid stored token`() = runTest {
         coEvery { httpService.fetchAuthToken(any()) } coAnswers {
@@ -242,12 +242,12 @@ class AuthTokenManagerTest {
 
         assertEquals(stillValid, subject.current())
         assertEquals(1, fetchCount.get())
-        // Second call inside the cooldown: no new attempt, same still-valid token.
+        
         assertEquals(stillValid, subject.current())
         assertEquals(1, fetchCount.get())
     }
 
-    // T54 — same for a server that answers with no token.
+    
     @Test
     fun `an empty server token inside the margin keeps the still-valid stored token`() = runTest {
         coEvery { httpService.fetchAuthToken(any()) } coAnswers {
@@ -260,8 +260,8 @@ class AuthTokenManagerTest {
         assertEquals(1, fetchCount.get())
     }
 
-    // T55 — refreshRejected never hands back the token the server just rejected, even when a
-    // failed refresh would otherwise fall back to it (it is still valid by the clock).
+    
+    
     @Test
     fun `a failed forced refresh does not return the rejected token`() = runTest {
         coEvery { httpService.fetchAuthToken(any()) } coAnswers {
@@ -275,7 +275,7 @@ class AuthTokenManagerTest {
         assertEquals(1, fetchCount.get())
     }
 
-    // T44 — the margin boundary is exclusive: exactly the margin left is still usable.
+    
     @Test
     fun `current keeps a token with exactly the expiry margin left`() = runTest {
         stubRefresh()
@@ -286,8 +286,8 @@ class AuthTokenManagerTest {
         assertEquals(0, fetchCount.get())
     }
 
-    // T45 — one ms inside the margin refreshes. `exp` has second resolution, so the token lands on
-    // the whole second below the boundary — still the first instant that counts as expiring.
+    
+    
     @Test
     fun `current refreshes a token one ms inside the expiry margin`() = runTest {
         stubRefresh()
@@ -298,7 +298,7 @@ class AuthTokenManagerTest {
         assertEquals(1, fetchCount.get())
     }
 
-    // T46 — a rejected token storage has already replaced is answered from storage, not refreshed.
+    
     @Test
     fun `refreshRejected returns the stored token when it is already newer`() = runTest {
         stubRefresh()
@@ -309,7 +309,7 @@ class AuthTokenManagerTest {
         assertEquals(0, fetchCount.get())
     }
 
-    // T47 — no credential means nothing to refresh with, even for a rejection.
+    
     @Test
     fun `refreshRejected returns empty when there is no credential`() = runTest {
         stubRefresh()
@@ -319,7 +319,7 @@ class AuthTokenManagerTest {
         assertEquals(0, fetchCount.get())
     }
 
-    // T48 — logout lands while the refresh is in flight: the token is discarded, not written back.
+    
     @Test
     fun `a refresh completing after logout does not write the token`() = runTest {
         val users = userManager(microToken = testJwt(expiresInMs = -60_000L))
@@ -337,7 +337,7 @@ class AuthTokenManagerTest {
     private companion object {
         const val CONCURRENT = 10
 
-        /** Whole second, so a token's `exp` survives the second-resolution truncation intact. */
+        
         const val FIXED_NOW = 1_700_000_000_000L
     }
 }

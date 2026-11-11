@@ -9,7 +9,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowAlarmManager
 import kotlin.test.assertEquals
 
-/** Sideload channels declare SCHEDULE_EXACT_ALARM, so the row reflects the grant state. */
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [34])
 class ExactAlarmAccessSideloadTest {

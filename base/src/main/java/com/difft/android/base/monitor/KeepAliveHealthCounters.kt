@@ -14,20 +14,20 @@ import util.AppForegroundObserver
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * #1328: hot-path event counters for the daily [KeepAliveHealthReporter] report (FCM receipts and
- * transit latency, FCM-triggered pull results, background delivery latency per channel, app stalls,
- * keep-alive service uptime).
- *
- * Recording only touches memory under a short lock; nothing here does IO on the caller's thread.
- * Pending counts reach app_state on the first event of a process (FCM-woken processes are often
- * killed within minutes), then at most once per [FLUSH_INTERVAL_MS] (piggybacking on events and on
- * the keep-alive alarm tick, never a wakeup of its own), on service stop and when the app goes to
- * the background, so a process kill loses at most one interval of counts.
- *
- * Delivery latency is skipped until the trusted clock is anchored, so a cold FCM-woken process that
- * has made no API call yet contributes no delivery sample; FCM transit falls back to the offset-corrected wall clock.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 @Singleton
 class KeepAliveHealthCounters @Inject constructor(
     @param:AppStateDataStore
@@ -37,11 +37,11 @@ class KeepAliveHealthCounters @Inject constructor(
     companion object {
         internal const val FLUSH_INTERVAL_MS = 5 * 60 * 1000L
 
-        /**
-         * Minimum spacing of the extra flush triggered by an FCM pull result. The pull result is the
-         * last event of an FCM wake-up, so flushing then captures the payload sample and the pull
-         * result together before the process is reclaimed; the floor bounds this to ~2 writes/min.
-         */
+        
+
+
+
+
         internal const val PULL_FLUSH_FLOOR_MS = 30 * 1000L
     }
 
@@ -50,21 +50,21 @@ class KeepAliveHealthCounters @Inject constructor(
     internal var isForeground: () -> Boolean = { AppForegroundObserver.isForegrounded() }
     internal var wallClock: () -> Long = { System.currentTimeMillis() }
 
-    /** Unanchored fallback for FCM transit: wall clock corrected by the last persisted server offset. */
+    
     internal var offsetCorrectedNow: () -> Long = { ServerTimeProvider.nowMillis() }
 
-    /**
-     * False when this install is not reporting (see [KeepAliveHealthModel.isEligible]). Set by the
-     * reporter on every decision; `MessageServiceManager.setKeepAlive` sets it to true when the user
-     * enables keep-alive, until the next decision.
-     */
+    
+
+
+
+
     @Volatile
     var collecting: Boolean = true
 
     private val lock = Any()
     private val pending = HashMap<String, Int>()
 
-    // elapsedRealtime the uptime was last accrued from while the service runs; null when stopped.
+    
     private var fgsAccruedFrom: Long? = null
     internal var lastFlushElapsed: Long? = null
     internal var lastPullFlushElapsed: Long? = null
@@ -77,16 +77,16 @@ class KeepAliveHealthCounters @Inject constructor(
         runCatching { AppForegroundObserver.addListener(backgroundListener) }
     }
 
-    /**
-     * One FCM receipt. The transit sample is recorded with the receipt so the first-event flush of
-     * a short-lived FCM-woken process persists both.
-     *
-     * @param highPrioritySentTimeMs `RemoteMessage.sentTime` of a message sent as high priority (the
-     * caller filters on `originalPriority`), or a non-positive value for no transit sample. Transit
-     * is counted in the foreground, for duplicates and critical alerts too. A cold FCM-woken process
-     * is the case this sample exists for, so an unanchored clock falls back to the wall clock
-     * corrected by the last persisted server offset instead of dropping the sample.
-     */
+    
+
+
+
+
+
+
+
+
+
     fun onFcmReceived(deprioritized: Boolean, highPrioritySentTimeMs: Long = 0L) {
         if (!collecting) return
         synchronized(lock) {
@@ -100,7 +100,7 @@ class KeepAliveHealthCounters @Inject constructor(
         flush(force = false)
     }
 
-    /** The keep-alive alarm chain was found stale after [durationMs] of silence (process frozen or alarms dropped). */
+    
     fun onAppStall(durationMs: Long) {
         if (!collecting || durationMs <= 0L) return
         synchronized(lock) {
@@ -111,20 +111,20 @@ class KeepAliveHealthCounters @Inject constructor(
         flush(force = false)
     }
 
-    /** Result of an FCM-triggered HTTP pull; other pull triggers are not reported here. */
+    
     fun onPullResult(success: Boolean) {
         if (!collecting) return
         synchronized(lock) { increment(if (success) HealthEventKeys.PULL_OK else HealthEventKeys.PULL_FAIL) }
         flush(force = false, pullResult = true)
     }
 
-    /**
-     * Records the latency of a message that was newly stored; the caller must not call this for
-     * redeliveries or duplicates (the store's insert check decides).
-     *
-     * @param serverTimestamp server arrival time of the envelope (`systemShowTimestamp`).
-     * @param channel path the envelope arrived on; selects the latency counter.
-     */
+    
+
+
+
+
+
+
     fun onEnvelopeDelivered(serverTimestamp: Long, channel: DeliveryChannel) {
         if (!collecting) return
         synchronized(lock) {
@@ -135,10 +135,10 @@ class KeepAliveHealthCounters @Inject constructor(
         flush(force = false)
     }
 
-    /**
-     * One delivery that [LateDeliveryTracker] judged late (see [LateDeliveryRule]); feeds the 7-day
-     * `L` verdict rule on reporting installs. The tracker keeps its own count for every install.
-     */
+    
+
+
+
     fun onLateDelivery() {
         if (!collecting) return
         synchronized(lock) { increment(HealthEventKeys.LATE_5M) }
@@ -151,7 +151,7 @@ class KeepAliveHealthCounters @Inject constructor(
             fgsAccruedFrom = elapsedClock()
             if (collecting) increment(HealthEventKeys.FGS_STARTS)
         }
-        // A short-lived revival can die before any alarm tick; same throttled flush as other events.
+        
         flush(force = false)
     }
 
@@ -163,17 +163,17 @@ class KeepAliveHealthCounters @Inject constructor(
         flush(force = true)
     }
 
-    /** #1376 background power counters from [BackgroundPowerSampler]; persisted with the next flush. */
+    
     fun onPowerCounts(add: Map<String, Int>) {
         if (!collecting) return
         synchronized(lock) { add.forEach { (k, v) -> increment(k, v) } }
         flush(force = false)
     }
 
-    /** Keep-alive alarm tick: accrues uptime and persists if an interval has passed. */
+    
     fun onAlarmTick() = flush(force = false)
 
-    /** Takes all pending counts (uptime accrued up to now) and resets them. */
+    
     fun drain(): Map<String, Int> = synchronized(lock) {
         accrueUptime()
         val out = HashMap(pending)
@@ -181,7 +181,7 @@ class KeepAliveHealthCounters @Inject constructor(
         out
     }
 
-    /** Persisted + pending counts are dropped by the reporter; this drops the in-memory part. */
+    
     fun discard() {
         synchronized(lock) { pending.clear() }
     }
@@ -211,7 +211,7 @@ class KeepAliveHealthCounters @Inject constructor(
         }.onFailure { L.w { "[KeepAliveHealth] event flush failed: ${it.stackTraceToString()}" } }
     }
 
-    // Caller holds lock.
+    
     private fun accrueUptime() {
         val from = fgsAccruedFrom ?: return
         val now = elapsedClock()

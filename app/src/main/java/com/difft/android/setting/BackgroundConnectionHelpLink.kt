@@ -4,14 +4,14 @@ import android.os.Build
 import java.net.URLEncoder
 import java.util.Locale
 
-/**
- * Builds the "more guidance" link for the background-connection settings page.
- *
- * The page lives next to the proxy help page and opens the section matching the device brand, so
- * the link carries the manufacturer, model and API level: device data only, no account identifiers.
- * `from` names the settings screen the user came from; the page decides what to do with it, so the
- * client never has to change when the page layout does.
- */
+
+
+
+
+
+
+
+
 object BackgroundConnectionHelpLink {
 
     const val BASE_URL = "https://quicall.app/notification-help-android.html"

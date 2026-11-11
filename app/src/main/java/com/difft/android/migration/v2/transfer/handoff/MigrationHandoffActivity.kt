@@ -21,24 +21,24 @@ import kotlinx.coroutines.withTimeoutOrNull
 import com.difft.android.p2p.engine.upload.MigrationRejectReason
 import dagger.hilt.android.EntryPointAccessors
 
-/**
- * The only exported entry point of the migration feature — a UI-less trampoline both package families
- * ship, so the two apps on one device can hand the transfer to each other without exposing their real
- * screens.
- *
- * Every action is started for result, so [getCallingPackage] is trustworthy, and every action vets
- * it: the caller must be the peer package signed with one of our certificates, and a send payload
- * must point at loopback. A payload from an unknown app would otherwise make this device stream its
- * history to whatever address it named. Start-receive shows nothing — the receiver comes up in the
- * foreground service and the pairing payload goes back in the result, so the final authorisation
- * stays on the old app's own page.
- */
+
+
+
+
+
+
+
+
+
+
+
+
 class MigrationHandoffActivity : ComponentActivity() {
 
-    /** True when this instance started the receiver, so an interrupted start may tear it down. */
+    
     private var startedReceiverHere = false
 
-    /** True once a result was set; the teardown in [onDestroy] is for the unanswered case only. */
+    
     private var resultDelivered = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -60,7 +60,7 @@ class MigrationHandoffActivity : ComponentActivity() {
         finish()
     }
 
-    /** The caller must be the peer package, signed with one of our certificates. */
+    
     private fun vettedCaller(what: String): String? {
         val caller = callingPackage
         if (caller == null || caller != PeerApps.peerPackage(this)) {
@@ -79,16 +79,16 @@ class MigrationHandoffActivity : ComponentActivity() {
         val raw = intent.getStringExtra(PeerApps.EXTRA_QR_PAYLOAD)
         val payload = raw?.let(QrPayloadCodec::decode)
         if (payload == null || payload.ip != PeerApps.LOOPBACK_IP || payload.transferKey == null) {
-            // Never log the payload itself: it carries the pin and the transfer key.
+            
             L.w { "[MigrationV2][Handoff] send refused: payload absent, undecodable or not loopback" }
             return false
         }
-        // The handoff flag can only ever arrive here — from the vetted peer, on a loopback payload —
-        // which is what makes "a cross-device container can never carry a credential" structural.
+        
+        
         val credentialHandoff = intent.getBooleanExtra(PeerApps.EXTRA_CREDENTIAL_HANDOFF, false)
         L.i { "[MigrationV2][Handoff] send accepted from $caller handoff=$credentialHandoff → opening the send screen" }
-        // REORDER_TO_FRONT: a send screen that already exists (the same pairing, mid-send) comes
-        // forward instead of a second instance stacking on top of it.
+        
+        
         startActivity(
             Intent()
                 .setClassName(packageName, PeerApps.SEND_ACTIVITY)
@@ -99,11 +99,11 @@ class MigrationHandoffActivity : ComponentActivity() {
         return true
     }
 
-    /**
-     * Start the no-login receiver and hand its pairing payload back to the old app. This install must
-     * be able to take an account first, and names the failing condition in the result so the old app
-     * can show a reason; the handshake gate re-checks the same conditions when the bytes arrive.
-     */
+    
+
+
+
+
     private fun handleStartReceive() {
         if (vettedCaller("start-receive") == null) {
             finishWith(false)
@@ -138,12 +138,12 @@ class MigrationHandoffActivity : ComponentActivity() {
                 finishWith(false)
                 return@launch
             }
-            // The payload travels in the result only, never in a log line.
+            
             finishWith(true, Intent().putExtra(PeerApps.EXTRA_QR_PAYLOAD, QrPayloadCodec.encodeText(payload)))
         }
     }
 
-    /** Null when this install may adopt an account now; otherwise the wire token naming why not. */
+    
     private fun receiveBlockReason(): String? {
         val gate = EntryPointAccessors.fromApplication(applicationContext, MigrationStatusProvider.StatusEntryPoint::class.java).handoffGate()
         return if (gate.canReceive()) null else MigrationRejectReason.TARGET_NOT_EMPTY.wire
@@ -152,8 +152,8 @@ class MigrationHandoffActivity : ComponentActivity() {
     private fun handleResumeReceive(): Boolean {
         vettedCaller("resume-receive") ?: return false
         L.i { "[MigrationV2][Handoff] resume-receive → bringing the receive screen to the front" }
-        // singleTop + REORDER_TO_FRONT: an existing receive screen comes forward in its own task
-        // instead of being recreated; when none exists yet this creates it in the handoff shape.
+        
+        
         startActivity(
             MigrationImportLauncherImpl.createP2pReceiveIntentFor(
                 this,
@@ -165,11 +165,11 @@ class MigrationHandoffActivity : ComponentActivity() {
         return true
     }
 
-    /**
-     * This is a `noHistory` trampoline: leaving the task destroys it and cancels the wait on
-     * [lifecycleScope], so a receiver started here would keep listening with nobody left to publish
-     * its payload. A receiver that was already up when the caller arrived is not ours to stop.
-     */
+    
+
+
+
+
     override fun onDestroy() {
         if (isFinishing && startedReceiverHere && !resultDelivered) {
             L.w { "[MigrationV2][Handoff] start-receive interrupted before the payload was published — tearing the receiver down" }
@@ -179,7 +179,7 @@ class MigrationHandoffActivity : ComponentActivity() {
     }
 
     private companion object {
-        /** How long the receiver gets to publish its pairing payload before the caller is told it failed. */
+        
         const val RECEIVER_UP_TIMEOUT_MS = 8_000L
     }
 }

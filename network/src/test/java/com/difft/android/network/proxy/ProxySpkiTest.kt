@@ -10,18 +10,18 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/**
- * Unit tests for [ProxySpki] — the shared SPKI pin helper that both
- * [ProxyPinTrustManager] (signaling outer-TLS) and `ProxyTurnTlsVerifier`
- * (TURN outer-TLS, in :call) delegate to. Robolectric is required because
- * [ProxySpki.pinOf] uses `android.util.Base64`, which returns stub bytes on a
- * bare JVM (same reason as [ProxyPinTrustManagerTest]).
- */
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 class ProxySpkiTest {
 
-    // Reuses the self-signed EC (prime256v1) fixture from ProxyPinTrustManagerTest.
-    // SPKI pin = base64(sha256(DER SubjectPublicKeyInfo)) = [VALID_PIN].
+    
+    
     private val certPem = """
         -----BEGIN CERTIFICATE-----
         MIIBkjCCATegAwIBAgIUcdpFDZMPF2Ad94f71Bnw6YZB5X4wCgYIKoZIzj0EAwIw
@@ -43,13 +43,13 @@ class ProxySpkiTest {
             .generateCertificate(ByteArrayInputStream(certPem.toByteArray())) as X509Certificate
     }
 
-    // T7 — pinOf produces the canonical SPKI pin (sha256 over publicKey.encoded, NO_WRAP base64).
+    
     @Test
     fun `pinOf computes the canonical SPKI pin`() {
         assertEquals(validPin, ProxySpki.pinOf(cert))
     }
 
-    // T8 — matches: exact match, whitespace tolerance, mismatch, blank guard.
+    
     @Test
     fun `matches returns true for the correct pin`() {
         assertTrue(ProxySpki.matches(cert, validPin))

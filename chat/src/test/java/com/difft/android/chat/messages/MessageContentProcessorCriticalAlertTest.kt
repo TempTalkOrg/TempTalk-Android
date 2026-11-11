@@ -37,12 +37,12 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos.Envelope
 
-/**
- * The critical-alert branch of [MessageContentProcessor.handleNotifyMessage] (#1381): an alert for
- * the call being joined or already active still gets its local chat message but does not highlight
- * the conversation (the join-during-write ordering is covered by CriticalAlertHighlightWriterTest);
- * an alert for another call does both.
- */
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28])
 class MessageContentProcessorCriticalAlertTest {
@@ -57,7 +57,7 @@ class MessageContentProcessorCriticalAlertTest {
     @Before
     fun setUp() {
         val context = ApplicationProvider.getApplicationContext<Application>()
-        // LCallManager's <clinit> reads ApplicationHelper.instance (lateinit).
+        
         ApplicationHelper.init(mockk<ScopeApplication>(relaxed = true))
         mockkObject(LCallManager)
         coEvery { LCallManager.getCriticalAlertNotificationContent(any(), any()) } returns ("title" to "content")

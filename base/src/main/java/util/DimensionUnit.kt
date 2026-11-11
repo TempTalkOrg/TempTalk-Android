@@ -3,10 +3,11 @@ package util
 import android.content.res.Resources
 import androidx.annotation.Dimension
 import androidx.annotation.Px
+import com.difft.android.base.utils.density.UiDensity
 
-/**
- * Core utility for converting different dimensional values.
- */
+
+
+
 enum class DimensionUnit {
     PIXELS {
         @Px
@@ -14,16 +15,16 @@ enum class DimensionUnit {
 
         @Dimension(unit = Dimension.DP)
         override fun toDp(@Px value: Float): Float =
-            value / Resources.getSystem().displayMetrics.density
+            value / UiDensity.density
 
         @Dimension(unit = Dimension.SP)
         override fun toSp(@Px value: Float): Float =
-            value / Resources.getSystem().displayMetrics.scaledDensity
+            value / (Resources.getSystem().displayMetrics.scaledDensity * UiDensity.scale)
     },
     DP {
         @Px
         override fun toPixels(@Dimension(unit = Dimension.DP) value: Float): Float =
-            value * Resources.getSystem().displayMetrics.density
+            value * UiDensity.density
 
         @Dimension(unit = Dimension.DP)
         override fun toDp(@Dimension(unit = Dimension.DP) value: Float): Float = value
@@ -35,7 +36,7 @@ enum class DimensionUnit {
     SP {
         @Px
         override fun toPixels(@Dimension(unit = Dimension.SP) value: Float): Float =
-            value * Resources.getSystem().displayMetrics.scaledDensity
+            value * Resources.getSystem().displayMetrics.scaledDensity * UiDensity.scale
 
         @Dimension(unit = Dimension.DP)
         override fun toDp(@Dimension(unit = Dimension.SP) value: Float): Float =

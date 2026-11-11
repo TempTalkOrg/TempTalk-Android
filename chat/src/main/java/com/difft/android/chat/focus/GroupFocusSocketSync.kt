@@ -11,11 +11,11 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Refreshes the group focus state every time the chat socket (re)connects: pushes missed while it
- * was down are not replayed, so the GET is what brings the cache up to date. Lifetime follows
- * [com.difft.android.chat.websocket.WebSocketManager.start] / `stop`.
- */
+
+
+
+
+
 @Singleton
 class GroupFocusSocketSync @Inject constructor(
     private val appWebSocketHelper: AppWebSocketHelper,

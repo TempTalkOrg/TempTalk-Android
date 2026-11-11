@@ -13,12 +13,12 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
 
-/**
- * [HeaderInterceptor]'s `Accept-Language` follows a system language change in a live process for
- * a user who never chose a language (#1395): the language is resolved per request from the
- * system configuration, not from a value cached at process start. Robolectric's qualifiers drive
- * the system configuration.
- */
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, qualifiers = "en-rUS")
 class HeaderInterceptorAcceptLanguageTest {

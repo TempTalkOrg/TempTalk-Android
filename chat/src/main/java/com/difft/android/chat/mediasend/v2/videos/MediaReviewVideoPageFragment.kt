@@ -14,10 +14,10 @@ import com.difft.android.chat.mediasend.v2.MediaSelectionViewModel
 
 private const val VIDEO_EDITOR_TAG = "video.editor.fragment"
 
-/**
- * Page fragment which displays a single editable video (non-gif) to the user. Has an embedded MediaSendVideoFragment
- * and adds some extra support for saving and restoring state, as well as saving a video to disk.
- */
+
+
+
+
 class MediaReviewVideoPageFragment : androidx.fragment.app.Fragment(R.layout.fragment_container), VideoEditorFragment.Controller {
 
     private val sharedViewModel: MediaSelectionViewModel by viewModels(ownerProducer = { requireActivity() })

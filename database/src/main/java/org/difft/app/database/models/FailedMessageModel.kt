@@ -15,22 +15,22 @@ class FailedMessageModel {
     @WCDBField(isNotNull = true)
     var messageEnvelopBytes: ByteArray = ByteArray(0)
 
-    /**
-     * Retry attempt counter. Starts at 0, increments per retry tick attempt
-     * that ends in TransientFailure. Row is deleted when it would reach
-     * `MAX_RETRIES` (see `FailedMessageProcessor#bumpRetryOrGiveUp`).
-     * No index — cardinality is 0..4, too low for an index to pay back.
-     */
+    
+
+
+
+
+
     @WCDBField
     var retryCount: Int = 0
 
-    /**
-     * Wall-clock (ms) of the most recent attempt. New inserts use `System.currentTimeMillis()`;
-     * legacy rows (pre-upgrade) default to 0, which both schedules them as immediately due
-     * and trips the first-cycle TTL sweep (see `FailedMessageProcessor`).
-     * Indexed because the scheduler issues
-     * `WHERE retryCount < N ORDER BY lastAttemptTime ASC LIMIT M`.
-     */
+    
+
+
+
+
+
+
     @WCDBField
     @WCDBIndex
     var lastAttemptTime: Long = 0

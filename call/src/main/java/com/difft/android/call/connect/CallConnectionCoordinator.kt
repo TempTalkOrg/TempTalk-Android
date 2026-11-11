@@ -36,28 +36,8 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import kotlin.concurrent.Volatile
 
-/**
- * Coordinates connection lifecycle and failover for a single call session.
- *
- * Responsibilities:
- *  - Multi-phase failover connect ([connectToRoomWithFailover]).
- *  - Single-URL reconnect after a user-initiated node/connection-mode switch
- *    ([connectToRoomManualSwitch]).
- *  - URL / TLS-host resolution that honours the WSS(domain-only) vs QUIC(IP direct)
- *    rule when the caller changes settings mid-call ([resolveManualConnectUrl],
- *    [inferConnectedNode]).
- *
- * Extracted from `LCallViewModel` so the ViewModel can stay focused on call orchestration
- * and UI state. Failure classification lives in [classifyConnectFailure] so the retry-vs-abort
- * decision can be unit-tested without a coordinator harness.
- *
- * This file is still over the project's 500-line guideline: failover, manual switch, and URL/node
- * resolution are three responsibilities that want separate homes.
- *
- * Thread-safety: instances are expected to be used from a single call session; the only
- * shared state is [isRetryUrlConnecting] which is marked [Volatile] so the Room event
- * collector on the main thread observes the latest value without locking.
- */
+
+
 internal class CallConnectionCoordinator(
     private val appContext: Context,
     private val roomCtl: CallRoomController,
@@ -66,86 +46,86 @@ internal class CallConnectionCoordinator(
     private val authTokenProvider: AuthTokenProvider,
 ) {
 
-    /**
-     * True while a failover / manual-switch attempt is in progress. The ViewModel reads
-     * this to suppress spurious `Disconnected` / `FailedToConnect` room events that are
-     * an expected part of the retry loop.
-     */
+    
+
+
+
+
     @Volatile
     var isRetryUrlConnecting: Boolean = false
         private set
 
-    /**
-     * True from the moment a user-initiated node / connection-mode switch tears the session down
-     * until the FIRST `RoomEvent.Connected` of the resulting reconnect consumes it (via
-     * [consumeManualSwitchReconnecting]). It tells `onConnected` that the local mic/camera
-     * publications were destroyed by the switch and must be re-applied from the user's still-live
-     * intent (see [RoomEventDispatcher.restoreMediaAfterServerSwitch]) instead of running the
-     * first-connect bring-up.
-     *
-     * Consume-on-use (rather than sticky) is deliberate: it scopes the flag to exactly the one
-     * reconnect it was set for, so a later re-emitted `Connected` (ICE-restart / soft-resume, which
-     * preserves tracks) takes the normal path — avoiding a force-unmute of a self-muted user and a
-     * spurious cancel of a genuine "participant left" timeout.
-     */
+    
+
+
+
+
+
+
+
+
+
+
+
+
     @Volatile
     var isManualSwitchReconnecting: Boolean = false
         private set
 
-    /**
-     * Atomically reads and clears [isManualSwitchReconnecting]. Called once by the room event
-     * collector on the first `onConnected` after a manual switch. Single-threaded on the collector,
-     * but @Volatile write keeps it visible to the IO connect coroutine.
-     */
+    
+
+
+
+
     fun consumeManualSwitchReconnecting(): Boolean {
         val was = isManualSwitchReconnecting
         isManualSwitchReconnecting = false
         return was
     }
 
-    /**
-     * Embedded `serviceUrls` (bundled `default_global_config.json`) as a
-     * last-ditch connection fallback — but ONLY while the proxy is OFF.
-     *
-     * Under the proxy the call domain MUST come from `proxy.tunnelDomains.call`
-     * (surfaced via [LCallManager.ensureCallServiceUrlsForCall] /
-     * [LCallManager.getCachedServiceUrls], which synthesize from it), because
-     * that is the single source the tunnel-host whitelist is derived from. The
-     * embedded `serviceUrls` block is a SEPARATE source that a live
-     * `tunnelDomains.call` override can drift from; connecting to a
-     * non-whitelisted call domain would route DIRECT and leak the real IP. So we
-     * fail closed here (return `null`) instead of falling back.
-     */
+    
+
+
+
+
+
+
+
+
+
+
+
+
     private fun embeddedServiceUrlsFallbackOrNull(): ServiceUrls? =
         if (ProxyConfigProvider.isProxyActiveForCall) null
         else DefaultGlobalConfigCallServiceUrlsReader.read(appContext)
 
-    /** Milliseconds left before [CONNECT_BUDGET_MS] runs out, never negative. */
+    
     private fun remainingBudgetMs(deadlineMs: Long): Long =
         (deadlineMs - SystemClock.elapsedRealtime()).coerceAtLeast(0L)
 
-    /** True once [CONNECT_BUDGET_MS] has elapsed; see that constant for why the cap exists. */
+    
     private fun budgetExhausted(deadlineMs: Long): Boolean = remainingBudgetMs(deadlineMs) == 0L
 
-    /**
-     * Call media TLS pins trust to the chative CA; a certificate validation failure on any
-     * connect attempt (failover or user-initiated manual switch) is a possible MITM attack,
-     * so surface it to the shared [NetworkRiskNotifier].
-     */
+    
+
+
+
+
     private fun reportCertRiskIfNeeded(t: Throwable, serverHost: String) {
         if (CertValidationFailureDetector.isCertValidationFailure(t)) {
             NetworkRiskNotifier.onCertValidationFailed("call:$serverHost")
         }
     }
 
-    /**
-     * Failover & retry strategy:
-     *   [LCallManager.ensureCallServiceUrlsForCall] → multi-node QUIC/WSS sequence → backoff →
-     *   force-refresh config → assets fallback, then retry.
-     *
-     * Returns `true` as soon as any attempt succeeds; on terminal or exhaustion it
-     * reports a final error via [roomCtl] and returns `false`.
-     */
+    
+
+
+
+
+
+
+
     suspend fun connectToRoomWithFailover(
         callParams: ByteArray?,
         useQuic: Boolean,
@@ -181,9 +161,9 @@ internal class CallConnectionCoordinator(
             return false
         }
 
-        // roomOrNull, not the fail-loud getter: this read sits outside the attempt loop's try, so a
-        // teardown racing it would throw straight out of the coordinator — past the classification
-        // below and past failWith, leaving the caller with no CONNECTED_FAILED at all.
+        
+        
+        
         statisticsLogManager.setRoomLocalId(roomCtl.roomOrNull()?.localId)
 
         var failureCount = 0
@@ -212,15 +192,15 @@ internal class CallConnectionCoordinator(
 
             for ((idx, att) in attempts.withIndex()) {
                 if (failureCount > 0) {
-                    // Clamped to what is left of the budget: the backoff climbs to a 30s ceiling,
-                    // so an unclamped sleep could run well past the deadline and then break
-                    // without ever attempting — pure dead time for the user.
+                    
+                    
+                    
                     val backoffMs = ConnectionBackoff.delayMsBeforeRetryAfterFailure(failureCount)
                     delay(backoffMs.coerceAtMost(remainingBudgetMs(deadlineMs)))
                 }
-                // Stop starting new attempts once the budget is spent. Checked here rather than
-                // wrapping the loop in withTimeout so an in-flight handshake is never cut mid-way,
-                // which bounds the total at the budget plus one attempt's own connect timeout.
+                
+                
+                
                 if (budgetExhausted(deadlineMs)) {
                     L.w {
                         "[Call] meeting connect budget exhausted after ${CONNECT_BUDGET_MS}ms " +
@@ -256,9 +236,9 @@ internal class CallConnectionCoordinator(
                             terminalError = StartCallException(t.message)
                         }
                         ConnectFailureCategory.PRECONDITION -> {
-                            // Localized copy for the user: these messages describe an internal
-                            // guard. The guard's own text rides on the cause so the log and the
-                            // uploaded failure record keep the real, locale-independent reason.
+                            
+                            
+                            
                             terminalError = ServerConnectionException(getString(R.string.call_params_startcall_exception_tip), t)
                         }
                     }
@@ -271,8 +251,8 @@ internal class CallConnectionCoordinator(
                     return true
                 }
 
-                // Prefer the cause when one is attached: a PRECONDITION failure carries localized
-                // user copy as its message, which must not become the uploaded failure reason.
+                
+                
                 val errorMsg = terminalError?.let { "${it.javaClass.simpleName}: ${(it.cause ?: it).message.orEmpty()}" }
                     ?: transientErrorMsg.orEmpty()
                 reportConnectFail(att, errorMsg)
@@ -307,11 +287,11 @@ internal class CallConnectionCoordinator(
         return false
     }
 
-    /**
-     * Single-URL reconnect after the user switches node / connection mode — no multi-phase
-     * failover. Shares certificate source and error classification with
-     * [connectToRoomWithFailover].
-     */
+    
+
+
+
+
     suspend fun connectToRoomManualSwitch(
         serverUrl: String,
         callParams: ByteArray?,
@@ -366,14 +346,14 @@ internal class CallConnectionCoordinator(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {
-            // The reconnect failed, so no manual-switch Connected will arrive to consume this flag.
-            // Some failure branches below don't tear the old session down, which could still emit
-            // an unrelated (ICE-restart) Connected later — reset here so it isn't misclassified as
-            // the manual-switch reconnect and made to run restore / cancel a legitimate 1v1 timeout.
+            
+            
+            
+            
             isManualSwitchReconnecting = false
-            // Same classification as connectToRoomWithFailover so a failure means the same
-            // thing on both paths; only the outcome differs (a manual switch has no further
-            // candidate to try, so a transient failure reports the retryable-timeout copy).
+            
+            
+            
             when (classifyConnectFailure(e)) {
                 ConnectFailureCategory.TRANSIENT -> {
                     L.e { "[Call] manualSwitch transient url=$connectUrl err=${e.message}" }
@@ -395,19 +375,19 @@ internal class CallConnectionCoordinator(
         }
     }
 
-    /**
-     * Picks a connect URL for the given node respecting the connection mode rule.
-     * Returns `null` when no viable URL can be produced (e.g. node has neither IP nor domain).
-     */
+    
+
+
+
     fun resolveManualConnectUrl(node: ServerNode?, useQuicSignal: Boolean): String? {
         val n = node ?: return null
         return if (useQuicSignal) {
-            // QUIC-over-proxy (MASQUE-lite, §9.6): the relay forwards by the tunnel's
-            // CONNECT target host, which must be a DOMAIN to match its suffix allowlist
-            // (an IP literal would be denied). Under a proxy QUIC relay, connect via the
-            // node domain ONLY; if the node has no domain, refuse (return null) rather
-            // than fall through to QUIC-by-IP — that would always be denied by the relay
-            // whitelist. Mirrors MeetingConnectionPlanner.appendNodeAttempts (skip node).
+            
+            
+            
+            
+            
+            
             if (ProxyConfigProvider.isProxyForCallQuicEnabled) {
                 return if (n.domain.isNotBlank())
                     MeetingConnectionPlanner.normalizeConnectUrl(n.domain)
@@ -432,22 +412,13 @@ internal class CallConnectionCoordinator(
         }
     }
 
-    /**
-     * Rebuilds the currently-connected [ServerNode] from [LCallEngine.serverUrlConnected] by
-     * matching the URL host against cached service URLs (domain or addrs). Used when the user
-     * only toggles the connection mode without selecting a node.
-     */
-    /**
-     * Listens for user-initiated server node / connection mode changes during an active call
-     * and triggers a reconnect with the updated configuration. Previously
-     * `LCallViewModel.registerManualSwitchReconnect` — merged here so the full manual-switch
-     * chain (URL resolution + reconnect + status bookkeeping) lives in one place.
-     *
-     * Connection rule enforcement:
-     *  - WebSocket (useQuicSignal=false) → connect via the node's domain.
-     *  - HTTP/3 QUIC (useQuicSignal=true) → connect via the node's first IP in `addrs`;
-     *    if no IP is available, fall back to the domain (with a warning log).
-     */
+    
+
+
+
+
+    
+
     fun observeManualSwitchReconnect(
         scope: CoroutineScope,
         callIntent: CallIntent,
@@ -462,20 +433,20 @@ internal class CallConnectionCoordinator(
                 val status = roomCtl.callStatus.value
                 if (status != CallStatus.CONNECTED && status != CallStatus.RECONNECTED) return@collect
 
-                // Honors the proxy QUIC→WSS override centrally (see LCallEngine.isUseQuicSignal).
+                
                 val useQuicSignal = LCallEngine.isUseQuicSignal()
                 val connectionTypeChanged = roomCtl.isUseQuicSignal() != useQuicSignal
                 if (selectedNode == null && !connectionTypeChanged) return@collect
 
-                // Guard: when only self is in the room, tearing down causes the server to
-                // end the call and the subsequent reconnect will be rejected with status
-                // 22001 ("Invalid Call, maybe expired"). Reject up-front and roll back
-                // engine state so the UI reflects the still-active connection.
-                // Non-throwing snapshot: this collector runs on the session's (Main) mainScope and can
-                // race with call teardown (releaseLocked sets released=true before callStatus flips
-                // out of CONNECTED/RECONNECTED). Reading the fail-loud room getter here would crash
-                // with "room accessed after release"; a released room reads as "no remotes" → the
-                // switch is conservatively rejected instead.
+                
+                
+                
+                
+                
+                
+                
+                
+                
                 if (!roomCtl.hasRemoteParticipants()) {
                     L.w {
                         "[call] manualSwitchReconnect rejected: only self in room, node=${selectedNode?.name} useQuic=$useQuicSignal"
@@ -508,22 +479,22 @@ internal class CallConnectionCoordinator(
                     roomId = roomIdGetter(),
                 )
                 val joinCallParams = createStartCallParams(body)
-                // disconnect() is a blocking call; under an active proxy the tunnel
-                // socket close performs a TLS close_notify network write. The combine
-                // collector runs on the session's (Main) mainScope, so disconnecting here
-                // directly would do network I/O on the main thread
-                // (NetworkOnMainThreadException). Run it on IO, right before the
-                // reconnect, so ordering is preserved.
-                // Marks the upcoming disconnect+reconnect as a manual switch so onConnected
-                // re-applies the user's mic/camera intent instead of the first-connect bring-up.
-                // Set BEFORE the teardown; consumed by the first Connected of the reconnect (or
-                // reset if that reconnect fails). See field docs.
+                
+                
+                
+                
+                
+                
+                
+                
+                
+                
                 isManualSwitchReconnecting = true
                 scope.launch(Dispatchers.IO) {
-                    // disconnectQuietly() never throws (released/not-created room → no-op) and
-                    // swallows disconnect() failures, so it can't abort the coroutine or leave the
-                    // call stuck in SWITCHING_SERVER (or cancel the parent scope) — reconnect must
-                    // always be attempted. Also fixes the fail-loud getter crash if release raced in.
+                    
+                    
+                    
+                    
                     roomCtl.disconnectQuietly()
                     awaitDisconnectedSettle()
                     connectToRoomManualSwitch(effective, joinCallParams, useQuicSignal)
@@ -531,20 +502,20 @@ internal class CallConnectionCoordinator(
             }
     }
 
-    /**
-     * Narrows the disconnect→connect race behind a manual server switch.
-     *
-     * `disconnectQuietly()` tears the old session down and sends a CLIENT_INITIATED leave. The
-     * server's leave response later drives an ASYNC `onEngineDisconnected(CLIENT_INITIATED)` into
-     * the SDK's Room. If that stale callback lands AFTER the new `connect()` has flipped the room
-     * to CONNECTING, the SDK's state-only re-entrancy guard misfires and tears the freshly-started
-     * connection down — leaving the call stuck in SWITCHING_SERVER ("connecting" forever).
-     *
-     * Waiting until the room is fully DISCONNECTED and then adding a small settle delay gives that
-     * late callback time to drain while the room is still DISCONNECTED (where the guard correctly
-     * absorbs it), before we start the new connect. Mitigation only; the root fix belongs in the
-     * SDK (session-tagged disconnect events + cancel-safe transport handshake).
-     */
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
     private suspend fun awaitDisconnectedSettle() {
         val deadline = System.currentTimeMillis() + MANUAL_SWITCH_DISCONNECT_WAIT_MS
         while (!roomCtl.isRoomDisconnected() && System.currentTimeMillis() < deadline) {
@@ -553,15 +524,15 @@ internal class CallConnectionCoordinator(
         delay(MANUAL_SWITCH_SETTLE_DELAY_MS)
     }
 
-    /**
-     * Rolls engine state back to the currently-active transport / node after a manual
-     * switch that cannot take effect (rejected up-front or no reachable URL). Mirrors the
-     * connection-mode/node reset that the "only self in room" guard performs, so the
-     * controlled UI reflects the still-live connection instead of a stale toggle.
-     *
-     * Must be called BEFORE any reconnect is attempted: it reads [CallRoomController.isUseQuicSignal]
-     * which `connect()` overwrites with the attempted value before the handshake completes.
-     */
+    
+
+
+
+
+
+
+
+
     private fun rollbackManualSwitch(selectedNode: ServerNode?, connectionTypeChanged: Boolean) {
         if (connectionTypeChanged) {
             LCallEngine.setSelectedConnectMode(
@@ -606,11 +577,11 @@ internal class CallConnectionCoordinator(
         roomCtl.collectError(error)
     }
 
-    /**
-     * For IP direct connections, the URI's host is an IP; TLS requires the certificate domain.
-     * Look up the node whose `addrs` contains this IP from cached service URLs first, then fall
-     * back to the currently selected node's domain; otherwise the primary domain as a last resort.
-     */
+    
+
+
+
+
     private fun tlsServerHostForManualConnect(connectUrl: String): String {
         val host = runCatching { connectUrl.toUri().host }.getOrNull()?.trim().orEmpty()
         if (host.isEmpty()) return host
@@ -621,11 +592,11 @@ internal class CallConnectionCoordinator(
         return host
     }
 
-    /**
-     * WSS (WebSocket) must connect via the certificate domain — IP direct connect is QUIC-only.
-     * If the incoming URL is IP-based but the user selected WebSocket mode, rewrite the URL to
-     * use that IP's owning node domain before connecting.
-     */
+    
+
+
+
+
     private fun enforceWssDomainUrl(normalizedUrl: String, useQuicSignal: Boolean): String {
         if (useQuicSignal) return normalizedUrl
         val host = runCatching { normalizedUrl.toUri().host }.getOrNull()?.trim().orEmpty()
@@ -635,12 +606,12 @@ internal class CallConnectionCoordinator(
         return MeetingConnectionPlanner.normalizeConnectUrl(domain) ?: normalizedUrl
     }
 
-    /**
-     * Resolves the domain that owns the given IP host. Priority:
-     *   1. Node (primary or fallback) in cached service URLs whose `addrs` contains this IP.
-     *   2. User-selected server node's domain (if any).
-     *   3. Cached primary node's domain (last resort).
-     */
+    
+
+
+
+
+
     private fun resolveDomainForIpHost(ipHost: String): String {
         val cached = LCallManager.getCachedServiceUrls()
         if (cached != null) {
@@ -677,45 +648,36 @@ internal class CallConnectionCoordinator(
         )
     }
 
-    // Internal (not private) so the retry bounds below can be pinned by unit tests.
+    
     internal companion object {
-        /** Poll interval while waiting for the room to reach DISCONNECTED after disconnect(). */
+        
         const val MANUAL_SWITCH_DISCONNECT_POLL_MS = 20L
 
-        /**
-         * Upper bound on the DISCONNECTED wait. `disconnect()` runs handleDisconnect synchronously,
-         * so the room is normally DISCONNECTED already; this only bounds pathological cases so a
-         * manual switch can never hang here.
-         */
+        
+
+
+
+
         const val MANUAL_SWITCH_DISCONNECT_WAIT_MS = 500L
 
-        /**
-         * Settle delay after DISCONNECTED so the async onEngineDisconnected(CLIENT_INITIATED) from
-         * the torn-down session drains before connect() flips the room to CONNECTING. Observed lag
-         * between leave and that callback was ~300ms; kept modest to bound switch latency.
-         */
+        
+
+
+
+
         const val MANUAL_SWITCH_SETTLE_DELAY_MS = 300L
 
-        /**
-         * Wall-clock ceiling on the whole multi-phase failover, checked before each new attempt.
-         *
-         * The candidate count alone does not bound the wait: [ConnectionBackoff] escalates to a
-         * 30s ceiling, so a full candidate list whose failures are all transient schedules several
-         * MINUTES of delay, and nothing outside bounds it — the 1v1 timeout
-         * ([com.difft.android.call.manager.CallTimeoutManager.DEF_ONGOING_CALL_TIMEOUT]) only arms
-         * once the room reports Connected, i.e. after this loop has already succeeded. A caller
-         * staring at "connecting" for minutes is a failed call either way, so cap it here and
-         * report the retryable timeout copy while the user still has patience for a second try.
-         * Matches the 1v1 timeout's own 60s scale.
-         */
+        
+
+
         const val CONNECT_BUDGET_MS = 60_000L
 
-        /**
-         * Backstop on the failure count (the loop ends once it is EXCEEDED, i.e. on the 21st).
-         * Under the current backoff curve [CONNECT_BUDGET_MS] always runs out first — the
-         * cumulative delay passes 60s by the 8th failure — so this bound is unreachable in
-         * practice and exists only so a future backoff change cannot make the loop unbounded.
-         */
+        
+
+
+
+
+
         const val MAX_TRANSIENT_FAILURES = 20
     }
 }

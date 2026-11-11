@@ -101,22 +101,22 @@ dependencies {
     implementation(project(":base"))
     implementation(project(":database"))
 
-    // Hilt
+    
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
 
-    // Network specific dependencies
+    
     implementation(libs.okhttp.logging.interceptor)
 
-    // JWT
+    
     implementation(libs.jwtdecode)
 
-    // Protobuf
+    
     implementation(libs.protobuf.kotlin.lite)
     implementation(libs.bundles.jackson)
     implementation(libs.signal.android)
 
-    // Test dependencies
+    
     testImplementation(libs.junit)
     testImplementation(libs.kotlin.test)
     testImplementation(libs.kotlinx.coroutines.test)
@@ -131,7 +131,7 @@ dependencies {
 }
 protobuf {
     protoc {
-        // The artifact spec of the Protobuf Compiler
+        
         artifact = "com.google.protobuf:protoc:3.21.2"
     }
     generateProtoTasks {

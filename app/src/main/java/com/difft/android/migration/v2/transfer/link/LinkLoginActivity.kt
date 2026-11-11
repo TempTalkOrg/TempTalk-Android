@@ -35,12 +35,12 @@ import java.util.UUID
 import javax.inject.Inject
 import kotlinx.coroutines.launch
 
-/**
- * Hosts the Desktop-login confirmation page. Opened by the home scanner for every `tsdevice:` QR
- * with the provisioning id/key and the raw migration query values; owns nothing but wiring — the
- * decision logic is in [LinkLoginViewModel], the link itself in [LinkDeviceUtils], and a sync hands
- * over to the standard send screen, which starts on its own.
- */
+
+
+
+
+
+
 @AndroidEntryPoint
 class LinkLoginActivity : BaseActivity() {
 
@@ -98,7 +98,7 @@ class LinkLoginActivity : BaseActivity() {
         }
     }
 
-    /** The standard send screen, told to start at once: the user already decided here. */
+    
     private fun openSend(rawPayload: String, includeAttachments: Boolean, awaitPeerConfirm: Boolean) {
         startActivity(
             Intent()
@@ -111,7 +111,7 @@ class LinkLoginActivity : BaseActivity() {
         )
     }
 
-    /** Real implementations of the page's seams: live export estimate, pinned HTTPS to the Desktop, the account link. */
+    
     private inner class Gateway : LinkLoginGateway {
         override suspend fun estimate(): ExportEstimate =
             NeutralExporterImpl(readSource)

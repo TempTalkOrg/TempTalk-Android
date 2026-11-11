@@ -11,13 +11,13 @@ import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
 
-/**
- * [AttachmentPathResolver] addressing contract.
- *
- * `FileUtil.getMessageAttachmentFilePath` is stubbed to a deterministic shape so the assertions pin
- * WHICH key ends up in the directory segment (the resolver's only decision) rather than the app's
- * real storage root.
- */
+
+
+
+
+
+
+
 class AttachmentPathResolverTest {
 
     @Before
@@ -90,7 +90,7 @@ class AttachmentPathResolverTest {
 
     @Test
     fun `nesting depth does not change addressing`() {
-        // A leaf three forwards deep is addressed exactly like a top-level one: by its own localId.
+        
         val deepLeaf = attachment(localId = "local-deep", isForwardCopy = true)
 
         assertEquals("/root/attachment/local-deep/photo.jpg", AttachmentPathResolver.fileFor(deepLeaf))
@@ -118,8 +118,7 @@ class AttachmentPathResolverTest {
 
     @Test
     fun `a staged file lands exactly where the reader will look for it`() {
-        // The writer/reader agreement the five hand-rolled write sites used to break: staging under
-        // the OWNER MESSAGE id while every read gate resolved the attachment's own directory.
+        
         val localId = "local-new"
         val staged = AttachmentPathResolver.stagingFileFor(localId, "photo.jpg")
 

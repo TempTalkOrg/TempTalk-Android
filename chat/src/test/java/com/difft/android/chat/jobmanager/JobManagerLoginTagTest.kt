@@ -35,14 +35,14 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/**
- * [JobManager] and the creator login of its jobs (#1382 A04): a job is tagged when it is added, and
- * the startup task (the one-time sweep of untagged send jobs) finishes before any job is
- * dispatched.
- *
- * Tech mirrors [JobManagerMessagingPauseTest]: Robolectric for the Debouncer's main-looper Handler,
- * real dispatchers because the management dispatcher is a real thread pool.
- */
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 class JobManagerLoginTagTest {
 
@@ -52,7 +52,7 @@ class JobManagerLoginTagTest {
     private val ran = LinkedBlockingQueue<String>()
     private val failed = LinkedBlockingQueue<String>()
 
-    /** What each run's send check answered, as `id:SendLogin`. */
+    
     private val sendChecks = LinkedBlockingQueue<String>()
 
     @Before
@@ -101,7 +101,7 @@ class JobManagerLoginTagTest {
         assertEquals("login-a", awaitInsertedTag(inserted, "before-load"))
     }
 
-    // The tag is the login read at the load, never the one signed in when the add resumes.
+    
     @Test
     fun `a sign-in after a signed-out load does not claim a job added before the load`() = runBlocking(Dispatchers.Default) {
         val inserted = recordInserts()
@@ -112,7 +112,7 @@ class JobManagerLoginTagTest {
 
         jobManager.add(RecordingJob(Job.Parameters.Builder("before-load").build(), PushTextSendJob.KEY, ran, failed))
         jobManager.flush()
-        // B is already signed in when the add resumes from the signed-out load.
+        
         login.value = "login-b"
         firstLoad.complete(null)
 
@@ -132,7 +132,7 @@ class JobManagerLoginTagTest {
         assertEquals("login-b", awaitInsertedTag(inserted, "after-load"))
     }
 
-    /** Records every insert and makes the inserted jobs runnable. */
+    
     private fun recordInserts(): MutableList<JobSpec> {
         val inserted = mutableListOf<JobSpec>()
         every { jobStorage.insertJobs(any()) } answers {
@@ -223,7 +223,7 @@ class JobManagerLoginTagTest {
         Unit
     }
 
-    // -- Helpers --
+    
 
     private fun buildJobManager(
         startupTask: JobStartupTask = JobStartupTask.NONE,
@@ -263,7 +263,7 @@ class JobManagerLoginTagTest {
         isMemoryOnly = false,
     )
 
-    /** Records its runs and failures; stands in for a send job's work and its failed-row write. */
+    
     private class RecordingJob(
         parameters: Parameters,
         private val key: String,

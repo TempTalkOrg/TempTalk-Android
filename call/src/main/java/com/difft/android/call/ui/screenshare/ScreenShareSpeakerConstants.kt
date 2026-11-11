@@ -1,9 +1,10 @@
 package com.difft.android.call.ui.screenshare
 
-/** Timing for screen-share floating speaker hold, overlap, and fade animations. */
-object ScreenShareSpeakerConstants {
 
-    const val FALLBACK_HOLD_MS: Long = 500L
+
+
+
+object ScreenShareSpeakerConstants {
 
     const val MIN_OVERLAP_MS: Long = 150L
 

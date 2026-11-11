@@ -19,27 +19,27 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/**
- * Screenshot detector with compatibility for all Android versions.
- *
- * - Android 14+ (API 34): Uses official ScreenCaptureCallback API
- * - Android 14 below: Uses ContentObserver to monitor MediaStore changes
- *
- * Usage:
- * ```
- * val detector = ScreenshotDetector(
- *     activity = requireActivity(),
- *     coroutineScope = viewLifecycleOwner.lifecycleScope,
- *     onScreenshotDetected = { /* Handle screenshot */ }
- * )
- * detector.startListening() // Call in onResume
- * detector.stopListening()  // Call in onPause
- * ```
- *
- * @param activity The activity for registering callbacks and accessing content resolver
- * @param coroutineScope Coroutine scope for async operations (recommend using lifecycleScope)
- * @param onScreenshotDetected Callback when screenshot is detected
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 class ScreenshotDetector(
     private val activity: Activity,
     private val coroutineScope: CoroutineScope,
@@ -48,21 +48,21 @@ class ScreenshotDetector(
     companion object {
         private const val TAG = "Screenshot"
 
-        // Debounce time to avoid duplicate callbacks
+        
         private const val DEBOUNCE_MS = 1500L
 
-        // Only consider images added within this time window as screenshots
+        
         private const val TIME_WINDOW_SECONDS = 5L
 
-        // Screenshot folder paths - only path matching is used (more reliable than filename matching)
-        // This avoids false positives when saving images with "screenshot" in the filename
+        
+        
         private val SCREENSHOT_PATH_KEYWORDS = listOf(
-            "screenshots/",      // Standard Android: DCIM/Screenshots/, Pictures/Screenshots/
-            "screenshot/",       // Some devices
-            "screencapture/",    // Some devices
-            "截屏/",              // Chinese: Screenshots folder
-            "截图/",              // Chinese: Screenshots folder
-            "miui/screenshot"    // MIUI specific
+            "screenshots/",      
+            "screenshot/",       
+            "screencapture/",    
+            "截屏/",              
+            "截图/",              
+            "miui/screenshot"    
         )
     }
 
@@ -70,13 +70,13 @@ class ScreenshotDetector(
     private var lastDetectedTime = 0L
     private var startListenTime = 0L
 
-    // Null rather than a 0L sentinel: unlike the epoch-based lastDetectedTime above, this is an
-    // elapsed-realtime value, where 0 is a legal reading (the instant of boot) and not a value
-    // that can stand in for "unset".
+    
+    
+    
     @Volatile
     private var lastCaptureAt: Long? = null
 
-    // Android 14+ official API callback (lazy to avoid ClassNotFoundException on older versions)
+    
     @get:RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
     private val screenCaptureCallback by lazy {
         Activity.ScreenCaptureCallback {
@@ -85,13 +85,13 @@ class ScreenshotDetector(
         }
     }
 
-    // ContentObserver for older Android versions
+    
     private var contentObserver: ContentObserver? = null
 
-    /**
-     * Start listening for screenshots.
-     * Should be called in Activity's onResume.
-     */
+    
+
+
+
     fun startListening() {
         if (isListening) {
             L.d { "[$TAG] Already listening, skipping" }
@@ -111,10 +111,10 @@ class ScreenshotDetector(
         L.i { "[$TAG] Started listening (API ${Build.VERSION.SDK_INT})" }
     }
 
-    /**
-     * Stop listening for screenshots.
-     * Should be called in Activity's onPause.
-     */
+    
+
+
+
     fun stopListening() {
         if (!isListening) {
             return
@@ -131,16 +131,16 @@ class ScreenshotDetector(
         L.i { "[$TAG] Stopped listening" }
     }
 
-    /**
-     * Release resources.
-     * Should be called in Activity's onDestroy.
-     * Note: Coroutine scope is managed externally (e.g., lifecycleScope auto-cancels on destroy)
-     */
+    
+
+
+
+
     fun release() {
         stopListening()
     }
 
-    // ============ Android 14+ Implementation ============
+    
 
     @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
     private fun startListeningApi34() {
@@ -151,7 +151,7 @@ class ScreenshotDetector(
             )
         } catch (e: Exception) {
             L.e { "[$TAG] Failed to register ScreenCaptureCallback: ${e.message}" }
-            // Fallback to legacy method
+            
             startListeningLegacy()
         }
     }
@@ -165,7 +165,7 @@ class ScreenshotDetector(
         }
     }
 
-    // ============ Legacy Implementation (ContentObserver) ============
+    
 
     private fun startListeningLegacy() {
         contentObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
@@ -198,14 +198,13 @@ class ScreenshotDetector(
     }
 
     private fun checkIfScreenshot(uri: Uri) {
-        // Check permission first
         if (!hasReadPermission()) {
             L.w { "[$TAG] No read permission, cannot check screenshot" }
             return
         }
 
         coroutineScope.launch {
-            // Try with retry mechanism (file might not be indexed immediately)
+            
             var isScreenshot = false
             for (attempt in 1..3) {
                 isScreenshot = withContext(Dispatchers.IO) {
@@ -213,7 +212,6 @@ class ScreenshotDetector(
                 }
                 if (isScreenshot) break
 
-                // Wait a bit before retry (file might not be indexed yet)
                 if (attempt < 3) {
                     delay(200L * attempt)
                 }
@@ -242,8 +240,8 @@ class ScreenshotDetector(
 
     private fun isScreenshotUri(uri: Uri): Boolean {
         return try {
-            // For Android 10+, use DISPLAY_NAME and RELATIVE_PATH
-            // For older versions, use DATA column
+            
+            
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 isScreenshotUriApi29(uri)
             } else {
@@ -263,13 +261,12 @@ class ScreenshotDetector(
             MediaStore.Images.Media.DATE_ADDED
         )
 
-        // Try direct URI query first
         var cursor = activity.contentResolver.query(uri, projection, null, null, null)
 
-        // If direct query fails, try querying by ID from the URI
+        
         if (cursor == null || cursor.count == 0) {
             cursor?.close()
-            cursor = null  // Ensure cursor is null before potential reassignment
+            cursor = null
             val id = uri.lastPathSegment
             if (id != null) {
                 L.d { "[$TAG] Direct query failed, trying by ID: $id" }
@@ -294,16 +291,14 @@ class ScreenshotDetector(
                 val relativePath = if (relativePathIndex >= 0) c.getString(relativePathIndex)?.lowercase() ?: "" else ""
                 val dateAdded = if (dateAddedIndex >= 0) c.getLong(dateAddedIndex) else 0L
 
-                // Check if recently added (within time window)
                 val currentTimeSeconds = System.currentTimeMillis() / 1000
                 val isRecent = currentTimeSeconds - dateAdded < TIME_WINDOW_SECONDS
 
-                // Check if after we started listening
                 val dateAddedMs = dateAdded * 1000
                 val isAfterStart = dateAddedMs >= startListenTime
 
-                // Strict check: path MUST contain screenshot folder keyword
-                // Filename match alone is not reliable (e.g., saving an image named "screenshot_xxx.jpg" from chat)
+                
+                
                 val isScreenshot = SCREENSHOT_PATH_KEYWORDS.any { keyword ->
                     relativePath.contains(keyword)
                 }
@@ -333,16 +328,14 @@ class ScreenshotDetector(
                 val data = if (dataIndex >= 0) cursor.getString(dataIndex)?.lowercase() ?: "" else ""
                 val dateAdded = if (dateAddedIndex >= 0) cursor.getLong(dateAddedIndex) else 0L
 
-                // Check if recently added
                 val currentTimeSeconds = System.currentTimeMillis() / 1000
                 val isRecent = currentTimeSeconds - dateAdded < TIME_WINDOW_SECONDS
 
-                // Check if after we started listening
                 val dateAddedMs = dateAdded * 1000
                 val isAfterStart = dateAddedMs >= startListenTime
 
-                // Strict check: path MUST contain screenshot folder keyword
-                // Filename match alone is not reliable (e.g., saving an image named "screenshot_xxx.jpg" from chat)
+                
+                
                 val isScreenshot = SCREENSHOT_PATH_KEYWORDS.any { keyword ->
                     data.contains(keyword)
                 }
@@ -353,22 +346,13 @@ class ScreenshotDetector(
         return false
     }
 
-    // ============ Common ============
+    
 
-    /**
-     * Time elapsed since the last capture this detector observed, or [Long.MAX_VALUE] when it has
-     * observed none.
-     *
-     * Updated for every observed capture, including the ones the debounce below drops: the
-     * debounce is there to stop the same capture being announced twice, not to deny that it
-     * happened. A caller timing its own behaviour off a capture needs the latter, so it must not
-     * read the debounced callback as the signal.
-     *
-     * Measured on [SystemClock.elapsedRealtime], since callers compare it against sub-second
-     * thresholds that a wall-clock jump would distort. Note the clock starts at *detection*, not
-     * at the shutter: on the legacy MediaStore path detection can trail the capture itself by the
-     * indexing delay plus the retry backoff, which shifts a caller's window by that much.
-     */
+    
+
+
+
+
     fun millisSinceLastCapture(): Long {
         val at = lastCaptureAt ?: return Long.MAX_VALUE
         return SystemClock.elapsedRealtime() - at
@@ -377,7 +361,7 @@ class ScreenshotDetector(
     private fun handleScreenshotDetected() {
         lastCaptureAt = SystemClock.elapsedRealtime()
 
-        // Debounce to avoid duplicate callbacks
+        
         val now = System.currentTimeMillis()
         if (now - lastDetectedTime < DEBOUNCE_MS) {
             L.d { "[$TAG] Debounced screenshot callback" }
@@ -385,8 +369,7 @@ class ScreenshotDetector(
         }
         lastDetectedTime = now
 
-        // Use coroutine to ensure callback runs on main thread
-        // Dispatchers.Main.immediate executes immediately if already on main thread
+        
         coroutineScope.launch(Dispatchers.Main.immediate) {
             onScreenshotDetected()
         }

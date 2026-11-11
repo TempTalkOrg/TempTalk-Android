@@ -9,8 +9,7 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import org.difft.app.database.getContactorsFromAllTable
-import com.difft.android.base.utils.pane.detailNavigation
-import com.difft.android.chat.contacts.contactsdetail.ContactDetailDestination
+import com.difft.android.chat.contacts.contactsdetail.showContactCard
 import com.difft.android.chat.databinding.FragmentEmojiReactionBinding
 import com.hi.dhl.binding.viewbind
 import dagger.hilt.android.AndroidEntryPoint
@@ -24,11 +23,11 @@ import org.difft.app.database.models.DBMessageModel
 import org.difft.app.database.reactions
 import javax.inject.Inject
 
-/**
- * Who reacted to a message with one emoji: a tab of [EmojiReactionFragment]. The arguments carry
- * only the message id and the emoji (they are saved with the home screen's state); the reactors
- * are loaded from the message.
- */
+
+
+
+
+
 @AndroidEntryPoint
 class EmojiReactionTabFragment : Fragment() {
 
@@ -40,7 +39,7 @@ class EmojiReactionTabFragment : Fragment() {
     private val mContactsAdapter: EmojiReactionContactorsAdapter by lazy {
         object : EmojiReactionContactorsAdapter() {
             override fun onContactClicked(contact: ContactorModel, position: Int) {
-                detailNavigation().push(this@EmojiReactionTabFragment, ContactDetailDestination(contact.id))
+                showContactCard(this@EmojiReactionTabFragment, contact.id)
             }
         }
     }

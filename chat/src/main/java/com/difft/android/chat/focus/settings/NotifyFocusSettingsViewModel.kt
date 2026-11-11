@@ -25,41 +25,41 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-/** The caption under the "Group Focus" row on Me > Notifications. */
+
 sealed interface NotifyFocusCaption {
     data object Off : NotifyFocusCaption
     data class Focusing(val name: String) : NotifyFocusCaption
 
-    /** The focus group is gone (error color). */
+    
     data object Invalid : NotifyFocusCaption
 }
 
 object NotifyFocusSettingsContract {
 
     sealed interface Intent {
-        /** Re-reads the global group notification level (on resume). */
+        
         data object Refresh : Intent
         data class ToggleFocus(val requested: Boolean) : Intent
         data object TapEndTime : Intent
         data object TapOthersStillNotify : Intent
         data class SetFoldOthers(val requested: Boolean) : Intent
 
-        /** The "Select focus group" row of the invalid state. */
+        
         data object TapSelectGroup : Intent
         data object TapGroupNotificationPaused : Intent
     }
 
     data class State(
-        /** False hides every focus entry and keeps the plain Group Notification row. */
+        
         val featureEnabled: Boolean = false,
-        /** Focus is active (the invalid state included). */
+        
         val focusOn: Boolean = false,
         val caption: NotifyFocusCaption = NotifyFocusCaption.Off,
         val invalid: Boolean = false,
         val end: FocusEnd? = null,
         val othersStillNotify: List<StillNotifyItem> = emptyList(),
         val foldOthers: Boolean = true,
-        /** The global group notification level: shown as the value, or as the restore value while paused. */
+        
         val groupLevel: GlobalNotificationType = GlobalNotificationType.ALL,
         val groupNotificationPaused: Boolean = false,
     )
@@ -70,13 +70,13 @@ object NotifyFocusSettingsContract {
         data object ChangeEndTime : Effect
         data object OpenOthersStillNotify : Effect
 
-        /** D7: paused global group notification; the primary button ends focus. */
+        
         data object ShowPausedDialog : Effect
         data object ShowError : Effect
     }
 }
 
-/** State of the "Group Focus" block and the paused "Group Notification" row on Me > Notifications (PRD 7.5). */
+
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class NotifyFocusSettingsViewModel internal constructor(

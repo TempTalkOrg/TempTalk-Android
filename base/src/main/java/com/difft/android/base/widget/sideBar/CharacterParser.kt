@@ -1,22 +1,15 @@
-/*
- * Filename	CharacterParser.java
- * Company	上海乐问-浦东分公司。
- * @author	LuRuihui
- * @version	0.1
- */
 package com.difft.android.base.widget.sideBar
 
 import com.difft.android.base.log.lumberjack.L
 
-/**
- * Java汉字转换为拼音
- *
- */
-object CharacterParser {
-    //    private var buffer: StringBuilder? = null
-//    var resource: String? = null
 
-    /** * 汉字转成ASCII码 * * @param chs * @return  */
+object CharacterParser {
+
+    
+
+
+
+
     private fun getChsAscii(chs: String): Int {
         var asc = 0
         try {
@@ -38,7 +31,11 @@ object CharacterParser {
         return asc
     }
 
-    /** * 单字解析 * * @param str * @return  */
+    
+
+
+
+
     fun convert(str: String): String? {
         var result: String? = null
         val ascii = getChsAscii(str)
@@ -55,7 +52,11 @@ object CharacterParser {
         return result
     }
 
-    /** * 词组解析 * * @param chs * @return  */
+    
+
+
+
+
     fun getSelling(chs: String): String {
         try {
             var key: String
@@ -79,10 +80,6 @@ object CharacterParser {
             return "#"
         }
     }
-
-//    val spelling: String
-//        get() = getSelling(resource)
-
 
     private val pyvalue = intArrayOf(
         -20319, -20317, -20304, -20295, -20292, -20283, -20265, -20257, -20242, -20230, -20051, -20036, -20032,

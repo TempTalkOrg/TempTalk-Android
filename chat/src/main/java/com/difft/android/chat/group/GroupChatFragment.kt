@@ -1,5 +1,12 @@
 package com.difft.android.chat.group
 
+import com.difft.android.base.ui.topchrome.installTopInsetPadding
+import com.difft.android.base.ui.topchrome.installTopInsetSpacer
+import com.difft.android.base.ui.topchrome.TopChromeStyle
+import com.difft.android.base.ui.topchrome.TopChromeOwner
+import com.difft.android.base.ui.sidechrome.padForSideChrome
+import com.difft.android.chat.ui.trackChatChrome
+import com.difft.android.chat.ui.installConversationGlass
 import android.Manifest
 import android.os.Bundle
 import android.text.TextUtils
@@ -23,7 +30,6 @@ import com.difft.android.base.android.permission.PermissionUtil
 import com.difft.android.base.android.permission.PermissionUtil.launchSinglePermission
 import com.difft.android.base.android.permission.PermissionUtil.registerPermission
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.utils.ResUtils
 import com.difft.android.network.config.GlobalConfigsManager
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
@@ -32,6 +38,8 @@ import com.difft.android.call.state.OnGoingCallStateManager
 import com.difft.android.chat.R
 import com.difft.android.base.utils.SecureModeUtil
 import com.difft.android.chat.common.SendMessageUtils
+import com.difft.android.chat.group.mvi.GroupDissolveBannerContract.Intent
+import com.difft.android.chat.group.mvi.GroupDissolveBannerViewModel
 import com.difft.android.chat.messages.PriorConversationReporter
 import com.difft.android.chat.databinding.ChatFragmentGroupChatBinding
 import com.difft.android.chat.setting.viewmodel.ChatSettingViewModel
@@ -64,12 +72,11 @@ import com.difft.android.chat.util.MessageNotificationUtil
 import com.difft.android.chat.util.ViewUtil
 import javax.inject.Inject
 
-/**
- * GroupChatFragment - 群聊页面 Fragment
- * 用于支持大屏双栏布局
- */
+
 @AndroidEntryPoint
-class GroupChatFragment : Fragment(), ChatMessageListProvider, VoiceRecordHost, ReopenableConversationPage {
+class GroupChatFragment : Fragment(), ChatMessageListProvider, VoiceRecordHost, ReopenableConversationPage, TopChromeOwner {
+    override val topChromeStyle get() = TopChromeStyle.Feather
+
 
     override fun onConversationReopened() {
         chatViewModel.onReopened()
@@ -101,6 +108,7 @@ class GroupChatFragment : Fragment(), ChatMessageListProvider, VoiceRecordHost, 
 
     private var _binding: ChatFragmentGroupChatBinding? = null
     private val binding get() = _binding!!
+    private val dissolveBannerModel: GroupDissolveBannerViewModel by viewModels()
 
     private val groupId: String by lazy {
         arguments?.getString(ARG_GROUP_ID) ?: ""
@@ -146,7 +154,7 @@ class GroupChatFragment : Fragment(), ChatMessageListProvider, VoiceRecordHost, 
         onAudioPermissionForMessageResult(it)
     }
 
-    /** Cache: whether confidential toggle should be hidden due to group member limit */
+    
     private var shouldHideConfidentialForGroupLimit = false
 
     override fun onCreateView(
@@ -155,26 +163,37 @@ class GroupChatFragment : Fragment(), ChatMessageListProvider, VoiceRecordHost, 
         savedInstanceState: Bundle?
     ): View {
         _binding = ChatFragmentGroupChatBinding.inflate(inflater, container, false)
+
         
-        // Force initialize ViewModels before child fragments are created.
-        // Child fragments (GroupChatHeaderFragment, etc.) use this fragment as ViewModel owner,
-        // and their onCreateView runs before our onViewCreated.
-        // By accessing ViewModels here, we ensure they exist when children access them.
+        
+        
+        
         chatViewModel
         chatSettingViewModel
-        
+
         return binding.root
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        
+        padForSideChrome(view)
+        
+        installTopInsetSpacer(binding.topInsetSpacer)
+        
+        installTopInsetPadding(binding.includeFullInput.root)
+        installConversationGlass(this, binding.root, binding.fragmentContainerViewContents)
+        trackChatChrome(viewLifecycleOwner, binding.fragmentContainerViewContents, binding.fragmentContainerViewHeader, binding.fragmentContainerViewInput) {
+            getChatMessageListFragment()?.setChromeInsets(it.top, it.bottom)
+        }
 
-        // API < 30: WindowInsetsAnimationCompat doesn't work with adjustNothing, so the window
-        // resizes for the keyboard; shared with the other pages of this window (no-op on 30+).
+        
+        
         SoftInputModeLease.acquireResize(requireActivity(), this, conversationRoot = true)
 
         onCreateForShowingMessages()
         registerCallStatusViewListener()
+        installGroupDissolveBanner(viewLifecycleOwner, binding, dissolveBannerModel, chatViewModel.chatUIData)
     }
 
     override fun onResume() {
@@ -193,15 +212,14 @@ class GroupChatFragment : Fragment(), ChatMessageListProvider, VoiceRecordHost, 
     }
 
     override fun onDestroyView() {
-        // The last page of this window to let go restores the window's mode, so a conversation
-        // closed in another tab does not reset it under a page still using the keyboard.
+        
+        
         SoftInputModeLease.release(requireActivity(), this)
         super.onDestroyView()
         _binding = null
     }
 
     private fun onCreateForShowingMessages() {
-//        ScreenShotUtil.forceDisable(requireActivity())
 
         if (TextUtils.isEmpty(chatViewModel.forWhat.id)) {
             ToastUtil.show("No groupID detected. Finishing Activity.")
@@ -217,12 +235,11 @@ class GroupChatFragment : Fragment(), ChatMessageListProvider, VoiceRecordHost, 
                 if (!isAdded || view == null) return@onEach
                 if (it.gid == chatViewModel.forWhat.id) {
                     if (it.status != 0) {
-                        // Group is gone (kicked / left / dismissed / destroyed) — close.
+                        
                         detailNavigation().closeConversation(this@GroupChatFragment)
                         return@onEach
                     }
                     chatViewModel.setChatUIData(ChatUIData(null, it))
-                    // Refresh confidential toggle when group members change
                     updateConfidential()
                 }
             }
@@ -319,7 +336,6 @@ class GroupChatFragment : Fragment(), ChatMessageListProvider, VoiceRecordHost, 
     }
 
     private fun updateConfidential(conversationSet: ConversationSetResponseBody? = null) {
-        // Check group member count asynchronously
         viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
             val memberCount = wcdb.getGroupMemberCount(chatViewModel.forWhat.id)
             val limit = globalConfigsManager.getGroupConfidentialMemberLimit()
@@ -334,19 +350,16 @@ class GroupChatFragment : Fragment(), ChatMessageListProvider, VoiceRecordHost, 
 
     private fun updateConfidentialUI(conversationSet: ConversationSetResponseBody? = null) {
         if (shouldHideConfidentialForGroupLimit) {
-            // Hide confidential toggle when group member limit exceeded
             binding.includeFullInput.ivFullInputConfidential.visibility = View.GONE
             return
         }
 
         binding.includeFullInput.ivFullInputConfidential.visibility = View.VISIBLE
         if (conversationSet?.confidentialMode == 1) {
-            val drawable = ResUtils.getDrawable(R.drawable.chat_btn_confidential_mode_enable)
-            binding.includeFullInput.ivFullInputConfidential.setImageDrawable(drawable)
+            binding.includeFullInput.ivFullInputConfidential.setImageResource(R.drawable.chat_btn_confidential_mode_enable)
             binding.includeFullInput.ivFullInputConfidential.tag = 1
         } else {
-            val drawable = ResUtils.getDrawable(R.drawable.chat_btn_confidential_mode_disable)
-            binding.includeFullInput.ivFullInputConfidential.setImageDrawable(drawable)
+            binding.includeFullInput.ivFullInputConfidential.setImageResource(R.drawable.chat_btn_confidential_mode_disable)
             binding.includeFullInput.ivFullInputConfidential.tag = 0
         }
     }
@@ -354,9 +367,9 @@ class GroupChatFragment : Fragment(), ChatMessageListProvider, VoiceRecordHost, 
     private fun getGroupInfo(forceUpdate: Boolean = false) {
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                // Snapshot local version before force-fetching so we can detect server-side
-                // changes and emit a room update event. Only the force-update path compares
-                // — cache-hit returns local data unchanged and needs no emit.
+                
+                
+                
                 val (oldVersion, oldName, oldAvatar) = if (forceUpdate) {
                     withContext(Dispatchers.IO) {
                         val g = wcdb.group.getFirstObject(DBGroupModel.gid.eq(chatViewModel.forWhat.id))
@@ -375,8 +388,8 @@ class GroupChatFragment : Fragment(), ChatMessageListProvider, VoiceRecordHost, 
                             L.i { "[GroupChatFragment] Group info changed for ${result.gid}, notifying room" }
                             groupUtil.emitSingleGroupUpdate(result)
                         } else {
-                            // Group info unchanged: independently check Room/Group drift
-                            // (fallback for cold-start race that drops trackRoom events).
+                            
+                            
                             groupUtil.reconcileRoomIfDrifted(result)
                         }
                     }
@@ -392,8 +405,8 @@ class GroupChatFragment : Fragment(), ChatMessageListProvider, VoiceRecordHost, 
     }
 
 
-    // Group info stacks above this conversation in the home detail stack (its shell Activity
-    // elsewhere). Leaving or losing the group closes the conversation through the navigation.
+    
+    
     fun openGroupInfoActivity() {
         detailNavigation().push(this, GroupInfoDestination(chatViewModel.forWhat.id))
     }
@@ -441,6 +454,7 @@ class GroupChatFragment : Fragment(), ChatMessageListProvider, VoiceRecordHost, 
         binding.fragmentContainerViewCall.visibility =
             if (onGoingCallStateManager.hasOtherCallData(callDataManager.callingList.value))
                 View.VISIBLE else View.GONE
+        dissolveBannerModel.dispatch(Intent.SetJoinCallBarVisible(binding.fragmentContainerViewCall.visibility == View.VISIBLE))
 
         combine(
             onGoingCallStateManager.chatHeaderCallVisibility,
@@ -454,6 +468,7 @@ class GroupChatFragment : Fragment(), ChatMessageListProvider, VoiceRecordHost, 
             .onEach { shouldShow ->
                 binding.fragmentContainerViewCall.visibility =
                     if (shouldShow) View.VISIBLE else View.GONE
+                dissolveBannerModel.dispatch(Intent.SetJoinCallBarVisible(shouldShow))
             }
             .launchIn(viewLifecycleOwner.lifecycleScope)
     }

@@ -3,9 +3,9 @@ package com.difft.android.base.log.lumberjack.data
 import java.text.SimpleDateFormat
 import java.util.Locale
 
-/**
- * Created by flisar on 17.01.2019.
- */
+
+
+
 
 class TimerData {
 
@@ -17,9 +17,9 @@ class TimerData {
     private var mEnd: Long = 0
     private var mLaps: MutableList<Long>? = null
 
-    // -------------
-    // getter
-    // -------------
+    
+    
+    
 
     fun getStart(): Long? = if (wasStarted()) mStart else null
 
@@ -33,29 +33,29 @@ class TimerData {
 
     fun getStartTime() : String = if (wasStarted()) TIME_FORMATTER.format(mStart) else "NOT STARTED"
 
-    // -------------
-    // helper functions
-    // -------------
+    
+    
+    
 
-    /*
-     returns if timer was started, even after stop is called
-     */
+    
+
+
     fun wasStarted() = mStart != 0L
 
-    /*
-     returns if timer is running
-     will be true after starting until you call stop
-     */
+    
+
+
+
     fun isRunning() = mStart != 0L && mEnd == 0L
 
-    /*
-     returns if timer was started and stopped and is not running anymore
-     */
+    
+
+
     fun wasEnded() = wasStarted() && mEnd != 0L
 
-    // -------------
-    // functions
-    // -------------
+    
+    
+    
 
     fun start(): TimerData {
         if (!isRunning())

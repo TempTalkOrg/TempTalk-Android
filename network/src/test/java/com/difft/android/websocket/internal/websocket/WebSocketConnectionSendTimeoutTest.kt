@@ -19,11 +19,11 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
-/**
- * [WebSocketConnection.sendRequestAwaitResponse] must surface a response timeout as an
- * [IOException] (so the sender falls back to HTTP and send jobs retry), never as a
- * TimeoutCancellationException.
- */
+
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class WebSocketConnectionSendTimeoutTest {
 

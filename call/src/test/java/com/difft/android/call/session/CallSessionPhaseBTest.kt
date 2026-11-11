@@ -55,12 +55,12 @@ import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
 import kotlin.coroutines.CoroutineContext
 
-/**
- * The session's room setup (Phase B, `CallRoomWiring.kt`), launched once by [CallSession.start] on
- * the session's Default scope: wiring order, the once-only gate, the two abort points, the
- * resolved [CallSession.roomState], the end on failure, cancellation, and who releases the entry
- * point's wait-dialog claim. Rows: T2-10..T2-13, T3-20, T5-19, T5-27, T5-28.
- */
+
+
+
+
+
+
 class CallSessionPhaseBTest {
 
     private val testDispatcher = StandardTestDispatcher()
@@ -71,7 +71,7 @@ class CallSessionPhaseBTest {
     @get:Rule(order = 1)
     val globalMocks = GlobalStaticMockRule()
 
-    /** Phase B runs on the test scheduler: it runs when the test runs that scheduler. */
+    
     private lateinit var h: CallSessionTestHarness
     private val extraHarnesses = mutableListOf<CallSessionTestHarness>()
     private val collectorScopes = mutableListOf<CoroutineScope>()
@@ -319,7 +319,7 @@ class CallSessionPhaseBTest {
         assertEquals("mic on", (barrage.renderable as BarrageRenderable.Default).message.message)
     }
 
-    /** Session UI events collected on the test Main dispatcher until `@After`. */
+    
     private fun collectEvents(session: CallSession): List<CallSessionUiEvent> {
         val events = Collections.synchronizedList(mutableListOf<CallSessionUiEvent>())
         val scope = CoroutineScope(testDispatcher)
@@ -328,7 +328,7 @@ class CallSessionPhaseBTest {
         return events
     }
 
-    /** Records the named arguments of every [CallCleanupSteps.build] call (last call wins), then runs the real build. */
+    
     private fun captureCleanupStepArgs(): Map<String, Any?> {
         val captured = mutableMapOf<String, Any?>()
         val names = CallCleanupSteps::build.parameters.map { it.name!! }
@@ -351,7 +351,7 @@ class CallSessionPhaseBTest {
         const val AWAIT_POLL_MS = 5L
     }
 
-    /** Dispatches through [delegate] and marks the running block, so a stub can tell it ran via `Dispatchers.Main`. */
+    
     private class MainMarkingDispatcher(private val delegate: TestDispatcher) : CoroutineDispatcher() {
         override fun dispatch(context: CoroutineContext, block: Runnable) {
             delegate.dispatch(context, Runnable {

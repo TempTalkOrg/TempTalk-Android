@@ -23,20 +23,20 @@ import org.robolectric.shadows.ShadowSystemClock
 import java.time.Duration
 import java.util.concurrent.TimeUnit
 
-/**
- * Pins [OrientationPolicy.preReleaseForUnfold] and the pending-release rule in
- * [OrientationPolicy.applyTo]: a PORTRAIT lock on a phone-sized panel is released, the inner
- * panel is left to `applyTo`, any non-PORTRAIT value is left alone (whether that PORTRAIT is the
- * policy's own is the caller's ownership guard), and the release survives replays on the same
- * panel until the fold closes, the panel changes, or the time box runs out. Robolectric
- * `@Config(qualifiers=...)` sizes the default display; `ShadowDisplayManager.setSupportedModes`
- * drives the panel mode separately where the decision must come from the mode.
- */
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33], application = Application::class)
 class OrientationPolicyPreReleaseTest {
 
-    // The pending release is process-wide; never leave it behind for another test class.
+    
     @Before
     fun resetPending() = OrientationPolicy.clearUnfoldPending()
 
@@ -80,8 +80,8 @@ class OrientationPolicyPreReleaseTest {
     @Test
     @Config(qualifiers = "sw600dp-w859dp-h608dp")
     fun `frozen app bounds at the inner panel — the panel mode still identifies the outer panel`() {
-        // HyperOS keeps the app-level bounds at the launch posture; a process started unfolded
-        // and folded again reads 608dp from getRealMetrics while the panel mode is the outer one.
+        
+        
         val activity = lockedActivity()
         val density = activity.resources.displayMetrics.density
         ShadowDisplayManager.setSupportedModes(
@@ -110,8 +110,8 @@ class OrientationPolicyPreReleaseTest {
     @Test
     @Config(qualifiers = "w400dp-h800dp")
     fun `replay on the same panel before the display switch keeps the release`() {
-        // A display event on the still phone-sized outer panel replays the policy before the OS
-        // switches displays; with the unfold pending it must not put the lock back.
+        
+        
         val activity = lockedActivity()
         OrientationPolicy.preReleaseForUnfold(activity)
 
@@ -156,9 +156,9 @@ class OrientationPolicyPreReleaseTest {
     @Test
     @Config(qualifiers = "w400dp-h800dp")
     fun `screen created on the pending panel is held open, and re-locks once the time box is over`() {
-        // A screen started inside the window arrives with the manifest value (`locked`), not
-        // UNSPECIFIED; its request is what the OS rotates by at the switch, so it must be held
-        // open like the screen that released — and lock normally once the release has expired.
+        
+        
+        
         OrientationPolicy.preReleaseForUnfold(lockedActivity())
         val created = createActivity().apply { requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LOCKED }
 
@@ -183,8 +183,8 @@ class OrientationPolicyPreReleaseTest {
     @Test
     @Config(qualifiers = "w400dp-h800dp")
     fun `scheduleUnfoldRelock runs the re-apply only once the time box is over`() {
-        // Shared by BaseActivity and the call activity: whichever screen released, or was held
-        // open while created inside a release, converges on the normal policy after the box.
+        
+        
         val owner = Robolectric.buildActivity(ComponentActivity::class.java).create().start().resume().get()
         var runs = 0
 
@@ -199,9 +199,9 @@ class OrientationPolicyPreReleaseTest {
     @Test
     @Config(qualifiers = "w400dp-h800dp")
     fun `relaunch on the inner panel ends the release — a fold-back inside the time box re-locks`() {
-        // The relaunched instance already carries UNSPECIFIED, so applyTo writes nothing on the
-        // inner panel; it must still end the pending release there, or folding back before the
-        // time box runs out would find the outer panel pending and leave it unlocked.
+        
+        
+        
         val activity = lockedActivity()
         OrientationPolicy.preReleaseForUnfold(activity)
         val innerId = ShadowDisplayManager.addDisplay("sw600dp-w859dp-h608dp")
@@ -220,8 +220,8 @@ class OrientationPolicyPreReleaseTest {
     @Test
     @Config(qualifiers = "w400dp-h800dp")
     fun `a different phone-sized panel is not covered by the pending release`() {
-        // The release is tied to the panel it was made on; a relaunch on some other small panel
-        // (a clamshell's main display after its cover) decides normally.
+        
+        
         val activity = lockedActivity()
         OrientationPolicy.preReleaseForUnfold(activity)
         val otherId = ShadowDisplayManager.addDisplay("w412dp-h915dp")

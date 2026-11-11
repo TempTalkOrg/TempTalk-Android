@@ -20,12 +20,12 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 
-/**
- * The first-attach watchdog: a session no call page attaches to within 10 s (a blocked launch, a
- * page that finished before its view model existed) leaves the call through the exit decision
- * with LEAVE, and when that signaling never settles the exit fallback ends it locally 10 s later.
- * An attach disarms it; a session that ended or is ending is never left a second time.
- */
+
+
+
+
+
+
 class CallSessionWatchdogTest {
 
     private val testDispatcher = StandardTestDispatcher()
@@ -41,7 +41,7 @@ class CallSessionWatchdogTest {
     @Before
     fun setUp() {
         h = CallSessionTestHarness(testDispatcher)
-        // The exit decision itself is CallExitHandlerTest's; here only whether it runs, and how.
+        
         mockkConstructor(CallExitHandler::class)
         every { anyConstructed<CallExitHandler>().handleExit(any(), any()) } just runs
     }

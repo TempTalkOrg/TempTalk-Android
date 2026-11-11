@@ -22,13 +22,10 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos.Mode
 
-/**
- * `buildForwardData` is where a forward is born, so it is where a new local identity has to be
- * minted — on BOTH branches. Re-forwarding used to hand the new message the source's own
- * ForwardContext object, which is the sharing this pins closed.
- *
- * Robolectric because the real `buildForwardData` resolves string resources for the forward preview.
- */
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [31])
 class BuildForwardDataIdentityTest {
@@ -81,10 +78,10 @@ class BuildForwardDataIdentityTest {
         assertNotEquals("local-src", copy.localId)
         assertTrue(copy.isForwardCopy)
         assertEquals(AttachmentStatus.LOADING.code, copy.status)
-        // Source is the ORIGINAL attachment's own directory — a message's attachment is addressed
-        // exactly like a forwarded one.
+        
+        
         assertEquals("/root/attachment/local-src/photo.jpg", copy.forwardSourceFilePath)
-        // Server identity untouched, and the original object is not mutated.
+        
         assertEquals("server-id", copy.id)
         assertEquals(AttachmentStatus.SUCCESS.code, original.status)
     }
@@ -113,7 +110,7 @@ class BuildForwardDataIdentityTest {
         assertNotEquals("local-top", copiedTop.localId)
         assertNotEquals("local-nested", copiedNested.localId)
         assertNotEquals(copiedTop.localId, copiedNested.localId)
-        // Source tree untouched.
+        
         assertEquals("local-top", topLeaf.localId)
         assertEquals("local-nested", nestedLeaf.localId)
     }

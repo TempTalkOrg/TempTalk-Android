@@ -39,11 +39,11 @@ class DeviceRepositoryTest {
     }
     private lateinit var repository: DeviceRepository
 
-    /**
-     * Hand-written recording fake rather than a mock (mirrors NoOpRefresher in
-     * ProxyConfigProviderTunnelHostsTest). Records the source tags so the auth-failure hook can be
-     * asserted without giving every other test in this file a mock to satisfy.
-     */
+    
+
+
+
+
     private class RecordingSink : AuthFailureSink {
         val sources = mutableListOf<String>()
         override fun onAuthRejected(source: String) {
@@ -64,7 +64,7 @@ class DeviceRepositoryTest {
         clearMocks(deviceApiService, httpClient)
     }
 
-    // --- auth-failure hook: every 401/403 through executeDeviceCall reaches SessionAuthGuard ---
+    
 
     @Test
     fun `getDevices 401 reports the auth failure exactly once`() = runTest {
@@ -88,7 +88,7 @@ class DeviceRepositoryTest {
         assertEquals(listOf(AuthFailureSource.DEVICE_API), authFailureSink.sources)
     }
 
-    // --- credential-bound probe (#1382 A09) ---
+    
 
     @Test
     fun `checkDeviceAuthAs sends exactly the given credential`() = runTest {
@@ -136,7 +136,7 @@ class DeviceRepositoryTest {
         assertTrue(authFailureSink.sources.isEmpty())
     }
 
-    // --- checkDeviceAuth: success ---
+    
 
     @Test
     fun `checkDeviceAuth 200 success completes without exception`() = runTest {
@@ -144,7 +144,7 @@ class DeviceRepositoryTest {
             "{}".toResponseBody("application/json".toMediaType())
         )
 
-        repository.checkDeviceAuth() // Should not throw
+        repository.checkDeviceAuth() 
     }
 
     @Test
@@ -153,10 +153,10 @@ class DeviceRepositoryTest {
             204, "".toResponseBody("application/json".toMediaType())
         )
 
-        repository.checkDeviceAuth() // Should not throw
+        repository.checkDeviceAuth() 
     }
 
-    // --- checkDeviceAuth: 401 -> AuthorizationFailedException ---
+    
 
     @Test
     fun `checkDeviceAuth 401 throws AuthorizationFailedException`() = runTest {
@@ -170,7 +170,7 @@ class DeviceRepositoryTest {
         assertEquals(401, exception.code)
     }
 
-    // --- checkDeviceAuth: 403 -> AuthorizationFailedException (CRITICAL: PR #395 regression guard) ---
+    
 
     @Test
     fun `checkDeviceAuth 403 throws AuthorizationFailedException - PR 395 regression guard`() =
@@ -185,7 +185,7 @@ class DeviceRepositoryTest {
             assertEquals(403, exception.code)
         }
 
-    // --- checkDeviceAuth: 404 with account offline status 10105 -> AccountOfflineException ---
+    
 
     @Test
     fun `checkDeviceAuth 404 with status 10105 throws AccountOfflineException`() = runTest {
@@ -201,7 +201,7 @@ class DeviceRepositoryTest {
         assertEquals("offline", exception.reason)
     }
 
-    // --- checkDeviceAuth: 404 with account offline status 10110 -> AccountOfflineException ---
+    
 
     @Test
     fun `checkDeviceAuth 404 with status 10110 throws AccountOfflineException`() = runTest {
@@ -216,7 +216,7 @@ class DeviceRepositoryTest {
         assertEquals(10110, exception.status)
     }
 
-    // --- checkDeviceAuth: 404 without special status -> NotFoundException ---
+    
 
     @Test
     fun `checkDeviceAuth 404 without special status throws NotFoundException`() = runTest {
@@ -252,7 +252,7 @@ class DeviceRepositoryTest {
         }
     }
 
-    // --- checkDeviceAuth: network error -> PushNetworkException ---
+    
 
     @Test
     fun `checkDeviceAuth IOException throws PushNetworkException`() = runTest {
@@ -264,7 +264,7 @@ class DeviceRepositoryTest {
         assertIs<IOException>(exception.cause)
     }
 
-    // --- checkDeviceAuth: unknown error code -> NonSuccessfulResponseCodeException ---
+    
 
     @Test
     fun `checkDeviceAuth 500 throws NonSuccessfulResponseCodeException`() = runTest {
@@ -278,7 +278,7 @@ class DeviceRepositoryTest {
         assertEquals(500, exception.code)
     }
 
-    // --- getNewDeviceVerificationCode ---
+    
 
     @Test
     fun `getNewDeviceVerificationCode returns verification code string`() = runTest {
@@ -290,22 +290,22 @@ class DeviceRepositoryTest {
         assertEquals(expectedCode, result)
     }
 
-    // --- addDevice ---
+    
 
     @Test
     fun `addDevice calls sendProvisioningMessage on service`() = runTest {
         coEvery { deviceApiService.sendProvisioningMessage(any(), any()) } returns Unit
 
-        // Use mock dependencies for crypto - we just verify the service call is made
-        // We cannot easily test the full crypto path without real keys,
-        // but we can verify the call structure by checking it does not throw
-        // and that sendProvisioningMessage is called.
-        // For a full addDevice test we'd need real crypto keys, which is integration-level.
-        // Here we verify the API service layer interaction.
+        
+        
+        
+        
+        
+        
         coVerify(exactly = 0) { deviceApiService.sendProvisioningMessage(any(), any()) }
     }
 
-    // --- getDevices: success + primary-device filter ---
+    
 
     private fun okBody(json: String): Response<okhttp3.ResponseBody> =
         Response.success(json.toResponseBody("application/json".toMediaType()))
@@ -436,14 +436,14 @@ class DeviceRepositoryTest {
         assertIs<IOException>(e.cause)
     }
 
-    // --- removeDevice ---
+    
 
     @Test
     fun `T15 removeDevice 200 succeeds and calls service once`() = runTest {
         coEvery { deviceApiService.removeDevice(2) } returns
             Response.success("".toResponseBody("application/json".toMediaType()))
 
-        repository.removeDevice(2) // should not throw
+        repository.removeDevice(2) 
 
         coVerify(exactly = 1) { deviceApiService.removeDevice(2) }
     }
@@ -453,7 +453,7 @@ class DeviceRepositoryTest {
         coEvery { deviceApiService.removeDevice(2) } returns
             Response.success(204, "".toResponseBody("application/json".toMediaType()))
 
-        repository.removeDevice(2) // should not throw
+        repository.removeDevice(2) 
     }
 
     @Test
@@ -505,7 +505,7 @@ class DeviceRepositoryTest {
         coVerify(exactly = 0) { deviceApiService.removeDevice(any()) }
     }
 
-    // --- DeviceInfo DTO (Gson @SerializedName) ---
+    
 
     @Test
     fun `T23 DeviceInfo deserializes all four fields`() {

@@ -9,11 +9,11 @@ import com.difft.android.base.notification.ReadinessIssue
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/**
- * The notifications slot reads readiness N1/N2 instead of channel code and must be eligible in
- * exactly the cases `MessageNotificationUtil.canShowNotifications()` returns false: permission
- * denied, app switch off, MESSAGE group blocked, MESSAGE category missing or NONE.
- */
+
+
+
+
+
 class NotificationsEligibilityTest {
 
     private val high = ChannelReading(importance = NotificationManager.IMPORTANCE_HIGH, hasSound = true)

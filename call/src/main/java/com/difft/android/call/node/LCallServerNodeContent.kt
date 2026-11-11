@@ -37,19 +37,19 @@ import com.difft.android.call.R
 import com.difft.android.call.data.CONNECTION_TYPE
 import com.difft.android.call.data.ServerNode
 
-/** Test handles for the two glyphs that carry no text of their own. */
+
 const val SERVER_NODE_CHECKMARK_TEST_TAG = "server_node_checkmark"
 const val SERVER_NODE_REFRESH_TEST_TAG = "server_node_refresh"
 const val SERVER_NODE_LOADING_TEST_TAG = "server_node_loading"
 
-/** Protocol names, not translatable copy — they label the transport the call actually uses. */
+
 private const val PROTOCOL_QUIC = "HTTP/3"
 private const val PROTOCOL_WEB_SOCKET = "WebSocket"
 
-/**
- * Stateless body of the call-network diagnostics screen. Every interaction is reported through a
- * callback, so this never touches `LCallEngine` and can be rendered from a test.
- */
+
+
+
+
 @Composable
 fun LCallServerNodeContent(
     servers: List<ServerNode>,
@@ -73,8 +73,8 @@ fun LCallServerNodeContent(
         Spacer(Modifier.height(DifftSettingsDefaults.FirstGroupSpacing))
 
         ConnectionStatusGroup(
-            // The connected node is the truth; falling back to the selection (then the first known
-            // node) keeps the row from reading "----" before the first connection.
+            
+            
             node = connectedNode ?: selectedNode ?: servers.firstOrNull(),
             connected = connectedNode != null,
             connectionType = connectionType,
@@ -90,8 +90,8 @@ fun LCallServerNodeContent(
             servers.forEach { server ->
                 ServerNodeRow(
                     server = server,
-                    // An explicit selection wins; before the first selection the connected node
-                    // carries the checkmark so the list agrees with the status group above.
+                    
+                    
                     selected = (selectedNode ?: connectedNode)?.domain == server.domain,
                     onClick = { onServerSelected(server) },
                 )
@@ -109,7 +109,7 @@ fun LCallServerNodeContent(
                 if (upstreamServers.isEmpty()) {
                     DifftSettingsRow(label = stringResource(R.string.call_server_node_upstream_empty))
                 } else {
-                    // Not selectable: while proxied these servers are not used for the connection.
+                    
                     upstreamServers.forEach { server ->
                         ServerNodeRow(server = server, selected = false, onClick = null)
                     }
@@ -164,7 +164,7 @@ private fun RefreshAction(isLoading: Boolean, onRefresh: () -> Unit) {
                 .size(20.dp)
                 .testTag(SERVER_NODE_LOADING_TEST_TAG),
             strokeWidth = 2.dp,
-            color = DifftTheme.colors.primary,
+            color = DifftTheme.colors.info,
         )
     } else {
         IconButton(
@@ -183,10 +183,10 @@ private fun RefreshAction(isLoading: Boolean, onRefresh: () -> Unit) {
     }
 }
 
-/**
- * One node: flag, name + role badge, then the tunnel domain and its resolved IPs. Tapping a
- * selectable row routes the next call through that node and marks it with a checkmark.
- */
+
+
+
+
 @Composable
 private fun ServerNodeRow(
     server: ServerNode,
@@ -207,7 +207,7 @@ private fun ServerNodeRow(
             Icon(
                 painter = painterResource(com.difft.android.base.R.drawable.base_ic_checkmark),
                 contentDescription = null,
-                tint = DifftTheme.colors.primary,
+                tint = DifftTheme.colors.info,
                 modifier = Modifier
                     .size(DifftSettingsDefaults.ChevronSize)
                     .testTag(SERVER_NODE_CHECKMARK_TEST_TAG),
@@ -222,7 +222,7 @@ private fun ServerNodeRow(
             Text(
                 text = server.name,
                 style = DifftSettingsDefaults.LabelTextStyle,
-                color = if (selected) DifftTheme.colors.primary else DifftTheme.colors.textPrimary,
+                color = if (selected) DifftTheme.colors.info else DifftTheme.colors.textPrimary,
             )
             Spacer(Modifier.width(DifftSettingsDefaults.LabelInfoGap))
             NodeRoleBadge(isPrimary = server.isPrimary)
@@ -249,7 +249,7 @@ private fun NodeRoleBadge(isPrimary: Boolean) {
     Box(
         modifier = Modifier
             .background(
-                if (isPrimary) DifftTheme.colors.primary else DifftTheme.colors.backgroundDisabled,
+                if (isPrimary) DifftTheme.colors.info else DifftTheme.colors.backgroundDisabled,
                 DifftSettingsDefaults.GroupShape,
             )
             .padding(horizontal = 8.dp, vertical = 2.dp),

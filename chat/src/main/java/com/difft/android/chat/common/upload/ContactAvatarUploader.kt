@@ -24,14 +24,14 @@ import javax.crypto.spec.SecretKeySpec
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Encrypt + upload a contact-class avatar (own profile avatar or remark avatar
- * for another contact). AES-GCM-256, endpoint `/v1/profile/avatar/attachment`.
- *
- * Kept separate from [com.difft.android.chat.group.GroupAvatarUploader]: groups
- * use a different endpoint, encryption scheme, and CDN. Mixing the two surfaces
- * as `IllegalStateException: closed` from OkHttp on download.
- */
+
+
+
+
+
+
+
+
 @Singleton
 class ContactAvatarUploader @Inject constructor(
     @param:ApplicationContext private val context: Context,
@@ -61,7 +61,7 @@ class ContactAvatarUploader @Inject constructor(
             throw IOException("avatar_encrypt_failed")
         }
 
-        // close() releases the OkHttp connection; non-2xx already threw HttpException.
+        
         noHeaderClient.httpService.fetchUploadAvatar(
             response.location.orEmpty(),
             RequestBody.create(null, payload)
@@ -73,7 +73,7 @@ class ContactAvatarUploader @Inject constructor(
         )
     }
 
-    /** Upload and return the canonical [AvatarResponse] JSON. */
+    
     suspend fun uploadAndBuildJson(filePath: String): String {
         val meta = uploadAvatar(filePath)
         return gson.toJson(
@@ -85,7 +85,7 @@ class ContactAvatarUploader @Inject constructor(
         )
     }
 
-    /** Returns `IV (12B) ‖ ciphertext ‖ GCM tag (16B)`. Paired with [com.difft.android.chat.common.AvatarUtil.fetchAvatar]. */
+    
     private fun encryptGcm(content: ByteArray, base64Key: String): ByteArray {
         val iv = ByteArray(12).also { SecureRandom().nextBytes(it) }
         val secretKey = SecretKeySpec(Base64.decode(base64Key), "AES")

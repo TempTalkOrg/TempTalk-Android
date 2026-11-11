@@ -25,14 +25,11 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.random.Random
 
-/**
- * Drives the `failed_message` retry queue: serialized UPSERT on the way in,
- * bounded scheduled retries on the way out.
- *
- * Replaces the previous "insertOrReplace + retry forever every 3 s" loop that
- * accumulated dead letters and burned Crashlytics quota.
- */
-// All wcdb calls in this class run on Dispatchers.IO.
+
+
+
+
+
 @Suppress("BlockingWcdbInSuspend")
 @OptIn(FlowPreview::class)
 @Singleton
@@ -45,51 +42,47 @@ class FailedMessageProcessor @Inject constructor(
         const val MAX_RETRIES = 5
         const val MAX_PER_TICK = 50
 
-        /** Bounded TTL — 3 days. Normal MAX_RETRIES path resolves in ~35 minutes. */
+        
         val TTL_MILLIS: Long = TimeUnit.DAYS.toMillis(3)
 
-        /**
-         * Minimum wall-clock wait after the Nth failure (index = retryCount).
-         * `backoffMillis(0)` ≈ 1 s, `backoffMillis(4)` ≈ 30 min. Total accumulated
-         * wall-clock ≈ 35 min 36 s before MAX_RETRIES gives up.
-         */
+        
+
+
+
+
         val BACKOFF_TABLE: LongArray = longArrayOf(
-            TimeUnit.SECONDS.toMillis(1),     // after 1st failure
-            TimeUnit.SECONDS.toMillis(5),     // after 2nd
-            TimeUnit.SECONDS.toMillis(30),    // after 3rd
-            TimeUnit.MINUTES.toMillis(5),     // after 4th
-            TimeUnit.MINUTES.toMillis(30),    // after 5th
+            TimeUnit.SECONDS.toMillis(1),     
+            TimeUnit.SECONDS.toMillis(5),     
+            TimeUnit.SECONDS.toMillis(30),    
+            TimeUnit.MINUTES.toMillis(5),     
+            TimeUnit.MINUTES.toMillis(30),    
         )
     }
 
     private val processEvents = MutableSharedFlow<Unit>(replay = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
-    /**
-     * Serializes [saveTransient] calls so two coroutines enqueuing the same
-     * envelope timestamp don't both insert (primary-key conflict) or one of
-     * them overwrite the other's retryCount with a freshly-zeroed one.
-     */
+    
+
+
+
+
     private val saveMutex = Mutex()
 
-    /**
-     * First-cycle TTL cleanup latch. The `sampleAfterFirst(3000)` Flow is
-     * collected sequentially — each `onEach` lambda runs to completion
-     * before the next emission is delivered — so concurrent access is not
-     * possible. `appScope` is `Dispatchers.IO` (a thread pool) though, so
-     * the read and write across ticks may land on different threads;
-     * `@Volatile` guarantees the JVM publishes the write so a later tick
-     * sees the latest value across that thread switch.
-     *
-     * Don't introduce a `withContext { ... }` inside the `onEach` lambda
-     * that returns control before [hasCleanedUp] is set — that would
-     * break the sequential-collection contract this relies on.
-     */
+    
+
+
+
+
+
+
+
+
     @Volatile
     private var hasCleanedUp = false
 
-    /**
-     * Auto-invoked by Hilt after construction.
-     */
+    
+
+
     @Inject
     fun initWhenInject() {
         processEvents.sampleAfterFirst(3000).onEach {
@@ -101,14 +94,14 @@ class FailedMessageProcessor @Inject constructor(
         processEvents.tryEmit(Unit)
     }
 
-    /**
-     * Enqueue transient-failed envelopes for later retry. Uses [saveMutex] to
-     * serialize concurrent callers so duplicate timestamps don't race and
-     * silently drop retryCount progress.
-     *
-     * If a row already exists for a given envelope timestamp, only
-     * `lastAttemptTime` is refreshed — `retryCount` progress is preserved.
-     */
+    
+
+
+
+
+
+
+
     suspend fun saveTransient(envelopes: List<Envelope>) {
         if (envelopes.isEmpty()) return
         saveMutex.withLock {
@@ -139,7 +132,7 @@ class FailedMessageProcessor @Inject constructor(
         }
     }
 
-    /** One tick under one receive ticket (#1382); skipped while messaging is closed. */
+    
     internal suspend fun processAdmittedTick() {
         val admission = messagingGate.tryAdmit(AdmissionKind.RECEIVE, "failed-drain")
         if (admission == null) {
@@ -149,13 +142,13 @@ class FailedMessageProcessor @Inject constructor(
         admission.use { processFailedMessagesInternal(it) }
     }
 
-    /**
-     * The migration export's pre-snapshot drain (#1382): every retryable row once, ignoring
-     * backoff, under [owner]'s pause, so envelopes consumed from the server before the pause land
-     * in the snapshot.
-     *
-     * @return the rows left in the table, or null when [owner]'s export is not the one exporting.
-     */
+    
+
+
+
+
+
+
     suspend fun drainAsOwner(owner: String): Int? {
         val admission = messagingGate.tryAdmitAsOwner(owner, AdmissionKind.RECEIVE, "failed-drain-owner") ?: return null
         return admission.use {
@@ -166,17 +159,7 @@ class FailedMessageProcessor @Inject constructor(
 
     private suspend fun processFailedMessagesInternal(admission: MessagingTicket, ignoreBackoff: Boolean = false) {
         try {
-            // (CancellationException is rethrown below — must propagate so
-            // scope shutdown / logout actually cancels this tick.)
-            // First-cycle TTL cleanup: prune anything whose last attempt is older
-            // than TTL before we bother loading due rows. Keyed on `lastAttemptTime`
-            // (not envelope `timestamp`) so server-side backlogs of old envelopes
-            // still get a full retry window once we receive them — using
-            // `timestamp` would zero-retry anything older than TTL on first sight.
-            // Note: `lastAttemptTime = 0` legacy rows (pre-upgrade) satisfy
-            // `0 < cutoff` and get swept too — desired, since their attempt
-            // history is unknown and aligning them to the new schema is safer
-            // than indefinitely keeping them.
+            
             if (!hasCleanedUp) {
                 val cutoff = System.currentTimeMillis() - TTL_MILLIS
                 runCatching {
@@ -195,28 +178,28 @@ class FailedMessageProcessor @Inject constructor(
                 processOne(failed, admission)
             }
         } catch (e: CancellationException) {
-            // Must propagate so scope shutdown actually cancels (parity with
-            // IncomingEnvelopMessageProcessor.processBatch + EnvelopToMessageProcessor.process).
+            
+            
             throw e
         } catch (e: Throwable) {
             L.e { "[FailedMessageProcessor] Error processing failed messages: ${e.stackTraceToString()}" }
         }
     }
 
-    /**
-     * One row's retry attempt. Outcomes:
-     * - Success → delete the failed_message row (the actual message was already
-     *   persisted into the message table inside [EnvelopToMessageProcessor.process]
-     *   via `putWhenNonExist`).
-     * - Permanent → report + delete the failed_message row.
-     * - Transient → bump retryCount + lastAttemptTime; at MAX_RETRIES, give-up
-     *   report + delete the failed_message row.
-     */
+    
+
+
+
+
+
+
+
+
     private suspend fun processOne(failed: FailedMessageModel, admission: MessagingTicket) {
         val envelope = try {
             Envelope.parseFrom(failed.messageEnvelopBytes)
         } catch (e: Exception) {
-            // Stored bytes corrupt — nothing to retry. Same input → same failure.
+            
             deleteFailedRow(failed.timestamp)
             reportPermanentDrop(
                 DropReason.DECRYPTION_DATA_CORRUPT,
@@ -232,7 +215,7 @@ class FailedMessageProcessor @Inject constructor(
                 deleteFailedRow(failed.timestamp)
             }
             is EnvelopeProcessResult.PermanentFailure -> {
-                // Reclassified as permanent on a later attempt — report + purge.
+                
                 reportPermanentDrop(
                     res.reason,
                     res.cause,
@@ -244,20 +227,12 @@ class FailedMessageProcessor @Inject constructor(
             is EnvelopeProcessResult.TransientFailure -> {
                 bumpRetryOrGiveUp(failed, res.cause)
             }
-            // Nothing was stored; keep the row and its retry count.
+            
             EnvelopeProcessResult.Paused -> Unit
         }
     }
 
-    /**
-     * Delete a single failed_message row with error logging.
-     *
-     * Silent swallow of a DELETE failure here is bad enough to log explicitly
-     * (per logging-standards.md): if the row stays after the caller assumed
-     * it was gone, future ticks re-process it, wasting CPU and producing
-     * duplicate Crashlytics noise. TTL eventually cleans it up but the
-     * intermediate loop is hard to diagnose without this log.
-     */
+    
     private fun deleteFailedRow(timestamp: Long) {
         runCatching {
             wcdb.failedMessage.deleteObjects(DBFailedMessageModel.timestamp.eq(timestamp))
@@ -269,11 +244,7 @@ class FailedMessageProcessor @Inject constructor(
     private fun bumpRetryOrGiveUp(failed: FailedMessageModel, cause: Throwable) {
         val newCount = failed.retryCount + 1
         if (newCount >= MAX_RETRIES) {
-            // Give-up-specific log first (carries retry attempt count); then
-            // route through the shared [reportPermanentDrop] helper so the
-            // generic L.w + Crashlytics record pair stays locked together
-            // with every other permanent-drop site. Tagged `RETRY_EXHAUSTED`
-            // for Crashlytics issue separation from other permanent drops.
+            
             L.w {
                 "[FailedMessageProcessor] giving up ts=${failed.timestamp} after $newCount attempts " +
                     "err=${cause.javaClass.simpleName}"
@@ -293,11 +264,7 @@ class FailedMessageProcessor @Inject constructor(
                     DBFailedMessageModel.timestamp.eq(failed.timestamp)
                 )
             }.onFailure { e ->
-                // Update failure (e.g. disk full) is dangerous: leaving the row
-                // with the old retryCount + lastAttemptTime makes it due again
-                // on the next tick, looping every ~1 s. Fall back to deleting
-                // the row — TTL would clean it eventually but we don't want
-                // to pin the retry loop in the meantime.
+                
                 L.e {
                     "[FailedMessageProcessor] updateRow failed ts=${failed.timestamp}, " +
                         "deleting row to avoid retry loop: ${e.stackTraceToString()}"
@@ -314,11 +281,11 @@ class FailedMessageProcessor @Inject constructor(
         }
     }
 
-    /**
-     * Load rows that are due for another attempt: `retryCount < MAX_RETRIES`,
-     * ordered by oldest attempt first. Over-read a 2x window and filter by
-     * backoff to keep query cost bounded while still finding old-enough rows.
-     */
+    
+
+
+
+
     private fun loadDueMessages(ignoreBackoff: Boolean = false): List<FailedMessageModel> {
         val candidates = runCatching {
             if (ignoreBackoff) {
@@ -344,16 +311,16 @@ class FailedMessageProcessor @Inject constructor(
             .take(MAX_PER_TICK)
     }
 
-    /**
-     * Look up the base wait for [retryCount] in [BACKOFF_TABLE] (clamped) and
-     * apply ±20% uniform jitter to avoid thundering-herd when many rows fail
-     * at once and become due simultaneously.
-     */
+    
+
+
+
+
     internal fun backoffMillis(retryCount: Int): Long {
         val idx = retryCount.coerceIn(0, BACKOFF_TABLE.lastIndex)
         val base = BACKOFF_TABLE[idx]
         val jitter = base / 5L
-        // nextLong(from, until) — until is exclusive; +1 makes the range symmetric.
+        
         return base + Random.nextLong(-jitter, jitter + 1)
     }
 }

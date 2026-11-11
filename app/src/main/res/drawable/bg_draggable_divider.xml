@@ -1,14 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-    Background for the draggable dual-pane divider (floating overlay).
 
-    Only the center drag handle pill (6dp x 56dp, fully rounded capsule), mirroring Signal
-    Android's AppPaneDragHandle (Material 3 Adaptive). Its colour is @color/icon and turns
-    t.primary while held or dragged (@color/draggable_divider_handle); there is no ripple, which
-    would tint the whole touch band behind the pill.
-
-    No full-height line: pane separation is implicit from list/detail backgrounds.
--->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
 
     <item android:gravity="center">

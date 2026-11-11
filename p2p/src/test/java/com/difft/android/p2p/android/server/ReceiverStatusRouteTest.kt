@@ -27,13 +27,13 @@ import javax.net.ssl.SSLContext
 import javax.net.ssl.TrustManager
 import javax.net.ssl.X509TrustManager
 
-/**
- * `GET /status` on the wire: the sender's own connection to ask how its upload is doing, answered
- * from the session manager alone. Authorization is the session token; a wrong one and an unknown
- * session are both 404, so the route leaks nothing about ids. After the session ends the same route
- * says how — which is what a sender whose final response was lost needs — and `/cancel` answers
- * with a state rather than a bare 200.
- */
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 class ReceiverStatusRouteTest {
 
@@ -65,16 +65,16 @@ class ReceiverStatusRouteTest {
         val id = prepared.sessionId
         val token = prepared.sessionToken
 
-        // Missing pieces and wrong credentials, in the order a probe would try them.
+        
         assertEquals(400, request(port, "GET", "/api/localsend/v2/status?sessionId=$id").status)
         assertEquals(404, request(port, "GET", "/api/localsend/v2/status?sessionId=$id&token=nope").status)
         assertEquals(404, request(port, "GET", "/api/localsend/v2/status?sessionId=other&token=$token").status)
 
-        // An upload refused before authorization (wrong file token) is not the session failing.
+        
         assertEquals(403, request(port, "POST", "/api/localsend/v2/upload?sessionId=$id&fileId=f&token=bad").status)
         assertNull(status(port, id, token).terminal)
 
-        // Live: progress as reported, no terminal.
+        
         sessions.stage(TransferStages.RECEIVING)
         sessions.attachmentBytesLanded(100)
         val live = status(port, id, token)
@@ -85,7 +85,7 @@ class ReceiverStatusRouteTest {
         sessions.attachmentBytesLanded(1)
         assertTrue(status(port, id, token).progressRevision > revBefore)
 
-        // Past the commit point a cancel is too_late and the session stays live.
+        
         sessions.authorizeUpload(id, "f", prepared.slots.getValue("f").token, "127.0.0.1")
         assertTrue(sessions.committing(id))
         val late = request(port, "POST", "/api/localsend/v2/cancel?sessionId=$id&token=$token")
@@ -93,14 +93,14 @@ class ReceiverStatusRouteTest {
         assertEquals(CancelState.TOO_LATE, P2pJson.decodeFromString<CancelResponse>(late.body).state)
         assertNull(status(port, id, token).terminal)
 
-        // Ended: the same route answers with the terminal, still token-gated.
+        
         sessions.markTerminal(id, TransferTerminal.SUCCEEDED)
         val ended = status(port, id, token)
         assertEquals(TransferTerminal.SUCCEEDED, ended.terminal)
         assertEquals(TransferStages.DONE, ended.stage)
         assertEquals(404, request(port, "GET", "/api/localsend/v2/status?sessionId=$id&token=nope").status)
 
-        // Lingering after the transfer: status still answers, a new session is refused.
+        
         srv.closeToNewSessions()
         assertEquals(TransferTerminal.SUCCEEDED, status(port, id, token).terminal)
         assertEquals(409, request(port, "POST", "/api/localsend/v2/prepare-upload").status)
@@ -114,7 +114,7 @@ class ReceiverStatusRouteTest {
 
     private class Reply(val status: Int, val body: String)
 
-    /** One request, whole response: the server closes the connection, so the body ends at EOF. */
+    
     private fun request(port: Int, method: String, target: String): Reply = trustAllSocket(port).use { socket ->
         socket.soTimeout = 5_000
         socket.getOutputStream().apply {
@@ -127,7 +127,7 @@ class ReceiverStatusRouteTest {
         Reply(status, body)
     }
 
-    /** The pin is not the subject here — accept whatever cert the server presents. */
+    
     private fun trustAllSocket(port: Int): Socket {
         val trustAll = object : X509TrustManager {
             override fun checkClientTrusted(chain: Array<out java.security.cert.X509Certificate>?, authType: String?) = Unit

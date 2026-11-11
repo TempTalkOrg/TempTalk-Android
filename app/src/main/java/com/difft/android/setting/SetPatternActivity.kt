@@ -10,6 +10,7 @@ import com.difft.android.base.widget.PatternLockView
 import com.difft.android.login.PatternCredential
 import com.difft.android.R
 import com.difft.android.base.BaseActivity
+import com.difft.android.base.ui.sidechrome.sideChromeBar
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.databinding.ActivitySetPatternBinding
@@ -35,6 +36,10 @@ class SetPatternActivity : BaseActivity() {
     private var firstPattern: List<PatternLockView.Dot>? = null
     private var isConfirmStep = false
 
+    override fun participatesInSideChrome(): Boolean = true
+
+    override fun padsRootForSideChrome(): Boolean = true
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         SecurityResultNonce.resultData(intent)?.let { setResult(RESULT_CANCELED, it) }
@@ -43,7 +48,7 @@ class SetPatternActivity : BaseActivity() {
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 if (isConfirmStep) {
-                    // Back to first step
+                    
                     showFirstStep()
                 } else {
                     finish()
@@ -53,31 +58,28 @@ class SetPatternActivity : BaseActivity() {
     }
 
     private fun initView() {
-        mBinding.ibBack.setOnClickListener {
-            onBackPressedDispatcher.onBackPressed()
-        }
+        sideChromeBar().setBack(mBinding.ibBack, { onBackPressedDispatcher.onBackPressed() })
 
         showFirstStep()
         SetPatternLayoutPolicy(mBinding).attach()
 
         mBinding.patternLockView.addPatternLockListener(object : PatternLockView.PatternLockViewListener {
             override fun onStarted() {
-                // 重新绘制时显示subtitle，隐藏error
                 showSubtitle()
             }
 
             override fun onProgress(progressPattern: MutableList<PatternLockView.Dot>) {
-                // Pattern drawing in progress
+                
             }
 
             override fun onComplete(pattern: MutableList<PatternLockView.Dot>) {
-                // A single dot is an accidental touch, not an attempt: clear without feedback.
+                
                 if (pattern.size <= 1) {
                     mBinding.patternLockView.clearPattern()
                     return
                 }
                 if (!isConfirmStep) {
-                    // First step - record pattern
+                    
                     if (pattern.size < 4) {
                         showError(getString(R.string.settings_pattern_too_short))
                         mBinding.patternLockView.clearPattern()
@@ -87,12 +89,11 @@ class SetPatternActivity : BaseActivity() {
                     firstPattern = pattern.toList()
                     showConfirmStep()
                 } else {
-                    // Second step - confirm pattern
+                    
                     if (pattern.map { it.id } == firstPattern?.map { it.id }) {
-                        // Pattern confirmed, save it
+                        
                         savePattern(pattern)
 
-                        // 显示成功Toast并关闭页面
                         ToastUtil.show(getString(R.string.settings_pattern_success_title))
                         finish()
                     } else {
@@ -103,7 +104,7 @@ class SetPatternActivity : BaseActivity() {
             }
 
             override fun onCleared() {
-                // Pattern cleared
+                
             }
         })
     }
@@ -136,12 +137,12 @@ class SetPatternActivity : BaseActivity() {
     }
 
     private fun savePattern(pattern: List<PatternLockView.Dot>) {
-        // Marked as created under the current dot-selection rule, which turns off the unlock fallback.
+        
         val patternHash = PatternCredential.create(pattern.map { it.id }).format()
 
         userManager.update {
             this.pattern = patternHash
-            this.patternShowPath = true // Default to show path
+            this.patternShowPath = true 
         }
     }
 }

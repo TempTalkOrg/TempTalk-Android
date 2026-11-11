@@ -1,12 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-  Android 14+ "Select photos" partial-access hint bar. Shown only when
-  media access is PARTIAL (see PermissionUtil.MediaAccessState). Visuals reuse
-  :base theme tokens (bg1 / t.secondary / t.info) so dark mode follows the app
-  DayNight theme automatically with no selector values-night resources.
-  Extracted as a standalone layout so it can be inflated in isolation for
-  cross-module screenshot tests (:chat host).
--->
+
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/ps_partial_access_bar"
     android:layout_width="match_parent"

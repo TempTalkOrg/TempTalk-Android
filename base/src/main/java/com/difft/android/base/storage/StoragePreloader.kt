@@ -14,18 +14,18 @@ import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Warms up the three DataStores at application start via parallel `.data.first()` calls so that:
- *
- * 1. Tink `Aead` primitives are constructed (encrypted namespaces).
- * 2. Backing files are opened and any pending migrations run.
- * 3. Decoded values are cached in each DataStore's actor StateFlow.
- * 4. [KeyboardHeightCache] is seeded from the `app_state` snapshot, so its main-thread readers never
- *    touch the store.
- *
- * Subsequent reads return from the in-memory cache. Called from `TempTalkApplication.initStorageLayer()`
- * under a 2 s `withTimeoutOrNull` budget.
- */
+
+
+
+
+
+
+
+
+
+
+
+
 @Singleton
 class StoragePreloader @Inject constructor(
     @param:SecureUserDataStore private val secureUserStore: DataStore<UserAuthData>,

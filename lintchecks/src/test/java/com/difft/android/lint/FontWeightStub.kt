@@ -3,7 +3,7 @@ package com.difft.android.lint
 import com.android.tools.lint.checks.infrastructure.TestFile
 import com.android.tools.lint.checks.infrastructure.TestFiles.kotlin
 
-/** Minimal `androidx.compose.ui.text.font.FontWeight` for detector tests that reference it. */
+
 internal val FONT_WEIGHT_STUB: TestFile = kotlin(
     "src/androidx/compose/ui/text/font/FontWeight.kt",
     """

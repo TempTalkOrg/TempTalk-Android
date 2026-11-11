@@ -23,7 +23,7 @@ import kotlin.test.assertNull
 class KeepAliveHealthReporterTest {
 
     init {
-        // Day slots are tested in UTC regardless of the machine's zone.
+        
         KeepAliveHealthWindow.zoneOffsetMs = { 0L }
     }
 
@@ -61,7 +61,7 @@ class KeepAliveHealthReporterTest {
             serverNow = { 1_000_000L }
             isForeground = { false }
             wallClock = { 0L }
-            lastFlushElapsed = 0L // keep hot-path counts in memory so the report drains them deterministically
+            lastFlushElapsed = 0L 
         }
         reporter = KeepAliveHealthReporter(mockk(relaxed = true), store, counters)
         recorder = ForegroundServiceFailureRecorder(store)
@@ -188,7 +188,7 @@ class KeepAliveHealthReporterTest {
     @Test
     fun `control sample reports without keep-alive and the slot is stable`() = runTest {
         run(false, emptyList(), now = 0L, slot = 0)
-        run(false, emptyList(), now = day, slot = 99) // stored slot 0 wins over a new draw
+        run(false, emptyList(), now = day, slot = 99) 
         assertEquals(1, sent.size)
         assertEquals(0, prefs()[AppStateKeys.BG_HEALTH_SAMPLE_SLOT])
     }
@@ -209,7 +209,7 @@ class KeepAliveHealthReporterTest {
         recorder.recordNow(FgsStartFailure.DIRECT_OTHER, nowWall = 5 * day + 20)
         recorder.recordNow(FgsStartFailure.DIRECT_NOT_ALLOWED, nowWall = 5 * day + 25)
         recorder.recordNow(FgsStartFailure.DIRECT_SECURITY, nowWall = 5 * day + 26)
-        // Direct failures are followed by a retry, so they never open a daily slot on their own.
+        
         assertEquals(emptyList(), KeepAliveHealthWindow.decode(prefs()[AppStateKeys.BG_HEALTH_DAILY]))
 
         recorder.recordNow(FgsStartFailure.STARTFG_REFUSED, nowWall = 5 * day + 30)
@@ -234,14 +234,14 @@ class KeepAliveHealthReporterTest {
 
     @Test
     fun `recovered starts do not trip the foreground service rule`() = runTest {
-        // 10 starts that each needed the background retry: 10 direct failures, 10 successful starts.
+        
         repeat(10) { recorder.recordNow(FgsStartFailure.DIRECT_NOT_ALLOWED, nowWall = 100 * day + it) }
         store.edit { KeepAliveHealthWindow.mergeEvents(it, mapOf("fgs_starts" to 10), 100 * day) }
         val slots = KeepAliveHealthWindow.decode(prefs()[AppStateKeys.BG_HEALTH_DAILY])
         assertEquals("0", KeepAliveHealthWindow.verdict(slots, 104 * day).value)
     }
 
-    // Seeds the window and adds counts to the daily slot the way a counters flush does.
+    
     private suspend fun preload(at: Long, counts: Map<String, Int>) {
         store.edit { KeepAliveHealthWindow.mergeEvents(it, counts, at) }
     }
@@ -251,13 +251,13 @@ class KeepAliveHealthReporterTest {
         val base = 100 * day
         run(true, emptyList(), now = base)
         preload(base, mapOf("late_5m" to 2))
-        counters.onLateDelivery() // memory only
+        counters.onLateDelivery() 
         run(true, emptyList(), now = base + 3 * day)
         assertEquals(1, sent.size)
         assertEquals(true, sent[0].contains(" late_5m=3 "), sent[0])
         assertEquals(true, sent[0].contains(" pv=1 pv_why=L pv_days=2 pv_n=0 "), sent[0])
         assertEquals(true, sent[0].contains(" pv_late_n=3 "), sent[0])
-        // The drained in-memory count is merged into today's slot, next to the 2 already persisted.
+        
         assertEquals(
             listOf(2, 1),
             KeepAliveHealthWindow.decode(prefs()[AppStateKeys.BG_HEALTH_DAILY]).map { it.counts.getValue("late_5m") }
@@ -277,15 +277,15 @@ class KeepAliveHealthReporterTest {
 
     @Test
     fun `T4 verdict waits 72h of real observation and pruning moves the start forward`() = runTest {
-        val first = 101 * day - 60_000L // day 100, 23:59
+        val first = 101 * day - 60_000L 
         run(true, emptyList(), now = first)
         preload(first, mapOf("late_5m" to 3))
-        // L needs late deliveries on two days of the window, not a count.
+        
         preload(102 * day + 1, mapOf("late_5m" to 1))
-        run(true, emptyList(), now = 103 * day) // 2 days 1 min later
+        run(true, emptyList(), now = 103 * day) 
         assertEquals(true, sent[0].contains(" pv=na pv_why=none pv_days=2 pv_n=0 "), sent[0])
 
-        run(true, emptyList(), now = 104 * day + 1) // more than 72 h since the first write
+        run(true, emptyList(), now = 104 * day + 1) 
         assertEquals(true, sent[1].contains(" pv=1 pv_why=L pv_days=2 pv_n=0 "), sent[1])
     }
 
@@ -293,10 +293,10 @@ class KeepAliveHealthReporterTest {
     fun `T4 start is the oldest retained slot, not the pruned one`() = runTest {
         val first = 101 * day - 60_000L
         run(true, emptyList(), now = first)
-        preload(first, mapOf("late_5m" to 3)) // day 100
+        preload(first, mapOf("late_5m" to 3)) 
         val second = 105 * day - 60_000L
-        preload(second, mapOf("late_5m" to 1)) // day 104
-        run(true, emptyList(), now = 107 * day) // day 100 pruned; start = day-104 t0, 2 days 1 min old
+        preload(second, mapOf("late_5m" to 1)) 
+        run(true, emptyList(), now = 107 * day) 
         assertEquals(true, sent[0].contains(" pv=na pv_why=none pv_days=1 pv_n=0 "), sent[0])
         assertEquals(true, sent[0].contains(" pv_late_n=1 "), sent[0])
     }
@@ -311,7 +311,7 @@ class KeepAliveHealthReporterTest {
         run(true, emptyList(), now = 8 * day)
         assertEquals(true, sent[0].endsWith(" fcm_state=fail fcm_fail_h=31$POWER_TAIL"), sent[0])
 
-        store.edit { it[AppStateKeys.BG_FCM_STATE] = "nogms" } // failure hours only apply to a failing state
+        store.edit { it[AppStateKeys.BG_FCM_STATE] = "nogms" } 
         run(true, emptyList(), now = 9 * day)
         assertEquals(true, sent[1].endsWith(" fcm_state=nogms fcm_fail_h=0$POWER_TAIL"), sent[1])
     }
@@ -320,7 +320,7 @@ class KeepAliveHealthReporterTest {
     fun `isReporting covers keep-alive users and the sampled control group and persists the slot`() = runTest {
         assertEquals(true, reporter.isReporting(false, newSampleSlot = { 3 }))
         assertEquals(3, prefs()[AppStateKeys.BG_HEALTH_SAMPLE_SLOT])
-        assertEquals(true, reporter.isReporting(false, newSampleSlot = { 99 })) // stored slot wins
+        assertEquals(true, reporter.isReporting(false, newSampleSlot = { 99 })) 
         assertEquals(true, reporter.isReporting(true))
 
         store.edit { it[AppStateKeys.BG_HEALTH_SAMPLE_SLOT] = 50 }
@@ -333,7 +333,7 @@ class KeepAliveHealthReporterTest {
         reporter.onProbe(null, listOf(ExitSample("ANR", true)))
         reporter.onProbe(null, listOf(ExitSample("ANR", true), ExitSample("EXIT_SELF", false)))
         assertEquals("ANR_fg:2,EXIT_SELF_bg:1", prefs()[AppStateKeys.BG_HEALTH_EXIT_COUNTS]?.split(',')?.sorted()?.joinToString(","))
-        assertNull(prefs()[AppStateKeys.BG_HEALTH_LAST_REPORT_TS]) // no decision was made
+        assertNull(prefs()[AppStateKeys.BG_HEALTH_LAST_REPORT_TS]) 
 
         run(false, emptyList(), now = 0L, slot = 50)
         assertNull(prefs()[AppStateKeys.BG_HEALTH_EXIT_COUNTS])
@@ -348,7 +348,7 @@ class KeepAliveHealthReporterTest {
     }
 
     private companion object {
-        // adb is unknown in the test snapshot; no power counters were recorded.
+        
         val POWER_TAIL = " adb=na" + BackgroundPowerModel.formatSection(emptyMap())
     }
 }

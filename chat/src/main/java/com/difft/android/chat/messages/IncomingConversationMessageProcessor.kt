@@ -23,13 +23,13 @@ class IncomingConversationMessageProcessor @Inject constructor(
     private val priorConversationReporter: PriorConversationReporter,
     private val messagingGate: MessagingGate,
 ) {
-    /**
-     * ACKs one preview and stores its latest message and read position under one ticket (#1382).
-     * An ACKed preview is consumed on the server, so it is stored at once rather than held for the
-     * end marker: the marker may never be read (the socket closes) or may be refused (the pause
-     * began), and nothing held in memory could then reach the migration snapshot. A refused preview
-     * is neither ACKed nor stored and stays queued on the server.
-     */
+    
+
+
+
+
+
+
     suspend fun income(conversationPreviewWrapper: ConversationPreviewWrapper, requestId: Long) {
         val admission = messagingGate.tryAdmit(AdmissionKind.RECEIVE, "ws-preview")
         if (admission == null) {
@@ -51,7 +51,7 @@ class IncomingConversationMessageProcessor @Inject constructor(
         }
     }
 
-    /** ACKs the end marker and opens the prior-conversation window, only while messaging is open (#1382). */
+    
     suspend fun endReceive(requestId: Long) {
         val admission = messagingGate.tryAdmit(AdmissionKind.RECEIVE, "ws-preview-end")
         if (admission == null) {
@@ -60,7 +60,7 @@ class IncomingConversationMessageProcessor @Inject constructor(
         }
         admission.use {
             sendAck(requestId)
-            // Report the open chat so the server delivers its backlog first.
+            
             priorConversationReporter.onReplayStarted()
         }
     }
@@ -73,22 +73,22 @@ class IncomingConversationMessageProcessor @Inject constructor(
             )
         } else For.Account(conversationPreview.conversationId.number)
         val latestMsg: SignalServiceProtos.Envelope = conversationPreview.lastestMsg.copyWithMsgExtraConversationId(forWhat)
-        // Conversation-preview is best-effort: persistence happens inside
-        // `process()` on Success. We still report PermanentFailure here so
-        // the per-envelope Crashlytics signal isn't lost on this path —
-        // `EnvelopToMessageProcessor.process` deliberately defers logging
-        // and recordException to the caller via `reportPermanentDrop`.
-        // TransientFailure is left alone because the regular incoming
-        // path will re-deliver and own the retry.
-        //
-        // Wrapped in try/catch (CancellationException rethrown) so an
-        // unforeseen throw from `process()` — e.g. OOM / SOF — does not
-        // skip the read-position write below. This restores the
-        // best-effort guarantee the pre-v2 `runCatching` provided.
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
         try {
             when (val res = envelopToMessageProcessor.process(latestMsg, "conversation-preview", admission)) {
                 is EnvelopeProcessResult.Success -> {
-                    // No-op — persistence + dedup already done inside process().
+                    
                 }
                 is EnvelopeProcessResult.PermanentFailure -> {
                     reportPermanentDrop(
@@ -99,10 +99,10 @@ class IncomingConversationMessageProcessor @Inject constructor(
                     )
                 }
                 is EnvelopeProcessResult.TransientFailure -> {
-                    // Best-effort: same envelope arrives via the regular
-                    // incoming path and is retried there.
+                    
+                    
                 }
-                // Unreachable while income holds its ticket.
+                
                 EnvelopeProcessResult.Paused -> Unit
             }
         } catch (e: CancellationException) {

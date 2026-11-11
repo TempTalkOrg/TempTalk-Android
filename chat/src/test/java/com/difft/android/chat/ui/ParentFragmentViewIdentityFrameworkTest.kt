@@ -16,15 +16,11 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/**
- * FA3 — Framework Assumption Test against real AndroidX Fragment classes (no mocks).
- *
- * ChatMessageInputFragment resolves its KeyboardPanelHost ONCE, in onViewCreated, and caches it —
- * where it previously re-evaluated `parentFragment?.view as? InsetAwareConstraintLayout` at each of
- * the seven call sites. Caching is only safe if `parentFragment.view` cannot change identity or
- * become null during the child's view lifecycle. That is an assumption about AndroidX Fragment
- * behavior, not about our code, so it is pinned here rather than argued.
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28])
 class ParentFragmentViewIdentityFrameworkTest {
@@ -52,7 +48,7 @@ class ParentFragmentViewIdentityFrameworkTest {
         }
     }
 
-    /** Mirrors how FragmentContainerView adds a child declared in the parent's layout. */
+    
     class ParentFragment : Fragment() {
         val child = ChildFragment()
 

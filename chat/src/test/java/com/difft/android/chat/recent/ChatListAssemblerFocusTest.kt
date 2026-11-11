@@ -14,7 +14,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** Group focus rules of [ChatListAssembler] (design §3/§4, PRD 7.4, A1/A8/A9/A9b–d/A10c/A16/A17). */
+
 class ChatListAssemblerFocusTest {
 
     private fun focus(
@@ -91,7 +91,7 @@ class ChatListAssemblerFocusTest {
 
     private fun ChatListAssembly.keys() = rows.map { it.key() }
 
-    // F is the focus group; its pin is the one FocusPinCoordinator writes when focus starts.
+    
     private val baseRooms = listOf(
         room("A", 90),
         room("F", 10, pinned = true),
@@ -103,7 +103,7 @@ class ChatListAssemblerFocusTest {
 
     @Test
     fun `feature on but not focusing keeps the pre-focus order and offers focus on groups only`() {
-        // F keeps no pin here: focus never started, so the coordinator wrote nothing.
+        
         val out = assemble(baseRooms.map { if (it.roomId == "F") it.copy(pinnedTime = null) else it }, focus(active = false))
         assertEquals(listOf("P", ME, "A", "+bob", "B", "F"), out.keys())
         val byId = out.rows.associate { it.chatItemData()!!.roomId to it.chatItemData()!! }
@@ -121,7 +121,7 @@ class ChatListAssemblerFocusTest {
 
     @Test
     fun `the focus group renders as the focus card and sits where its stored pin puts it`() {
-        // Not pinned in the DB (the coordinator has not written yet, or the user unpinned it): it keeps its activity position.
+        
         val rooms = baseRooms.map { if (it.roomId == "F") it.copy(pinnedTime = null) else it }
         val unpinned = assemble(rooms, focus(fold = false))
         assertEquals(listOf("P", ME, "A", "+bob", "B", "*F"), unpinned.keys())
@@ -129,7 +129,7 @@ class ChatListAssemblerFocusTest {
         assertFalse(card.data.isPinned)
         assertEquals(FocusRowAction.END, card.data.focusAction)
 
-        // Pinned in the DB: the pinned section, ordered by activity like every pinned row.
+        
         val pinned = assemble(baseRooms, focus(fold = false))
         assertEquals(listOf("*F", "P", ME, "A", "+bob", "B"), pinned.keys())
         assertTrue((pinned.rows.first() as ListItem.FocusChat).data.isPinned)
@@ -147,7 +147,7 @@ class ChatListAssemblerFocusTest {
     fun `a synthesized focus row is used only when the focus group has no room row`() {
         val stand = RoomViewData(roomId = "G", type = RoomViewData.Type.Group, roomName = "G", isSynthesized = true)
         val withStand = assemble(baseRooms, focus(gid = "G", fold = false), synthesized = stand)
-        // The stand-in counts as pinned with no activity yet (sortTime 0): last of the pinned section.
+        
         assertEquals(listOf("F", "P", ME, "*G", "A", "+bob", "B"), withStand.keys())
         assertTrue(withStand.rows[3].chatItemData()!!.isSynthesized)
 
@@ -165,11 +165,11 @@ class ChatListAssemblerFocusTest {
         val deleted = assemble(baseRooms, focus(gid = "G", fold = false), synthesized = stand, deleted = setOf("G"))
         assertFalse(deleted.keys().any { it.contains("G") })
 
-        // Another group's record does not hide this one's stand-in.
+        
         val other = assemble(baseRooms, focus(gid = "G", fold = false), synthesized = stand, deleted = setOf("Z"))
         assertTrue(other.keys().contains("*G"))
 
-        // The room came back on its own (a new message recreated it): it shows normally despite the record.
+        
         val back = assemble(baseRooms, focus(gid = "F", fold = false), synthesized = stand.copy(roomId = "F"), deleted = setOf("F"))
         assertEquals(1, back.keys().count { it == "*F" })
         assertFalse(back.rows.first().chatItemData()!!.isSynthesized)
@@ -178,7 +178,7 @@ class ChatListAssemblerFocusTest {
     @Test
     fun `folding moves every other group, pinned ones included, into one row sorted by its newest member`() {
         val out = assemble(baseRooms, focus())
-        // Private chats, Note to Self and the focus group stay; A (90), P (pinned) and B fold.
+        
         assertEquals(listOf("*F", ME, "folded(3)", "+bob"), out.keys())
         val summary = (out.rows[2] as ListItem.FoldedGroups).summary
         assertEquals("name-A", summary.latestGroupName)

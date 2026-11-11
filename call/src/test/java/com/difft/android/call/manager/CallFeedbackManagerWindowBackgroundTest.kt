@@ -21,18 +21,18 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import kotlin.test.assertEquals
 
-/**
- * Regression pin (family F, issue #1127): [CallFeedbackManager.showCallFeedbackView]
- * adds a temporary Compose overlay directly onto whatever host Activity `onActivityResumed`
- * happened to land on (`TempTalkApplication.kt:517-542` -> `LCallManager.showCallFeedbackView` ->
- * this class) — it never owns that Activity's window and must not mutate its background, neither
- * while displayed (M17) nor after the user dismisses it (M18).
- *
- * `CallRatingView` (rendered inside `CallRatingFeedbackView`) calls `ResUtils.getString`, which
- * dereferences the lateinit `ApplicationHelper.instance` — `TestScopeApplication.onCreate`
- * initializes it, same precedent as `ForegroundServiceIntegrationTest`/
- * `MainPageWithTopStatusViewTest`.
- */
+
+
+
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(application = TestScopeApplication::class, sdk = [34])

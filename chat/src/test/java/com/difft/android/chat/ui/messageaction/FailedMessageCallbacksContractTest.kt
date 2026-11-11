@@ -3,14 +3,14 @@ package com.difft.android.chat.ui.messageaction
 import org.junit.Assert.assertNotNull
 import org.junit.Test
 
-/**
- * T5-7 — compile-anchored structural guard for [FailedMessageActionPopup.Callbacks].
- *
- * The failed-message menu exposes exactly Resend + Delete, so the callback surface must be exactly
- * `onResend` / `onDelete` / `onDismiss`. The anonymous implementation below overrides those three and
- * nothing else: if an `onInfo` member (or any other abstract method) were added back to the
- * interface, this file would STOP COMPILING — which is the assertion.
- */
+
+
+
+
+
+
+
+
 class FailedMessageCallbacksContractTest {
 
     @Test
@@ -35,7 +35,7 @@ class FailedMessageCallbacksContractTest {
 
         assertNotNull(callbacks)
 
-        // Each member is independently reachable (no accidental delegation between them).
+        
         callbacks.onResend()
         callbacks.onDelete()
         callbacks.onDismiss()

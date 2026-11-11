@@ -23,16 +23,11 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ActivityController
 
-/**
- * X1, X2 — the two guards that stand between the synthesised dispatch and a crash.
- *
- * X1 is the regression guard for Crashlytics issue `32a90db4`: the registered listener's body hides
- * the action panel, i.e. it mutates the view tree, and doing that from inside an
- * `onApplyWindowInsets` callback is what crashed. X2 covers the popup-specific case the full-screen
- * widget never had to handle — the sheet calls `finish()` from `STATE_HIDDEN` and hides the keyboard
- * from `onSlide`, so a pending IME-hidden dispatch can land in an Activity that is already going
- * away.
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 class PopupKeyboardPanelDispatchGuardTest {
 
@@ -66,10 +61,7 @@ class PopupKeyboardPanelDispatchGuardTest {
         .setVisible(WindowInsetsCompat.Type.ime(), true)
         .build()
 
-    /**
-     * X1 — a listener that mutates the view tree must never run inside the insets callback. The one
-     * frame of deferral is mandatory, not stylistic.
-     */
+    
     @Test
     fun `X1 a listener that mutates the view tree runs after the insets callback returns`() {
         var insideInsetsCallback = false
@@ -108,7 +100,7 @@ class PopupKeyboardPanelDispatchGuardTest {
         assertEquals(0, root.childCount)
     }
 
-    /** X2 — a dispatch posted before the Activity starts finishing must be dropped, not delivered. */
+    
     @Test
     fun `X2 a pending dispatch is dropped when the host activity is finishing`() {
         val events = mutableListOf<String>()
@@ -133,14 +125,14 @@ class PopupKeyboardPanelDispatchGuardTest {
             imeVisible = true,
             maxHeightPx = 0,
         )
-        // The sheet reached STATE_HIDDEN and finished the Activity before the frame ran.
+        
         every { hostActivity.isFinishing } returns true
         shadowOf(Looper.getMainLooper()).idle()
 
         assertEquals(emptyList<String>(), events)
     }
 
-    /** X2's second half — the same drop when the window has gone away under the posted runnable. */
+    
     @Test
     fun `X2 a pending dispatch is dropped when the root view is detached`() {
         val events = mutableListOf<String>()

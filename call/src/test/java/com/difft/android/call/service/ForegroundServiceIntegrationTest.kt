@@ -35,20 +35,20 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ServiceController
 import org.robolectric.annotation.Config
 
-/**
- * [ForegroundService] promotion and ownership, driven through the real service lifecycle
- * (`Robolectric.buildService`) with the shared promotion helper mocked, so production delegation to
- * `ForegroundServiceStarter` is verified.
- *
- * - Promotion: `isForegroundStarted` follows the helper's result at each promotion site, and
- *   `isServiceRunning` turns true only after a successful promotion.
- * - A denied typed promotion ([SecurityException]) is retried as DATA_SYNC; a double denial tells the
- *   owning session, stops the service up to its start id and does not crash. A promotion the
- *   platform refuses outright (the helper returns false and has stopped the service) tells the
- *   owning session too.
- * - Ownership: a start that reaches the service with no owning session promotes and then stops the
- *   service up to its own start id; a type-update start decrements the pending-update count.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [31])
 class ForegroundServiceIntegrationTest {
@@ -98,7 +98,7 @@ class ForegroundServiceIntegrationTest {
         (if (intent == null) Robolectric.buildService(ForegroundService::class.java)
         else Robolectric.buildService(ForegroundService::class.java, intent)).also { service = it }
 
-    /** Read the private `isForegroundStarted` field via reflection. */
+    
     private fun readIsForegroundStarted(service: ForegroundService): Boolean {
         val field = ForegroundService::class.java
             .getDeclaredField("isForegroundStarted")
@@ -106,11 +106,11 @@ class ForegroundServiceIntegrationTest {
         return field.getBoolean(service)
     }
 
-    /**
-     * Invoke the private `updateServiceType` method via reflection. Production route is
-     * `onStartCommand(ACTION_UPDATE_SERVICE_TYPE) -> updateServiceType()` on the main thread, after
-     * the foreground re-promotion that every start performs.
-     */
+    
+
+
+
+
     private fun invokeUpdateServiceType(service: ForegroundService) {
         val method = ForegroundService::class.java
             .getDeclaredMethod("updateServiceType")
@@ -122,7 +122,7 @@ class ForegroundServiceIntegrationTest {
         shadowOf(app).grantPermissions(Manifest.permission.RECORD_AUDIO)
     }
 
-    // ---------- C1 success: onStartCommand helper returns true ----------
+    
     @Test
     fun `C1 onStartCommand helper success — production delegates, isForegroundStarted true, returns NOT_STICKY`() {
         every {
@@ -147,12 +147,12 @@ class ForegroundServiceIntegrationTest {
             "C1 fix: isForegroundStarted = true after helper returns true",
             readIsForegroundStarted(controller.get())
         )
-        // controller.startCommand returns the controller, not the int: call the method directly.
+        
         val result = controller.get().onStartCommand(null, 0, 0)
         assertEquals(Service.START_NOT_STICKY, result)
     }
 
-    // ---------- C1 failure: onStartCommand helper returns false ----------
+    
     @Test
     fun `C1 onStartCommand helper FGSNAE — production delegates, isForegroundStarted stays false`() {
         every {
@@ -174,10 +174,10 @@ class ForegroundServiceIntegrationTest {
         assertFalse(ForegroundService.isServiceRunning)
     }
 
-    // ---------- T-int-3 C2: updateServiceType helper FGSNAE → isForegroundStarted reset ----------
+    
     @Test
     fun `T-int-3 updateServiceType helper FGSNAE — isForegroundStarted reset to false`() {
-        // First call (onStartCommand) returns true, second call (updateServiceType) returns false
+        
         every {
             ForegroundServiceStarter.startForegroundSafely(any(), any(), any(), any())
         } returnsMany listOf(true, false)
@@ -205,7 +205,7 @@ class ForegroundServiceIntegrationTest {
         )
     }
 
-    // ---------- T-int-3 sanity: updateServiceType helper success → isForegroundStarted stays true ----------
+    
     @Test
     fun `T-int-3 sanity updateServiceType helper success — isForegroundStarted stays true`() {
         every {
@@ -232,7 +232,7 @@ class ForegroundServiceIntegrationTest {
         )
     }
 
-    // ---------- C0: @Volatile annotation present on isForegroundStarted ----------
+    
     @Test
     fun `C0 isForegroundStarted field is @Volatile for cross-thread visibility`() {
         val field = ForegroundService::class.java.getDeclaredField("isForegroundStarted")
@@ -298,7 +298,7 @@ class ForegroundServiceIntegrationTest {
         assertEquals(1, ForegroundService.pendingTypeUpdates)
         assertFalse("owned: keeps running", shadowOf(controller.get()).isStoppedBySelf)
 
-        // The owner's stop was left to this start: it promotes first, then stops.
+        
         ForegroundService.ownerSessionId = ForegroundService.NO_OWNER
         controller.startCommand(0, 2)
 
@@ -336,7 +336,7 @@ class ForegroundServiceIntegrationTest {
         val controller = build().create()
         idleMainLooper()
 
-        // Directly, not through the controller, which idles the main looper after the call.
+        
         controller.get().onStartCommand(null, 0, 5)
 
         verify(exactly = 2) { ForegroundServiceStarter.startForegroundSafely(any(), any(), any(), any()) }
@@ -393,7 +393,7 @@ class ForegroundServiceIntegrationTest {
         controller.startCommand(0, 1)
         idleMainLooper()
 
-        // The start's promotion and the collector's ongoing-call notification, each retried as DATA_SYNC.
+        
         verify(exactly = 2) { ForegroundServiceStarter.startForegroundSafely(any(), any(), any(), dataSync) }
         assertTrue(ForegroundService.isServiceRunning)
         verify(exactly = 0) { controllerMock.onPromoteFailed(any()) }

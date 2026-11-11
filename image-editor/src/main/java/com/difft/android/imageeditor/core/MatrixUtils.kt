@@ -20,9 +20,9 @@ class MatrixUtils {
             return floats
         }
 
-        /**
-         * Extracts the angle from a matrix in radians.
-         */
+        
+
+
         @JvmStatic
         fun getRotationAngle(matrix: Matrix): Float {
             val matrixValues = getTempMatrixValues()
@@ -30,7 +30,7 @@ class MatrixUtils {
             return (-atan2(matrixValues[Matrix.MSKEW_X].toDouble(), matrixValues[Matrix.MSCALE_X].toDouble())).toFloat()
         }
 
-        /** Gets the scale on the X axis */
+        
         @JvmStatic
         fun getScaleX(matrix: Matrix): Float {
             val matrixValues = getTempMatrixValues()

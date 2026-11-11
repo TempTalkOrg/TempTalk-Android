@@ -19,19 +19,19 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
-/**
- * Backoff schedule and the memory-authoritative failure bookkeeping behind the translation-model
- * download.
- *
- * Pure JVM: [backoffDelayMs] is deliberately Android-free, and the state object only needs a
- * `DataStore<Preferences>` (the in-memory recording fake) plus a test-controlled `appScope`.
- *
- * What each case asserts:
- *  - T17  the backoff schedule for failCount 0..99
- *  - T18  three failures then a success resets the record
- *  - T18b the in-memory value is new BEFORE the asynchronous app_state write happens
- *  - T21  (partial) a stuck download records a reason without consuming a backoff step
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class TranslateModelFailureStateTest {
 
@@ -54,7 +54,7 @@ class TranslateModelFailureStateTest {
 
     private fun state() = TranslateModelFailureState(dataStore, Gson())
 
-    // --- T17 ----------------------------------------------------------------
+    
 
     @Test
     fun `T17 backoff schedule is 1m 1m 5m 30m 2h 24h capped`() {
@@ -67,7 +67,7 @@ class TranslateModelFailureStateTest {
         assertEquals(86_400_000L, backoffDelayMs(99))
     }
 
-    // --- T18 ----------------------------------------------------------------
+    
 
     @Test
     fun `T18 three failures then a success clears the record`() = runTest(testDispatcher) {
@@ -91,19 +91,19 @@ class TranslateModelFailureStateTest {
         first.onFailure(model, FailureReason.NO_SPACE)
         first.onFailure(model, FailureReason.NO_SPACE)
 
-        // The asynchronous write already landed in the fake store (appScope is the test scope).
+        
         val reloaded = state()
         reloaded.ensureLoaded()
 
         assertEquals(2, reloaded.failCount(model))
     }
 
-    // --- T18b ---------------------------------------------------------------
+    
 
     @Test
     fun `T18b the in-memory record is authoritative before the disk write`() = runTest(testDispatcher) {
-        // A store that never answers its first read: the write actor stays suspended for the whole
-        // test, so anything readable here came from memory, not from disk.
+        
+        
         val silentStore = RecordingPreferencesDataStore(initial = null)
         val state = TranslateModelFailureState(silentStore, Gson())
 
@@ -114,7 +114,7 @@ class TranslateModelFailureStateTest {
         assertEquals(0, silentStore.writeCount.get())
     }
 
-    // --- T21 (stuck) --------------------------------------------------------
+    
 
     @Test
     fun `a stuck download records a reason without consuming a backoff step`() = runTest(testDispatcher) {
@@ -127,7 +127,7 @@ class TranslateModelFailureStateTest {
         assertEquals(0L, state.nextRetryAtMs(model))
     }
 
-    // --- load / clear -------------------------------------------------------
+    
 
     @Test
     fun `an unreadable blob starts clean instead of throwing`() = runTest(testDispatcher) {

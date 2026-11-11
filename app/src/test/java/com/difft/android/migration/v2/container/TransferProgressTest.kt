@@ -5,11 +5,11 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * The progress formula both ends compute. The property that matters is the endpoint: whatever the
- * mix of records and attachment bytes, the bar reaches exactly 1.0 when — and only when — the stream
- * has delivered everything the manifest announced. The old byte-estimate bar could not promise that.
- */
+
+
+
+
+
 class TransferProgressTest {
 
     @Test
@@ -44,7 +44,7 @@ class TransferProgressTest {
 
     @Test
     fun `a record phase alone still spans the whole bar`() {
-        // A text-only history has no attachment bytes; records must carry the bar to 1.0 on their own.
+        
         val totals = ContainerTotals(recordCount = 4, attachmentCount = 0, attachmentBytes = 0)
 
         assertEquals(0.5f, TransferProgress.ratio(2, 0, totals))

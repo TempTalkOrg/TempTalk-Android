@@ -115,7 +115,7 @@ internal abstract class AvcTrack(spsBuffer: ByteBuffer, ppsBuffer: ByteBuffer) :
         var _timescale: Int
         var _frametick: Int
         if (sps.vuiParams != null) {
-            _timescale = sps.vuiParams.time_scale shr 1 // Not sure why, but I found this in several places, and it works...
+            _timescale = sps.vuiParams.time_scale shr 1
             _frametick = sps.vuiParams.num_units_in_tick
             if (_timescale == 0 || _frametick == 0) {
                 val logTimescale = _timescale
@@ -162,7 +162,7 @@ internal abstract class AvcTrack(spsBuffer: ByteBuffer, ppsBuffer: ByteBuffer) :
     }
 
     override fun getLanguage(): String {
-        return "\u0060\u0060\u0060" // 0 in Iso639
+        return "\u0060\u0060\u0060" 
     }
 
     override fun getSampleDescriptionBox(): SampleDescriptionBox {
@@ -302,14 +302,10 @@ internal abstract class AvcTrack(spsBuffer: ByteBuffer, ppsBuffer: ByteBuffer) :
                 else
                     null
             )
-/*            decFrameBuffer.add(ssi);
-            if (decFrameBuffer.size() - 1 > maxDecFrameBuffering) { // just added one
-                drainDecPictureBuffer(false);
-            }*/
         } else if (sliceHeader.sps.pic_order_cnt_type == 1) {
             throw MuxingException("pic_order_cnt_type == 1 needs to be implemented")
         } else if (sliceHeader.sps.pic_order_cnt_type == 2) {
-            return null // no ctts
+            return null 
         }
         throw MuxingException("I don't know sliceHeader.sps.pic_order_cnt_type of " + sliceHeader.sps.pic_order_cnt_type)
     }
@@ -447,7 +443,6 @@ internal abstract class AvcTrack(spsBuffer: ByteBuffer, ppsBuffer: ByteBuffer) :
             }
 
             val maxPicOrderCountLsb = (1 shl (currentSlice.sps.log2_max_pic_order_cnt_lsb_minus4 + 4))
-            // System.out.print(" pic_order_cnt_lsb " + pic_order_cnt_lsb + " " + max_pic_order_count);
             picOrderCountLsb = currentSlice.pic_order_cnt_lsb
             picOrderCntMsb = 0
             if ((picOrderCountLsb < prevPicOrderCntLsb) && ((prevPicOrderCntLsb - picOrderCountLsb) >= (maxPicOrderCountLsb / 2))) {

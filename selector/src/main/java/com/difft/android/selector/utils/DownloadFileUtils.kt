@@ -22,7 +22,7 @@ import java.net.URL
 
 object DownloadFileUtils {
 
-    /** Save the resource at [path] into MediaStore, reporting the resulting path to [listener]. */
+    
     @JvmStatic
     fun saveLocalFile(
         context: Context,

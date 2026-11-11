@@ -27,11 +27,11 @@ import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import java.util.concurrent.TimeUnit
 
-/**
- * Two-pane keyboard insets reach only the pane that holds the focused field (design "global search
- * in the list pane" §4.7): the other pane's children see the IME removed; with no focus both panes
- * see the real insets; one-pane is not routed.
- */
+
+
+
+
+
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [33])
 class PaneImeRouterTest {
@@ -40,7 +40,7 @@ class PaneImeRouterTest {
     private val host: PaneNavigatorTestHost get() = controller!!.get()
     private val root: View get() = host.findViewById<ViewGroup>(android.R.id.content).getChildAt(0)
 
-    /** IME bottom last received by a probe listener on the child of each pane. */
+    
     private val received = mutableMapOf<String, Int>()
 
     @After
@@ -81,10 +81,10 @@ class PaneImeRouterTest {
         return field
     }
 
-    /**
-     * Robolectric gives the first focusable view (the pager's list) the focus; take it out so the
-     * focus sits in neither pane (it falls to the divider between them, outside both).
-     */
+    
+
+
+
     private fun noFocus() {
         host.findViewById<ViewGroup>(R.id.index_viewpager).getChildAt(0).isFocusable = false
         root.findFocus()?.clearFocus()
@@ -118,7 +118,7 @@ class PaneImeRouterTest {
         dispatchIme(500)
         assertEquals(mapOf("list" to 0, "detail" to 500), received)
 
-        removeField(chatInput) // focus falls back to the search field: a real hand-over
+        removeField(chatInput) 
         assertSame(host.findViewById(R.id.list_pane), router.owner)
         dispatchIme(500)
         removeField(searchField)
@@ -155,7 +155,7 @@ class PaneImeRouterTest {
         assertEquals(mapOf("list" to 500, "detail" to 0), received)
         received.clear()
 
-        focusIn(R.id.detail_pane) // requestApplyInsets re-runs the window's insets through the new routing
+        focusIn(R.id.detail_pane) 
         settle()
 
         assertEquals("both panes received a fresh dispatch without anyone asking", setOf("list", "detail"), received.keys)
@@ -167,8 +167,8 @@ class PaneImeRouterTest {
         launch("w840dp-h900dp")
         probe("list", R.id.index_viewpager)
         probe("detail", R.id.fragment_container_detail)
-        // Pre-30 the framework re-derives the IME from the window's bottom insets on the way down:
-        // what an unrouted dispatch delivers is the reference, not the 500 sent.
+        
+        
         noFocus()
         dispatchIme(500)
         val unrouted = received.getValue("list")
@@ -181,7 +181,7 @@ class PaneImeRouterTest {
         assertEquals(mapOf("list" to unrouted, "detail" to 0), received)
     }
 
-    /** Records the IME animation ends a child of a pane sees; CONTINUE so the probe itself never blocks anything. */
+    
     private class EndProbe : WindowInsetsAnimationCompat.Callback(DISPATCH_MODE_CONTINUE_ON_SUBTREE) {
         var prepares = 0
         var ends = 0
@@ -206,16 +206,16 @@ class PaneImeRouterTest {
         val detailProbe = EndProbe()
         ViewCompat.setWindowInsetsAnimationCallback(host.findViewById(R.id.index_viewpager), listProbe)
         ViewCompat.setWindowInsetsAnimationCallback(host.findViewById(R.id.fragment_container_detail), detailProbe)
-        focusIn(R.id.detail_pane) // the conversation input: detail owns, list is STOP
+        focusIn(R.id.detail_pane) 
 
-        // The keyboard animates for the detail pane; mid-way the search field takes the focus.
+        
         runImeAnimation(imeAnimation()) { focusIn(R.id.list_pane) }
 
         assertEquals("the detail page sees the end of the animation it started with", 1, detailProbe.ends)
         assertEquals("the list was STOP for this animation", 0, listProbe.prepares)
         settle()
 
-        // The next animation belongs to the list pane: the detail subtree is shielded, the list is not.
+        
         runImeAnimation(imeAnimation())
         assertEquals(1, listProbe.prepares)
         assertEquals(1, listProbe.ends)
@@ -223,7 +223,7 @@ class PaneImeRouterTest {
         assertEquals(1, detailProbe.prepares)
     }
 
-    /** A focusable view that is no text editor yet (a Compose field before its input session opens). */
+    
     private class LateEditor(context: android.content.Context) : View(context) {
         init {
             isFocusable = true
@@ -249,7 +249,7 @@ class PaneImeRouterTest {
         settle()
         assertNull("a focus change alone routes nothing for a non-editor with the keyboard hidden", router.owner)
 
-        // The keyboard opens for it: the IME animation decides the owner before any pane sees it.
+        
         runImeAnimation(imeAnimation()) { dispatchIme(500) }
 
         assertSame(host.findViewById(R.id.list_pane), router.owner)
@@ -271,12 +271,12 @@ class PaneImeRouterTest {
         dispatchIme(500)
         assertSame(host.findViewById(R.id.list_pane), router.owner)
 
-        // The search layer closes: its field is gone, focus falls to a non-editor, the keyboard starts hiding.
+        
         removeField(searchField)
         assertSame("focus left the field but the keyboard is still up", host.findViewById(R.id.list_pane), router.owner)
         runImeAnimation(imeAnimation()) {
             assertSame("no recompute for a hide", host.findViewById(R.id.list_pane), router.owner)
-            dispatchIme(0) // the hide's final insets
+            dispatchIme(0) 
         }
         assertEquals("the conversation pane saw no hide animation", 0, detailProbe.prepares)
         assertEquals(0, received["detail"])
@@ -294,11 +294,11 @@ class PaneImeRouterTest {
         probe("list", R.id.index_viewpager)
         probe("detail", R.id.fragment_container_detail)
         noFocus()
-        focusIn(R.id.detail_pane) // the chat input
+        focusIn(R.id.detail_pane) 
         dispatchIme(500)
         assertSame(host.findViewById(R.id.detail_pane), router.owner)
 
-        // The Compose search field: focused now, a text editor only once its input session opens.
+        
         val field = LateEditor(host)
         host.findViewById<ViewGroup>(R.id.list_pane).addView(field, ViewGroup.LayoutParams(100, 100))
         assertTrue(field.requestFocus())
@@ -316,13 +316,13 @@ class PaneImeRouterTest {
         probe("list", R.id.index_viewpager)
         probe("detail", R.id.fragment_container_detail)
         noFocus()
-        // The list's first focusable view (the pager on a device), no editor.
+        
         host.findViewById<ViewGroup>(R.id.list_pane).addView(LateEditor(host), ViewGroup.LayoutParams(100, 100))
         val chatInput = focusIn(R.id.detail_pane)
         dispatchIme(500)
         assertSame(host.findViewById(R.id.detail_pane), router.owner)
 
-        // A conversation switch replaces the chat page; the framework refocuses the list by itself.
+        
         removeField(chatInput)
         assertSame(host.findViewById(R.id.list_pane), router.paneOf(root.findFocus()))
 
@@ -339,7 +339,7 @@ class PaneImeRouterTest {
         val field = focusIn(R.id.detail_pane)
         dispatchIme(500)
 
-        removeField(field) // focus falls to the divider, outside both panes
+        removeField(field) 
         assertNull(router.paneOf(root.findFocus()))
 
         assertSame(host.findViewById(R.id.detail_pane), router.owner)

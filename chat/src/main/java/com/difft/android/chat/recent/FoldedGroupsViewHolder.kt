@@ -14,18 +14,18 @@ import com.difft.android.chat.databinding.ChatFragmentRecentChatListItemBinding
 import difft.android.messageserialization.model.CRITICAL_ALERT_TYPE_NONE
 import difft.android.messageserialization.model.ROOM_SEND_STATUS_NONE
 
-/**
- * The "Folded Groups (n)" row (PRD 7.4.2): a function avatar like Saved Messages (filled folder icon),
- * a grey "focus icon + HH:MM resume" after the name while focus has an end time, the newest group's
- * preview with the strongest unread mention, a grey summed badge. It cannot be pinned; its only
- * action (long-press and end-side swipe) is "End Focus", and it has no start-side swipe.
- */
+
+
+
+
+
+
 class FoldedGroupsViewHolder(container: ViewGroup) : RecyclerView.ViewHolder(
     ChatFragmentRecentChatListItemBinding.inflate(LayoutInflater.from(container.context), container, false).root
 ) {
     private val binding = ChatFragmentRecentChatListItemBinding.bind(itemView)
 
-    /** Last press position on the row, for the long-press menu anchor. */
+    
     var lastTouchX: Int = 0
         private set
     var lastTouchY: Int = 0
@@ -45,7 +45,7 @@ class FoldedGroupsViewHolder(container: ViewGroup) : RecyclerView.ViewHolder(
         binding.imageviewAvatar.visibility = View.VISIBLE
         binding.imageviewAvatar.setAvatar(R.drawable.chat_ic_folded_groups_avatar)
         binding.imageviewBotBadge.isVisible = false
-        binding.textviewTimer.isVisible = false
+        binding.timerRow.isVisible = false
         binding.imageviewFocus.isVisible = false
         binding.textviewFocusLine2.isVisible = false
         binding.textviewFocusLine3.isVisible = false
@@ -67,7 +67,7 @@ class FoldedGroupsViewHolder(container: ViewGroup) : RecyclerView.ViewHolder(
         val content = summary.latestContent?.toString().orEmpty()
         binding.textviewDetail.isVisible = true
         binding.textviewDetail.text = if (content.isEmpty()) name else context.getString(R.string.focus_list_folded_preview, name, content)
-        // Other groups are muted while focusing: weak (grey) preview and badge.
+        
         binding.textviewDetail.setTextColor(ContextCompat.getColor(context, detailColorRes(summary.unreadCount, isMuted = true)))
 
         val tags = buildTagSegments(
@@ -116,7 +116,7 @@ class FoldedGroupsViewHolder(container: ViewGroup) : RecyclerView.ViewHolder(
         binding.actionDelete.isVisible = false
         bindFocusSwipeAction(binding.actionFocus, binding.actionFocusIcon, binding.actionFocusLabel, FocusRowAction.END)
         binding.actionFocus.setOnClickListener {
-            root.close()
+            root.close(animate = false)
             onEndFocus()
         }
     }

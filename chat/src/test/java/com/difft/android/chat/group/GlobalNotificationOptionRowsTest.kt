@@ -21,11 +21,11 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/**
- * [GlobalNotificationOptionRows] contract (issue #1223): the single owner of the three
- * [GlobalNotificationType] rows, shared by the global page and the per-group page. MENTION is the
- * only option with an explanation line, and exactly one row carries the checkmark.
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34])
@@ -38,7 +38,7 @@ class GlobalNotificationOptionRowsTest {
 
     private fun string(resId: Int) = context.getString(resId)
 
-    // T27
+    
     @Test
     fun `all three options render and report their raw value`() {
         var selected = -1

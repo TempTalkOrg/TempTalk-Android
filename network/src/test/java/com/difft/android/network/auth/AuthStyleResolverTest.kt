@@ -6,14 +6,14 @@ import org.junit.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
-/**
- * [AuthStyleResolver] resolution order, and the two framework facts the design leans on: Retrofit
- * tags every request with an `Invocation`, and `Request.newBuilder()` preserves that tag across the
- * host-failover rebuild (issue #1231).
- */
+
+
+
+
+
 class AuthStyleResolverTest {
 
-    // T21 — a method declaration beats its interface's.
+    
     @Test
     fun `method annotation wins over interface annotation`() {
         val request = requestOf(BasicDeclaringService::class.java) { it.overridesWithJwt() }
@@ -21,7 +21,7 @@ class AuthStyleResolverTest {
         assertEquals(AuthStyle.JWT, AuthStyleResolver.styleFor(request))
     }
 
-    // T22 — an undeclared method inherits its interface's declaration.
+    
     @Test
     fun `interface annotation applies to an undeclared method`() {
         val request = requestOf(BasicDeclaringService::class.java) { it.inheritsInterface() }
@@ -29,7 +29,7 @@ class AuthStyleResolverTest {
         assertEquals(AuthStyle.BASIC, AuthStyleResolver.styleFor(request))
     }
 
-    // T23 — the fail-safe trigger: nothing declared, or no Invocation tag at all.
+    
     @Test
     fun `returns null when nothing declares a style`() {
         val undeclared = requestOf(UndeclaredService::class.java) { it.undeclared() }

@@ -20,12 +20,12 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * The nested-forward BFS: flat assembly, deep-tree equivalence against a naive recursion, the
- * [MAX_FORWARD_DEPTH] cap, the cycle guard, and Int/Long key alignment.
- *
- * Test rows #25..#28 and #32 of the design inventory.
- */
+
+
+
+
+
+
 class MessageHydratorForwardTreeTest {
 
     @After
@@ -39,7 +39,7 @@ class MessageHydratorForwardTreeTest {
     private fun messageWithContext(id: String, fcId: Long): MessageModel =
         buildMessageModel(id, 1_000L).apply { forwardContextDatabaseId = fcId }
 
-    /** #25 — flat combined forward: three top-level forwards, ordered, each with its own children rows. */
+    
     @Test
     fun `flat forward context assembles all top level forwards in databaseId order`() {
         val corpus = ChildRowCorpus(
@@ -69,10 +69,10 @@ class MessageHydratorForwardTreeTest {
         }
     }
 
-    /**
-     * #26 — a three-level tree must equal what the naive point-query recursion produces for the
-     * same rows. `ChildRowCorpus.referenceSubDataFor` is written independently of the BFS.
-     */
+    
+
+
+
     @Test
     fun `nested forward tree equals the naive recursive reference`() {
         val message = messageWithContext("A", 9L)
@@ -97,15 +97,15 @@ class MessageHydratorForwardTreeTest {
         )
     }
 
-    /**
-     * #27 — an 18-level chain truncates at [MAX_FORWARD_DEPTH]: the level-16 node reports
-     * `forwards = emptyList()` (shape-identical to a real leaf) and exactly one `L.w` is emitted.
-     * Without the cap this would be the point-query path's StackOverflowError.
-     */
+    
+
+
+
+
     @Test
     fun `nesting deeper than the cap truncates and warns once`() {
-        // mockkStatic, not mockkObject: L's log entry points are @JvmStatic, so Kotlin call sites
-        // invoke the static bridge on class L, which instance-level object mocking cannot see.
+        
+        
         mockkStatic(L::class)
         val chainLength = MAX_FORWARD_DEPTH + 2
         val forwards = buildList {
@@ -142,11 +142,11 @@ class MessageHydratorForwardTreeTest {
         verify(exactly = 1) { L.w(any<() -> String>()) }
     }
 
-    /**
-     * #28 — a corrupt parent loop (a node pointing back at an already-visited ancestor) must not
-     * spin or overflow. The visited set drops the repeat, so the BFS issues at most
-     * [MAX_FORWARD_DEPTH] level queries and the rebuilt tree is finite.
-     */
+    
+
+
+
+
     @Test
     fun `a parent cycle terminates instead of looping`() {
         val corpus = ChildRowCorpus(
@@ -156,7 +156,7 @@ class MessageHydratorForwardTreeTest {
                 buildForwardModel(databaseId = 10, forwardContextDatabaseId = 1L),
                 buildForwardModel(databaseId = 20, parentForwardModelDatabaseId = 10L),
                 buildForwardModel(databaseId = 30, parentForwardModelDatabaseId = 20L),
-                // Corrupt row: re-introduces databaseId 20 as a child of 30, closing 20 -> 30 -> 20.
+                
                 buildForwardModel(databaseId = 20, parentForwardModelDatabaseId = 30L),
             ),
         )
@@ -177,11 +177,11 @@ class MessageHydratorForwardTreeTest {
         assertEquals("10 -> 20 -> 30, then the cycle edge is dropped", 3, depth)
     }
 
-    /**
-     * #32 — `ForwardModel.databaseId` is `Int` while `AttachmentModel.forwardModelDatabaseId` is
-     * `Long?`. A mismatched key type here loses the whole attachment set silently, with no
-     * exception and no log.
-     */
+    
+
+
+
+
     @Test
     fun `forward children attach across the Int primary key to Long foreign key boundary`() {
         val corpus = ChildRowCorpus(

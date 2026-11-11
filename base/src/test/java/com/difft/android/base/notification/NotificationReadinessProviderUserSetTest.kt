@@ -10,7 +10,7 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
 
-/** Design §7: [ChannelReading.userSetImportance] comes from `hasUserSetImportance()` on API 29+ only. */
+
 @RunWith(RobolectricTestRunner::class)
 class NotificationReadinessProviderUserSetTest {
 
@@ -36,7 +36,7 @@ class NotificationReadinessProviderUserSetTest {
     @Config(sdk = [34])
     fun `a category whose importance the user locked reads as set`() {
         val channel = createCallChannel()
-        // USER_LOCKED_IMPORTANCE, set by the system settings UI through the hidden lockFields().
+        
         NotificationChannel::class.java.getMethod("lockFields", Int::class.javaPrimitiveType).invoke(channel, USER_LOCKED_IMPORTANCE)
         assertEquals(true, readCall()?.userSetImportance)
     }

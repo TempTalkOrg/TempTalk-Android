@@ -7,15 +7,15 @@ import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Owns the critical-alert conversation highlight for #1381: an alert writes it unless the alert is
- * for the call being joined or already active, and a join clears it ([clearForJoin]).
- *
- * Per conversation, "check -> write" and the join's clear run under one lock, and a join publishes its
- * marker before it clears. Either the write's check sees the marker, or the write finished first and
- * the join's clear removes it; an alert for another call that writes after the join's clear keeps its
- * highlight. Called from message-processing and join threads, never from main.
- */
+
+
+
+
+
+
+
+
+
 @Singleton
 class CriticalAlertHighlightWriter @Inject constructor(
     private val dbRoomStore: DBRoomStore,
@@ -36,7 +36,7 @@ class CriticalAlertHighlightWriter @Inject constructor(
         }
     }
 
-    /** A join's clear; the join's gate marker must already be published. */
+    
     fun clearForJoin(conversationId: String) {
         synchronized(lockFor(conversationId)) { dbRoomStore.clearCriticalAlert(conversationId) }
     }

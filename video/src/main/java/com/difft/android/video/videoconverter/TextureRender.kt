@@ -27,13 +27,13 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
 
-/**
- * Code for rendering a texture onto a surface using OpenGL ES 2.0.
- */
+
+
+
 internal class TextureRender(flipX: Boolean) {
 
     private val mTriangleVerticesData = floatArrayOf(
-        // X, Y, Z, U, V
+        
         -1.0f, -1.0f, 0f, 0f, 0f,
         1.0f, -1.0f, 0f, 1f, 0f,
         -1.0f, 1.0f, 0f, 0f, 1f,
@@ -41,7 +41,7 @@ internal class TextureRender(flipX: Boolean) {
     )
 
     private val mTriangleVerticesDataFlippedX = floatArrayOf(
-        // X, Y, Z, U, V
+        
         -1.0f, -1.0f, 0f, 1f, 0f,
         1.0f, -1.0f, 0f, 0f, 0f,
         -1.0f, 1.0f, 0f, 1f, 1f,
@@ -114,9 +114,9 @@ internal class TextureRender(flipX: Boolean) {
         GLES20.glFinish()
     }
 
-    /**
-     * Initializes GL state.  Call this after the EGL surface has been created and made current.
-     */
+    
+
+
     fun surfaceCreated() {
         mProgram = createProgram(VERTEX_SHADER, FRAGMENT_SHADER)
         if (mProgram == 0) {
@@ -171,9 +171,9 @@ internal class TextureRender(flipX: Boolean) {
         checkGlError("glTexParameter")
     }
 
-    /**
-     * Replaces the fragment shader.
-     */
+    
+
+
     fun changeFragmentShader(fragmentShader: String) {
         GLES20.glDeleteProgram(mProgram)
         mProgram = createProgram(VERTEX_SHADER, fragmentShader)
@@ -235,7 +235,7 @@ internal class TextureRender(flipX: Boolean) {
 
         private const val FRAGMENT_SHADER =
             "#extension GL_OES_EGL_image_external : require\n" +
-                "precision mediump float;\n" + // highp here doesn't seem to matter
+                "precision mediump float;\n" + 
                 "varying vec2 vTextureCoord;\n" +
                 "uniform samplerExternalOES sTexture;\n" +
                 "void main() {\n" +

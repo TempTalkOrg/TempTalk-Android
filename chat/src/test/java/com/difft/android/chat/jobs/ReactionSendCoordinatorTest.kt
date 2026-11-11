@@ -37,17 +37,17 @@ import org.junit.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 
-/**
- * Tests for [ReactionSendCoordinator]. Uses real Gson + JsonDataSerializer to round-trip
- * the actual serializedData shape; mocks JobManager + factory. Each test builds the
- * coordinator with `backgroundScope` so the test scheduler can drive the internal launches.
- * B7 uses UnconfinedTestDispatcher + CompletableDeferred barriers for deterministic
- * concurrency.
- */
+
+
+
+
+
+
+
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class ReactionSendCoordinatorTest {
 
-    // Production Gson wiring — For.Account/For.Group must round-trip.
+    
     private val gson: Gson = run {
         val valueAdapter = com.difft.android.chat.jobs.RuntimeTypeAdapterFactory.of(For::class.java)
             .registerSubtype(For.Account::class.java)
@@ -56,9 +56,9 @@ class ReactionSendCoordinatorTest {
     }
     private val dataSerializer = JsonDataSerializer()
 
-    // jobManager is shared because ApplicationDependencies caches the first
-    // getJobManager() result in a @Volatile field we can't reset between tests.
-    // clearMocks in @After keeps each test independent.
+    
+    
+    
     private val jobManager: JobManager = sharedJobManager
     private val factory = mockk<PushReactionSendJobFactory>(relaxed = true)
 
@@ -67,7 +67,7 @@ class ReactionSendCoordinatorTest {
     }
 
     private val conversationId = "+10000000001"
-    // MessageId.idValue = "<ts><source-without-plus><device>"
+    
     private val realMessageId = "1699999999000" + "200000000002" + "1"
     private val emoji = "👍"
     private val uid = "self-uid"
@@ -75,8 +75,8 @@ class ReactionSendCoordinatorTest {
 
     @Before
     fun setUp() {
-        // mockkObject doesn't intercept @JvmStatic reliably; seed the real init() with
-        // a stub Provider so getJobManager() returns our mock. init() is idempotent.
+        
+        
         if (!ApplicationDependencies.isInitialized()) {
             ApplicationDependencies.init(
                 mockk<Application>(relaxed = true),
@@ -97,10 +97,10 @@ class ReactionSendCoordinatorTest {
         clearMocks(jobManager, factory)
     }
 
-    // Each test builds its own coordinator. The injected CoroutineScope shares the test's
-    // CoroutineContext (so the test scheduler drives `scope.launch { ... }`) but uses a
-    // SupervisorJob so failures in the launched coroutine don't fail the test scope.
-    // advanceUntilIdle() drains the launched work deterministically.
+    
+    
+    
+    
     private fun TestScope.newCoordinator(
         serializer: Data.Serializer = dataSerializer,
     ) = ReactionSendCoordinator(
@@ -226,7 +226,7 @@ class ReactionSendCoordinatorTest {
         val coordinator = newCoordinator()
         val newReaction = buildReaction()
         val newTm = buildTextMessage(newReaction)
-        // Same emoji + uid, but realSource points to a DIFFERENT target message.
+        
         val otherTargetReaction = buildReaction(realSourceTs = 1_588_888_888_000L)
         val otherTargetTm = buildTextMessage(otherTargetReaction)
         val existingSpec = buildJobSpec("spec-other-target", otherTargetTm)
@@ -268,8 +268,8 @@ class ReactionSendCoordinatorTest {
         verify(exactly = 1) { jobManager.add(any()) }
     }
 
-    // Defensive: in normal operation only one pending job exists per (msgId, emoji, uid)
-    // because of FIFO+Mutex. If multiple ever do, the coordinator must cancel ALL of them.
+    
+    
     @Test
     fun `B5 - three matching pending jobs - all three are cancelled, one new added`() = runTest {
         val coordinator = newCoordinator()
@@ -315,16 +315,16 @@ class ReactionSendCoordinatorTest {
         verify(exactly = 1) { jobManager.add(any()) }
     }
 
-    /**
-     * B7 — concurrent same-conversation enqueues. Per-conversation Mutex MUST serialize
-     * the find→cancel→add window so the second call sees the first's added job and
-     * supersedes it. Uses CompletableDeferred barriers for deterministic interleaving.
-     *
-     * Tautology guard (one-time manual verification): temporarily replace
-     * `mutex.withLock { ... }` with `run { ... }` in ReactionSendCoordinator
-     * (impl, NOT this test). Re-run — must FAIL with cancel("spec-1") count = 0
-     * (B races ahead, observes empty queue). Restore Mutex; must pass.
-     */
+    
+
+
+
+
+
+
+
+
+
     @Test
     fun `B7 - concurrent enqueue in same conversation - mutex serializes RMW`() =
         runTest(UnconfinedTestDispatcher()) {
@@ -358,8 +358,8 @@ class ReactionSendCoordinatorTest {
                 }
             }
 
-            // A launches into backgroundScope; under UnconfinedTestDispatcher it runs
-            // eagerly until firstCallProceed.await() suspension inside the stub.
+            
+            
             coordinator.enqueueReactionWithDedupe(
                 conversationId = conversationId,
                 realMessageId = realMessageId,
@@ -369,9 +369,9 @@ class ReactionSendCoordinatorTest {
             )
             firstCallEntered.await()
 
-            // B launches; tries to acquire the same per-conversation Mutex → suspends
-            // because A still holds it. Without the Mutex, B would race ahead and
-            // observe an empty queue (callCount=2 before A's add).
+            
+            
+            
             coordinator.enqueueReactionWithDedupe(
                 conversationId = conversationId,
                 realMessageId = realMessageId,
@@ -381,8 +381,8 @@ class ReactionSendCoordinatorTest {
             )
             yield()
 
-            // Release A — it completes its withLock body (finds empty, adds spec-1),
-            // releases the mutex. B then acquires it and sees A's added spec-1.
+            
+            
             firstCallProceed.complete(Unit)
             advanceUntilIdle()
 
@@ -390,11 +390,11 @@ class ReactionSendCoordinatorTest {
             verify(exactly = 2) { jobManager.add(any()) }
         }
 
-    /**
-     * B8 — concurrent ops on DIFFERENT conversations get DIFFERENT mutexes and run in
-     * parallel without contention. Both calls' stubs must complete; if a single shared
-     * mutex were used, this would deadlock.
-     */
+    
+
+
+
+
     @Test
     fun `B8 - concurrent enqueue in different conversations - mutexes independent`() =
         runTest(UnconfinedTestDispatcher()) {
@@ -432,7 +432,7 @@ class ReactionSendCoordinatorTest {
                 factory = factory,
             )
 
-            // Both must enter concurrently (deadlock here = shared mutex bug).
+            
             enteredA.await()
             enteredB.await()
             proceed.complete(Unit)
@@ -442,8 +442,8 @@ class ReactionSendCoordinatorTest {
             verify(exactly = 2) { jobManager.add(any()) }
         }
 
-    // Inner JSON malformed → JsonSyntaxException (RuntimeException ⊂ Exception). Matcher
-    // catches it as Throwable, returns false; add still runs.
+    
+    
     @Test
     fun `B9 - inner JSON parse failure - matcher tolerates exception, no cancel, still add`() =
         runTest {
@@ -481,8 +481,8 @@ class ReactionSendCoordinatorTest {
             verify(exactly = 1) { jobManager.add(any()) }
         }
 
-    // Outer Data JSON corrupt → JsonDataSerializer throws AssertionError (extends Error,
-    // not Exception). Pins HIGH-1 fix: matcher's `catch (Throwable)` swallows it.
+    
+    
     @Test
     fun `B9b - outer Data unparseable AssertionError - matcher tolerates Error, no cancel, still add`() =
         runTest {
@@ -553,7 +553,7 @@ class ReactionSendCoordinatorTest {
         verify(exactly = 1) { jobManager.add(any()) }
     }
 
-    // Belt-and-suspenders — queueKey already filters by factory at the framework level.
+    
     @Test
     fun `B11 - wrong factoryKey - defensive filter rejects, no cancel`() = runTest {
         val coordinator = newCoordinator()
@@ -579,7 +579,7 @@ class ReactionSendCoordinatorTest {
         verify(exactly = 1) { jobManager.add(any()) }
     }
 
-    // Sibling of B6 — pins the `factory.create(null, tm)` invocation contract.
+    
     @Test
     fun `B12 - empty queue - new job built with null parameters and the supplied textMessage`() =
         runTest {
@@ -624,8 +624,8 @@ class ReactionSendCoordinatorTest {
         assertEquals(50, coordinator.mutexes.size)
     }
 
-    // Coordinator does NOT pre-filter on isRunning — cancellation of a running job is
-    // best-effort (Risk 3 in design). Receiver-side LWW bottoms out if HTTP already sent.
+    
+    
     @Test
     fun `B14 - matching running job - still cancelled (best-effort, see Risk 3)`() = runTest {
         val coordinator = newCoordinator()
@@ -647,8 +647,8 @@ class ReactionSendCoordinatorTest {
         verify(exactly = 1) { jobManager.add(any()) }
     }
 
-    // L.i { ... } is a lazy lambda fired immediately before cancel(spec.id) — verifying
-    // cancel-after-match is a sufficient proxy without mocking the L object.
+    
+    
     @Test
     fun `B15 - logging path is exercised on supersede (cancel-after-match proxy)`() = runTest {
         val coordinator = newCoordinator()

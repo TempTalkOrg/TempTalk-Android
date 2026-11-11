@@ -23,10 +23,10 @@ import org.junit.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
-/**
- * Unit tests for [LinkedDevicesCountStore]. Pure JVM; the gated concurrency tests drive the
- * [StandardTestDispatcher] scheduler explicitly with [runCurrent]/[advanceUntilIdle].
- */
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class LinkedDevicesCountStoreTest {
 
@@ -47,10 +47,10 @@ class LinkedDevicesCountStoreTest {
         clearMocks(repo)
     }
 
-    /** getDevices() returns an already-primary-filtered list; the store only reads its size. */
+    
     private fun devices(n: Int): List<DeviceInfo> = List(n) { DeviceInfo(id = 100 + it) }
 
-    // C5t: seed — count==null, repo returns 2 → count emits null→2; getDevices called once.
+    
     @Test
     fun `C5t refresh seeds count from null`() = runTest {
         coEvery { repo.getDevices() } returns devices(2)
@@ -64,7 +64,7 @@ class LinkedDevicesCountStoreTest {
         coVerify(exactly = 1) { repo.getDevices() }
     }
 
-    // C6t: no throttling — every call issues a real fetch → getDevices called twice.
+    
     @Test
     fun `C6t refresh always fetches`() = runTest {
         coEvery { repo.getDevices() } returns devices(2)
@@ -76,7 +76,7 @@ class LinkedDevicesCountStoreTest {
         coVerify(exactly = 2) { repo.getDevices() }
     }
 
-    // C8t: an auth failure is swallowed (best-effort); last-known count kept, no logout.
+    
     @Test
     fun `C8t refresh swallows auth failure and keeps last-known`() = runTest {
         coEvery { repo.getDevices() } returns devices(2)
@@ -84,12 +84,12 @@ class LinkedDevicesCountStoreTest {
         assertEquals(2, store.count.value)
 
         coEvery { repo.getDevices() } throws AuthorizationFailedException(401, "auth failed")
-        store.refresh() // must not throw
+        store.refresh() 
 
         assertEquals(2, store.count.value)
     }
 
-    // C9t: CancellationException is rethrown, not swallowed.
+    
     @Test
     fun `C9t refresh rethrows CancellationException`() = runTest {
         coEvery { repo.getDevices() } throws CancellationException("cancelled")
@@ -97,7 +97,7 @@ class LinkedDevicesCountStoreTest {
         assertFailsWith<CancellationException> { store.refresh() }
     }
 
-    // C10t: update() pushes immediately; with no throttle a later refresh still fetches and wins.
+    
     @Test
     fun `C10t update pushes value and later refresh still fetches`() = runTest {
         coEvery { repo.getDevices() } returns devices(5)
@@ -113,7 +113,7 @@ class LinkedDevicesCountStoreTest {
         coVerify(exactly = 1) { repo.getDevices() }
     }
 
-    // C11t: a refresh made while another is in flight coalesces (tryLock) — only one GET fires.
+    
     @Test
     fun `C11t concurrent refresh coalesces to a single fetch`() = runTest {
         val gate = CompletableDeferred<Unit>()
@@ -128,7 +128,7 @@ class LinkedDevicesCountStoreTest {
 
         val job1 = launch { store.refresh() }
         val job2 = launch { store.refresh() }
-        runCurrent() // job1 holds the lock and parks at the gate; job2 tryLock fails and returns
+        runCurrent() 
         assertEquals(1, maxInFlight)
 
         gate.complete(Unit)
@@ -136,23 +136,23 @@ class LinkedDevicesCountStoreTest {
         job1.join(); job2.join()
 
         assertEquals(2, store.count.value)
-        coVerify(exactly = 1) { repo.getDevices() } // coalesced
+        coVerify(exactly = 1) { repo.getDevices() } 
     }
 
-    // C12t: a push landing mid-fetch bumps the generation, so the in-flight fetch's stale result is
-    // discarded on commit and the pushed value wins.
+    
+    
     @Test
     fun `C12t push during in-flight fetch discards the stale fetch result`() = runTest {
         val gate = CompletableDeferred<Unit>()
         coEvery { repo.getDevices() } coAnswers { gate.await(); devices(5) }
 
         val job = launch { store.refresh() }
-        runCurrent() // fetch is in flight (genAtStart captured), parked at the gate
+        runCurrent() 
 
-        store.update(2) // authoritative push — bumps generation, count=2
+        store.update(2) 
         assertEquals(2, store.count.value)
 
-        gate.complete(Unit) // fetch returns stale 5, but generation changed → discarded
+        gate.complete(Unit) 
         advanceUntilIdle()
         job.join()
 

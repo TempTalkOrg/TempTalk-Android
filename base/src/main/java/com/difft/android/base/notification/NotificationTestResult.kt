@@ -2,7 +2,7 @@ package com.difft.android.base.notification
 
 import java.util.concurrent.TimeUnit
 
-/** The user-run notification tests (#1350): message banner and sound, message on the lock screen, call pop-up. */
+
 enum class NotificationTestKind(val logName: String) {
     BANNER("banner"),
     LOCKSCREEN("lockscreen"),
@@ -14,11 +14,11 @@ enum class NotificationTestOutcome(internal val code: String) {
     FAIL("fail"),
 }
 
-/**
- * One stored test outcome, encoded `<ok|fail>|<epochMs>|<fingerprint>`. A result only counts while
- * the settings it was taken under are unchanged ([fingerprint], see [NotificationTestFingerprint])
- * and it is at most [MAX_AGE_MS] old; anything else reads as "not tested".
- */
+
+
+
+
+
 data class NotificationTestResult(
     val outcome: NotificationTestOutcome,
     val epochMs: Long,
@@ -26,7 +26,7 @@ data class NotificationTestResult(
 ) {
     fun encode(): String = "${outcome.code}$SEPARATOR$epochMs$SEPARATOR$fingerprint"
 
-    /** A clock that moved back before [epochMs] also invalidates the result: it can no longer be dated. */
+    
     fun isValid(currentFingerprint: String, nowMs: Long): Boolean =
         fingerprint == currentFingerprint && (nowMs - epochMs) in 0..MAX_AGE_MS
 
@@ -35,7 +35,7 @@ data class NotificationTestResult(
         private const val SEPARATOR = '|'
         private const val PARTS = 3
 
-        /** Null for an absent or malformed value, which then reads as "not tested". */
+        
         fun decode(raw: String?): NotificationTestResult? {
             if (raw.isNullOrBlank()) return null
             val parts = raw.split(SEPARATOR)
@@ -48,7 +48,7 @@ data class NotificationTestResult(
     }
 }
 
-/** The results that are still valid; a null entry is "not tested". */
+
 data class NotificationTestResults(
     val banner: NotificationTestResult? = null,
     val lockscreen: NotificationTestResult? = null,
@@ -63,7 +63,7 @@ data class NotificationTestResults(
     companion object {
         val NONE = NotificationTestResults()
 
-        /** Keeps only the stored results whose fingerprint matches [input] and that are not expired. */
+        
         fun validOf(
             stored: Map<NotificationTestKind, NotificationTestResult>,
             input: ReadinessInput,

@@ -15,18 +15,18 @@ import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * Cases #53..#55 plus the controller half of #62 — `trimToLatest()`.
- *
- * The window only grows past its cap through the observer's unbounded `ge(min)` branch (a
- * conversation parked at the bottom absorbing incoming messages), so that is how these cases build
- * an oversized window: no page load can produce one.
- */
+
+
+
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class ChatNormalPaginationControllerTrimTest : PaginationTestBase() {
 
-    // #53 — every property of one trim at once, including the CRIT-2 one: the rows the user is
-    // looking at (parked at the bottom) all survive.
+    
+    
     @Test
     fun `trimToLatest re-slices to the cap, re-anchors, preserves position and queries nothing`() = runTest {
         val controller = controller()
@@ -51,7 +51,7 @@ class ChatNormalPaginationControllerTrimTest : PaginationTestBase() {
         assertEquals("only the observer restart queries", restartsBefore + 1, source.callCount("latestMessageId"))
     }
 
-    // #54 — at or under the cap it is a no-op: the SAME state object, no emission, no restart.
+    
     @Test
     fun `trimToLatest on a window at the cap emits nothing and restarts nothing`() = runTest {
         val controller = controller()
@@ -65,8 +65,8 @@ class ChatNormalPaginationControllerTrimTest : PaginationTestBase() {
         assertEquals(restartsBefore, source.callCount("latestMessageId"))
     }
 
-    // #55 — the observer restart is half the feature. Without it the next change signal still
-    // re-queries from the OLD window minimum and the window snaps straight back to its pre-trim size.
+    
+    
     @Test
     fun `trimToLatest restarts the observer, which then re-queries from the new window minimum`() = runTest {
         val controller = controller()
@@ -88,10 +88,10 @@ class ChatNormalPaginationControllerTrimTest : PaginationTestBase() {
         assertEquals(MAX_MESSAGE_COUNT, controller.window().size)
     }
 
-    // #62 — CRIT-1 at the controller layer, out-of-order insert flavour. A row that lands OLDER than
-    // the window is invisible to the observer's own window query, so the emission it triggers carries
-    // a byte-identical messageList: the re-run COUNT is the ONLY thing that can distinguish it, and
-    // the flag it produces is the only reason the emission is worth delivering.
+    
+    
+    
+    
     @Test
     fun `a row inserted older than the window changes only hasReachedHistoryStart`() = runTest {
         source.seed(buildMessageSequence(5))
@@ -107,10 +107,10 @@ class ChatNormalPaginationControllerTrimTest : PaginationTestBase() {
         assertFalse(after.hasReachedHistoryStart)
     }
 
-    /**
-     * Opens the conversation at its newest page, then feeds enough incoming messages through the
-     * observer's unbounded branch for the window to reach [targetSize]. Returns that window.
-     */
+    
+
+
+
     private suspend fun growWindowTo(
         controller: ChatNormalPaginationController,
         targetSize: Int,
@@ -129,7 +129,7 @@ class ChatNormalPaginationControllerTrimTest : PaginationTestBase() {
         return controller.window()
     }
 
-    /** Every source method that costs a query, except the observer-restart probe. */
+    
     private fun windowQueryCounts(): Map<String, Int> = listOf(
         "roomAnchors", "earliestFailedOutgoing", "firstUnreadFromOthers", "countOlderThan",
         "countNewerThan", "newerThan", "atOrNewerThan", "olderThan", "atOrOlderThan", "latest",

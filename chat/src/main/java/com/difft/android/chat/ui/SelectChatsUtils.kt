@@ -1,6 +1,8 @@
 package com.difft.android.chat.ui
 
+import android.widget.ImageView
 import android.app.Activity
+import com.difft.android.base.widget.floatAsTopBarButton
 import android.net.Uri
 import android.text.TextUtils
 import android.view.View
@@ -112,7 +114,7 @@ data class ChatsContact(
     val avatar: String?,
     val firstLetters: String?,
     val isGroup: Boolean,
-    val itemType: Int,  //1 chat 2 group 3 contact
+    val itemType: Int,  
     val avatarJson: String?
 )
 
@@ -136,12 +138,13 @@ class SelectChatsUtils @Inject constructor(
     @Inject
     lateinit var pushForwardNoticeSendJobFactory: PushForwardNoticeSendJobFactory
 
-    /**
-     * 任务成功完成后的统一处理
-     * @param message 成功提示消息的资源ID
-     * @param wait the task's own wait claim, released first
-     * @param onDismiss 关闭 dialog 的回调
-     */
+    
+
+
+
+
+
+
     private suspend fun handleTaskSuccess(message: Int, wait: TaskWait, onDismiss: () -> Unit) {
         L.i { "[SelectChatsUtils] forward message success" }
         withContext(Dispatchers.Main) {
@@ -151,9 +154,6 @@ class SelectChatsUtils @Inject constructor(
         }
     }
 
-    /**
-     * 任务失败后的统一处理
-     */
     private suspend fun handleTaskError(e: Exception, wait: TaskWait) {
         L.e(e) { "[SelectChatsUtils] forward message failed:" }
         withContext(Dispatchers.Main) {
@@ -162,7 +162,7 @@ class SelectChatsUtils @Inject constructor(
         }
     }
 
-    /** Releases [wait] even when the task's scope was cancelled before the handlers ran. */
+    
     private suspend fun releaseTaskWait(wait: TaskWait) {
         withContext(NonCancellable + Dispatchers.Main) { wait.release() }
     }
@@ -183,27 +183,26 @@ class SelectChatsUtils @Inject constructor(
         file: File? = null,
         forwardContexts: List<ForwardContext>? = null,
         scene: ForwardNoticeData.Scene? = null,
-        // Source conversation (where the forwarded messages originally lived). Forward callers
-        // MUST pass this — the forwardNotice is posted there to tell original participants their
-        // messages were forwarded away. Share callers (file / plain text share) pass null; no
-        // notice is sent.
+        
+        
+        
+        
         sourceConversation: For? = null,
-        // Authors of user-selected messages. PRD §5.3.4: deduped and priority-sorted by the
-        // caller via NoticeAggregator (CF sender first → count desc → ts desc → authorId asc).
-        // Used as the authoritative source for the notice's author display list.
+        
+        
+        
         sourceAuthorIds: List<String>? = null,
-        // PRD §5.3: explicit selected-message count (CF bubble counts as 1). When null,
-        // falls back to sourceAuthorIds.size — only safe when caller didn't dedup (e.g.,
-        // single-message paths where size == 1).
+        
+        
+        
         messageCount: Int? = null,
-        // PRD v1.0 §5.3 combined-forward mode of the source selection. Default UNKNOWN keeps
-        // legacy share/external entries untouched; Phase 4 dispatch sites populate explicitly.
+        
         combinedForwardMode: CombinedForwardMode = CombinedForwardMode.UNKNOWN,
-        // PRD v2.0 §改动1/§改动2 条件①④: whether the forwarded content includes someone else's real
-        // message. Default true keeps share/external callers tracing; forward sites compute it.
+        
+        
         carriesForeignContent: Boolean = true,
-        // Optional ownership transfer: called once after cancellation or when sending no longer
-        // reads the source file. Existing callers retain ownership when this is null.
+        
+        
         onFileReleased: (() -> Unit)? = null,
     ) {
         val sending = AtomicBoolean(false)
@@ -248,9 +247,6 @@ class SelectChatsUtils @Inject constructor(
                     onDismiss = { fragment.dismiss() },
                     onSendStarted = { onFileReleased == null || (!released.get() && sending.compareAndSet(false, true)) },
                     onFileReleased = if (onFileReleased == null) null else ::releaseOwnedFile,
-                    onConfirmationCanceled = if (onFileReleased == null) null else {
-                        { if (!sending.get()) { releaseOwnedFile(); fragment.dismiss() } }
-                    },
                 )
             } catch (e: Exception) {
                 if (onFileReleased == null) throw e
@@ -285,7 +281,6 @@ class SelectChatsUtils @Inject constructor(
 
     fun search(scope: CoroutineScope) {
         scope.launch(Dispatchers.IO) {
-            // 并发查询所有数据
             val roomsDeferred = async { queryRooms() }
             val groupsDeferred = async { queryGroups() }
             val contactsDeferred = async { queryContacts() }
@@ -316,7 +311,6 @@ class SelectChatsUtils @Inject constructor(
                 )
             }
 
-            // 如果需要添加收藏房间且结果中不包含，则添加
             val rooms = baseRooms + if (ResUtils.getString(com.difft.android.base.R.string.chat_favorites).uppercase().contains(searchKey.uppercase()) &&
                 !baseRooms.any { it.roomId == globalServices.myId }
             ) {
@@ -376,10 +370,7 @@ class SelectChatsUtils @Inject constructor(
 
     private var etMessage: DifftClearableInputView? = null
 
-    // Long by nature: a single forward/share dialog builder (view binding in onViewCreated +
-    // sequential send-task assembly in onConfirm). PRD v2.0 only threaded the notice params
-    // (targetConversationId / carriesForeignContent) through it, nudging it just past the limit.
-    // Suppressed rather than split to keep the dialog's send flow in one readable place.
+    
     @Suppress("LongMethod")
     private fun showSendToDialog(
         context: Activity,
@@ -398,9 +389,7 @@ class SelectChatsUtils @Inject constructor(
         onDismiss: () -> Unit,
         onSendStarted: () -> Boolean = { true },
         onFileReleased: (() -> Unit)? = null,
-        onConfirmationCanceled: (() -> Unit)? = null,
     ) {
-        var confirmed = false
         ComposeDialogManager.showMessageDialog(
             context = context,
             title = context.getString(R.string.chat_send_to),
@@ -426,16 +415,15 @@ class SelectChatsUtils @Inject constructor(
                 }
                 textViewName.text = chatsContact.name
                 val contentText = title ?: content
-                // Display-only normalize: this preview bypasses setMarkdownToTextview. Only the bound
-                // value is normalized; `content` is reused as the sent payload below and stays raw.
+                
+                
                 textContent.text = contentText.normalizeNewlines()
             },
             onConfirm = {
                 if (!onSendStarted()) return@showMessageDialog
-                confirmed = true
                 val message = forwardNoteText(etMessage)
 
-                // The wait belongs to this send (the select sheet runs it), not to a page.
+                
                 val wait = try { TaskWait.claim(context, wait = null) }
                 catch (e: Exception) {
                     if (onFileReleased == null) throw e
@@ -445,10 +433,8 @@ class SelectChatsUtils @Inject constructor(
                     return@showMessageDialog
                 }
 
-                // 收集所有需要发送的任务
                 val sendTasks = mutableListOf<suspend () -> Unit>()
 
-                // 添加主要内容发送任务
                 if (file != null) {
                     sendTasks.add {
                         sendFile(context, Uri.fromFile(file), chatsContact.id, chatsContact.isGroup)
@@ -459,7 +445,7 @@ class SelectChatsUtils @Inject constructor(
                         val time = messageArchiveManager.getMessageArchiveTime(forWhat)
                         val response = getConversationConfigs(context, listOf(forWhat.id))
                         var mode = response.data?.conversations?.find { body -> body.conversation == forWhat.id }?.confidentialMode ?: 0
-                        // Check group member limit or bot: force mode to 0
+                        
                         if (mode == 1) {
                             if (chatsContact.isGroup) {
                                 val memberCount = wcdb.getGroupMemberCount(chatsContact.id)
@@ -469,10 +455,10 @@ class SelectChatsUtils @Inject constructor(
                                 mode = 0
                             }
                         }
-                        // scene fallback: share-external-content entries pass `null`; we land
-                        // on SINGLE-equivalent semantics so the notice still reflects reality.
-                        // Non-forward callers (file != null, plain text) never hit this branch
-                        // because they don't pass `forwardContexts`.
+                        
+                        
+                        
+                        
                         val resolvedScene = scene ?: run {
                             L.w { "[SelectChatsUtils] forwardContexts present but scene=null, fallback to SINGLE" }
                             ForwardNoticeData.Scene.SINGLE
@@ -495,9 +481,9 @@ class SelectChatsUtils @Inject constructor(
                 } else {
                     sendTasks.add {
                         sendTextPush(context, content, chatsContact.id, chatsContact.isGroup)
-                        // PRD §5: partial-text forward emits SINGLE notice (mirrors partial copy).
-                        // Propagate combinedForwardMode the caller computed (UNKNOWN for main-conv
-                        // partial-select, SUB_COMBINED_FORWARD for CF-detail partial-select).
+                        
+                        
+                        
                         if (sourceConversation != null && !sourceAuthorIds.isNullOrEmpty()) {
                             sendForwardNotice(
                                 sourceConversation,
@@ -513,14 +499,12 @@ class SelectChatsUtils @Inject constructor(
                     }
                 }
 
-                // 添加额外消息发送任务
                 if (!TextUtils.isEmpty(message)) {
                     sendTasks.add {
                         sendTextPush(context, message, chatsContact.id, chatsContact.isGroup)
                     }
                 }
 
-                // 顺序执行所有发送任务
                 val sendJob = scope.launch(Dispatchers.IO) {
                     try {
                         sendTasks.forEach { task ->
@@ -537,45 +521,33 @@ class SelectChatsUtils @Inject constructor(
                         releaseTaskWait(wait)
                     }
                 }
-                // A launch canceled before its body starts still relinquishes the source; when
-                // started, completion happens after synchronous staging/copy has left the file.
+                
+                
                 if (onFileReleased != null) sendJob.invokeOnCompletion { onFileReleased() }
-            },
-            onDismiss = {
-                if (!confirmed) onConfirmationCanceled?.invoke()
             },
         )
     }
 
-    /**
-     * Save one or more forwarded messages to the user's own notes (recipient=self).
-     *
-     * Signature changed from `forwardContext: ForwardContext?` to
-     * `forwardContexts: List<ForwardContext>?` so multi-select save-to-notes keeps
-     * EVERY selected message's attachments — the previous `.first()` shortcut at the
-     * call site dropped N-1 attachments and produced wrong notice text
-     * ("saved 1 message from Y" when actually saved 5).
-     *
-     * Each ForwardContext is processed independently for attachment permissions /
-     * text push; the notice is enqueued once for the whole batch, with aggregated
-     * authors and a total count.
-     */
+    
+
+
+
     fun saveToNotes(
         context: Activity,
         content: String,
         forwardContexts: List<ForwardContext>? = null,
-        // Source conversation where the user initiated save-to-notes. Pass null to skip the notice.
+        
         sourceConversation: For? = null,
-        // Authors of the user-selected messages (deduped/priority-sorted by caller). See sendForwardNotice.
+        
         sourceAuthorIds: List<String>? = null,
-        // PRD §5.3: explicit selected-message count (CF as 1). Null → falls back to sourceAuthorIds.size.
+        
         messageCount: Int? = null,
-        // PRD v1.0 §5.3 combined-forward mode of the source selection. Default UNKNOWN.
+        
         combinedForwardMode: CombinedForwardMode = CombinedForwardMode.UNKNOWN,
-        // PRD v2.0 §改动1/§改动2 条件①④: whether the saved content includes someone else's real message.
+        
         carriesForeignContent: Boolean = true,
-        // A page in the home screen's detail stack passes its own wait, so the dialog goes with
-        // the page; the save itself still completes.
+        
+        
         wait: PageWait? = null,
     ) {
         val taskWait = TaskWait.claim(context, wait)
@@ -606,12 +578,12 @@ class SelectChatsUtils @Inject constructor(
                             )
                         }
                     }
-                    // All forward messages persisted/sent → emit one aggregated notice to the
-                    // SOURCE conversation (where messages originally lived), telling its members
-                    // "these messages were saved to notes". If caller didn't pass sourceConversation
-                    // (non-chat entry, test tool, etc.), skip the notice silently.
+                    
+                    
+                    
+                    
                     if (sourceConversation != null) {
-                        // Save-to-notes target is the user's own notes (globalServices.myId).
+                        
                         sendForwardNotice(
                             sourceConversation,
                             forwardContexts,
@@ -633,7 +605,7 @@ class SelectChatsUtils @Inject constructor(
                 }
             }
         } else {
-            // Pure text save-to-notes — no source messages → no notice (nothing to summarize).
+            
             appScope.launch(Dispatchers.IO) {
                 try {
                     sendTextPush(context, content, globalServices.myId, false)
@@ -688,13 +660,12 @@ class SelectChatsUtils @Inject constructor(
         archiveTime: Int? = null,
         confidentialMode: Int? = null,
         scene: ForwardNoticeData.Scene,
-        sourceConversation: For? = null,   // Source conversation (where the forwarded messages originally lived); notice is posted here.
-        sourceAuthorIds: List<String>? = null,   // Deduped/priority-sorted authors of the user-selected messages (outer, not nested).
-        messageCount: Int? = null,   // PRD §5.3: explicit selected-message count; null falls back to sourceAuthorIds.size.
+        sourceConversation: For? = null,   
+        sourceAuthorIds: List<String>? = null,   
+        messageCount: Int? = null,   
         combinedForwardMode: CombinedForwardMode = CombinedForwardMode.UNKNOWN,
-        carriesForeignContent: Boolean = true,   // PRD v2.0 §改动1: see sendForwardNotice.
+        carriesForeignContent: Boolean = true,   
     ) = coroutineScope {
-        // 使用 async 等待所有内部协程完成
         val deferredTasks = forwardContexts.map { forwardContext ->
             async {
                 try {
@@ -712,14 +683,14 @@ class SelectChatsUtils @Inject constructor(
             }
         }
 
-        // fail-fast: any forwardContext failure throws, which bypasses sendForwardNotice below
-        // and propagates to the onConfirm outer try/catch → handleTaskError.
+        
+        
         awaitAll(*deferredTasks.toTypedArray())
 
-        // All original forward messages succeeded → enqueue one notice to the SOURCE conversation
-        // (where the forwarded messages originally lived),telling original participants
-        // "someone forwarded your messages away". This mirrors screenshot-notification semantics.
-        // NOT to the forward target — target-side already sees the forwarded messages themselves.
+        
+        
+        
+        
         if (sourceConversation != null) {
             sendForwardNotice(sourceConversation, forwardContexts, scene, sourceAuthorIds, messageCount, combinedForwardMode, targetConversationId = chatsContact.id, carriesForeignContent = carriesForeignContent)
         } else {
@@ -727,55 +698,54 @@ class SelectChatsUtils @Inject constructor(
         }
     }
 
-    /**
-     * Enqueue a [PushForwardNoticeSendJob] summarizing a completed multi-message forward
-     * into [sourceConversation] (the chat where the forwarded messages originally lived).
-     * The notice tells participants of that original conversation that someone forwarded
-     * their messages away — mirroring screenshot-notification semantics.
-     *
-     * Aggregation rules:
-     *   - authorIds: flatten top-level forwards, take `.author`, dedup (first-seen order).
-     *     Nested forwards don't contribute their own authors — we count/attribute only
-     *     the top-level messages the user chose to forward.
-     *   - totalCount: sum of top-level forwards across all ForwardContexts.
-     *     Nested forwards count as 1 (the container).
-     *
-     * Empty aggregation → drop silently (defensive; should not happen in practice).
-     */
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     private fun sendForwardNotice(
-        sourceConversation: For,   // Source conversation; the notice is posted here.
+        sourceConversation: For,   
         forwardedContexts: List<ForwardContext>,
         scene: ForwardNoticeData.Scene,
-        // Preferred authoritative author list from the caller. PRD §5.3.4: callers SHOULD
-        // pass a deduped + priority-sorted list (NoticeAggregator.computeSortedSourceAuthorIds...).
-        // When non-null, used directly for the notice's authors block.
-        // When null, fall back to the old flat-map aggregation over top-level forwards
-        // (may incorrectly expand a combined-forward message into its nested entries).
+        
+        
+        
+        
+        
         sourceAuthorIds: List<String>? = null,
-        // PRD §5.3: explicit selected-message count (treats a CF bubble as 1). When provided
-        // alongside sourceAuthorIds, this is authoritative — required because the author list
-        // is deduped, so `.size` no longer equals the selected count. When null, falls back
-        // to `sourceAuthorIds.size` (safe only for single-message callers where size == 1).
+        
+        
+        
+        
         messageCount: Int? = null,
-        // PRD v1.0 §5.3 combined-forward mode of the source selection. Default UNKNOWN matches
-        // pre-PRD callers; Phase 4 dispatch sites populate explicitly.
+        
+        
         combinedForwardMode: CombinedForwardMode = CombinedForwardMode.UNKNOWN,
-        // PRD v2.0 §改动1: the forward target conversation id. Used for conditions ② (Saved) and
-        // ③ (target == source). Null skips the target check (e.g. callers without a single target).
+        
+        
         targetConversationId: String? = null,
-        // PRD v2.0 §改动1/§改动2 条件①④: whether the forwarded content includes another person's
-        // real message (judged by real author at the dispatch site — CF by its inner authors).
-        // Default true keeps legacy/share callers tracing; dispatch sites compute it explicitly.
+        
+        
+        
         carriesForeignContent: Boolean = true,
     ) {
-        // PRD v2.0 §改动1 条件①④: nothing of anyone else's left the conversation → no trace.
+        
         if (!carriesForeignContent) {
             L.i { "[ForwardNotice] skip — no foreign content (all self) (conv=${sourceConversation.id})" }
             return
         }
-        // PRD v2.0 §改动1 条件②: forwarding from inside the user's own Saved conversation has no
-        // other audience. 条件③: forwarding back into the source conversation keeps the content
-        // inside it — nothing left. Either way, no trace. Central guard for every forward surface.
+        
+        
         if (sourceConversation.id == globalServices.myId) {
             L.i { "[ForwardNotice] skip — Saved source conversation (conv=${sourceConversation.id})" }
             return
@@ -915,13 +885,13 @@ class SelectChatsUtils @Inject constructor(
         try {
             val attachment = attachmentList[index]
             attachment.key?.let {
-                // One derivation with the repair's isExist/uploadInfo keying (attachmentFileHashOf):
-                // the miss this marks and the re-upload that repairs it must name the same file.
+                
+                
                 val fileHash = attachmentFileHashOf(it)
-                // withContext(Dispatchers.IO) rather than relying on the callers' dispatcher: the
-                // Call.execute() below blocks, so the safety must not be the caller's to provide.
-                // Failures stay non-fatal (see the null-body reasoning below), so they degrade to
-                // "no answer about the file" exactly as an unparsable body always has.
+                
+                
+                
+                
                 val fileExistResp = withContext(Dispatchers.IO) {
                     runCatching {
                         authTokenProvider.withInvalidTokenRetry("forwardRepairIsExist") { token ->
@@ -940,26 +910,25 @@ class SelectChatsUtils @Inject constructor(
                         changeAttachmentDigest(forward, attachment.localId, fileExistResp, fileHash)
                     }
                 } else if (fileExistResp?.exists == false) {
-                    // The server no longer holds this file, so the pointer this leaf carries is dead:
-                    // sending it would deliver an attachment the recipient can never download, with
-                    // no signal to anyone (issue #1181). Zeroing the authority id is the miss signal
-                    // the send job repairs from — it already means "never uploaded" everywhere else,
-                    // and unlike a transient marker it survives the per-target copy, the job's
-                    // serialization and the row, so an interrupted send still knows.
-                    //
-                    // `attachment` IS the tree leaf (checkForwardAttachments collects the leaf objects
-                    // themselves), so this reaches exactly the one leaf the request was made for.
-                    //
-                    // Only an EXPLICIT miss counts. A null body is a transport/parse failure, not an
-                    // answer about the file, and treating it as a miss would turn every flaky isExist
-                    // into a full re-upload of a file the server most likely still has.
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
                     L.w { "[SelectChatsUtils] isExist miss, forward attachment needs re-upload localId=${attachment.localId}" }
                     attachment.authorityId = 0L
                     attachment.fileHash = fileHash
                 }
             }
 
-            // 递归处理下一个附件
             requestPermission(
                 activity,
                 forwardContext,
@@ -1008,15 +977,15 @@ class SelectChatsUtils @Inject constructor(
         val timeStamp = getSafeTimestamp()
         val messageId = "${timeStamp}${globalServices.myId.replace("+", "")}${DEFAULT_DEVICE_ID}"
 
-        // Per TARGET, not per forward action: one ForwardContext instance is dispatched to N targets,
-        // so each target's message needs its own attachment identities (and, below, its own files).
-        // Runs after the isExist authorization has rewritten authorityId/digest on the shared tree, so
-        // the copies inherit the final server identity.
+        
+        
+        
+        
         val targetForwardContext = forwardContext?.deepCopyWithNewAttachmentIdentities()
         if (targetForwardContext != null) {
-            // Best effort: gives the forwarded bubble its file up front so it renders without a
-            // download. Never blocks the send — any failure leaves the copy LOADING, which is the
-            // pre-existing download path, so the send proceeds either way.
+            
+            
+            
             try {
                 val result = withContext(Dispatchers.IO) { ForwardAttachmentMaterializer.materialize(targetForwardContext) }
                 if (result.copied > 0 || result.failed > 0) {
@@ -1059,7 +1028,7 @@ class SelectChatsUtils @Inject constructor(
             )
             L.i { "[Message] forward message success:" + textMessage.id }
             ApplicationDependencies.getJobManager().add(pushTextSendJobFactory.create(null, textMessage))
-            // 注意：WaitDialog 和成功提示现在由调用方管理
+            
         }
         if (archiveTime != null && confidentialMode != null) {
             sendMessage(archiveTime, confidentialMode)
@@ -1068,7 +1037,7 @@ class SelectChatsUtils @Inject constructor(
                 val time = messageArchiveManager.getMessageArchiveTime(forWhat)
                 val response = getConversationConfigs(activity, listOf(accountID))
                 var mode = response.data?.conversations?.find { body -> body.conversation == accountID }?.confidentialMode ?: 0
-                // Check group member limit or bot: force mode to 0
+                
                 if (mode == 1) {
                     if (isGroup) {
                         val memberCount = wcdb.getGroupMemberCount(accountID)
@@ -1081,8 +1050,8 @@ class SelectChatsUtils @Inject constructor(
                 sendMessage(time.toInt(), mode)
             } catch (e: Exception) {
                 L.e { "[SelectChatsUtils] sendTextPush error: ${e.stackTraceToString()}" }
-                // The send never reached the job queue, so the copies materialized above belong to
-                // no row: row-driven deletion and the migration's sweep could never reclaim them.
+                
+                
                 targetForwardContext?.let { ForwardAttachmentMaterializer.discard(it) }
                 throw e
             }
@@ -1100,10 +1069,10 @@ class SelectChatsUtils @Inject constructor(
         val messageId = "${timeStamp}${globalServices.myId.replace("+", "")}${DEFAULT_DEVICE_ID}"
 
         val fileName = FileSystemUtils.getFileName(attachmentUri.path)
-        // Minted before the copy: the file is staged at the address the attachment will be read
-        // from, so the same value keys the directory and the row.
+        
+        
         val attachmentLocalId = UUID.randomUUID().toString()
-        //copy file
+        
         try {
             val filePath = AttachmentPathResolver.stagingFileFor(attachmentLocalId, fileName)
             FileSystemUtils.copy(attachmentUri.path, filePath)
@@ -1113,9 +1082,9 @@ class SelectChatsUtils @Inject constructor(
             val fileSize = FileSystemUtils.getLength(filePath)
 
             val attachment = Attachment(
-                // No server-side id — see the send path in ChatMessageInputFragment: this copy is
-                // located by localId, and the column stays NULL so the legacy row locator cannot
-                // reach it.
+                
+                
+                
                 "",
                 0,
                 mimeType,
@@ -1135,7 +1104,7 @@ class SelectChatsUtils @Inject constructor(
             val time = messageArchiveManager.getMessageArchiveTime(forWhat)
             val response = getConversationConfigs(context, listOf(accountID))
             var mode = response.data?.conversations?.find { body -> body.conversation == accountID }?.confidentialMode ?: 0
-            // Check group member limit or bot: force mode to 0
+            
             if (mode == 1) {
                 if (isGroup) {
                     val memberCount = wcdb.getGroupMemberCount(accountID)
@@ -1183,14 +1152,11 @@ class SelectChatsUtils @Inject constructor(
     }
 }
 
-/**
- * Writes one fast-path authorization response back onto the ONE forward-tree leaf it was requested
- * for, matched by that leaf's local id, at any nesting depth.
- *
- * Matching by the server-side attachment id stopped at the FIRST leaf carrying it, so forwarding the
- * same file twice in one action left every sibling after the first holding a stale digest and a zero
- * authority id. Local ids are unique per leaf, so each response lands on exactly its own leaf.
- */
+
+
+
+
+
 internal fun changeAttachmentDigest(
     forward: Forward,
     attachmentLocalId: String,
@@ -1210,9 +1176,6 @@ internal fun changeAttachmentDigest(
     }
 }
 
-/**
- * 聊天选择底部弹窗Fragment
- */
 @AndroidEntryPoint
 class ChatSelectBottomSheetFragment() : BaseBottomSheetDialogFragment() {
 
@@ -1238,15 +1201,13 @@ class ChatSelectBottomSheetFragment() : BaseBottomSheetDialogFragment() {
         }
     }
 
-    // 使用默认容器（带圆角和拖拽条）
     override fun getContentLayoutResId(): Int = R.layout.chat_layout_forward_select_chat
 
-    // 全屏显示
     override fun isFullScreen(): Boolean = true
 
     override fun onContentViewCreated(view: View, savedInstanceState: Bundle?) {
-        // Fresh instances always get onSelected before show(); a picker restored after recreation
-        // has no callback and would ignore taps (#1440).
+        
+        
         if (onSelected == null) {
             L.i { "[SelectChats] restored picker without callback, dismissing" }
             dismissAllowingStateLoss()
@@ -1258,9 +1219,8 @@ class ChatSelectBottomSheetFragment() : BaseBottomSheetDialogFragment() {
             view.findViewById<TextView>(R.id.title).text = getString(R.string.select_contact)
         }
 
-        val tvClose = view.findViewById<AppCompatTextView>(R.id.tv_close)
-        tvClose.setOnClickListener {
-            dismiss()  // onDismiss 中会处理回调和清理
+        view.findViewById<ImageView>(R.id.iv_close).apply { floatAsTopBarButton(leading = false) }.setOnClickListener {
+            dismiss()
         }
 
         val searchInput = view.findViewById<DifftSearchInputView>(R.id.search_input)
@@ -1277,11 +1237,11 @@ class ChatSelectBottomSheetFragment() : BaseBottomSheetDialogFragment() {
         val recentChatsAdapter = object : ChatsContactSelectAdapter(isContactOnly) {
             override fun onItemClicked(data: ChatsContact?, position: Int) {
                 onSelected?.invoke(data)
-                // 只有联系人选择对话框才在选择后自动关闭
+                
                 if (isContactOnly) {
                     dismiss()
                 }
-                // 聊天选择对话框在选择后保持打开状态，等待发送确认对话框显示
+                
             }
         }
 
@@ -1292,7 +1252,6 @@ class ChatSelectBottomSheetFragment() : BaseBottomSheetDialogFragment() {
             adapter = recentChatsAdapter
         }
 
-        // 使用Fragment的lifecycleScope监听数据流变化，确保Fragment销毁时协程也会取消
         lifecycleScope.launch {
             if (isContactOnly) {
                 selectChatsUtils._contactsFlow.collect { contacts ->
@@ -1310,7 +1269,6 @@ class ChatSelectBottomSheetFragment() : BaseBottomSheetDialogFragment() {
                     }
 
                     withContext(Dispatchers.Main) {
-                        // 检查Fragment是否仍然attached，避免崩溃
                         if (!isAdded) return@withContext
 
                         if (contactsList.isEmpty()) {
@@ -1386,7 +1344,6 @@ class ChatSelectBottomSheetFragment() : BaseBottomSheetDialogFragment() {
                     }
                 }.collect { combinedList ->
                     withContext(Dispatchers.Main) {
-                        // 检查Fragment是否仍然attached，避免崩溃
                         if (!isAdded) return@withContext
 
                         if (combinedList.isEmpty()) {
@@ -1411,12 +1368,12 @@ class ChatSelectBottomSheetFragment() : BaseBottomSheetDialogFragment() {
     override fun onDismiss(dialog: android.content.DialogInterface) {
         super.onDismiss(dialog)
         L.i { "onDismiss" }
-        // 通过回调通知 dialog 关闭，让原始实例清除引用（避免系统返回键关闭时的内存泄漏）
+        
         onSelected?.invoke(null)
-        onSelected = null  // 清除回调引用
+        onSelected = null
         selectChatsUtils.searchKey = ""
     }
 }
 
-/** The optional note typed in the forward dialog, as sent after the forwarded content. */
+
 internal fun forwardNoteText(input: DifftClearableInputView?): String = input?.query.orEmpty().trim()

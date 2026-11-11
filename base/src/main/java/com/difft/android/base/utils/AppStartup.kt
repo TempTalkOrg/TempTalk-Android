@@ -11,20 +11,20 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicInteger
 
-/**
- * Manages our app startup flow.
- *
- * Tasks must be registered before [execute] is called; additions made from inside
- * a running task body are silently dropped (the iteration takes a snapshot up front
- * to guard against [java.util.ConcurrentModificationException]).
- *
- * Tasks run with **continue-on-failure** semantics — a throw does NOT abort the
- * rest of the chain (see #863 for why this matters). Failures are reported to
- * [L]; the goal is "guarantee no crash", not strict fail-fast.
- * If a task's failure should be fatal, handle it in the task body.
- *
- * All public methods must be called on the main thread.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 object AppStartup {
 
     private const val TAG = "AppStartup"
@@ -41,73 +41,73 @@ object AppStartup {
     private var renderStartTime: Long = 0
     private var renderEndTime: Long = 0
 
-    // Coroutine scope for managing startup tasks
+    
     private val startupScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     
-    // Job for managing post-render timeout
+    
     private var postRenderTimeoutJob: Job? = null
     
-    // Job for managing background post-render task
+    
     private var backgroundPostRenderJob: Job? = null
 
-    /**
-     * Records the application creation time.
-     */
+    
+
+
     fun onApplicationCreate() {
         applicationStartTime = System.currentTimeMillis()
         L.i { "[$TAG]Application creation started at: $applicationStartTime" }
     }
 
-    /**
-     * Schedules a task that must happen during app startup in a blocking fashion.
-     * @param name Task name for logging and debugging
-     * @param task The task to execute
-     * @return This AppStartup instance for chaining
-     */
+    
+
+
+
+
+
     fun addBlocking(name: String, task: () -> Unit): AppStartup {
         blocking.add(Task(name, task))
         return this
     }
 
-    /**
-     * Schedules a task that should not block app startup, but should still happen as quickly as possible.
-     * @param name Task name for logging and Crashlytics attribution
-     * @param task The task to execute
-     * @return This AppStartup instance for chaining
-     */
+    
+
+
+
+
+
     fun addNonBlocking(name: String, task: () -> Unit): AppStartup {
         nonBlocking.add(Task(name, task))
         return this
     }
 
-    /**
-     * Schedules a task that should only be executed after all critical UI has been rendered.
-     * If no UI will be shown (i.e. the Application was created in the background),
-     * this will simply happen a short delay after Application#onCreate().
-     * @param name Task name for logging and Crashlytics attribution
-     * @param task The task to execute
-     * @return This AppStartup instance for chaining
-     */
+    
+
+
+
+
+
+
+
     fun addPostRender(name: String, task: () -> Unit): AppStartup {
         postRender.add(Task(name, task))
         return this
     }
 
-    /**
-     * Indicates a UI event critical to initial rendering has started.
-     * This will delay tasks that were scheduled via addPostRender().
-     * You MUST call onCriticalRenderEventEnd() for each invocation of this method.
-     */
+    
+
+
+
+
     fun onCriticalRenderEventStart() {
         if (outstandingCriticalRenderEvents.get() == 0 && postRender.isNotEmpty()) {
             L.i { "[$TAG]Received first critical render event" }
             renderStartTime = System.currentTimeMillis()
 
-            // Cancel any existing timeout job and background post-render job
+            
             postRenderTimeoutJob?.cancel()
             backgroundPostRenderJob?.cancel()
             
-            // Start a new timeout job using coroutines
+            
             postRenderTimeoutJob = startupScope.launch {
                 delay(FAILSAFE_RENDER_TIME)
                 L.w { "[$TAG]Reached the failsafe event for post-render! Either someone forgot to call onCriticalRenderEventEnd(), the activity was started while the phone was locked, or app start is taking a very long time." }
@@ -118,10 +118,10 @@ object AppStartup {
         outstandingCriticalRenderEvents.incrementAndGet()
     }
 
-    /**
-     * Indicates a UI event critical to initial rendering has ended.
-     * Should only be paired with onCriticalRenderEventStart().
-     */
+    
+
+
+
     fun onCriticalRenderEventEnd() {
         if (outstandingCriticalRenderEvents.get() <= 0) {
             L.w { "[$TAG]Too many end events! onCriticalRenderEventStart/End was mismanaged." }
@@ -134,7 +134,7 @@ object AppStartup {
 
             L.i { "[$TAG]First render has finished. Cold Start: ${renderEndTime - applicationStartTime} ms, Render Time: ${renderEndTime - renderStartTime} ms" }
 
-            // Cancel the timeout job since render completed successfully
+            
             postRenderTimeoutJob?.cancel()
             postRenderTimeoutJob = null
             backgroundPostRenderJob?.cancel()
@@ -157,8 +157,8 @@ object AppStartup {
     }
 
     private fun executeBlockingTasks(stopwatch: Stopwatch) {
-        // Snapshot-before-iterate guards against ConcurrentModificationException
-        // if a task body re-enters addBlocking (e.g. via a lazy ContentProvider).
+        
+        
         val tasks = blocking.toList()
         blocking.clear()
         tasks.forEach { task ->
@@ -197,7 +197,7 @@ object AppStartup {
                     }
 
                 } catch (e: CancellationException) {
-                    // Preserve structured-concurrency cancellation.
+                    
                     throw e
                 } catch (e: Throwable) {
                     reportTaskFailure(kind = "non-blocking", taskName = task.name, e = e)
@@ -239,16 +239,16 @@ object AppStartup {
         }
     }
 
-    /**
-     * Logs to [L] (the local log file). The call is wrapped so a failing sink does
-     * not break startup. The goal is "guarantee no crash", not full log fidelity —
-     * `android.util.Log` was intentionally excluded since it does not reach the local
-     * log file. (Crashlytics is unavailable on the F-Droid build.)
-     *
-     * The stack trace is inlined into the message via `stackTraceToString()` so it is
-     * always present in the file log regardless of the Timber formatter's
-     * throwable-handling policy.
-     */
+    
+
+
+
+
+
+
+
+
+
     private fun reportTaskFailure(kind: String, taskName: String, e: Throwable) {
         val displayName = taskName.ifEmpty { "<anonymous>" }
         val label = "[$TAG] $kind task '$displayName' failed — continuing"
@@ -256,9 +256,9 @@ object AppStartup {
         runCatching { L.e { "$label: ${e.stackTraceToString()}" } }
     }
 
-    /**
-     * Represents a startup task with name and runnable.
-     */
+    
+
+
     private data class Task(
         val name: String,
         val runnable: () -> Unit
@@ -268,7 +268,7 @@ object AppStartup {
         return applicationStartTime
     }
 
-    /** Test-only: singleton state can leak across tests if [execute] is not reached. */
+    
     @VisibleForTesting
     internal fun reset() {
         blocking.clear()
@@ -282,9 +282,9 @@ object AppStartup {
         postRenderTimeoutJob = null
         backgroundPostRenderJob?.cancel()
         backgroundPostRenderJob = null
-        // Cancel anonymous IO children launched by executeNonBlockingTasks /
-        // executePostRender — without this they survive teardown and can race
-        // against the next test (e.g. CountDownLatch in non-blocking test).
+        
+        
+        
         startupScope.coroutineContext[Job]?.children?.forEach { it.cancel() }
     }
 }

@@ -31,7 +31,7 @@ import java.io.IOException
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** [MigrationPauseAuthProbe]: the old login's end is detected while the pause waits for it (T1, T24, #1382 A09). */
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class MigrationPauseAuthProbeTest {
 
@@ -85,7 +85,7 @@ class MigrationPauseAuthProbeTest {
     fun `a 401 for a credential replaced while in flight is ignored`() = runTest {
         awaitingLogin()
         coEvery { probeCalls() } answers {
-            // A re-login lands while the request is on the wire.
+            
             every { userManager.getUserData() } returns UserData(baseAuth = "new-auth")
             throw AuthorizationFailedException(401, "revoked")
         }
@@ -142,7 +142,7 @@ class MigrationPauseAuthProbeTest {
         coEvery { probeCalls() } returns Unit
         startProbe()
         runCurrent()
-        messaging.pauseMessaging() // EXPORTING
+        messaging.pauseMessaging() 
         runCurrent()
         advanceTimeBy(30_000L)
         coVerify(exactly = 0) { deviceRepository.checkDeviceAuthAs(any(), any(), any()) }
@@ -153,7 +153,7 @@ class MigrationPauseAuthProbeTest {
         advanceTimeBy(30_000L)
         coVerify(exactly = 0) { deviceRepository.checkDeviceAuthAs(any(), any(), any()) }
 
-        // Back in front: asked at once.
+        
         foreground.value = true
         runCurrent()
         coVerify(exactly = 1) { probeCalls() }

@@ -22,7 +22,7 @@ import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
 
-/** The forced-update gate expires 30 minutes after a hand-off and the normal recheck restores it (#1355). */
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class StartupUpdateCheckerTest {
 
@@ -75,7 +75,7 @@ class StartupUpdateCheckerTest {
         advance(StartupUpdateChecker.START_DELAY_MS + 1)
         advance(31 * minute)
         checker.onForcedHandOff()
-        // Same forced offer again, 30+ min after the first check and 2 s into the hand-off window.
+        
         checker.onSessionStart()
         advance(StartupUpdateChecker.START_DELAY_MS + 1)
         assertEquals(forced, checker.blockingForced.value)

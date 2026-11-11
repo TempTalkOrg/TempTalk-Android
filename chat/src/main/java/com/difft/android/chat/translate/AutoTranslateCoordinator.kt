@@ -43,25 +43,25 @@ import org.difft.app.database.hydration.MessageHydrator
 import org.difft.app.database.models.MessageModel
 import java.util.concurrent.ConcurrentHashMap
 
-/** Why a visible range is being reported. Decides nothing here; kept for the diagnostics line. */
+
 enum class VisibleReason { FIRST_SCREEN, SCROLL_IDLE, WINDOW_CHANGED }
 
-/**
- * Owns auto-translate for ONE conversation page. Created by `ChatMessageViewModel`, torn down with
- * it.
- *
- * Delivery is driven by ONE long-lived collector on [TranslateQueue.completions], not by whoever
- * happens to be awaiting a handle. Every result for this conversation lands in the overlay (and,
- * when the state is persistable, in the database) whether it was awaited or not — so giving up on a
- * wait, re-reporting a visible range or scrolling away never loses a translation.
- *
- * "Never loses" is scoped to the page's lifetime: a completion that resolves after [close] is
- * dropped, so re-entering the conversation re-translates those messages. Only results already
- * computed by then are drained and written.
- *
- * [overlay] is authoritative over hydration for the page's lifetime: a window re-query in flight
- * when a translation is written would otherwise hand back the pre-write value.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 class AutoTranslateCoordinator @AssistedInject constructor(
     @Assisted private val forWhat: For,
     @Assisted private val scope: CoroutineScope,
@@ -77,31 +77,31 @@ class AutoTranslateCoordinator @AssistedInject constructor(
 
     private val _overlay = MutableStateFlow<Map<String, TranslateData>>(emptyMap())
 
-    /** messageId -> the translation state the page must render, whatever the database says. */
+    
     val overlay: StateFlow<Map<String, TranslateData>> = _overlay.asStateFlow()
 
     private val ownerKey = forWhat.id
     private val manualOwnerKey = "${forWhat.id}#manual"
 
-    /** "$messageId#$target", claimed with `add()` so admission is a single atomic step. */
+    
     private val attempted = ConcurrentHashMap.newKeySet<String>()
     private val userDisabled = ConcurrentHashMap.newKeySet<String>()
 
-    /** Target language of the last manual request per message, so an inline retry can repeat it. */
+    
     private val manualTargets = ConcurrentHashMap<String, TranslateTargetLanguage>()
 
-    /** Latest manual attempt per message; an older wait that outlives it must not write its outcome. */
+    
     private val manualAttempt = ConcurrentHashMap<String, Any>()
 
     private val pendingManual = PendingManualTranslations()
 
-    /** The current window, kept so a visible-range report can resolve ids to bodies. */
+    
     private val windowMessages = ConcurrentHashMap<String, TextChatMessage>()
 
     @Volatile
     private var target: TranslateLang? = null
 
-    /** False until the stored value has been read, so the first apply is never skipped as a no-op. */
+    
     @Volatile
     private var settingApplied = false
 
@@ -116,37 +116,37 @@ class AutoTranslateCoordinator @AssistedInject constructor(
 
     private val pendingResults = mutableMapOf<String, TranslateData>()
 
-    /**
-     * Attempt key (message + target) -> a gate completed once that attempt's result has been handled
-     * by the completions collector. Keyed by attempt, not by message: after a target switch a
-     * leftover old-target completion must not open the wait for the new target.
-     * A budget wait has to wait for DELIVERY, not for the queue handle: the handle is
-     * resolved by the worker BEFORE the collector has written anything, so joining it can return to
-     * an empty batch and push the translation out to the next 800 ms flush — the very jump the
-     * budget exists to prevent.
-     */
+    
+
+
+
+
+
+
+
+
     private val deliveries = ConcurrentHashMap<String, CompletableDeferred<Unit>>()
 
-    /**
-     * Guards [pendingResults] and [flushJob]. A plain monitor rather than a `Mutex` because
-     * [close] — which is not a suspending function — has to drain the batch before the page's scope
-     * goes away; nothing inside the critical sections suspends.
-     */
+    
+
+
+
+
     private val batchLock = Any()
     private var flushJob: Job? = null
 
-    /**
-     * Set by [close]. It suppresses ALL post-close completion handling, not just the flush timer: a
-     * result arriving afterwards is discarded outright — no overlay update, no batch entry, no
-     * write — because the page it was computed for is gone.
-     */
+    
+
+
+
+
     @Volatile
     private var closed = false
 
-    /**
-     * The queue's session epoch as of this page. Re-read immediately before every write that runs on
-     * [appScope]; see [persistIfCurrent].
-     */
+    
+
+
+
     private val startGeneration = queue.generation
 
     fun start() {
@@ -165,7 +165,7 @@ class AutoTranslateCoordinator @AssistedInject constructor(
             .onEach { applySetting(it.translateSetting ?: 0) }
             .launchIn(scope)
 
-        // A model finishing its download is the moment the current viewport becomes translatable.
+        
         modelStore.state
             .map { target?.let { t -> modelStore.isReady(t) } ?: false }
             .distinctUntilChanged()
@@ -173,18 +173,17 @@ class AutoTranslateCoordinator @AssistedInject constructor(
             .onEach { onVisibleRange(lastVisibleIds, VisibleReason.FIRST_SCREEN) }
             .launchIn(scope)
 
-        // ...and the moment a manual request that gave up on the pack can run without another tap.
+        
         modelStore.state
             .onEach { resumePendingManual(it) }
             .launchIn(scope)
     }
 
-    /**
-     * Scenario A: a bounded wait so a brand-new incoming message and its translation reach the list
-     * in the same frame. Returns immediately when the setting is off, the model is missing or the
-     * emission carries no new candidate, and never fails — a missed budget is picked up by the
-     * batch channel.
-     */
+    
+
+
+
+
     suspend fun awaitNewIncoming(behavior: ChatMessageListBehavior) {
         val lang = target ?: return
         if (!modelStore.isReady(lang)) return
@@ -211,10 +210,10 @@ class AutoTranslateCoordinator @AssistedInject constructor(
         }
     }
 
-    /**
-     * Records the window that was just assembled. Pure bookkeeping — the overlay is already a
-     * combine source, so nothing is applied here.
-     */
+    
+
+
+
     fun onWindowAssembled(messages: List<ChatMessage>) {
         val ids = HashSet<String>(messages.size)
         var maxTs = Long.MIN_VALUE
@@ -228,7 +227,7 @@ class AutoTranslateCoordinator @AssistedInject constructor(
         if (maxTs > lastWindowMaxTs) lastWindowMaxTs = maxTs
     }
 
-    /** Scenarios B and C: translate what the user is actually looking at. */
+    
     fun onVisibleRange(messageIds: List<String>, reason: VisibleReason) {
         lastVisibleIds = messageIds
         val lang = target ?: return
@@ -239,15 +238,15 @@ class AutoTranslateCoordinator @AssistedInject constructor(
             }
             if (inputs.isEmpty()) return@launch
             L.i { "[Translate] visible room=${forWhat.id} reason=$reason n=${inputs.size}" }
-            // Deliberately NOT cancelling anything still in flight for ids that are still visible:
-            // the queue's key dedup merges them, and cancelling a wait would only lose the batching.
+            
+            
             val waits = inputs.map { submitAuto(it, lang, TranslateQueue.Priority.VISIBLE) }
             withTimeoutOrNull(VISIBLE_BATCH_BUDGET_MS) { waits.forEach { it.await() } }
             flush()
         }
     }
 
-    /** Long-press "translate": an explicit user action, so it gets a placeholder and error states. */
+    
     fun translateManually(message: TextChatMessage, targetLanguage: TranslateTargetLanguage) {
         val lang = if (targetLanguage == TranslateTargetLanguage.ZH) TranslateLang.ZH else TranslateLang.EN
         val text = manualBody(message)
@@ -260,17 +259,17 @@ class AutoTranslateCoordinator @AssistedInject constructor(
         val attempt = Any().also { manualAttempt[message.id] = it }
 
         scope.launch {
-            // The user may turn translation off, leave the page, or start a newer attempt (retry,
-            // pack-ready resume) while the pack downloads; only the latest attempt owns the row.
+            
+            
             fun stillWanted() = !closed && message.id !in userDisabled && manualAttempt[message.id] === attempt
             val failedModel = previous.copy(translateStatus = TranslateStatus.FailedModel)
             try {
-                // Waited for here rather than in the queue worker, so a pack download never
-                // stalls the serial queue for every other conversation.
+                
+                
                 val ready = modelStore.awaitReady(lang)
                 if (!stillWanted()) return@launch
-                // A pack the engine found missing (the source's) is waited for once more here; every
-                // other result reaches the page through the completions collector.
+                
+                
                 val result = if (ready) {
                     submitWaitingForPacks(modelStore, ::stillWanted) {
                         queue.submit(
@@ -291,8 +290,8 @@ class AutoTranslateCoordinator @AssistedInject constructor(
                     _overlay.update { it + (message.id to failedModel) }
                 }
             } catch (e: CancellationException) {
-                // The page going away cancels both the wait and the queued handle; roll the
-                // optimistic placeholder back so a surviving observer never sees a frozen spinner.
+                
+                
                 if (manualAttempt[message.id] === attempt) _overlay.update { it + (message.id to previous) }
                 throw e
             } catch (e: Exception) {
@@ -302,7 +301,7 @@ class AutoTranslateCoordinator @AssistedInject constructor(
         }
     }
 
-    /** Long-press "turn translation off": hide it and remember the choice for this page session. */
+    
     fun translateOff(message: TextChatMessage) {
         val current = currentData(message.id) ?: return
         val off = current.copy(translateStatus = TranslateStatus.Invisible)
@@ -312,20 +311,20 @@ class AutoTranslateCoordinator @AssistedInject constructor(
         persistOne(message.id, off)
     }
 
-    /** Inline retry on a failed manual translation. */
+    
     fun retry(messageId: String) {
         val message = windowMessages[messageId] ?: return
         val targetLanguage = manualTargets[messageId] ?: return
         translateManually(message, targetLanguage)
     }
 
-    /**
-     * Teardown, called from `onCleared()` — i.e. AFTER AndroidX has already cancelled the page's
-     * scope. Whatever is still waiting for the 800 ms batch timer is therefore drained here and
-     * written on [appScope]: the overlay is irrelevant once the page is gone, but a translation that
-     * was already computed must not be thrown away — it would be recomputed, and paid for again in
-     * backend time, on the next visit.
-     */
+    
+
+
+
+
+
+
     fun close() {
         closed = true
         queue.cancelOwner(ownerKey)
@@ -345,13 +344,13 @@ class AutoTranslateCoordinator @AssistedInject constructor(
         L.i { "[Translate] coordinator closed room=${forWhat.id} drained=${leftover.size}" }
     }
 
-    // ---------------------------------------------------------------- internals
+    
 
-    /**
-     * Submits and hands back the message's delivery gate — see [deliveries]. The queue handle is
-     * left to the queue: it is what [TranslateQueue.cancelOwner] cancels, and nothing here has to
-     * observe that.
-     */
+    
+
+
+
+
     private fun submitAuto(
         input: TranslateJobInput,
         lang: TranslateLang,
@@ -375,13 +374,13 @@ class AutoTranslateCoordinator @AssistedInject constructor(
         deliveries.remove(attemptKey)?.complete(Unit)
     }
 
-    /** Frees every waiter whose job has just been dropped, so no wait outlives its own work. */
+    
     private fun releaseDeliveries() {
         deliveries.values.forEach { it.complete(Unit) }
         deliveries.clear()
     }
 
-    // Reads the emitted snapshot: the store publishes state before refreshing the cache isReady() reads.
+    
     private fun resumePendingManual(models: Map<ModelId, ModelState>) {
         if (closed) return
         pendingManual.takeReady { models[it] == ModelState.Ready }
@@ -396,26 +395,26 @@ class AutoTranslateCoordinator @AssistedInject constructor(
         val window = behavior.messageList
         if (window.isEmpty()) return emptyList()
         if (lastWindowIds.isEmpty()) {
-            // First screen while sitting at the bottom deserves the same one-shot treatment as a
-            // live message: take the newest few instead of waiting for the visible-range pass.
+            
+            
             return window.sortedBy { it.systemShowTimestamp }.takeLast(FIRST_SCREEN_MAX)
         }
         return window.filter { it.id !in lastWindowIds && it.systemShowTimestamp > lastWindowMaxTs }
     }
 
-    /**
-     * A build with no translate backend reads every stored setting as off: the row stays in the
-     * database untouched, so the conversation translates again as soon as it runs on a build that
-     * can.
-     */
+    
+
+
+
+
     private suspend fun applySetting(value: Int) {
         val newTarget = if (backend.isSupported) TranslateLang.fromSetting(value) else null
         if (settingApplied && newTarget == target) return
         settingApplied = true
         target = newTarget
         attempted.clear()
-        // Only the automatic owner: a manual translation the user is waiting for must survive a
-        // setting change.
+        
+        
         queue.cancelOwner(ownerKey)
         releaseDeliveries()
         val ready = newTarget != null && modelStore.isReady(newTarget)
@@ -431,31 +430,31 @@ class AutoTranslateCoordinator @AssistedInject constructor(
         try {
             deliver(completion, isManual)
         } finally {
-            // AFTER the result has reached the pending batch, and on every early return above it —
-            // stale target, released claim, closed page — so a budget wait is never left hanging.
+            
+            
             if (!isManual) completeDelivery(completion.key)
         }
     }
 
     private suspend fun deliver(completion: TranslateQueue.Completion, isManual: Boolean) {
         if (closed) return
-        // A result for a target the conversation has since moved away from is stale; a manual
-        // result is what the user explicitly asked for, so it is never filtered.
+        
+        
         if (!isManual && completion.target != target) return
-        // A manual one is owned by translateManually, which waits for the pack and retries.
+        
         if (isManual && completion.result is TranslateResult.ModelNotReady) return
 
         val data = mapResult(completion, isManual)
         if (data == null) {
             if (completion.result is TranslateResult.ModelNotReady) {
-                // Release the claim: the model-ready subscription will sweep this message again.
+                
                 attempted.remove(completion.key)
             }
             return
         }
 
         if (isManual) {
-            // Turned off while the translation was queued: the Invisible row the user chose stands.
+            
             if (completion.messageId in userDisabled) return
             pendingManual.remove(completion.messageId)
             _overlay.update { it + (completion.messageId to data) }
@@ -475,11 +474,11 @@ class AutoTranslateCoordinator @AssistedInject constructor(
         }
     }
 
-    /**
-     * AUTO renders successes only: a silent skip is the whole point of an automatic mode, and an
-     * inline "translation failed" row under every message of a screenful would be noise the user
-     * never asked for. MANUAL is an explicit action and therefore reports every outcome.
-     */
+    
+
+
+
+
     private fun mapResult(completion: TranslateQueue.Completion, isManual: Boolean): TranslateData? {
         val previous = currentData(completion.messageId) ?: EMPTY_TRANSLATE_DATA
         return when (val result = completion.result) {
@@ -495,12 +494,12 @@ class AutoTranslateCoordinator @AssistedInject constructor(
                 )
             }
 
-            // AUTO skips it. The engine answers MANUAL with the original as a Translated result, so
-            // the manual arm is defensive: it must still replace the placeholder, never leave it up.
+            
+            
             TranslateResult.SameLanguage ->
                 if (isManual) previous.copy(translateStatus = TranslateStatus.SameLanguage) else null
 
-            // Manual: handled by translateManually before delivery. Auto: silently re-swept.
+            
             is TranslateResult.ModelNotReady -> null
 
             is TranslateResult.Unsupported -> when {
@@ -533,26 +532,26 @@ class AutoTranslateCoordinator @AssistedInject constructor(
                 "skippedByStatus=${batch.size - persistable.size}"
         }
         if (persistable.isEmpty()) return
-        // [appScope], not [scope]: the results are already rendered, so a page teardown racing this
-        // launch would only lose the row and pay for the same translation again on the next visit.
+        
+        
         appScope.launch(Dispatchers.IO) { persistBatch(persistable) }
     }
 
-    /**
-     * Deliberately no `RoomChangeTracker.trackRoom` here: it re-runs the conversation page's most
-     * expensive query, and every incoming message would trigger it twice.
-     */
+    
+
+
+
     private suspend fun persistBatch(batch: Map<String, TranslateData>) =
         persistIfCurrent("n=${batch.size}") {
             dbMessageStore.updateMessageTranslateDataBatch(forWhat.id, batch)
         }
 
-    /**
-     * A user action's write must survive leaving the page — otherwise "turn translation off"
-     * followed by a back press silently comes back on the next visit. [appScope], not [scope]:
-     * AndroidX cancels the ViewModel's scope BEFORE `onCleared()` runs [close], so a write launched
-     * on the page's own scope in the same gesture would never start.
-     */
+    
+
+
+
+
+
     private fun persistOne(messageId: String, data: TranslateData) {
         if (!data.translateStatus.isPersistable) return
         appScope.launch(Dispatchers.IO) {
@@ -562,16 +561,16 @@ class AutoTranslateCoordinator @AssistedInject constructor(
         }
     }
 
-    /**
-     * The single guard for every translate write. [NonCancellable] because the results are already
-     * in the overlay, so losing the row to a page teardown would silently re-translate the same
-     * messages on the next visit.
-     *
-     * Running on a scope that outlives the page also means outliving a logout that is wiping the
-     * database, so the queue's epoch is re-read HERE, inside the uncancellable block, rather than at
-     * launch time: a bump since [startGeneration] means the account this translation belongs to is
-     * gone and the row must not be written.
-     */
+    
+
+
+
+
+
+
+
+
+
     private suspend fun persistIfCurrent(what: String, write: suspend () -> Unit) =
         withContext(NonCancellable) {
             if (queue.generation != startGeneration) {

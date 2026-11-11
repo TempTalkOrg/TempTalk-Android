@@ -4,16 +4,16 @@ import android.graphics.Canvas
 import android.graphics.Matrix
 import android.graphics.RectF
 
-/**
- * Tracks the current matrix for a canvas.
- *
- * This is because you cannot reliably call [Canvas.setMatrix].
- * [Canvas.getMatrix] provides this hint in its documentation:
- * "track relevant transform state outside of the canvas."
- *
- * To achieve this, any changes to the canvas matrix must be done via this class, including save and
- * restore operations where the matrix was altered in between.
- */
+
+
+
+
+
+
+
+
+
+
 class CanvasMatrix(private val canvas: Canvas) {
 
     private val canvasMatrix = Matrix()

@@ -20,11 +20,11 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/**
- * [NotificationContentDisplaySettingsContent] contract (issue #1223): every tap reports through
- * the callback, including a tap on the already-selected row — the host closes the screen on any
- * tap, so suppressing the unchanged case would strand the user on the page.
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34])
@@ -37,7 +37,7 @@ class NotificationContentDisplaySettingsContentTest {
 
     private fun string(resId: Int) = context.getString(resId)
 
-    // T28
+    
     @Test
     fun `tapping the already-selected row still reports it`() {
         val reported = mutableListOf<Int>()
@@ -63,7 +63,7 @@ class NotificationContentDisplaySettingsContentTest {
         assertEquals(listOf(NotificationContentDisplayType.NAME_AND_CONTENT.value), reported)
     }
 
-    // T28
+    
     @Test
     fun `every option renders and an unselected tap reports its value`() {
         val reported = mutableListOf<Int>()

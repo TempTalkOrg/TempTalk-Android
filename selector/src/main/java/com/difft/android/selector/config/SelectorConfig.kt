@@ -34,12 +34,12 @@ import com.difft.android.selector.thread.PictureThreadUtils
 import com.difft.android.selector.utils.FileDirMap
 import com.difft.android.selector.utils.SdkVersionUtils
 
-/**
- * PictureSelector config hub. The `@JvmField` annotations on the public fields are retained from
- * the staged Java→Kotlin port (harmless for Kotlin callers now that the module is 100% Kotlin).
- * Field-level dead-code pruning of the remaining unused config fields is deliberately deferred to
- * a follow-up (issue #1077).
- */
+
+
+
+
+
+
 class SelectorConfig {
     @JvmField var chooseMode: Int = 0
     @JvmField var isOnlyCamera: Boolean = false
@@ -85,7 +85,7 @@ class SelectorConfig {
     @JvmField var isHidePreviewDownload: Boolean = false
     @JvmField var isHidePreviewShare: Boolean = false
     @JvmField var isShowConfidentialTip: Boolean = false
-    /** External preview: hide the shared bottom-centre close button (keeps the title-bar back only). */
+    
     @JvmField var isHideBottomClose: Boolean = false
     @JvmField var isWithVideoImage: Boolean = false
     @JvmField var queryOnlyImageList: MutableList<String> = ArrayList()
@@ -239,7 +239,7 @@ class SelectorConfig {
         isUseSystemVideoPlayer = false
     }
 
-    // Callback listening
+    
     @JvmField var imageEngine: ImageEngine? = null
     @JvmField var compressEngine: CompressEngine? = null
     @JvmField var compressFileEngine: CompressFileEngine? = null
@@ -265,10 +265,10 @@ class SelectorConfig {
     @JvmField var onSelectAnimListener: OnSelectAnimListener? = null
     @JvmField var onCustomLoadingListener: OnCustomLoadingListener? = null
 
-    // selected current album folder
+    
     @JvmField var currentLocalMediaFolder: LocalMediaFolder? = null
 
-    // selected result
+    
     @JvmField val selectedResult = ArrayList<LocalMedia>()
 
     @Synchronized
@@ -287,7 +287,7 @@ class SelectorConfig {
     val resultFirstMimeType: String
         get() = if (selectedResult.size > 0) selectedResult[0].mimeType else ""
 
-    // selected preview result
+    
     @JvmField val selectedPreviewResult = ArrayList<LocalMedia>()
 
     fun addSelectedPreviewResult(list: ArrayList<LocalMedia>?) {
@@ -297,7 +297,7 @@ class SelectorConfig {
         }
     }
 
-    // all album data source
+    
     @JvmField val albumDataSource = ArrayList<LocalMediaFolder>()
 
     fun addAlbumDataSource(list: List<LocalMediaFolder>?) {
@@ -307,7 +307,7 @@ class SelectorConfig {
         }
     }
 
-    // all data source
+    
     @JvmField val dataSource = ArrayList<LocalMedia>()
 
     fun addDataSource(list: ArrayList<LocalMedia>?) {

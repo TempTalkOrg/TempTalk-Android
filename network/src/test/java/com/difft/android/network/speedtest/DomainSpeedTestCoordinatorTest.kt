@@ -26,13 +26,13 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/**
- * Host selection, marks and exhaustion of [DomainSpeedTestCoordinator] (#1396). Probe publication,
- * resets and probe triggers are in [DomainSpeedTestCoordinatorProbeTest].
- *
- * Post-issue-#725 the persisted best host lives in the unified UserManager snapshot; the harness's
- * in-memory [com.difft.android.base.user.UserManager] verifies level-2 fallback end to end.
- */
+
+
+
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(manifest = Config.NONE)
@@ -41,7 +41,7 @@ class DomainSpeedTestCoordinatorTest {
     private val h = CoordinatorHarness()
     private val coordinator get() = h.coordinator
 
-    // -- getBestHostSync --
+    
 
     @Test
     fun `getBestHostSync returns snapshot host when available`() {
@@ -89,12 +89,12 @@ class DomainSpeedTestCoordinatorTest {
 
     @Test
     fun `getBestHostSync falls back to resolver host from global config`() {
-        // Snapshot empty + no persisted host → level-3 fallback resolves the chat
-        // host pool from services + domains via ServiceUrlResolver.
+        
+        
         assertEquals(A, coordinator.getBestHostSync())
     }
 
-    // T12 — a host the probe found down is chosen by no tier, persisted or not.
+    
     @Test
     fun `a host the probe found down is chosen by no tier`() {
         h.probe(A to true, B to false)
@@ -106,9 +106,9 @@ class DomainSpeedTestCoordinatorTest {
         assertEquals(C, coordinator.firstAvailableHost(listOf(B, C)))
     }
 
-    // -- exhaustion (T11) --
+    
 
-    // T11 — every host marked and the probe throttled: availability still resets at once.
+    
     @Test
     fun `exhausted pool resets availability even when the probe is throttled`() = runTest {
         coEvery { h.speedTester.testHosts(any()) } returns listOf(h.up(A), h.up(B), h.up(C))
@@ -157,7 +157,7 @@ class DomainSpeedTestCoordinatorTest {
         assertEquals(listOf(A, B, C), coordinator.getAllHostsRanked().sorted())
     }
 
-    // -- markHostUnavailable --
+    
 
     @Test
     fun `markHostUnavailable keeps the host out of every tier until it is healthy again`() {
@@ -176,7 +176,7 @@ class DomainSpeedTestCoordinatorTest {
         assertEquals(before, coordinator.currentGeneration())
     }
 
-    // T14 — no usable network: a connect failure says nothing about the host.
+    
     @Test
     fun `markHostUnavailable is dropped while the device is offline`() {
         h.online = false
@@ -188,9 +188,9 @@ class DomainSpeedTestCoordinatorTest {
         assertEquals(listOf(A, B, C), coordinator.getAllHostsRanked())
     }
 
-    // -- healthy answers (T13) --
+    
 
-    // T13 — any answer from a marked host makes it eligible again.
+    
     @Test
     fun `a healthy answer makes a marked host eligible again`() {
         coordinator.markHostUnavailable(A)
@@ -220,7 +220,7 @@ class DomainSpeedTestCoordinatorTest {
         assertEquals(before, coordinator.currentGeneration())
     }
 
-    // #1396 — a one-host pool (proxy mode with one tunnel domain) has nowhere to fail over to.
+    
     @Test
     fun `marking the only pool host writes nothing and never exhausts the pool`() {
         h.setProxy(P1)
@@ -242,7 +242,7 @@ class DomainSpeedTestCoordinatorTest {
         assertEquals(P2, coordinator.firstAvailableHost(listOf(P1, P2)))
     }
 
-    // #1396 — only a real down to up change is logged, not every answer while a probe is in flight.
+    
     @Test
     fun `a healthy answer logs only when it clears a down host`() = runTest {
         val lines = CopyOnWriteArrayList<String>()
@@ -274,7 +274,7 @@ class DomainSpeedTestCoordinatorTest {
         }
     }
 
-    // -- firstAvailableHost / eligibleHosts (proxy embedded-host failover) --
+    
 
     @Test
     fun `firstAvailableHost returns first candidate when none marked`() {
@@ -303,7 +303,7 @@ class DomainSpeedTestCoordinatorTest {
         assertEquals(P1, coordinator.firstAvailableHost(listOf(P1, P2)))
     }
 
-    // -- resetSession --
+    
 
     @Test
     fun `resetSession clears marks`() {

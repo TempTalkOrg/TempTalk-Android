@@ -20,10 +20,10 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/**
- * [HeaderInterceptor] resolving each endpoint's own [Auth] declaration — the one thing that decides
- * which `Authorization` goes on the wire (issues #1235, #1231).
- */
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class)
 class HeaderInterceptorDeclaredTest {
@@ -46,7 +46,7 @@ class HeaderInterceptorDeclaredTest {
         failFastOnMissingDeclaration = failFast,
     )
 
-    // T28 — a NONE endpoint strips Authorization and keeps Content-Type.
+    
     @Test
     fun `none strips authorization and preserves content type`() {
         val request = requestOf(NoAuthService::class.java) { it.strip() }
@@ -62,7 +62,7 @@ class HeaderInterceptorDeclaredTest {
         assertEquals("application/json", sent.single.headers["Content-Type"])
     }
 
-    // T29 — a JWT endpoint carries the token and never the Basic credential.
+    
     @Test
     fun `jwt sends the token and never basic`() {
         val (chain, sent) = chainOf(requestOf(JwtService::class.java) { it.token() }, 200)
@@ -73,7 +73,7 @@ class HeaderInterceptorDeclaredTest {
         assertFalse(sent.single.headers["Authorization"]!!.contains("Basic"))
     }
 
-    // T30 — an EXPLICIT endpoint keeps the header its caller built (the login pre-persist window).
+    
     @Test
     fun `explicit leaves the caller header untouched`() {
         val tokens = FakeAuthTokenProvider(token = JWT)
@@ -90,7 +90,7 @@ class HeaderInterceptorDeclaredTest {
         assertEquals(0, tokens.refreshCalls)
     }
 
-    // T31 — a JWT 401 refreshes once and retries the SAME url that answered.
+    
     @Test
     fun `a jwt 401 refreshes once and retries the same url`() {
         val tokens = FakeAuthTokenProvider(token = STALE, refreshedTo = FRESH)
@@ -106,12 +106,12 @@ class HeaderInterceptorDeclaredTest {
         assertEquals(sent.all[0].url, sent.all[1].url)
         assertEquals(STALE, tokens.lastRejected)
         assertEquals(1, tokens.refreshCalls)
-        // The rejected response is released; the one handed back to the caller is not.
+        
         assertTrue(sent.bodies[0].closed)
         assertFalse(sent.bodies[1].closed)
     }
 
-    // T32 — a second 401 is terminal: one retry, one refresh.
+    
     @Test
     fun `a second 401 throws after exactly one retry`() {
         val tokens = FakeAuthTokenProvider(token = STALE, refreshedTo = FRESH)
@@ -125,7 +125,7 @@ class HeaderInterceptorDeclaredTest {
         assertTrue(sent.bodies.all { it.closed })
     }
 
-    // T33 — the Signal-API contract: a raw 401 is returned, not converted, and not refreshed.
+    
     @Test
     fun `without rejection handling a 401 is returned raw`() {
         val tokens = FakeAuthTokenProvider(token = JWT, refreshedTo = FRESH)
@@ -138,7 +138,7 @@ class HeaderInterceptorDeclaredTest {
         assertEquals(0, tokens.refreshCalls)
     }
 
-    // T34 — a one-shot body cannot be replayed, so no retry is attempted.
+    
     @Test
     fun `a one-shot body is not retried`() {
         val tokens = FakeAuthTokenProvider(token = STALE, refreshedTo = FRESH)
@@ -155,7 +155,7 @@ class HeaderInterceptorDeclaredTest {
         assertTrue(sent.bodies.single().closed)
     }
 
-    // T35 — an undeclared endpoint falls back to implicit basic instead of losing its credential.
+    
     @Test
     fun `an undeclared endpoint falls back to implicit basic`() {
         val (chain, sent) = chainOf(requestOf(UndeclaredService::class.java) { it.undeclared() }, 200)
@@ -172,7 +172,7 @@ class HeaderInterceptorDeclaredTest {
         assertFailsWith<IllegalStateException> { interceptor(failFast = true).intercept(chain) }
     }
 
-    // A refresh that returns the same token is not worth a retry.
+    
     @Test
     fun `no retry when the refresh returns the same token`() {
         val tokens = FakeAuthTokenProvider(token = STALE, refreshedTo = STALE)
@@ -183,8 +183,8 @@ class HeaderInterceptorDeclaredTest {
         assertEquals(1, sent.size)
     }
 
-    // T49 — a declared BASIC endpoint's 401 is terminal: nothing is refreshed, nothing is retried,
-    // and the rejected response is closed rather than leaked.
+    
+    
     @Test
     fun `a declared basic 401 is not refreshed and its response is closed`() {
         val tokens = FakeAuthTokenProvider(token = JWT, refreshedTo = FRESH)

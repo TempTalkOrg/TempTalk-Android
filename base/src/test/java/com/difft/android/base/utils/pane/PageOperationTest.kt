@@ -18,11 +18,11 @@ import org.robolectric.Robolectric
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
-/**
- * [launchOutlivingPage]: a group leave, key rotation or friend removal started from a detail page
- * finishes its server write and local persist even when a fold recreation destroys the page
- * mid-way; its UI follow-ups run only while the page is still showing.
- */
+
+
+
+
+
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [33])
 class PageOperationTest {
@@ -38,9 +38,9 @@ class PageOperationTest {
 
     private fun start(page: Fragment) {
         page.launchOutlivingPage {
-            server.await() // the server call is still in flight
-            persisted++ // the local persist / key distribution
-            onPage { uiFollowUps++ } // spinner, toast, close
+            server.await() 
+            persisted++ 
+            onPage { uiFollowUps++ } 
         }
     }
 
@@ -54,7 +54,7 @@ class PageOperationTest {
         start(page)
         idle()
 
-        controller.pause().stop().destroy() // fold recreation tears the page down
+        controller.pause().stop().destroy() 
         server.complete(0)
         idle()
 

@@ -26,7 +26,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
-/** [MigrationPauseRecovery]: a pause that outlived its process resolves by phase (T5, T6, T7, T21, #1382). */
+
 class MigrationPauseRecoveryTest {
 
     private val disk = RecordingPreferencesDataStore()
@@ -36,11 +36,11 @@ class MigrationPauseRecoveryTest {
     private val heldSends = HeldSendJobs { _, _ -> }
     private val session = SenderSessionRef("10.0.0.2", 53317, "fp", SESSION, "token", listOf("status-v1"))
 
-    /**
-     * The process that crashed: pauses under the current login and reaches [phase]. Past the commit
-     * marker the receipt was written in the marker's own edit unless [withReceipt] is false (a
-     * receiver without `status-v1`).
-     */
+    
+
+
+
+
     private fun crashedIn(phase: MigrationPausePhase, withReceipt: Boolean = true) = runBlocking<Unit> {
         val pause = MigrationMessagePause(disk, MessagingGate())
         pause.load()
@@ -57,7 +57,7 @@ class MigrationPauseRecoveryTest {
         }
     }
 
-    /** The next process: loads the record and runs recovery with [verdict] as the receiver's answer. */
+    
     private fun coldStart(verdict: Verdict? = null): MigrationMessagePause = coldStart { verdict ?: error("no receiver to ask") }
 
     private fun coldStart(answer: suspend (SenderSessionRef) -> Verdict): MigrationMessagePause = runBlocking {
@@ -95,8 +95,8 @@ class MigrationPauseRecoveryTest {
 
     @Test
     fun `a crash between the commit marker and the end marker asks with the receipt written alongside`() = runBlocking<Unit> {
-        // The marker and the receipt landed together; the end marker never left. The receiver saw a
-        // body that broke off and says failed, so messaging resumes and the receipt goes.
+        
+        
         crashedIn(MigrationPausePhase.COMMITTING)
         var asked: SenderSessionRef? = null
 

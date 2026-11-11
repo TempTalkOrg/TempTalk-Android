@@ -17,9 +17,9 @@ object UserAgentManager {
 
     private val environmentHelper: EnvironmentHelper = EntryPointAccessors.fromApplication<EntryPoint>(com.difft.android.base.utils.application).environmentHelper
 
-    /**
-     * like: TempTalk/1.9.0 (Android 36; Google Pixel 6; Build 370644; Channel google; AppId org.difft.chative)
-     */
+    
+
+
     fun getUserAgent(): String = "${productName}/${appVersionName} (Android ${SDK_INT}; ${mode()}; Build ${appVersionCode}; Channel ${environmentHelper.getChannelName()}; AppId ${com.difft.android.base.utils.application.packageName})"
 
     private val productName

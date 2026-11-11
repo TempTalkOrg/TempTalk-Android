@@ -25,6 +25,7 @@ import com.difft.android.base.ui.theme.tokens.ColorTokens
 import com.difft.android.base.utils.WindowSizeClassUtil
 import com.difft.android.base.utils.hideNavigationBar
 import com.difft.android.base.utils.hideSystemBars
+import com.difft.android.base.widget.floatAsTopBarButton
 import com.difft.android.call.LCallActivity
 import com.difft.android.base.widget.BaseBottomSheetDialogFragment
 import com.difft.android.call.LCallToChatController
@@ -40,10 +41,9 @@ import org.difft.app.database.models.ContactorModel
 import javax.inject.Inject
 
 
-/**
- * 会议邀请底部弹窗 Fragment
- * 参考 ChatSelectBottomSheetFragment 的实现方式
- */
+
+
+
 @AndroidEntryPoint
 class MeetingInviteBottomSheetFragment : BaseBottomSheetDialogFragment() {
 
@@ -53,15 +53,15 @@ class MeetingInviteBottomSheetFragment : BaseBottomSheetDialogFragment() {
     private var inviteCallHandler: InviteCallHandler? = null
     var onInviteAction: ((InviteViewState) -> Unit)? = null
     
-    // 保存 TextWatcher 引用以便在销毁时移除
+    
     private var searchTextWatcher: android.text.TextWatcher? = null
     private var searchInput: AppCompatEditText? = null
     private var previousNightMode: Int? = null
 
-    /** Sheet height while the tabletop dock is shown; null for the full-height sheet. */
+    
     private var dockHeightPx: Int? = null
 
-    /** Whether the call page hides its status bar now; this window follows it. */
+    
     private var statusBarHidden = false
     private var sheetView: View? = null
     private var sheetBehavior: BottomSheetBehavior<*>? = null
@@ -86,28 +86,27 @@ class MeetingInviteBottomSheetFragment : BaseBottomSheetDialogFragment() {
         }
     }
 
-    // 使用默认容器（带圆角和拖拽条）
     override fun getContentLayoutResId(): Int = R.layout.layout_meeting_invite_bottom_sheet
 
-    // Full screen unless docked: the base's full-screen setup in onShow would stretch a docked
-    // sheet back to the window before applySheetHeight runs.
+    
+    
     override fun isFullScreen(): Boolean = dockHeightPx == null
 
     override fun onStart() {
         super.onStart()
         applySystemBars()
-        // A docked sheet is sized here, before its first layout: Dialog.show() posts onShow, so the
-        // base's setup can land after the first frame and the sheet would open at the window's
-        // height and slide down to the dock.
+        
+        
+        
         if (dockHeightPx == null) return
         val sheet = dialog?.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet) ?: return
         val behavior = BottomSheetBehavior.from(sheet)
         sheetView = sheet
         sheetBehavior = behavior
         applySheetHeight(sheet, behavior)
-        // BottomSheetDialog.onAttachedToWindow, on the first traversal, sets the window and the
-        // sheet's parents back to fitting system windows; docking again right after keeps the first
-        // frame at the window bottom too.
+        
+        
+        
         val decor = dialog?.window?.decorView ?: return
         if (decor.isAttachedToWindow) return
         decor.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
@@ -126,17 +125,17 @@ class MeetingInviteBottomSheetFragment : BaseBottomSheetDialogFragment() {
         applySheetHeight(sheet, behavior)
     }
 
-    /** Follows the call page's status bar ([hidden]); applies at once to a shown sheet. */
+    
     fun setStatusBarHidden(hidden: Boolean) {
         if (statusBarHidden == hidden) return
         statusBarHidden = hidden
         if (dialog?.window != null) applySystemBars()
     }
 
-    /**
-     * The sheet is its own dialog window and does not inherit the call's hidden bars; showing
-     * them would shift the call's insets (and the tabletop console) while the sheet is open.
-     */
+    
+
+
+
     private fun applySystemBars() {
         val window = dialog?.window ?: return
         val immersive = statusBarHidden || (activity as? LCallActivity)?.screenShareOrientationActive == true
@@ -148,10 +147,10 @@ class MeetingInviteBottomSheetFragment : BaseBottomSheetDialogFragment() {
         }
     }
 
-    /**
-     * Confines the sheet to the tabletop dock below the fold ([px] tall, over the console), or null
-     * for the full-height sheet. Applies at once to a shown sheet.
-     */
+    
+
+
+
     fun setDockHeight(px: Int?) {
         if (dockHeightPx == px) return
         dockHeightPx = px
@@ -166,7 +165,7 @@ class MeetingInviteBottomSheetFragment : BaseBottomSheetDialogFragment() {
         val dockHeight = dockHeightPx?.takeIf { it in 1 until screenHeight }
         behavior.skipCollapsed = true
         if (dockHeight != null) {
-            // Fixed to the dock's height: the stage above the fold stays visible, undimmed.
+            
             sheet.layoutParams = sheet.layoutParams.apply { height = dockHeight }
             behavior.isFitToContents = true
             behavior.peekHeight = dockHeight
@@ -185,25 +184,28 @@ class MeetingInviteBottomSheetFragment : BaseBottomSheetDialogFragment() {
         L.i { "[MeetingInvite] sheetHeight docked=$docked heightPx=$heightPx" }
     }
 
-    /** The dialog window's and the sheet containers' own inset handling, kept to restore after docking. */
+    
     private var undockedInsets: UndockedInsets? = null
 
-    /**
-     * What docking changes, to restore on undocking. The window's own fields are taken at the first
-     * docking; the parents' fitting and padding, which `BottomSheetDialog.onAttachedToWindow` sets
-     * from its edge-to-edge setting, only once the window is attached, after Material has set them.
-     */
+    
+
+
+
+
     private class UndockedInsets(val fitInsetsTypes: Int, val softInputMode: Int) {
         var parentsFit: List<Boolean>? = null
         var parentsPadding: List<IntArray>? = null
     }
 
-    /**
-     * A docked sheet reaches the window bottom, over the console: the dialog window and the sheet's
-     * coordinator and container stop keeping clear of the navigation bar, which the call page hides.
-     * Otherwise a three-button bar's band (48dp on the Galaxy Z Flip6) stays under the sheet with the
-     * console showing through it. Undocked, the dialog's own handling comes back.
-     */
+    
+
+
+
+
+
+    
+    override fun reservesKeyboardInset(): Boolean = undockedInsets == null
+
     private fun reachWindowBottom(sheet: View, docked: Boolean) {
         val window = dialog?.window ?: return
         val parents = generateSequence(sheet.parent as? View) { it.parent as? View }.take(2).toList()
@@ -220,15 +222,17 @@ class MeetingInviteBottomSheetFragment : BaseBottomSheetDialogFragment() {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 window.attributes = window.attributes.apply { fitInsetsTypes = 0 }
             }
-            // The keyboard's height comes to the container as an inset (below), never as a pan.
+            
             @Suppress("DEPRECATION")
             window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
             parents.forEach {
                 it.fitsSystemWindows = false
                 it.setPadding(0, 0, 0, 0)
             }
-            // Nothing fits system windows now, so the keyboard would cover the docked sheet (its
-            // search field): the container keeps the IME's height clear instead.
+            
+            
+            
+            
             parents.lastOrNull()?.let { container ->
                 ViewCompat.setOnApplyWindowInsetsListener(container) { view, insets ->
                     view.setPadding(0, 0, 0, insets.getInsets(WindowInsetsCompat.Type.ime()).bottom)
@@ -236,6 +240,7 @@ class MeetingInviteBottomSheetFragment : BaseBottomSheetDialogFragment() {
                 }
                 ViewCompat.requestApplyInsets(container)
             }
+            view?.let(ViewCompat::requestApplyInsets)
         } else {
             val saved = undockedInsets ?: return
             undockedInsets = null
@@ -244,10 +249,11 @@ class MeetingInviteBottomSheetFragment : BaseBottomSheetDialogFragment() {
             }
             window.setSoftInputMode(saved.softInputMode)
             parents.lastOrNull()?.let { ViewCompat.setOnApplyWindowInsetsListener(it, null) }
-            // Never attached while docked: Material sets the fitting itself when it attaches.
+            view?.let(ViewCompat::requestApplyInsets)
+            
             val fits = saved.parentsFit ?: return
             val paddings = saved.parentsPadding ?: return
-            // Material fits the decor exactly when it fits the container (both from its edge-to-edge setting).
+            
             WindowCompat.setDecorFitsSystemWindows(window, fits.lastOrNull() ?: true)
             parents.forEachIndexed { i, view ->
                 view.fitsSystemWindows = fits[i]
@@ -258,11 +264,8 @@ class MeetingInviteBottomSheetFragment : BaseBottomSheetDialogFragment() {
     }
 
     override fun onContentViewCreated(view: View, savedInstanceState: Bundle?) {
-        // 覆盖默认容器背景色；拖拽条保留（与消息转发弹窗一致）
         requireView().setBackgroundResource(R.drawable.bg_meeting_invite_bottom_sheet)
 
-        // 获取 InviteCallHandler - 这里需要通过参数传递或从 Manager 获取
-        // 暂时先通过回调设置
         if (inviteCallHandler == null) {
             L.w { "[MeetingInvite] InviteCallHandler is null, fragment will not work properly" }
             dismiss()
@@ -272,10 +275,8 @@ class MeetingInviteBottomSheetFragment : BaseBottomSheetDialogFragment() {
         setupInitialScreen(view)
         setupAddMembersScreen(view)
         
-        // 监听状态变化
         observeStateChanges(view)
         
-        // 初始加载联系人
         inviteCallHandler?.loadContacts()
     }
 
@@ -283,8 +284,14 @@ class MeetingInviteBottomSheetFragment : BaseBottomSheetDialogFragment() {
         this.inviteCallHandler = handler
     }
 
+    
+    private fun android.widget.ImageView.floatAsCallSheetClose() {
+        floatAsTopBarButton(leading = true, fillColor = ContextCompat.getColor(context, com.difft.android.base.R.color.bg3_night))
+    }
+
     private fun setupInitialScreen(view: View) {
         val ivClose = view.findViewById<android.widget.ImageView>(R.id.iv_close_initial)
+        ivClose.floatAsCallSheetClose()
         val tvInvite = view.findViewById<AppCompatTextView>(R.id.tv_invite)
         val tvAdd = view.findViewById<AppCompatTextView>(R.id.tv_add_member)
         val llAddMember = view.findViewById<ViewGroup>(R.id.ll_add_member)
@@ -310,7 +317,6 @@ class MeetingInviteBottomSheetFragment : BaseBottomSheetDialogFragment() {
             }
         }
 
-        // 设置已选成员列表
         val membersAdapter = MeetingInviteMembersAdapter(
             onRemoveClick = { member ->
                 inviteCallHandler?.removeMember(member)
@@ -323,7 +329,6 @@ class MeetingInviteBottomSheetFragment : BaseBottomSheetDialogFragment() {
             adapter = membersAdapter
         }
 
-        // 监听已选成员变化
         inviteCallHandler?.selectedMembers?.let { flow ->
             viewLifecycleOwner.lifecycleScope.launch {
                 flow.collect { members ->
@@ -332,7 +337,6 @@ class MeetingInviteBottomSheetFragment : BaseBottomSheetDialogFragment() {
                         membersAdapter.submitList(members) {
                             recyclerViewMembers?.scrollToPosition(0)
                         }
-                        // 更新邀请按钮状态
                         tvInvite?.isEnabled = members.isNotEmpty()
                         tvInvite?.alpha = if (members.isNotEmpty()) 1.0f else 0.5f
                     }
@@ -343,6 +347,7 @@ class MeetingInviteBottomSheetFragment : BaseBottomSheetDialogFragment() {
 
     private fun setupAddMembersScreen(view: View) {
         val ivClose = view.findViewById<android.widget.ImageView>(R.id.iv_close_add)
+        ivClose.floatAsCallSheetClose()
         val tvDone = view.findViewById<AppCompatTextView>(R.id.tv_done)
         val btnClear = view.findViewById<AppCompatImageButton>(R.id.button_clear)
         val etSearch = view.findViewById<AppCompatEditText>(R.id.edittext_search_input)
@@ -410,7 +415,6 @@ class MeetingInviteBottomSheetFragment : BaseBottomSheetDialogFragment() {
             recyclerViewSelectedStrip?.visibility = if (items.isNotEmpty()) View.VISIBLE else View.GONE
         }
 
-        // 设置联系人列表
         val contactsAdapter = MeetingInviteContactsAdapter(
             onContactClick = { contactId ->
                 inviteCallHandler?.let { handler ->
@@ -429,17 +433,15 @@ class MeetingInviteBottomSheetFragment : BaseBottomSheetDialogFragment() {
             layoutManager = LinearLayoutManager(requireContext())
             adapter = contactsAdapter
             isNestedScrollingEnabled = true
-            // 设置 clipToPadding 为 false，允许内容滚动到 padding 区域
             clipToPadding = false
-            // 动态设置底部 padding，确保最后一项可以完全显示
-            // 由于设置了 expandedOffset，需要添加额外的底部 padding
+            
             val isLandscape = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
             val topOffsetDp = if (isLandscape) 40 else 80
             val bottomPaddingPx = (topOffsetDp * resources.displayMetrics.density).toInt()
             setPadding(0, 0, 0, bottomPaddingPx)
         }
 
-        // 合并联系人列表、选中状态、会议中状态三个 Flow，统一驱动 UI
+        
         inviteCallHandler?.let { handler ->
             viewLifecycleOwner.lifecycleScope.launch {
                 combine(
@@ -469,7 +471,6 @@ class MeetingInviteBottomSheetFragment : BaseBottomSheetDialogFragment() {
                             contactsAdapter.submitList(contactsList)
                         }
 
-                        // 更新完成按钮状态
                         tvDone?.isEnabled = selectedIds.isNotEmpty()
                         tvDone?.alpha = if (selectedIds.isNotEmpty()) 1.0f else 0.5f
                     }
@@ -537,7 +538,6 @@ class MeetingInviteBottomSheetFragment : BaseBottomSheetDialogFragment() {
 
     override fun onDestroyView() {
         super.onDestroyView()
-        // 移除 TextWatcher 防止内存泄漏
         searchTextWatcher?.let { watcher ->
             view?.findViewById<AppCompatEditText>(R.id.edittext_search_input)?.removeTextChangedListener(watcher)
         }

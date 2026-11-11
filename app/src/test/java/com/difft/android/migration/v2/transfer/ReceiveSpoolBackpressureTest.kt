@@ -26,17 +26,11 @@ import javax.net.ssl.X509TrustManager
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/**
- * T42 — the regression the spool exists for: an importer far slower than the link must no longer
- * back-pressure the socket. Before the spool the body went into a 1 MiB `okio.Pipe`, so a staging
- * commit or an attachment fsync stalled the sender's writes and tripped its write-stall watchdog on
- * a transfer that was otherwise healthy.
- *
- * Run against the real [ReceiverHttpServer] over loopback TLS, with a consumer deliberately slower
- * than the sender. The design's figures (64 MiB at 5 s per MiB) are scaled down — the property is a
- * ratio, not a size — so the case runs in seconds while still making the consumer several times
- * slower than the writer.
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = android.app.Application::class, sdk = [33])
 class ReceiveSpoolBackpressureTest {
@@ -59,7 +53,7 @@ class ReceiveSpoolBackpressureTest {
             scope = scope,
             spoolDir = tmp.newFolder("spool"),
         ) { input ->
-            // Several times slower than the socket: the whole point is that this never reaches it.
+            
             val block = ByteArray(CHUNK)
             var total = 0L
             while (true) {
@@ -138,7 +132,7 @@ class ReceiveSpoolBackpressureTest {
         const val BODY_BYTES = 64 * CHUNK
         const val CONSUMER_DELAY_MS = 25L
 
-        /** Lower bound on the importer's own time, against which the sender's must look negligible. */
+        
         const val CONSUMER_TOTAL_MS = (BODY_BYTES / CHUNK) * CONSUMER_DELAY_MS
 
         const val MAX_WRITE_STALL_MS = 1_000L

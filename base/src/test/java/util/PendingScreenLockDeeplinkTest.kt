@@ -9,20 +9,20 @@ import org.robolectric.annotation.Config
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 
-/**
- * T5 — [PendingScreenLockDeeplink] single-slot queue (Bug 1 deeplink replay).
- *
- * Pins the invariant the replay correctness depends on: offer stores the intent, poll returns it
- * and clears the slot, and a second poll returns null so the queued deeplink can never replay
- * twice after a single unlock.
- */
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class PendingScreenLockDeeplinkTest {
 
     @After
     fun tearDown() {
-        // The object is a process-wide singleton; reset between tests.
+        
         PendingScreenLockDeeplink.clear()
     }
 

@@ -1,5 +1,6 @@
 package com.difft.android.call.ui.alert
 
+import com.difft.android.base.ui.compose.floatingSurface
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -27,7 +28,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -104,12 +104,7 @@ fun CallCriticalAlertBanner(onClicked: () -> Unit) {
                         rowWidthPx = coordinates.size.width
                         rowBounds = coordinates.boundsInWindow()
                     }
-                    .background(
-                        color = DifftTheme.colors.backgroundTertiary,
-                        shape = DifftTheme.radius.largeShape
-                    )
-                    .shadow(elevation = 6.dp, spotColor = Color(0x14000000), ambientColor = Color(0x14000000))
-                    .shadow(elevation = 14.dp, spotColor = Color(0x14000000), ambientColor = Color(0x14000000))
+                    .floatingSurface(DifftTheme.radius.largeShape, fill = DifftTheme.colors.backgroundTertiary)
                     .padding(start = 8.dp, top = 6.dp, end = 8.dp, bottom = 6.dp)
             ) {
                 Image(

@@ -1,41 +1,41 @@
 package com.difft.android.chat.focus
 
-/**
- * Local notification decision for the WebSocket delivery path, step for step the server's
- * `GroupPushDecider.decide` (FCM deliveries already passed it, so they are not re-judged here).
- * Pure and Android-free so the shared case table can be unit tested.
- *
- * 1. Private chat: muted -> no, otherwise yes; focus never applies.
- * 2. Group message [Category] from the mentions.
- * 3. Focus active (an invalid focus included): a valid focused group notifies everything; every other
- *    group follows the focus "others allow" options and [Category.OTHER] never notifies.
- * 4. No focus, group muted: the group's allow options decide; [Category.OTHER] never notifies.
- * 5. No focus, not muted: the notification level (single group, or the global one it follows).
- *
- * With [EffectiveFocus.featureEnabled] false step 3 is skipped and step 4 is the old "mute blocks
- * everything"; step 5 is the same either way (the mention level lets @me and @all through).
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 object GroupNotifyPolicy {
 
-    /** Reserved mention uid meaning @all (matches the message model's `MENTIONS_ALL_ID`). */
+    
     const val MENTIONS_ALL_UID = "MENTIONS_ALL"
 
     enum class Category {
         GROUP_CALL,
 
-        /** The mention list contains the local user, wherever @all sits in it. */
+        
         MENTION_ME,
 
-        /** @all is mentioned and the local user is not. */
+        
         MENTION_ALL,
 
         OTHER,
     }
 
-    /** Group message notification level: single-group value, or the global one when the group follows it. */
+    
     enum class NotifyLevel { ALL, MENTION, OFF }
 
-    /** The mute sub-options; null means the server value was never received, read as the server default. */
+    
     data class MuteOptions(
         val allowMentionMe: Boolean? = null,
         val allowMentionAll: Boolean? = null,
@@ -46,7 +46,7 @@ object GroupNotifyPolicy {
         val groupCall: Boolean get() = allowGroupCall ?: false
     }
 
-    /** Which rule produced the decision (mirrors the server's `PushDecision`). */
+    
     enum class Reason {
         PRIVATE_PUSH,
         PRIVATE_MUTED,
@@ -62,9 +62,9 @@ object GroupNotifyPolicy {
     data class Decision(val notify: Boolean, val reason: Reason)
 
     data class Input(
-        /** Group id, or null for a private chat. */
+        
         val gid: String?,
-        /** Ignored for a private chat. */
+        
         val category: Category,
         val muted: Boolean,
         val muteOptions: MuteOptions = MuteOptions(),
@@ -72,11 +72,11 @@ object GroupNotifyPolicy {
         val focus: EffectiveFocus = EffectiveFocus.INACTIVE,
     )
 
-    /**
-     * Category from a message's mention uids: a list that contains the local user is @me (even when @all
-     * comes first), otherwise one that contains @all is @all, otherwise a plain message for this user.
-     * A quote or reply of the user's message is not @me yet (pending product).
-     */
+    
+
+
+
+
     fun categorize(mentionUids: List<String>, myId: String): Category = when {
         myId in mentionUids -> Category.MENTION_ME
         MENTIONS_ALL_UID in mentionUids -> Category.MENTION_ALL
@@ -118,9 +118,9 @@ object GroupNotifyPolicy {
         Category.OTHER -> false
     }
 
-    /**
-     * Group calls ignore the level. At MENTION level @me and @all both pass, with the feature on or off.
-     */
+    
+
+
     private fun allowedByLevel(category: Category, level: NotifyLevel): Boolean {
         if (category == Category.GROUP_CALL) return true
         return when (level) {

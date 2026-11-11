@@ -22,7 +22,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** The one state read behind the notification settings page and its Calls and Critical Alerts pages. */
+
 class NotificationSettingsStateReader @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val messageNotificationUtil: MessageNotificationUtil,
@@ -30,7 +30,7 @@ class NotificationSettingsStateReader @Inject constructor(
     private val channelManager: NotificationChannelManager,
 ) {
 
-    /** Reads every status on IO; the critical-alert bypass is reconciled first so its read-back is current. */
+    
     internal suspend fun read(): NotificationSettingsUiState = withContext(Dispatchers.IO) {
         val bypass = try {
             channelManager.reconcileCriticalAlertBypass()
@@ -50,7 +50,7 @@ class NotificationSettingsStateReader @Inject constructor(
         )
     }
 
-    /** Records [fix]'s category as seen when its page [opened]; a failed write only keeps the reminder. */
+    
     internal suspend fun recordFixOpened(fix: NotificationFix, opened: Intent?) {
         val channelId = NotificationFixJump.seenCategory(fix, opened) ?: return
         try {
@@ -63,7 +63,7 @@ class NotificationSettingsStateReader @Inject constructor(
         }
     }
 
-    /** [read] with failures logged; null keeps the page's last state. */
+    
     internal suspend fun readOrNull(page: String): NotificationSettingsUiState? = try {
         read()
     } catch (e: CancellationException) {
@@ -74,10 +74,10 @@ class NotificationSettingsStateReader @Inject constructor(
     }
 }
 
-/**
- * Opens [fix]'s settings page from a notification settings page, with the shared failure toast; an
- * opened category page is recorded through [stateReader].
- */
+
+
+
+
 internal fun Fragment.openNotificationFix(fix: NotificationFix, stateReader: NotificationSettingsStateReader) {
     viewLifecycleOwner.lifecycleScope.launch {
         val appContext = requireContext().applicationContext

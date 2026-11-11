@@ -24,14 +24,12 @@ class CircleProgressBar @JvmOverloads constructor(
     private val paint = Paint()
 
     init {
-        // 获取自定义属性
         context.withStyledAttributes(attrs, R.styleable.CircleProgressBar) {
             progressBarColor = getColor(R.styleable.CircleProgressBar_progressBarColor, Color.BLUE)
             circleBackgroundColor = getColor(R.styleable.CircleProgressBar_circleBackgroundColor, Color.GRAY)
             strokeWidth = getDimension(R.styleable.CircleProgressBar_strokeWidth, 10f)
         }
 
-        // 初始化画笔
         paint.isAntiAlias = true
         paint.strokeWidth = strokeWidth
         paint.style = Paint.Style.STROKE
@@ -44,13 +42,11 @@ class CircleProgressBar @JvmOverloads constructor(
         val centerY = height / 2f
         val radius = Math.min(centerX, centerY) - strokeWidth / 2
 
-        // 绘制底色
         paint.color = circleBackgroundColor
         canvas.drawCircle(centerX, centerY, radius, paint)
 
         val angle = 360 * progress / maxProgress
 
-        // 绘制进度
         paint.color = progressBarColor
         canvas.drawArc(
             centerX - radius,

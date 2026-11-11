@@ -42,7 +42,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import com.difft.android.base.R as BaseR
 
-/** Real shell launcher registration, framework request codes, result delivery and saved-state restore. */
+
 @HiltAndroidTest
 @RunWith(RobolectricTestRunner::class)
 @Config(application = com.difft.android.test.FoldableTestApplication_Application::class, sdk = [34])
@@ -120,7 +120,7 @@ class ShellOriginResultProtocolIntegrationTest {
         parent.get().activityResultRegistry.dispatchResult(launch.requestCode, result.resultCode, result.resultIntent)
         idle()
         assertEquals(1, parent.get().finishCalls)
-        // Also prove business consumption, independently of the registry's own duplicate filtering.
+        
         assertFalse(DetailShellPop.consume(parent.get(), result.resultCode, result.resultIntent))
         assertEquals(1, parent.get().finishCalls)
         assertNotEquals(DetailShellPop.RESULT_POP_MORE, shadowOf(parent.get()).resultCode)
@@ -187,8 +187,8 @@ class ShellOriginResultProtocolIntegrationTest {
         original.get().activityResultRegistry.onSaveInstanceState(registryState)
         original.destroy()
         controllers.remove(original)
-        // Construct the narrow restoration window through public APIs on the real registry.
-        // This is a fixture-built state, not a claim about device callback timing.
+        
+        
         ShellOriginParentTestActivity.beforeShellCreate = { activity ->
             activity.activityResultRegistry.onRestoreInstanceState(registryState)
             assertTrue(activity.activityResultRegistry.dispatchResult(first.requestCode,
@@ -204,8 +204,8 @@ class ShellOriginResultProtocolIntegrationTest {
         assertTrue(push(restored.get(), "second-group"), "synchronous register callback must clear pending A")
         val second = assertNotNull(shadowOf(restored.get()).nextStartedActivityForResult)
         assertNotEquals(first.requestCode, second.requestCode)
-        // Registry 1.13 may retain a restored launched marker after register's immediate callback.
-        // Its old code can still accept a raw result, but no business callback remains attached.
+        
+        
         assertTrue(restored.get().activityResultRegistry.dispatchResult(first.requestCode,
             firstResult.resultCode, firstResult.resultIntent))
         idle()

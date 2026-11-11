@@ -15,11 +15,11 @@ import java.io.IOException
 import java.nio.ByteBuffer
 import java.util.Locale
 
-/**
- * Streaming audio-track transcoder. Ported 1:1 from the Signal-derived Java implementation as
- * part of the Kotlin port campaign (#1093). The drain/feed MediaCodec state machine in [step]
- * is preserved verbatim, so the class and that method exceed detekt size thresholds by design.
- */
+
+
+
+
+
 @Suppress("LargeClass")
 internal class AudioTrackConverter {
 
@@ -77,7 +77,7 @@ internal class AudioTrackConverter {
 
         val audioCodecInfo = MediaConverter.selectCodec(OUTPUT_AUDIO_MIME_TYPE)
         if (audioCodecInfo == null) {
-            // Don't fail CTS if they don't have an AAC codec (not here, anyway).
+            
             L.e { TAG + "Unable to find an appropriate codec for " + OUTPUT_AUDIO_MIME_TYPE }
             throw FileNotFoundException()
         }
@@ -103,10 +103,10 @@ internal class AudioTrackConverter {
         outputAudioFormat.setInteger(MediaFormat.KEY_AAC_PROFILE, OUTPUT_AUDIO_AAC_PROFILE)
         outputAudioFormat.setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, SAMPLE_BUFFER_SIZE)
 
-        // Create a MediaCodec for the desired codec, then configure it as an encoder with
-        // our desired properties. Request a Surface to use for input.
+        
+        
         mAudioEncoder = createAudioEncoder(audioCodecInfo, outputAudioFormat)
-        // Create a MediaCodec for the decoder, based on the extractor's format.
+        
         mAudioDecoder = createAudioDecoder(inputAudioFormat)
 
         mAudioDecoderInputBuffers = mAudioDecoder.inputBuffers
@@ -152,9 +152,9 @@ internal class AudioTrackConverter {
             }
         }
 
-        // Extract audio from file and feed to decoder.
-        // Do not extract audio if we have determined the output format but we are not yet
-        // ready to mux the frames.
+        
+        
+        
         while (!mAudioExtractorDone && (mEncoderOutputAudioFormat == null || mMuxer != null)) {
             val decoderInputBufferIndex = mAudioDecoder.dequeueInputBuffer(TIMEOUT_USEC.toLong())
             if (decoderInputBufferIndex == MediaCodec.INFO_TRY_AGAIN_LATER) {
@@ -193,12 +193,12 @@ internal class AudioTrackConverter {
             }
             mAudioExtractor.advance()
             mAudioExtractedFrameCount++
-            // We extracted a frame, let's try something else next.
+            
             break
         }
 
-        // Poll output frames from the audio decoder.
-        // Do not poll if we already have a pending buffer to feed to the encoder.
+        
+        
         while (!mAudioDecoderDone && mPendingAudioDecoderOutputBufferIndex == -1 &&
             (mEncoderOutputAudioFormat == null || mMuxer != null)
         ) {
@@ -246,11 +246,11 @@ internal class AudioTrackConverter {
             }
             mPendingAudioDecoderOutputBufferIndex = decoderOutputBufferIndex
             mAudioDecodedFrameCount++
-            // We extracted a pending frame, let's try something else next.
+            
             break
         }
 
-        // Feed the pending decoded audio buffer to the audio encoder.
+        
         while (mPendingAudioDecoderOutputBufferIndex != -1) {
             if (VERBOSE) {
                 L.d { TAG + "audio decoder: attempting to process pending buffer: " + mPendingAudioDecoderOutputBufferIndex }
@@ -294,11 +294,11 @@ internal class AudioTrackConverter {
                 if (VERBOSE) L.d { TAG + "audio decoder: EOS" }
                 mAudioDecoderDone = true
             }
-            // We enqueued a pending frame, let's try something else next.
+            
             break
         }
 
-        // Poll frames from the audio encoder and send them to the muxer.
+        
         while (!mAudioEncoderDone && (mEncoderOutputAudioFormat == null || mMuxer != null)) {
             val encoderOutputBufferIndex = mAudioEncoder.dequeueOutputBuffer(mAudioEncoderOutputBufferInfo, TIMEOUT_USEC.toLong())
             if (encoderOutputBufferIndex == MediaCodec.INFO_TRY_AGAIN_LATER) {
@@ -325,7 +325,7 @@ internal class AudioTrackConverter {
             val encoderOutputBuffer = mAudioEncoderOutputBuffers[encoderOutputBufferIndex]
             if ((mAudioEncoderOutputBufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG) != 0) {
                 if (VERBOSE) L.d { TAG + "audio encoder: codec config buffer" }
-                // Simply ignore codec config buffers.
+                
                 mAudioEncoder.releaseOutputBuffer(encoderOutputBufferIndex, false)
                 break
             }
@@ -342,7 +342,7 @@ internal class AudioTrackConverter {
             }
             mAudioEncoder.releaseOutputBuffer(encoderOutputBufferIndex, false)
             mAudioEncodedFrameCount++
-            // We enqueued an encoded frame, let's try something else next.
+            
             break
         }
     }
@@ -400,7 +400,7 @@ internal class AudioTrackConverter {
         Preconditions.checkState("no frame should be pending", -1 == mPendingAudioDecoderOutputBufferIndex)
     }
 
-    @SuppressLint("WrongConstant") // flags extracted from sample by MediaExtractor should be safe for MediaCodec.BufferInfo
+    @SuppressLint("WrongConstant") 
     @Throws(IOException::class)
     private fun extractAndRemux() {
         if (mMuxer == null) {
@@ -444,10 +444,10 @@ internal class AudioTrackConverter {
 
     companion object {
         private const val TAG = "media-converter"
-        private const val VERBOSE = false // lots of logging
+        private const val VERBOSE = false 
 
-        private const val OUTPUT_AUDIO_MIME_TYPE = VideoConstants.AUDIO_MIME_TYPE // Advanced Audio Coding
-        private val OUTPUT_AUDIO_AAC_PROFILE = MediaCodecInfo.CodecProfileLevel.AACObjectLC // MediaCodecInfo.CodecProfileLevel.AACObjectHE;
+        private const val OUTPUT_AUDIO_MIME_TYPE = VideoConstants.AUDIO_MIME_TYPE 
+        private val OUTPUT_AUDIO_AAC_PROFILE = MediaCodecInfo.CodecProfileLevel.AACObjectLC 
 
         private const val SAMPLE_BUFFER_SIZE = 16 * 1024
         private const val TIMEOUT_USEC = 10000
@@ -501,12 +501,12 @@ internal class AudioTrackConverter {
             return MediaConverter.getMimeTypeFor(format).startsWith("audio/")
         }
 
-        /**
-         * HE-AAC input bitstreams exhibit bad decoder behavior: the decoder's output buffer's presentation timestamp is way larger than the input sample's.
-         * This mismatch propagates throughout the transcoding pipeline and results in slowed, distorted audio in the output file.
-         * To sidestep this: AAC and its variants are a supported output codec, and HE-AAC bitrates are almost always lower than our target bitrate,
-         * so we can pass through the input bitstream unaltered, relying on consumers of the output file to render HE-AAC correctly.
-         */
+        
+
+
+
+
+
         private fun formatCanSkipTranscode(audioFormat: MediaFormat, desiredBitrate: Int): Boolean {
             return try {
                 val inputBitrate = audioFormat.getInteger(MediaFormat.KEY_BIT_RATE)

@@ -15,21 +15,21 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * The translate diff payload of [ChatMessageAdapter].
- *
- * Both decisions are pure functions on the adapter's companion, called by the DiffUtil callback and
- * by `onBindViewHolder`; testing them there avoids instantiating a RecyclerView adapter and its
- * whole ViewHolder tree for what is, in both cases, a two-line rule.
- *
- * What each case asserts:
- *  - T35  contentEqualsIgnoringTranslate: true when only translateData differs, false otherwise
- *  - T36  a translate-only difference yields PAYLOAD_TRANSLATE
- *  - T37  any other difference yields null (full rebind) — the regression guard
- *  - T38  a non-text message on either side yields null
- *  - T38b two recognised payloads both apply, and the row is NOT rebound in full afterwards
- *  - T38c a payload list on a holder with no partial path falls through to the full bind
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 class ChatMessageAdapterTranslatePayloadTest {
 
     private fun message(
@@ -47,7 +47,7 @@ class ChatMessageAdapterTranslatePayloadTest {
 
     private val translated = TranslateData(TranslateStatus.ShowCN, "你好", null)
 
-    // --- T35 ----------------------------------------------------------------
+    
 
     @Test
     fun `T35 only a translateData difference is content-equal`() {
@@ -70,7 +70,7 @@ class ChatMessageAdapterTranslatePayloadTest {
         )
     }
 
-    // --- T36 ----------------------------------------------------------------
+    
 
     @Test
     fun `T36 a translate-only change asks for the translate payload`() {
@@ -88,7 +88,7 @@ class ChatMessageAdapterTranslatePayloadTest {
         )
     }
 
-    // --- T37 ----------------------------------------------------------------
+    
 
     @Test
     fun `T37 a body change alongside the translation forces a full rebind`() {
@@ -100,7 +100,7 @@ class ChatMessageAdapterTranslatePayloadTest {
         assertNull(changePayloadFor(message(readStatus = 0), message(readStatus = 1)))
     }
 
-    // --- T38 ----------------------------------------------------------------
+    
 
     @Test
     fun `T38 a notify message on either side forces a full rebind`() {
@@ -114,7 +114,7 @@ class ChatMessageAdapterTranslatePayloadTest {
         assertNull(changePayloadFor(notify, notify))
     }
 
-    // --- T38b ---------------------------------------------------------------
+    
 
     @Test
     fun `T38b two recognised payloads both apply in one partial bind`() {
@@ -141,7 +141,7 @@ class ChatMessageAdapterTranslatePayloadTest {
         )
     }
 
-    // --- T38c ---------------------------------------------------------------
+    
 
     @Test
     fun `T38c a payload on a holder with no partial path falls through to the full bind`() {

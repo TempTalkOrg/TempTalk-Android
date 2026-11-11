@@ -13,11 +13,10 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/**
- * [MessageDetailBitmapHolder] keyed per page (design §5.1 X2, T19): two open message-detail pages
- * (one per home tab) keep their own snapshots, nothing is recycled, a fold keeps the page's
- * snapshot, and closing the page for good releases it.
- */
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class MessageDetailBitmapHolderTest {
@@ -50,7 +49,7 @@ class MessageDetailBitmapHolderTest {
     fun `a key from an earlier process never finds a new snapshot`() {
         val key = MessageDetailBitmapHolder.put(bitmap())
 
-        // A page restored after process death still holds its old key; counters restart at 1.
+        
         assertTrue((1..MAX_OLD_KEYS).none { MessageDetailBitmapHolder.get("message-detail-$it") != null })
         MessageDetailBitmapHolder.release(key)
     }

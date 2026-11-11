@@ -8,7 +8,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Pure decisions behind the #1347 FCM call-invite refresh and the server-push fallback skip. */
+
 class FcmPushPolicyTest {
 
     private fun call(

@@ -4,11 +4,11 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * F17: "Message" in a contact sheet opens a full conversation only when the sheet sits over the home
- * list with no conversation on screen; over a conversation it keeps the popup chat. Decided by what
- * is on screen, not by the layout mode (one-pane can now show a conversation on the home screen).
- */
+
+
+
+
+
 class ContactDetailSheetOverListTest {
 
     @Test

@@ -26,9 +26,9 @@ import com.difft.android.selector.utils.SdkVersionUtils
 import com.difft.android.selector.utils.SortUtils
 import java.util.ArrayList
 
-/**
- * Local media database query class.
- */
+
+
+
 class LocalMediaLoader(context: Context, config: SelectorConfig) : IBridgeMediaLoader(context, config) {
 
     override fun loadAllAlbum(query: OnQueryAllAlbumListener<LocalMediaFolder>?) {
@@ -148,19 +148,19 @@ class LocalMediaLoader(context: Context, config: SelectorConfig) : IBridgeMediaL
         val fileSizeCondition = getFileSizeCondition()
         return when (getConfig().chooseMode) {
             SelectMimeType.TYPE_ALL ->
-                // Get all, not including audio
+                
                 getSelectionArgsForAllMediaCondition(durationCondition, fileSizeCondition, getImageMimeTypeCondition(), getVideoMimeTypeCondition())
 
             SelectMimeType.TYPE_IMAGE ->
-                // Gets the image
+                
                 getSelectionArgsForImageMediaCondition(fileSizeCondition, getImageMimeTypeCondition())
 
             SelectMimeType.TYPE_VIDEO ->
-                // Access to video
+                
                 getSelectionArgsForVideoMediaCondition(durationCondition, getVideoMimeTypeCondition())
 
             SelectMimeType.TYPE_AUDIO ->
-                // Access to the audio
+                
                 getSelectionArgsForAudioMediaCondition(durationCondition, getAudioMimeTypeCondition())
 
             else -> null
@@ -170,22 +170,22 @@ class LocalMediaLoader(context: Context, config: SelectorConfig) : IBridgeMediaL
     override fun getSelectionArgs(): Array<String>? {
         return when (getConfig().chooseMode) {
             SelectMimeType.TYPE_ALL ->
-                // Get all
+                
                 arrayOf(
                     MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE.toString(),
                     MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO.toString(),
                 )
 
             SelectMimeType.TYPE_IMAGE ->
-                // Get photo
+                
                 arrayOf(MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE.toString())
 
             SelectMimeType.TYPE_VIDEO ->
-                // Get video
+                
                 arrayOf(MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO.toString())
 
             SelectMimeType.TYPE_AUDIO ->
-                // Get audio
+                
                 arrayOf(MediaStore.Files.FileColumns.MEDIA_TYPE_AUDIO.toString())
 
             else -> null
@@ -215,8 +215,8 @@ class LocalMediaLoader(context: Context, config: SelectorConfig) : IBridgeMediaL
         val absolutePath = data.getString(dataColumn)
         val url = if (SdkVersionUtils.isQ()) MediaUtils.getRealPathUri(id, mimeType) else absolutePath
         mimeType = if (TextUtils.isEmpty(mimeType)) PictureMimeType.ofJPEG() else mimeType
-        // Here, it is solved that some models obtain mimeType and return the format of image / *,
-        // which makes it impossible to distinguish the specific type, such as mi 8,9,10 and other models
+        
+        
         if (mimeType!!.endsWith("image/*")) {
             mimeType = MediaUtils.getMimeTypeFromMediaUrl(absolutePath!!)
             if (!getConfig().isGif) {
@@ -262,20 +262,20 @@ class LocalMediaLoader(context: Context, config: SelectorConfig) : IBridgeMediaL
             fileName = PictureMimeType.getUrlToFileName(absolutePath)
         }
         if (getConfig().isFilterSizeDuration && size > 0 && size < FileSizeUnit.KB) {
-            // Filter out files less than 1KB
+            
             return null
         }
         if (PictureMimeType.isHasVideo(mimeType) || PictureMimeType.isHasAudio(mimeType)) {
             if (getConfig().filterVideoMinSecond > 0 && duration < getConfig().filterVideoMinSecond) {
-                // If you set the minimum number of seconds of video to display
+                
                 return null
             }
             if (getConfig().filterVideoMaxSecond > 0 && duration > getConfig().filterVideoMaxSecond) {
-                // If you set the maximum number of seconds of video to display
+                
                 return null
             }
             if (getConfig().isFilterSizeDuration && duration <= 0) {
-                // If the length is 0, the corrupted video is processed and filtered out
+                
                 return null
             }
         }
@@ -296,9 +296,9 @@ class LocalMediaLoader(context: Context, config: SelectorConfig) : IBridgeMediaL
         return media
     }
 
-    /**
-     * Create folder
-     */
+    
+
+
     private fun getImageFolder(
         firstPath: String?,
         firstMimeType: String?,
@@ -306,7 +306,7 @@ class LocalMediaLoader(context: Context, config: SelectorConfig) : IBridgeMediaL
         imageFolders: MutableList<LocalMediaFolder>,
     ): LocalMediaFolder {
         for (folder in imageFolders) {
-            // Under the same folder, return yourself, otherwise create a new folder
+            
             val name = folder.folderName
             if (TextUtils.isEmpty(name)) {
                 continue
@@ -324,23 +324,23 @@ class LocalMediaLoader(context: Context, config: SelectorConfig) : IBridgeMediaL
     }
 
     companion object {
-        /**
-         * Video mode conditions
-         */
+        
+
+
         private fun getSelectionArgsForVideoMediaCondition(durationCondition: String, queryMimeCondition: String): String {
             return MediaStore.Files.FileColumns.MEDIA_TYPE + "=?" + queryMimeCondition + " AND " + durationCondition
         }
 
-        /**
-         * Audio mode conditions
-         */
+        
+
+
         private fun getSelectionArgsForAudioMediaCondition(durationCondition: String, queryMimeCondition: String): String {
             return MediaStore.Files.FileColumns.MEDIA_TYPE + "=?" + queryMimeCondition + " AND " + durationCondition
         }
 
-        /**
-         * Query conditions in all modes
-         */
+        
+
+
         private fun getSelectionArgsForAllMediaCondition(
             timeCondition: String,
             sizeCondition: String,
@@ -354,9 +354,9 @@ class LocalMediaLoader(context: Context, config: SelectorConfig) : IBridgeMediaL
                 sizeCondition
         }
 
-        /**
-         * Query conditions in image modes
-         */
+        
+
+
         private fun getSelectionArgsForImageMediaCondition(fileSizeCondition: String, queryMimeCondition: String): String {
             return MediaStore.Files.FileColumns.MEDIA_TYPE + "=?" + queryMimeCondition + " AND " + fileSizeCondition
         }

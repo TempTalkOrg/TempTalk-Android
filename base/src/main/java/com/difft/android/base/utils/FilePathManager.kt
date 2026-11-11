@@ -5,29 +5,14 @@ import android.os.Environment.MEDIA_MOUNTED
 import com.difft.android.base.log.lumberjack.L
 import java.io.File
 
-/**
- * FilePathManager - Lazy caching for common directory File objects
- *
- * Purpose: Eliminate ANR caused by multiple threads calling Context.getExternalFilesDir()
- *
- * Strategy:
- * - Call getExternalFilesDir(null) ONCE to get base directory
- * - Derive subdirectories using File(baseDir, subdir); [upgradeDir] and [shareImportDir] are
- *   always internal (filesDir) because other apps must not be able to write them
- * - Cache File objects using lazy delegation (thread-safe, initialized once)
- * - After first access, all subsequent calls return cached File objects (no lock contention)
- *
- * Thread-Safety:
- * - lazy with SYNCHRONIZED mode ensures single initialization per property
- * - First access may block briefly, but only once per directory
- * - Subsequent accesses are lock-free (just return cached File object)
- */
+
+
+
+
+
 object FilePathManager {
 
-    /**
-     * Base directory - the ONLY place we call getExternalFilesDir()
-     * All other directories derive from this to avoid multiple synchronized calls
-     */
+    
     private val baseDir: File by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
         val dir = if (Environment.getExternalStorageState() == MEDIA_MOUNTED) {
             application.getExternalFilesDir(null)
@@ -39,10 +24,6 @@ object FilePathManager {
         }
     }
 
-    /**
-     * Avatar cache directory
-     * Derived from baseDir, no additional getExternalFilesDir() call
-     */
     val avatarDir: File by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
         File(baseDir, FileUtil.FILE_DIR_AVATAR).also {
             ensureExists(it)
@@ -50,9 +31,6 @@ object FilePathManager {
         }
     }
 
-    /**
-     * Group avatar cache directory
-     */
     val groupAvatarDir: File by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
         File(baseDir, FileUtil.FILE_DIR_GROUP_AVATAR).also {
             ensureExists(it)
@@ -60,10 +38,7 @@ object FilePathManager {
         }
     }
 
-    /**
-     * Message attachment directory (base)
-     * Note: Individual message attachments will be in subdirectories
-     */
+    
     val attachmentDir: File by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
         File(baseDir, FileUtil.FILE_DIR_ATTACHMENT).also {
             ensureExists(it)
@@ -71,11 +46,11 @@ object FilePathManager {
         }
     }
 
-    /**
-     * Downloaded update APKs. Always internal storage, not [baseDir]: on Android 8–10 other apps
-     * with the storage permission could replace a verified APK in the app-specific external dir
-     * before the installer reads it (#1433).
-     */
+    
+
+
+
+
     val upgradeDir: File by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
         File(application.filesDir, FileUtil.FILE_DIR_UPGRADE).also {
             ensureExists(it)
@@ -83,9 +58,6 @@ object FilePathManager {
         }
     }
 
-    /**
-     * Draft message attachments directory
-     */
     val draftAttachmentsDir: File by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
         File(baseDir, FileUtil.DRAFT_ATTACHMENTS_DIRECTORY).also {
             ensureExists(it)
@@ -93,20 +65,20 @@ object FilePathManager {
         }
     }
 
-    /**
-     * Files shared in by other apps. Always internal storage: on Android 8–10 other apps with the
-     * storage permission can read the app-specific external dir (#1429). Like [upgradeDir], not
-     * derived from [baseDir]; registered in [getCachedDir] so `getFilePath` never resolves it there.
-     */
+    
+
+
+
+
     val shareImportDir: File by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
         File(application.filesDir, FileUtil.SHARE_IMPORT_DIRECTORY).also { ensureExists(it) }
     }
 
-    /**
-     * Decrypted favorite-gif disk cache directory (separate from message attachments, keyed by
-     * attachmentId). Mirrors the message-media cache: a hit lets the favorites grid skip the
-     * download/decrypt round-trip.
-     */
+    
+
+
+
+
     val gifFavoritesDir: File by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
         File(baseDir, FileUtil.FILE_DIR_GIF_FAVORITES).also {
             ensureExists(it)
@@ -114,10 +86,6 @@ object FilePathManager {
         }
     }
 
-    /**
-     * Ensure directory exists, create if needed
-     * Safe to call with I/O because this only happens once during lazy initialization
-     */
     private fun ensureExists(file: File) {
         if (!file.exists()) {
             if (file.mkdirs()) {
@@ -128,10 +96,10 @@ object FilePathManager {
         }
     }
 
-    /**
-     * Get cached File for common directories
-     * Returns null if not a common directory
-     */
+    
+
+
+
     fun getCachedDir(dir: String): File? = when (dir) {
         FileUtil.FILE_DIR_AVATAR -> avatarDir
         FileUtil.FILE_DIR_GROUP_AVATAR -> groupAvatarDir
@@ -143,9 +111,9 @@ object FilePathManager {
         else -> null
     }
 
-    /**
-     * Get base directory for creating dynamic subdirectories
-     * Uses cached baseDir to avoid repeated getExternalFilesDir() calls
-     */
+    
+
+
+
     fun getBaseDirFile(): File = baseDir
 }

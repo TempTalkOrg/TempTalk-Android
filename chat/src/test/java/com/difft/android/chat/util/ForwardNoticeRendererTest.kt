@@ -15,19 +15,11 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.util.Locale
 
-/**
- * Unit tests for [ForwardNoticeRenderer].
- *
- * Robolectric is used only for `Context.getQuantityString` / `Context.getString`; the
- * Renderer itself is pure. No `GlobalStaticMockRule` needed because `myId` is an explicit
- * parameter (by design — see Renderer doc).
- *
- * Locale is forced to en/zh per test so plurals text is deterministic across CI machines.
- *
- * PRD coverage:
- *   §5.4.2 (12 forward variants by mode × count × useSelfOnly)
- *   §5.3.4 (locale-aware author list cap & overflow)
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28])
 class ForwardNoticeRendererTest {
@@ -40,9 +32,9 @@ class ForwardNoticeRendererTest {
     private val dave = "+10004"
     private val eve = "+10005"
     private val frank = "+10006"
-    private val stranger = "+99999" // not in resolver map → hits fallback
+    private val stranger = "+99999" 
 
-    // Maps an id to a known display name so asserts can check the substring.
+    
     private val knownNames = mapOf(
         alice to "Alice",
         bob to "Bob",
@@ -50,7 +42,7 @@ class ForwardNoticeRendererTest {
         dave to "Dave",
         eve to "Eve",
         frank to "Frank",
-        myId to "SHOULD_NOT_BE_USED_FOR_ME" // myId path must return "You", not this
+        myId to "SHOULD_NOT_BE_USED_FOR_ME" 
     )
 
     private val resolver: (String) -> String = { id ->
@@ -60,7 +52,7 @@ class ForwardNoticeRendererTest {
     @Before
     fun setUp() {
         context = ApplicationProvider.getApplicationContext()
-        // Force English to get deterministic plurals ("one" vs "other" selection).
+        
         forceLocale(Locale.ENGLISH)
     }
 
@@ -71,7 +63,7 @@ class ForwardNoticeRendererTest {
         context.resources.updateConfiguration(config, context.resources.displayMetrics)
     }
 
-    // -------- Backwards-compatible UNKNOWN mode (existing behavior, English) --------
+    
 
     @Test
     fun `UNKNOWN SINGLE count 1 — self is operator — uses You`() {
@@ -105,7 +97,7 @@ class ForwardNoticeRendererTest {
 
     @Test
     fun `UNKNOWN ONE_BY_ONE count 3 — three authors — Oxford comma`() {
-        // English 3 authors → "A, B, and C" (Oxford comma per PRD §5.3.4)
+        
         val result = ForwardNoticeRenderer.render(
             operatorId = alice, myId = myId,
             notice = ForwardNoticeData(Scene.ONE_BY_ONE, listOf(alice, bob, carol), 3),
@@ -121,7 +113,7 @@ class ForwardNoticeRendererTest {
             notice = ForwardNoticeData(Scene.COMBINED, listOf(alice, bob), 5),
             context = context, resolveDisplayName = resolver
         )
-        // English 2 authors → "A and B" (no comma)
+        
         assertEquals("\"Bob\" forwarded 5 messages from Alice and Bob.", result)
     }
 
@@ -135,11 +127,11 @@ class ForwardNoticeRendererTest {
         assertEquals("\"You\" forwarded 3 messages from Alice, Bob, and Carol.", result)
     }
 
-    // -------- 5-author cap & overflow (PRD §5.3.4) --------
+    
 
     @Test
     fun `exactly 5 authors — all spelled out, Oxford comma`() {
-        // Boundary: size == MAX_VISIBLE_AUTHORS (5). All names should be rendered.
+        
         val result = ForwardNoticeRenderer.render(
             operatorId = alice, myId = myId,
             notice = ForwardNoticeData(Scene.COMBINED, listOf(alice, bob, carol, dave, eve), 5),
@@ -153,7 +145,7 @@ class ForwardNoticeRendererTest {
 
     @Test
     fun `6 authors — first 5 shown plus 'and 1 other' (singular)`() {
-        // Just-over-boundary: 6 distinct authors. Overflow N = total - shown.size = 1 → singular.
+        
         val result = ForwardNoticeRenderer.render(
             operatorId = alice, myId = myId,
             notice = ForwardNoticeData(
@@ -183,7 +175,7 @@ class ForwardNoticeRendererTest {
             resolveDisplayName = tenResolver
         )
 
-        // First 5 spelled, overflow = 10 - 5 = 5 others. Locale terminator appended.
+        
         assertEquals(
             "\"Alice\" forwarded 15 messages from User1, User2, User3, User4, User5 and 5 others.",
             result
@@ -192,8 +184,8 @@ class ForwardNoticeRendererTest {
 
     @Test
     fun `dedup runs before the display cap so repeats do not consume slots`() {
-        // Raw list has 6 ids but only 4 distinct (alice, bob, carol, stranger).
-        // 4 ≤ 5, so no overflow — full Oxford-comma form.
+        
+        
         val result = ForwardNoticeRenderer.render(
             operatorId = alice, myId = myId,
             notice = ForwardNoticeData(
@@ -211,7 +203,7 @@ class ForwardNoticeRendererTest {
 
     @Test
     fun `repeated authors are de-duplicated — single distinct survives`() {
-        // 4 raw ids, 2 distinct, all under cap.
+        
         val result = ForwardNoticeRenderer.render(
             operatorId = alice, myId = myId,
             notice = ForwardNoticeData(Scene.COMBINED, listOf(alice, alice, alice, bob), 4),
@@ -220,7 +212,7 @@ class ForwardNoticeRendererTest {
         assertEquals("\"Alice\" forwarded 4 messages from Alice and Bob.", result)
     }
 
-    // -------- Fallback paths --------
+    
 
     @Test
     fun `operator not in contacts — fallback used`() {
@@ -239,11 +231,11 @@ class ForwardNoticeRendererTest {
             notice = ForwardNoticeData(Scene.ONE_BY_ONE, listOf(stranger, bob), 2),
             context = context, resolveDisplayName = resolver
         )
-        // Two authors → "A and B" form.
+        
         assertEquals("\"Alice\" forwarded 2 messages from FALLBACK_$stranger and Bob.", result)
     }
 
-    // -------- Defensive paths --------
+    
 
     @Test
     fun `empty sourceAuthorIds — authors block empty, no crash`() {
@@ -252,7 +244,7 @@ class ForwardNoticeRendererTest {
             notice = ForwardNoticeData(Scene.SINGLE, emptyList(), 1),
             context = context, resolveDisplayName = resolver
         )
-        // SourceListFormatter returns "" for empty input — output ends with "from ."
+        
         assertEquals("\"Alice\" forwarded a message from .", result)
     }
 
@@ -266,7 +258,7 @@ class ForwardNoticeRendererTest {
         assertEquals("\"Alice\" forwarded a message from Bob.", result)
     }
 
-    // -------- PRD §5.4.3.2 cases 17–28 (Forward by mode) --------
+    
 
     @Test
     fun `case 17 — UNKNOWN count 1 — others`() {
@@ -289,7 +281,7 @@ class ForwardNoticeRendererTest {
             ),
             context = context, resolveDisplayName = resolver
         )
-        // PRD v2.0: all-self source list (outer authors) → short form, no redundant "from You".
+        
         assertEquals("\"You\" forwarded a message.", result)
     }
 
@@ -446,11 +438,11 @@ class ForwardNoticeRendererTest {
         assertEquals("\"You\" forwarded a message from a chat history.", result)
     }
 
-    // -------- CONTAINS_COMBINED_FORWARD count == 1 (single bubble IS a CF) --------
+    
 
     @Test
     fun `CONTAINS count 1 — single CF bubble — uses chat_history single`() {
-        // Per PRD §5.4.2: count == 1 with CONTAINS means that lone bubble is a CF.
+        
         val result = ForwardNoticeRenderer.render(
             operatorId = alice, myId = myId,
             notice = ForwardNoticeData(
@@ -464,7 +456,7 @@ class ForwardNoticeRendererTest {
         assertEquals("\"Alice\" forwarded a chat history from Bob.", result)
     }
 
-    // -------- Chinese locale --------
+    
 
     @Test
     fun `zh — UNKNOWN — uses 、 separator, no 'and'`() {
@@ -474,7 +466,7 @@ class ForwardNoticeRendererTest {
             notice = ForwardNoticeData(Scene.ONE_BY_ONE, listOf(bob, carol), 5),
             context = context, resolveDisplayName = resolver
         )
-        // PRD §5.3.4: Chinese uses 、 only — no 和 connector.
+        
         assertEquals("\"Alice\" 转发了 5 条来自 Bob、Carol 的消息。", result)
         assertFalse("zh must NOT use 和 connector", result.contains("和"))
     }
@@ -491,7 +483,7 @@ class ForwardNoticeRendererTest {
             notice = ForwardNoticeData(Scene.COMBINED, eightAuthors, 12),
             context = context, resolveDisplayName = r
         )
-        // First 5 names shown, suffix "等 8 人" (N = total authors = 8).
+        
         assertEquals(
             "\"Alice\" 转发了 12 条来自 U1、U2、U3、U4、U5 等 8 人 的消息。",
             result

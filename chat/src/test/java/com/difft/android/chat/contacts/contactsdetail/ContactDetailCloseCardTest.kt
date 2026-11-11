@@ -24,7 +24,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
-/** Detail stack host double recording what the card asked for. */
+
 class RecordingStackHost : Fragment(), DetailStackHost {
     var pops = 0
     var closes = 0
@@ -49,11 +49,11 @@ class CardSheet : BottomSheetDialogFragment() {
         FrameLayout(inflater.context)
 }
 
-/**
- * [ContactDetailFragment.closeCard] (design: foldable detail stacks, §3.10): the sheet branch
- * first, otherwise the detail navigation, which pops in the home stack and finishes the
- * ContactDetailActivity shell. A removed contact closes even at a two-pane root.
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33])
 class ContactDetailCloseCardTest {

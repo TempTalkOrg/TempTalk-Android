@@ -13,8 +13,8 @@ class NewSendMessageResponse() {
     @field:JsonProperty
     var reason: String? = null
 
-    // Nullable: absent from JSON -> null (see JacksonDeserializationTest). Callers that dereference
-    // it (NewSignalServiceMessageSender) use !!, preserving the original Java NPE-on-absent semantics.
+    
+    
     @field:JsonProperty
     var data: Data? = null
 
@@ -27,7 +27,7 @@ class NewSendMessageResponse() {
 
     class Data {
 
-        // Wire key stays "needsSync"; exposed as isNeedsSync so callers keep property access.
+        
         @field:JsonProperty("needsSync")
         var isNeedsSync: Boolean = false
 
@@ -55,8 +55,8 @@ class NewSendMessageResponse() {
 
     class User {
 
-        // Nullable to match the original Java model: an absent uid stays null (not ""), so callers
-        // that collect flagged uids skip it via mapNotNull instead of refreshing an empty uid.
+        
+        
         @field:JsonProperty
         var uid: String? = null
 

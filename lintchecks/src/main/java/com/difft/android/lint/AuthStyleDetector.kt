@@ -14,23 +14,23 @@ import org.jetbrains.uast.UMethod
 import org.jetbrains.uast.UParameter
 import org.jetbrains.uast.getContainingUClass
 
-/**
- * Keeps every Retrofit endpoint's auth style declared exactly once, at the endpoint (issue #1231).
- *
- * `HeaderInterceptor` is the only place `Authorization` is set, and it resolves the style from the
- * `@Auth` declaration it reads off Retrofit's `Invocation` tag. Three ways to defeat that are
- * reported here:
- *   - an endpoint with no declaration at all — it would take the interceptor's fail-safe fallback,
- *     which logs an error nobody reads in a release build
- *   - an endpoint that carries the header by hand — the drift #1231 removed: a call site's cached
- *     JWT outlives its 20-minute lifetime, and the endpoint gets two sources of truth
- *   - an `@Auth(AuthStyle.EXPLICIT)` endpoint with no header parameter left to supply the
- *     credential — it would go out unauthenticated, silently
- *
- * If a legitimate exception ever exists, suppress at the method with the matching
- * `@SuppressLint("...")` AND a comment explaining why — the convention
- * [ChativeHttpClientDetector] documents.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 class AuthStyleDetector : Detector(), Detector.UastScanner {
 
     override fun getApplicableUastTypes(): List<Class<out UElement>> = listOf(UMethod::class.java)
@@ -39,7 +39,7 @@ class AuthStyleDetector : Detector(), Detector.UastScanner {
         override fun visitMethod(node: UMethod) {
             if (!node.hasHttpAnnotation()) return
 
-            // Method declaration wins over the interface's, matching AuthStyleResolver.
+            
             val auth = node.ownAuth() ?: node.getContainingUClass()?.classAuth()
             val headerParams = node.authorizationHeaderParams()
 
@@ -51,7 +51,7 @@ class AuthStyleDetector : Detector(), Detector.UastScanner {
                     message = "`${node.name}` declares no auth style. Add " +
                         "`@Auth(AuthStyle.BASIC|JWT|NONE|EXPLICIT)` to the method, or to the " +
                         "service interface when every endpoint on it shares one style.",
-                    quickfixData = null, // The right style is semantic — no mechanical quick-fix.
+                    quickfixData = null, 
                 )
                 return
             }
@@ -95,7 +95,7 @@ class AuthStyleDetector : Detector(), Detector.UastScanner {
     private fun org.jetbrains.uast.UClass.classAuth(): UAnnotation? =
         uAnnotations.firstOrNull { it.qualifiedName == AUTH }
 
-    /** True for `@Auth(AuthStyle.EXPLICIT)` however the enum constant is qualified at the site. */
+    
     private fun UAnnotation.isExplicit(): Boolean =
         attribute("style")?.asSourceString()?.endsWith(EXPLICIT) == true
 

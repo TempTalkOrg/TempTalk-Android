@@ -162,7 +162,7 @@ class VideoThumbnailsRangeSelectorView : VideoThumbnailsView {
         canvas.clipPath(clippingPath)
         canvas.translate(paddingLeft.toFloat(), paddingTop.toFloat())
 
-        // draw greyed out areas
+        
         if (Build.VERSION.SDK_INT >= 26) {
             activeRegionPath.reset()
             timePillRect.set((left + 1).toFloat(), 0f, (right - 1).toFloat(), drawableHeight.toFloat())
@@ -183,7 +183,7 @@ class VideoThumbnailsRangeSelectorView : VideoThumbnailsView {
 
         val verticalThumbInset = drawableHeight / 4
         val halfThumbWidth = thumbSizePixels / 2
-        // draw thumb rectangles
+        
         paint.style = Paint.Style.FILL_AND_STROKE
         paint.color = thumbColor
         timePillRect.set((left - halfThumbWidth).toFloat(), verticalThumbInset.toFloat(), (left + halfThumbWidth).toFloat(), (drawableHeight - verticalThumbInset).toFloat())
@@ -191,7 +191,7 @@ class VideoThumbnailsRangeSelectorView : VideoThumbnailsView {
         timePillRect.set((right - halfThumbWidth).toFloat(), verticalThumbInset.toFloat(), (right + halfThumbWidth).toFloat(), (drawableHeight - verticalThumbInset).toFloat())
         canvas.drawRoundRect(timePillRect, THUMB_RECT_CORNER_RADIUS, THUMB_RECT_CORNER_RADIUS, paint)
 
-        // draw time hint pill
+        
         if (thumbHintTextSize > 0) {
             if (dragStartTimeMs > 0 && (dragThumb == Thumb.MIN || dragThumb == Thumb.MAX)) {
                 drawTimeHint(canvas, drawableWidth, dragThumb!!, false)
@@ -201,7 +201,7 @@ class VideoThumbnailsRangeSelectorView : VideoThumbnailsView {
             }
         }
 
-        // draw current position marker
+        
         if (left <= cursor && cursor <= right && dragThumb != Thumb.MIN && dragThumb != Thumb.MAX) {
             timePillRect.set((cursor - halfThumbWidth).toFloat(), 0f, (cursor + halfThumbWidth).toFloat(), drawableHeight.toFloat())
             paint.style = Paint.Style.FILL_AND_STROKE
@@ -308,7 +308,7 @@ class VideoThumbnailsRangeSelectorView : VideoThumbnailsView {
         return false
     }
 
-    // Range-slider drag — not a clickable view.
+    
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
         val actionMasked = event.actionMasked
@@ -432,7 +432,7 @@ class VideoThumbnailsRangeSelectorView : VideoThumbnailsView {
 
         private val MINIMUM_SELECTABLE_RANGE = TimeUnit.MILLISECONDS.toMicros(500)
         private const val ANIMATION_DURATION_MS = 100
-        // Getters: the system density changes with the display-size setting while the process lives.
+        
         private val THUMB_RECT_CORNER_RADIUS: Float get() = ViewUtil.dpToPx(4).toFloat()
         private val ACTIVE_REGION_CORNER_RADIUS: Float get() = ViewUtil.dpToPx(8).toFloat()
 

@@ -20,7 +20,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** Host double capturing the two dispatch arms. */
+
 class FakeDualPaneHostActivity : FragmentActivity(), DualPaneHost {
     var dualPane = false
     var showDetailCalls = 0
@@ -33,11 +33,11 @@ class FakeDualPaneHostActivity : FragmentActivity(), DualPaneHost {
     }
 }
 
-/**
- * MeFragment settings-row dual-pane dispatch. [dispatchLinkedDevicesRow] mirrors the shared
- * [MeFragment.navigateToDetailOrActivity] (the @AndroidEntryPoint MeFragment can't be launched
- * without a Hilt harness); the dispatched targets are the real production units.
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class MeFragmentLinkedDevicesDispatchTest {
@@ -58,7 +58,7 @@ class MeFragmentLinkedDevicesDispatchTest {
         runCatching { controller.destroy() }
     }
 
-    /** Mirrors MeFragment.navigateToDetailOrActivity (pre-existing shared row dispatch). */
+    
     private fun dispatchLinkedDevicesRow() {
         val paneHost = host as DualPaneHost
         if (paneHost.isDualPaneMode) {

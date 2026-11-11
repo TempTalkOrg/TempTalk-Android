@@ -41,7 +41,7 @@ class IdentityRotationRepository @Inject constructor(
     private val mutex = Mutex()
     private var accepted: AcceptedCandidate? = null
 
-    /** A retained accepted candidate is completed locally; it never sends another renewal. */
+    
     suspend fun renewOrComplete(): AccountMutationResult {
         val account = globalServices.myId
         val authorization = users.getUserData()?.baseAuth
@@ -62,7 +62,7 @@ class IdentityRotationRepository @Inject constructor(
     }
 
     private suspend fun createAcceptedCandidate(account: String, authorization: String?): AcceptedCandidate? {
-        // Acquire the process-wide mutex BEFORE generating or capturing any key material.
+        
         val registrationId = KeyHelper.generateRegistrationId(false)
         val next = IdentityKeyUtil.generateIdentityKeyPair()
         val old = encryption.getAciIdentityKey()

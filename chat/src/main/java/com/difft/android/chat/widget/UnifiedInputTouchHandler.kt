@@ -7,14 +7,15 @@ import android.view.MotionEvent
 import android.view.View
 import kotlin.math.abs
 
-/**
- * Touch handling for the unified chat input: a tap enters text input, a long press holds to
- * record a voice message. Only intercepts a gesture when [shouldIntercept] is true at
- * ACTION_DOWN (outside text-input mode); otherwise the whole gesture goes to the EditText so
- * cursor placement and text selection keep working.
- */
+
+
+
+
+
+
+
 class UnifiedInputTouchHandler(
-    private val touchSlop: Int,
+    private val moveTolerancePx: Int,
     private val shouldIntercept: () -> Boolean,
     private val callbacks: Callbacks,
     private val longPressTimeoutMs: Long = LONG_PRESS_TIMEOUT_MS,
@@ -25,7 +26,7 @@ class UnifiedInputTouchHandler(
         fun onPressStateChanged(pressed: Boolean)
         fun onTap()
 
-        /** Returns true when recording actually started; false ends the gesture with no recording. */
+        
         fun onLongPress(): Boolean
         fun onHoldMove(rawX: Float, rawY: Float)
         fun onHoldEnd()
@@ -61,7 +62,7 @@ class UnifiedInputTouchHandler(
         when (event.actionMasked) {
             MotionEvent.ACTION_MOVE -> when (state) {
                 State.HOLDING -> callbacks.onHoldMove(event.rawX, event.rawY)
-                State.PRESSED -> if (abs(event.rawX - downX) > touchSlop || abs(event.rawY - downY) > touchSlop) {
+                State.PRESSED -> if (abs(event.rawX - downX) > moveTolerancePx || abs(event.rawY - downY) > moveTolerancePx) {
                     handler.removeCallbacks(longPressRunnable)
                     callbacks.onPressStateChanged(false)
                     state = State.ABANDONED
@@ -76,7 +77,7 @@ class UnifiedInputTouchHandler(
                     State.HOLDING -> callbacks.onHoldEnd()
                     State.PRESSED -> {
                         callbacks.onPressStateChanged(false)
-                        callbacks.onTap()
+                        if (event.x in 0f..v.width.toFloat() && event.y in 0f..v.height.toFloat()) callbacks.onTap()
                     }
                     else -> Unit
                 }
@@ -86,7 +87,7 @@ class UnifiedInputTouchHandler(
                 val previous = state
                 reset()
                 when (previous) {
-                    // Same as the former hold-to-talk button: a cancelled stream ends the hold.
+                    
                     State.HOLDING -> callbacks.onHoldEnd()
                     State.PRESSED -> callbacks.onPressStateChanged(false)
                     else -> Unit
@@ -103,5 +104,8 @@ class UnifiedInputTouchHandler(
 
     companion object {
         const val LONG_PRESS_TIMEOUT_MS = 350L
+
+        
+        const val MOVE_TOLERANCE_DP = 10f
     }
 }

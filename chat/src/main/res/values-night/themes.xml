@@ -1,7 +1,9 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- Transparent Activity Theme for Bottom Sheet style presentation (dark mode) -->
+    
     <style name="Theme.TT.TransparentActivity" parent="Theme.Chative">
+        
+        <item name="android:windowAnimationStyle">@android:style/Animation.Translucent</item>
         <item name="android:windowIsTranslucent">true</item>
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:backgroundDimEnabled">false</item>

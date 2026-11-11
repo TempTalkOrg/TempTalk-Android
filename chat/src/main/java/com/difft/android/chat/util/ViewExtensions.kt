@@ -39,11 +39,11 @@ inline fun View.doOnEachLayout(crossinline action: (view: View) -> Unit): View.O
   return listener
 }
 
-/**
- * OnLayout gets called prior to the view *actually* being laid out. This
- * method will wait until the next layout and then post the action to happen
- * afterwards.
- */
+
+
+
+
+
 inline fun View.doAfterNextLayout(crossinline action: () -> Unit) {
   doOnNextLayout {
     post { action() }
@@ -64,10 +64,10 @@ fun TextView.setRelativeDrawables(
   )
 }
 
-/**
- * Get a lifecycle associated with this view. Care must be taken to ensure
- * if activity fallback occurs that the context of the view is correct.
- */
+
+
+
+
 fun View.getLifecycle(): Lifecycle? {
   return try {
     findFragment<Fragment>().viewLifecycleOwner.lifecycle

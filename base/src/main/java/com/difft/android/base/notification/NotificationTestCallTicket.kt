@@ -3,7 +3,7 @@ package com.difft.android.base.notification
 import java.util.UUID
 import javax.inject.Inject
 
-/** A bounded, versioned grant for one actual CALL display; never restores a page timer. */
+
 data class NotificationTestCallTicket(
     val runId: String,
     val postedAt: Long,
@@ -37,7 +37,7 @@ data class NotificationTestCallTicket(
 fun validNotificationTestId(value: String): Boolean =
     runCatching { UUID.fromString(value).toString() == value }.getOrDefault(false)
 
-/** Clock is injectable so expiry and the timeout/display boundary have deterministic tests. */
+
 class NotificationTestClock @Inject constructor() {
     fun nowMs(): Long = System.currentTimeMillis()
 }

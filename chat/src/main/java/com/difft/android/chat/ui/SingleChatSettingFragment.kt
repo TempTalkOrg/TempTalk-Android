@@ -19,6 +19,7 @@ import com.difft.android.ChatSettingViewModelFactory
 import com.difft.android.base.activity.ActivityProvider
 import com.difft.android.base.activity.ActivityType
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.ui.sidechrome.padForSideChrome
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.utils.EdgeToEdgeUtils
 import com.difft.android.base.utils.globalServices
@@ -27,20 +28,20 @@ import com.difft.android.base.utils.pane.RemovedConversations
 import com.difft.android.base.utils.pane.detailNavigation
 import com.difft.android.base.utils.pane.launchOutlivingPage
 import com.difft.android.base.utils.pane.isInDetailStack
-import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.chat.R
 import com.difft.android.chat.common.compose.CollapsingTitleBar
 import com.difft.android.chat.common.compose.ContactAvatar
 import com.difft.android.chat.common.compose.IdentityHeader
 import com.difft.android.chat.common.compose.IdentityHeaderMode
+import com.difft.android.chat.common.compose.LetterAvatar
 import com.difft.android.chat.common.compose.TitleBarAction
 import com.difft.android.chat.common.compose.TitleCollapseTracker
-import com.difft.android.chat.contacts.contactsdetail.ContactDetailDestination
+import com.difft.android.chat.contacts.contactsdetail.showContactCard
 import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.chat.contacts.data.isOfficialAccount
 import com.difft.android.chat.databinding.ChatActivitySettingBinding
-import com.difft.android.chat.group.CreateGroupActivity
+import com.difft.android.chat.group.create.openCreateGroupFromConversation
 import com.difft.android.chat.search.SearchMessageDestination
 import com.difft.android.chat.setting.ChatArchiveSettingsDestination
 import com.difft.android.chat.setting.SaveToPhotosSettingsDestination
@@ -78,15 +79,15 @@ import org.difft.app.database.wcdb
 import javax.inject.Inject
 import kotlin.coroutines.cancellation.CancellationException
 
-/**
- * 1:1 chat settings. A detail page (design: foldable detail stacks, §3.10): pushed onto the home
- * screen's detail stack above its conversation, or hosted full-window by
- * [SingleChatSettingActivity]. Pages it opens (archive, translate, search, group in common, ...)
- * are still Activities.
- */
+
+
+
+
+
+
 @AndroidEntryPoint
 class SingleChatSettingFragment : Fragment(), SettingsIdiomPage {
-    // Wait dialog claim scoped to this page (released with its view, dismissed by token only).
+    
     private val pageWait = PageWait(this)
 
 
@@ -118,17 +119,17 @@ class SingleChatSettingFragment : Fragment(), SettingsIdiomPage {
 
     private var mContact: ContactorModel? = null
 
-    /** Null only while the local row is still loading; see [loadAndRenderContact]. */
+    
     private var headerContact by mutableStateOf<ContactorModel?>(null)
     private var collapseTracker: TitleCollapseTracker? = null
 
-    /**
-     * Peer with no local row (fetch failed / deregistered): the header still needs an entry to the
-     * card. Applied only after the DB has answered, so the id never flashes while loading.
-     */
+    
+
+
+
     private val fallbackContact by lazy { ContactorModel().apply { id = contactId } }
 
-    // Observable for the title action; flips when the official-account cache fills late.
+    
     private var isOfficial by mutableStateOf(false)
     private var blockStatus: Int? = null
 
@@ -147,9 +148,10 @@ class SingleChatSettingFragment : Fragment(), SettingsIdiomPage {
             detailNavigation().pop(this)
             return
         }
-        // The home screen's panes leave the navigation-bar strip to the page; a shell Activity
-        // already pads for it.
+        
+        
         if (isInDetailStack()) EdgeToEdgeUtils.applyBottomInsetAsPadding(binding.root)
+        padForSideChrome(binding.root)
 
         isOfficial = contactId.isOfficialAccount()
         collapseTracker = TitleCollapseTracker(binding.composeTitleBar)
@@ -202,15 +204,15 @@ class SingleChatSettingFragment : Fragment(), SettingsIdiomPage {
     }
 
     private fun observe() {
-        // Re-render title/avatar after contact edits (remark name/avatar, profile, etc.).
+        
         ContactorUtil.contactsUpdate
             .filter { it.contains(contactId) }
             .onEach { loadAndRenderContact() }
             .launchIn(viewScope)
 
-        // Cold-start race: the official-account cache may populate after the first gating ran.
-        // Re-gate everything that depends on it (rows, block, common groups, title action) on a
-        // flip in either direction; drop(1) skips the current value.
+        
+        
+        
         OfficialAccountCache.state
             .map { contactId in it }
             .distinctUntilChanged()
@@ -224,7 +226,7 @@ class SingleChatSettingFragment : Fragment(), SettingsIdiomPage {
             }
             .launchIn(viewScope)
 
-        // Subscribe to conversationSet for all config-related UI updates
+        
         chatSettingViewModel.conversationSet
             .filterNotNull()
             .onEach { conversationSet ->
@@ -236,7 +238,7 @@ class SingleChatSettingFragment : Fragment(), SettingsIdiomPage {
             }
             .launchIn(viewScope)
 
-        // The translate value lives outside conversationSet: the stored target is local-only.
+        
         if (chatSettingViewModel.translateSupported) {
             chatSettingViewModel.translateSetting
                 .onEach { binding.translateText.text = translateEntryValue(requireContext(), it) }
@@ -246,7 +248,7 @@ class SingleChatSettingFragment : Fragment(), SettingsIdiomPage {
         }
     }
 
-    /** Which rows a note-to-self, an official account or a contact gets ([SingleChatSettingRows]). */
+    
     private fun applyAccountGating() {
         val isSelf = contactId == globalServices.myId
         val inContacts = !isSelf && !isOfficial &&
@@ -256,12 +258,12 @@ class SingleChatSettingFragment : Fragment(), SettingsIdiomPage {
         binding.relRemove.visibility = if (rows.remove) View.VISIBLE else View.GONE
         if (rows.remove) binding.tvRemove.setOnClickListener { showRemoveDialog() }
         binding.disappearingTimeContainer.visibility = if (rows.disappearing) View.VISIBLE else View.GONE
-        // Note to self receives no incoming messages, so there is nothing to auto-translate.
+        
         if (isSelf) binding.translateContainer.visibility = View.GONE
         if (!rows.block) binding.clBlock.visibility = View.GONE
     }
 
-    /** Block / unblock row from the conversation's block status; hidden for official accounts. */
+    
     private fun applyBlockRow() {
         val status = blockStatus ?: return
         if (!rows().block) {
@@ -274,8 +276,8 @@ class SingleChatSettingFragment : Fragment(), SettingsIdiomPage {
     }
 
     private fun setupToggles() {
-        // Controlled: the conversationSet flow moves the switch once the server accepted, so a
-        // failed request simply leaves it alone.
+        
+        
         binding.switch2mute1on1.setOnToggleRequestListener { view, requested ->
             val activity = requireActivity()
             pageWait.show()
@@ -296,13 +298,13 @@ class SingleChatSettingFragment : Fragment(), SettingsIdiomPage {
                 _binding?.switchStick?.isChecked = isPinned
             }
         }
-        // Controlled and DB-only: the switch moves once the write landed, no wait dialog needed.
+        
         binding.switchStick.setOnToggleRequestListener { view, requested ->
             view.guardWhile(pinChattingRoom(requested))
         }
     }
 
-    /** Shows the sound this chat plays; re-read on return from the system category page. */
+    
     private fun refreshNotificationSound() {
         if (!messageNotificationUtil.supportConversationNotification()) return
         val appContext = requireContext().applicationContext
@@ -318,7 +320,7 @@ class SingleChatSettingFragment : Fragment(), SettingsIdiomPage {
         }
     }
 
-    // region identity header (title bar + centered header)
+    
 
     private fun setupHeaderCompose() {
         val tracker = collapseTracker ?: return
@@ -331,19 +333,25 @@ class SingleChatSettingFragment : Fragment(), SettingsIdiomPage {
                     action = if (!rows().createGroupAction) {
                         null
                     } else {
-                        TitleBarAction.Icon(R.drawable.chat_ic_users_plus) { createGroupWithContact() }
+                        TitleBarAction.Icon(R.drawable.chat_ic_users_plus, getString(R.string.chat_option_create_group)) { createGroupWithContact() }
                     }
                 )
             }
         }
         binding.composeIdentityHeader.setContent {
             DifftTheme(applyWindowBackground = false) {
-                val contact = headerContact ?: return@DifftTheme
+                
+                
+                val contact = headerContact
                 IdentityHeader(
-                    name = contact.getDisplayNameForUI(),
+                    name = contact?.getDisplayNameForUI().orEmpty(),
                     mode = IdentityHeaderMode.Browse,
                     avatar = { avatarModifier ->
-                        ContactAvatar(contactor = contact, size = DifftTheme.spacing.avatarLarge, modifier = avatarModifier)
+                        if (contact != null) {
+                            ContactAvatar(contactor = contact, size = DifftTheme.spacing.avatarLarge, modifier = avatarModifier)
+                        } else {
+                            LetterAvatar(firstLetter = null, id = contactId, size = DifftTheme.spacing.avatarLarge, modifier = avatarModifier)
+                        }
                     },
                     onAvatarClick = { openContactCard() },
                     onHeaderClick = { openContactCard() },
@@ -354,7 +362,7 @@ class SingleChatSettingFragment : Fragment(), SettingsIdiomPage {
     }
 
     private fun openContactCard() {
-        detailNavigation().push(this, ContactDetailDestination(contactId))
+        showContactCard(this, contactId)
     }
 
     private fun createGroupWithContact() {
@@ -364,7 +372,7 @@ class SingleChatSettingFragment : Fragment(), SettingsIdiomPage {
                     wcdb.contactor.getFirstObject(DBContactorModel.id.eq(contactId))
                 }
                 if (contact != null) {
-                    CreateGroupActivity.startActivity(requireActivity(), arrayListOf(contact.id))
+                    openCreateGroupFromConversation(this@SingleChatSettingFragment, contact.id)
                 } else {
                     ToastUtil.showLong(getString(R.string.contact_not_in_list))
                 }
@@ -376,7 +384,7 @@ class SingleChatSettingFragment : Fragment(), SettingsIdiomPage {
         }
     }
 
-    // endregion
+    
 
     private fun loadAndRenderContact() {
         viewScope.launch {
@@ -395,7 +403,7 @@ class SingleChatSettingFragment : Fragment(), SettingsIdiomPage {
         }
     }
 
-    /** Common-group count and entry; numeric-only display, no English text to translate. */
+    
     @SuppressLint("SetTextI18n")
     private fun handleCommonGroupsDisplay() {
         if (!rows().commonGroups) {
@@ -431,10 +439,10 @@ class SingleChatSettingFragment : Fragment(), SettingsIdiomPage {
         SingleChatSettingDialogs.confirmRemove(this) { removeFriend() }
     }
 
-    /**
-     * Completes across a fold recreation: a removal the server accepted always deletes the local
-     * contact and conversation; only the toast and leaving the page need the page.
-     */
+    
+
+
+
     private fun removeFriend() {
         val appContext = requireContext().applicationContext
         val contactId = contactId
@@ -448,9 +456,9 @@ class SingleChatSettingFragment : Fragment(), SettingsIdiomPage {
                         messageStore.removeRoomAndMessages(contactId)
                     }
                     ContactorUtil.emitContactsUpdate(listOf(contactId))
-                    // The conversation is gone with the friend: close it on the home screen even
-                    // if this page was destroyed meanwhile (fold). Recorded first, so a home screen
-                    // recreated before the close lands still clears it.
+                    
+                    
+                    
                     RemovedConversations.add(contactId)
                     (appContext as? ConversationOpener)?.closeConversation(contactId)
                     onPage {
@@ -470,12 +478,12 @@ class SingleChatSettingFragment : Fragment(), SettingsIdiomPage {
         }
     }
 
-    /**
-     * The friend is gone, so the conversation is too. In the home detail stack the pages about the
-     * friend close (the whole stack when it starts at the friend's conversation or card); from a
-     * shell the home screen is brought forward, which (singleTask) also finishes the conversation
-     * Activity under this one.
-     */
+    
+
+
+
+
+
     private fun leaveRemovedConversation() {
         if (isInDetailStack()) {
             detailNavigation().closeConversation(this)
@@ -491,7 +499,7 @@ class SingleChatSettingFragment : Fragment(), SettingsIdiomPage {
         }
     }
 
-    /** @return the write's job, so the toggle can gate itself on it (see `DifftToggleView.guardWhile`). */
+    
     private fun pinChattingRoom(isPinned: Boolean): Job {
         return viewScope.launch {
             try {
@@ -515,10 +523,10 @@ class SingleChatSettingFragment : Fragment(), SettingsIdiomPage {
         return dbRoomStore.getPinnedTime(For.Account(contactId)).isPresent
     }
 
-    /**
-     * Display text for the save-to-photos setting.
-     * @param saveToPhotos null: follow global, 0: never, 1: always
-     */
+    
+
+
+
     private fun getSaveToPhotosDisplayText(saveToPhotos: Int?): String = when (saveToPhotos) {
         1 -> getString(R.string.save_to_photos_always)
         0 -> getString(R.string.save_to_photos_never)

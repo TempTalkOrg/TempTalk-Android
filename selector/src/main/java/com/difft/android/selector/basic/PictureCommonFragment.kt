@@ -34,44 +34,44 @@ import com.difft.android.selector.permissions.PermissionResultCallback
 import com.difft.android.selector.utils.ActivityCompatHelper
 import com.difft.android.selector.utils.FileDirMap
 
-/**
- * Base fragment of the selector/preview fragments. Owns the fragment lifecycle,
- * shared state, and the [IPictureSelectorCommonEvent] dispatch contract; the
- * heavy logic lives in 5 collaborators reached via this host reference.
- *
- * 1:1 Java→Kotlin port (issue #1077); the base + collaborator split is the only
- * structural change (500-line rule), all behavior preserved.
- */
+
+
+
+
+
+
+
+
 abstract class PictureCommonFragment : Fragment(), IPictureSelectorCommonEvent {
 
-    /** IBridgePictureBehavior */
+    
     internal var iBridgePictureBehavior: IBridgePictureBehavior? = null
 
-    /** page */
+    
     internal var mPage = 1
 
-    /** Media Loader engine */
+    
     internal lateinit var mLoader: IBridgeMediaLoader
 
-    /** PictureSelector Config */
+    
     internal lateinit var selectorConfig: SelectorConfig
 
-    /** Loading Dialog */
+    
     private var mLoadingDialog: Dialog? = null
 
-    /** click sound */
+    
     private var soundPool: SoundPool? = null
 
-    /** click sound effect id */
+    
     private var soundID = 0
 
-    /** fragment enter anim duration */
+    
     private var enterAnimDuration: Long = 0
 
-    /** tipsDialog */
+    
     internal var tipsDialog: Dialog? = null
 
-    /** attached context (last-resort fallback for getAppContext) */
+    
     private var attachedContext: Context? = null
 
     internal val permissions = FragmentPermissionDispatcher(this)
@@ -109,7 +109,7 @@ abstract class PictureCommonFragment : Fragment(), IPictureSelectorCommonEvent {
     override fun handlePermissionSettingResult(permissions: Array<String>) {}
 
     override fun openSoundRecording() {
-        // Audio-record path is dead (ofAudio is never launched); no-op retained for interface contract.
+        
     }
 
     internal fun getAppContext(): Context {
@@ -137,7 +137,7 @@ abstract class PictureCommonFragment : Fragment(), IPictureSelectorCommonEvent {
         permissions.handlePermissionDenied(permissionArray)
     }
 
-    /** Whether entered via PictureSelector default flow. */
+    
     internal fun isNormalDefaultEnter(): Boolean {
         return activity is PictureSelectorSupporterActivity || activity is PictureSelectorTransparentActivity
     }
@@ -169,7 +169,7 @@ abstract class PictureCommonFragment : Fragment(), IPictureSelectorCommonEvent {
         }
     }
 
-    /** Set the back-key listener. */
+    
     fun setRootViewKeyListener(view: View) {
         if (selectorConfig.isNewKeyBackMode) {
             requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner, object : OnBackPressedCallback(true) {
@@ -292,7 +292,7 @@ abstract class PictureCommonFragment : Fragment(), IPictureSelectorCommonEvent {
         permissions.onPermissionExplainEvent(isDisplayExplain, permissionArray)
     }
 
-    /** Play the click sound effect. */
+    
     internal fun playClickEffect() {
         val pool = soundPool
         if (pool != null && selectorConfig.isOpenClickSound) {
@@ -300,7 +300,7 @@ abstract class PictureCommonFragment : Fragment(), IPictureSelectorCommonEvent {
         }
     }
 
-    /** Release the sound-effect resources. */
+    
     private fun releaseSoundPool() {
         try {
             val pool = soundPool
@@ -361,7 +361,7 @@ abstract class PictureCommonFragment : Fragment(), IPictureSelectorCommonEvent {
 
     override fun onResultEvent(result: ArrayList<LocalMedia>) = transform.onResultEvent(result)
 
-    /** Set the app language. */
+    
     override fun initAppLanguage() {
         if (!::selectorConfig.isInitialized) {
             selectorConfig = SelectorProviders.getInstance().selectorConfig
@@ -417,10 +417,10 @@ abstract class PictureCommonFragment : Fragment(), IPictureSelectorCommonEvent {
         }
     }
 
-    /** Back to the current fragment. */
+    
     protected open fun onBackCurrentFragment() = results.onBackCurrentFragment()
 
-    /** Exit PictureSelector. */
+    
     open fun onExitPictureSelector() = results.onExitPictureSelector()
 
     companion object {
@@ -428,7 +428,7 @@ abstract class PictureCommonFragment : Fragment(), IPictureSelectorCommonEvent {
         val TAG: String = PictureCommonFragment::class.java.simpleName
     }
 
-    /** SelectorResult */
+    
     class SelectorResult(
         @JvmField var mResultCode: Int,
         @JvmField var mResultData: Intent?

@@ -6,4 +6,9 @@
     <item name="parent_start_guideline" type="id" />
     <item name="parent_end_guideline" type="id" />
     <item name="detail_shell_container" type="id" />
+    <item name="glass_backdrop" type="id" />
+    <item name="glass_surface_binding" type="id" />
+    <item name="floating_overlay_shadow" type="id" />
+    <item name="top_chrome_inset" type="id" />
+    <item name="corner_cutout" type="id" />
 </resources>

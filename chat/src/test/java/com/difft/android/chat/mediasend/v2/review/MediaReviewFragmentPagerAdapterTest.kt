@@ -19,25 +19,25 @@ import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import util.getParcelableCompat
 
-/**
- * T24 — [MediaReviewFragmentPagerAdapter] identity and ARG_URI contract.
- *
- * The compiler cannot catch the failure this pins. If the adapter still derived its URIs from the
- * bare `realPath` while the view model derived its keys from the normalized URI, both sides would
- * still hold perfectly legal keys of the same type — the crop / drawing / trim would simply be
- * written under one key and looked up under another, and be discarded with no error at all.
- *
- * Uses a real `FragmentStateAdapter` with a real host fragment, a real `Bundle` parcel round trip
- * and a real `Uri.hashCode()`, because the ViewPager2 stable-id contract lives in that framework
- * behaviour rather than in our code.
- *
- * Run: :chat:testDebugUnitTest
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [33])
 class MediaReviewFragmentPagerAdapterTest {
 
-    /** Mirrors the private constant in each page fragment; the parcel key is the contract. */
+    
     private val argUriKey = "arg.uri"
 
     private lateinit var controller: ActivityController<FragmentActivity>
@@ -83,11 +83,11 @@ class MediaReviewFragmentPagerAdapterTest {
         runCatching { controller.destroy() }
     }
 
-    /**
-     * T24 ① — every page fragment is handed the normalized URI, not the bare `realPath`. This is
-     * the root of the derivation chain: ARG_URI feeds both the editor-state keys and the preview
-     * sinks of all three page fragment types.
-     */
+    
+
+
+
+
     @Test
     fun `each page fragment argument carries the normalized media uri`() {
         media.indices.forEach { index ->
@@ -99,14 +99,14 @@ class MediaReviewFragmentPagerAdapterTest {
             assertEquals("page $index", media[index].readableUri(), argUri)
         }
 
-        // Shape check on top of equality: the two gallery items must reach the pages as content
-        // URIs, and the sandbox item must keep its file URI (its scoped-storage immunity).
+        
+        
         assertEquals("content", argUriOf(0).scheme)
         assertEquals("content", argUriOf(1).scheme)
         assertEquals("file", argUriOf(2).scheme)
     }
 
-    /** T24 ② / ③ — getItemId and containsItem share one derivation, so they cannot drift apart. */
+    
     @Test
     fun `item ids come from the normalized uri and are recognized by containsItem`() {
         media.indices.forEach { index ->
@@ -117,11 +117,11 @@ class MediaReviewFragmentPagerAdapterTest {
         }
     }
 
-    /**
-     * T24 ④ — ViewPager2 requires a stable id per logical item across adapter submissions.
-     * `readableUri()` reads only `path` / `realPath`, and no transform rewrites `path`, so
-     * resubmitting the same list must not renumber anything.
-     */
+    
+
+
+
+
     @Test
     fun `item ids are unchanged after resubmitting the same list`() {
         val before = media.indices.map { adapter.getItemId(it) }

@@ -3,19 +3,19 @@ package com.difft.android.chat.ui.messageaction
 import kotlin.math.max
 import kotlin.math.min
 
-/**
- * Integer rect used by [MessageActionPopupPositioner]. The positioner is pure Kotlin so it can be
- * unit-tested on the plain JVM, where `android.graphics.Rect` is an unmocked stub.
- *
- * All rects passed to one [MessageActionPopupPositioner.place] call must share one coordinate
- * space (root-relative, see #1294).
- */
+
+
+
+
+
+
+
 internal data class PopupRect(val left: Int, val top: Int, val right: Int, val bottom: Int) {
     val width: Int get() = right - left
     val height: Int get() = bottom - top
     val centerX: Int get() = (left + right) / 2
 
-    /** Half-open vertical overlap: rects that only touch do not overlap. */
+    
     fun overlapsVertically(other: PopupRect): Boolean = top < other.bottom && other.top < bottom
 
     fun verticalOverlap(other: PopupRect): Int = max(0, min(bottom, other.bottom) - max(top, other.top))
@@ -23,16 +23,16 @@ internal data class PopupRect(val left: Int, val top: Int, val right: Int, val b
     fun union(other: PopupRect): PopupRect =
         PopupRect(min(left, other.left), min(top, other.top), max(right, other.right), max(bottom, other.bottom))
 
-    /** Vertical intersection with [bounds]; null when empty. This is the single row clip. */
+    
     fun clipVerticallyTo(bounds: PopupRect): PopupRect? =
         PopupRect(left, max(top, bounds.top), right, min(bottom, bounds.bottom)).takeIf { it.top < it.bottom }
 }
 
-/**
- * What the menu may anchor to. [startRow] / [endRow] are the selection-edge rows (knob-extended,
- * unclipped); null means that handle is not visible. With no rows the menu anchors to [bubble],
- * which is already clipped to its visible part.
- */
+
+
+
+
+
 internal data class SelectionAnchorInput(
     val bubble: PopupRect,
     val startRow: PopupRect? = null,
@@ -55,7 +55,7 @@ internal enum class PlacementMode { BELOW, ABOVE, PINNED_TOP, PINNED_BOTTOM }
 
 internal data class ResolvedAnchor(val rect: PopupRect, val mode: AnchorMode)
 
-/** [isBelow] keeps the `ArrowConfig` meaning: true = menu below its anchor, arrow on the top edge. */
+
 internal data class YPlacement(val y: Int, val isBelow: Boolean, val mode: PlacementMode)
 
 internal data class PopupPlacement(
@@ -67,9 +67,9 @@ internal data class PopupPlacement(
     val placementMode: PlacementMode,
 )
 
-/** The vertical space the menu may occupy: `[minY, maxY]`. */
+
 internal data class VerticalBand(val minY: Int, val maxY: Int, val popupHeight: Int, val gap: Int) {
-    /** Candidate Ys are clamped into the band first, so a sliver anchor at an edge never pushes the menu into the edge padding. */
+    
     fun yBelow(anchor: PopupRect): Int = (anchor.bottom + gap).coerceAtLeast(minY)
 
     fun yAbove(anchor: PopupRect): Int = (anchor.top - popupHeight - gap).coerceAtMost(maxY - popupHeight)
@@ -83,20 +83,20 @@ internal data class VerticalBand(val minY: Int, val maxY: Int, val popupHeight: 
     fun pinnedBottomRect(): PopupRect = PopupRect(0, maxY - popupHeight, 0, maxY)
 }
 
-/**
- * Placement of the message action menu (#1294), shared by `MessageActionPopup` and
- * `FailedMessageActionPopup`. Anchor resolution follows TempTalk-iOS
- * `ConversationActionMenuController.refreshContainerViewFrame`:
- * both edge rows on one line -> that line; on different lines -> below the whole selection if it
- * fits, else above it, else the first (top) row; one row -> that row; none -> the bubble.
- *
- * Handle coverage: BELOW/ABOVE placements never overlap a visible row, except `FIRST_ROW` + BELOW
- * when the menu is taller than the gap between the rows (then it covers exactly the end row, as on
- * iOS). Pinned placements may cover rows.
- *
- * X aligns the menu with the bubble edge on the message side (outgoing: right edges, incoming: left
- * edges), clamped into the content minus the edge padding.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 internal object MessageActionPopupPositioner {
 
     fun place(
@@ -120,11 +120,11 @@ internal object MessageActionPopupPositioner {
         return PopupPlacement(x, yPlacement.y, yPlacement.isBelow, arrow, anchor, yPlacement.mode)
     }
 
-    /**
-     * The only place rows are intersected with the visible content. A handle can be visible through
-     * its touch padding while its row lies outside the list; such a row must not anchor the menu.
-     * The bubble is not clipped here: it is already the visible part.
-     */
+    
+
+
+
+
     internal fun clipRows(input: SelectionAnchorInput, content: PopupRect): SelectionAnchorInput =
         input.copy(
             startRow = input.startRow?.clipVerticallyTo(content),
@@ -146,7 +146,7 @@ internal object MessageActionPopupPositioner {
     }
 
     private fun resolveMultiRow(a: PopupRect, b: PopupRect, band: VerticalBand): ResolvedAnchor {
-        // Order by geometry, not by label.
+        
         val (top, bottom) = if (a.top <= b.top) a to b else b to a
         val belowWhole = PopupRect(bottom.left, top.top, bottom.right, bottom.bottom)
         if (band.fitsBelow(belowWhole)) return ResolvedAnchor(belowWhole, AnchorMode.WHOLE_SELECTION_BELOW)
@@ -159,7 +159,7 @@ internal object MessageActionPopupPositioner {
         band.fitsBelow(anchor) -> YPlacement(band.yBelow(anchor), isBelow = true, PlacementMode.BELOW)
         band.fitsAbove(anchor) -> YPlacement(band.yAbove(anchor), isBelow = false, PlacementMode.ABOVE)
         pinToTop(anchor, bubble, band) -> YPlacement(band.minY, isBelow = false, PlacementMode.PINNED_TOP)
-        // coerceAtLeast: a menu taller than the band keeps its top (the reaction row) inside the content.
+        
         else -> YPlacement(
             (band.maxY - band.popupHeight).coerceAtLeast(band.minY),
             isBelow = true,
@@ -167,10 +167,10 @@ internal object MessageActionPopupPositioner {
         )
     }
 
-    /**
-     * Pin to the edge whose menu covers less of the bubble; tie -> less of the anchor; tie -> the side
-     * with more free space around the bubble (legacy Android / iOS rule); equal -> bottom.
-     */
+    
+
+
+
     private fun pinToTop(anchor: PopupRect, bubble: PopupRect, band: VerticalBand): Boolean {
         val top = band.pinnedTopRect()
         val bottom = band.pinnedBottomRect()
@@ -181,13 +181,13 @@ internal object MessageActionPopupPositioner {
         return bubble.top - band.minY > band.maxY - bubble.bottom
     }
 
-    /**
-     * Aligns the menu with the [bubble] edge on the message side (#1294): outgoing -> right edges,
-     * incoming -> left edges. The bubble rect is used, not the resolved selection anchor. The result
-     * is clamped into `[content.left + edgePaddingPx, content.right - edgePaddingPx - popupWidth]`;
-     * a menu wider than that band starts at the left bound. X depends only on the message direction,
-     * never on the layout direction.
-     */
+    
+
+
+
+
+
+
     internal fun placeX(
         bubble: PopupRect,
         content: PopupRect,

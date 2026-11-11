@@ -13,18 +13,18 @@ enum class AppStore(val storePackage: String, val webListingPrefix: String) {
     FDroid("org.fdroid.fdroid", "https://f-droid.org/packages/"),
 }
 
-/**
- * Update delivery for store channels: opens this app's listing in [store], falling back to the
- * store's web listing. A store build never installs an APK itself, whatever the server offers.
- */
+
+
+
+
 class StoreUpdateDelivery(internal val store: AppStore) : UpdateDelivery {
 
     override val isInProgress: Boolean = false
 
     override fun attach(activity: FragmentActivity, onForceHandOff: () -> Unit) = Unit
 
-    // The force prompt stays up (autoDismiss = false): returning from the store without updating
-    // lands on it again, so onForceHandOff is not invoked.
+    
+    
     override fun deliver(context: Context, offer: UpdateOffer, isForce: Boolean, onForceHandOff: () -> Unit) {
         L.i { "[UpdateDelivery] open store=${store.name} force=$isForce" }
         val opened = openStoreApp(context) || openWebListing(context)

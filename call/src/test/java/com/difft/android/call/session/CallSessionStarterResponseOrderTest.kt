@@ -34,11 +34,11 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/**
- * `Room.connect` returns only after the first PeerConnection is up and emits `RoomEvent.Connected`
- * just before returning, so [CallSessionStarter.start] must handle `ttCallResp` while connect is
- * still in flight — the Connected handler reads the room id assigned from it.
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [33])
 class CallSessionStarterResponseOrderTest {

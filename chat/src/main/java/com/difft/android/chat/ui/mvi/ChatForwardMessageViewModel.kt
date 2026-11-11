@@ -11,17 +11,17 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
-/**
- * Holds the forward viewer's navigation stack so a configuration change keeps the shown
- * content instead of restoring empty fragments (#1440).
- */
+
+
+
+
 @HiltViewModel
 class ChatForwardMessageViewModel @Inject constructor() : ViewModel() {
 
     private val _state = MutableStateFlow(State())
     val state: StateFlow<State> = _state.asStateFlow()
 
-    /** Author names for titles; kept here so they survive a configuration change. */
+    
     val contactorCache = MessageContactsCacheUtil()
 
     fun dispatch(intent: Intent) {
@@ -35,6 +35,13 @@ class ChatForwardMessageViewModel @Inject constructor() : ViewModel() {
             }
             is Intent.PushNested -> _state.update { it.copy(stack = it.stack + intent.context) }
             is Intent.TrimTo -> _state.update { it.copy(stack = it.stack.take(intent.size)) }
+            is Intent.ReplaceAt -> _state.update { state ->
+                if (intent.index !in state.stack.indices) {
+                    state
+                } else {
+                    state.copy(stack = state.stack.mapIndexed { i, ctx -> if (i == intent.index) intent.context else ctx })
+                }
+            }
         }
     }
 }

@@ -74,7 +74,7 @@
         app:layout_constraintLeft_toLeftOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/ib_back" />
 
-    <!-- Voice Playback Speed Setting -->
+    
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/cl_voice_playback_speed"
         android:layout_width="match_parent"
@@ -132,7 +132,7 @@
         android:textColor="@color/t.third"
         android:textSize="12sp" />
 
-    <!-- Voice Changer (call) Setting -->
+    
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/cl_voice_changer"
         android:layout_width="match_parent"

@@ -5,12 +5,12 @@ import kotlin.random.Random
 
 object BackoffUtil {
 
-  /**
-   * Simple exponential backoff with random jitter.
-   * @param pastAttemptCount The number of attempts that have already been made.
-   *
-   * @return The calculated backoff.
-   */
+  
+
+
+
+
+
   @JvmStatic
   fun exponentialBackoff(pastAttemptCount: Int, maxBackoff: Long): Long {
     require(pastAttemptCount >= 1) { "Bad attempt count! $pastAttemptCount" }

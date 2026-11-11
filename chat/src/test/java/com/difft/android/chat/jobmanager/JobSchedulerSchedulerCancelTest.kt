@@ -22,11 +22,11 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/**
- * Covers [JobSchedulerScheduler.cancelAllExcept] and its ordering against
- * [JobSchedulerScheduler.schedule]. Kept apart from `JobSchedulerSchedulerTest` so neither file
- * grows past the project's file-size limit.
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33])
 class JobSchedulerSchedulerCancelTest {
@@ -34,7 +34,7 @@ class JobSchedulerSchedulerCancelTest {
     private val jobScheduler = mockk<JobScheduler>(relaxed = true)
     private val application = mockk<Application>(relaxed = true)
 
-    /** Binder calls in the order the scheduler's serial executor issued them. */
+    
     private val calls = LinkedBlockingQueue<String>()
 
     @Before
@@ -52,8 +52,8 @@ class JobSchedulerSchedulerCancelTest {
 
     @Test
     fun `cancelling everything clears our own wake-ups and leaves other components alone`() {
-        // The foreign job sits in the middle, so observing both of our cancels proves the whole
-        // list was walked and the foreign entry was deliberately skipped.
+        
+        
         every { jobScheduler.allPendingJobs } returns listOf(
             pendingJob(PLAIN_JOB_ID, OWN_SERVICE),
             pendingJob(FOREIGN_JOB_ID, FOREIGN_SERVICE),
@@ -80,8 +80,8 @@ class JobSchedulerSchedulerCancelTest {
         scheduler.cancelAllExcept(setOf(NETWORK_JOB_ID))
 
         assertEquals(listOf("cancel:$PLAIN_JOB_ID"), drain(1))
-        // The serial executor runs this fence only after the cancel task, so observing it proves
-        // that task already ran and left the network job alone.
+        
+        
         scheduler.schedule(0, emptyList())
         assertEquals(listOf("schedule:$PLAIN_JOB_ID"), drain(1))
         verify(exactly = 0) { jobScheduler.cancel(NETWORK_JOB_ID) }
@@ -125,8 +125,8 @@ class JobSchedulerSchedulerCancelTest {
     fun `a registration submitted before a cancel is never overtaken by it`() {
         val released = CountDownLatch(1)
         every { jobScheduler.getPendingJob(any()) } answers {
-            // Holds the registration task until the cancel has been submitted, so a parallel
-            // executor would let the cancel run first.
+            
+            
             released.await(AWAIT_SECONDS, TimeUnit.SECONDS)
             null
         }
@@ -145,7 +145,7 @@ class JobSchedulerSchedulerCancelTest {
         assertEquals(listOf("schedule:$NETWORK_JOB_ID", "cancel:$NETWORK_JOB_ID"), drain(2))
     }
 
-    // -- Armed flag --
+    
 
     @Test
     fun `a repeat drain with nothing registered in between never reaches the binder`() {
@@ -158,8 +158,8 @@ class JobSchedulerSchedulerCancelTest {
         assertEquals(listOf("cancel:$PLAIN_JOB_ID"), drain(1))
 
         scheduler.cancelAllExcept(emptySet())
-        // The serial executor runs this fence only after the second cancel task, so observing it
-        // proves that task already ran and chose not to enumerate.
+        
+        
         scheduler.schedule(0, listOf(TestNetworkConstraint()))
 
         assertEquals(listOf("schedule:$NETWORK_JOB_ID"), drain(1))
@@ -184,7 +184,7 @@ class JobSchedulerSchedulerCancelTest {
         assertEquals(2, enumerations.get(), "a new registration must make the next drain enumerate")
     }
 
-    // -- Helpers --
+    
 
     private fun recordCancels() {
         every { jobScheduler.cancel(any()) } answers { calls.add("cancel:${firstArg<Int>()}") }
@@ -198,7 +198,7 @@ class JobSchedulerSchedulerCancelTest {
         }
     }
 
-    /** Counts the enumerations while always reporting one of our own jobs as pending. */
+    
     private fun countEnumerations(pendingId: Int): AtomicInteger {
         val enumerations = AtomicInteger()
         every { jobScheduler.allPendingJobs } answers {

@@ -4,16 +4,16 @@ import org.difft.app.database.models.MessageModel
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/**
- * Pins the two spellings of the `message.sendType` domain against each other.
- *
- * `SendType` lives in :chat; the room-level clear-side recompute runs in :database, which does NOT
- * depend on :chat and therefore mirrors the values as `MessageModel.SEND_TYPE_*`. This test lives
- * in :chat because it is the only module where BOTH declarations are visible — if either side ever
- * drifts, it fails here rather than producing a silently wrong SQL predicate.
- *
- * Covers T3-3.
- */
+
+
+
+
+
+
+
+
+
+
 class SendTypeContractTest {
 
     @Test

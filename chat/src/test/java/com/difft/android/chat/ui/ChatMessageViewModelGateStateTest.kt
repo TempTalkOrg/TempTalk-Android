@@ -15,20 +15,20 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/**
- * Case #61 — the CRIT-1 regression at the layer where the gate reads its input.
- *
- * `checkAndLoadMessages` suppresses a page load by reading `hasReachedHistoryStart` /
- * `hasReachedLatest` off the CURRENT UI state, so the mechanism that unlocks a gated edge is: the
- * controller recomputes the flag on every emission, and the resulting UI state must reach the
- * Fragment. `distinctUntilChanged` sits between the two.
- *
- * The self conversation is deliberate. It is not E2EE-hint eligible, so no header is injected and
- * `chatMessages` is byte-identical across the two emissions below — which is exactly the case where
- * the flag flip is the ONLY difference. Before the flags entered `ChatMessageListUIState` this second
- * state would have been dropped as a duplicate, and the top gate could never re-open: "scrolled to
- * the top once, can never pull older messages again, even after a failed retry re-inserts one".
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28])
@@ -50,8 +50,8 @@ class ChatMessageViewModelGateStateTest : ChatMessageViewModelTestBase() {
             assertTrue(gated.hasReachedHistoryStart)
             val renderedIds = gated.chatMessages.map { it.id }
 
-            // Same window, same transformed list — only the flag moves (a row re-inserted OLDER than
-            // the window is invisible to the observer's window query, by design).
+            
+            
             behaviorFlow.value = ChatMessageListBehavior(
                 messageList = window,
                 updateTimestamp = 2L,

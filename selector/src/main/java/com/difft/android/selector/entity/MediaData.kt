@@ -4,7 +4,7 @@ import java.util.ArrayList
 
 class MediaData {
 
-    /** Public fields are accessed bare from remaining Java (LocalMediaPageLoader) → @JvmField. */
+    
     @JvmField
     var isHasNextMore: Boolean = false
 

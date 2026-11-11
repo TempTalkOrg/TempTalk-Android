@@ -11,7 +11,10 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.difft.android.chat.group.GroupUIData
 import com.difft.android.chat.search.SearchChatHistoryAdapter
 import com.difft.android.chat.search.SearchChatHistoryViewData
+import com.difft.android.search.mvi.GlobalSearchContract
+import com.difft.android.search.mvi.SearchRow
 import com.difft.android.test.rules.GlobalStaticMockRule
+import org.difft.app.database.models.ContactorModel
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -20,11 +23,11 @@ import org.robolectric.Robolectric
 import org.robolectric.annotation.Config
 import com.difft.android.base.R as BaseR
 
-/**
- * Two-pane highlight of the open conversation in the global search's group and message-history
- * rows (design "global search in the list pane" §4.3, S13): the selected row binds on bg3, the
- * others stay transparent, and changing the selection rebinds both rows.
- */
+
+
+
+
+
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [33])
 class SearchRowSelectionAdapterTest {
@@ -73,5 +76,29 @@ class SearchRowSelectionAdapterTest {
 
         assertEquals(bg3(), color(bind(adapter, 0)))
         assertEquals(Color.TRANSPARENT, color(bind(adapter, 1)))
+    }
+
+    @Test
+    fun `the grouped results list highlights the open conversation's rows only`() {
+        val adapter = GlobalSearchResultsAdapter(object : GlobalSearchResultsAdapter.Listener {
+            override fun onScopeSelected(scope: GlobalSearchContract.Scope) = Unit
+            override fun onContactClicked(contact: ContactorModel) = Unit
+            override fun onGroupClicked(group: GroupUIData) = Unit
+            override fun onHistoryClicked(history: SearchChatHistoryViewData) = Unit
+            override fun onViewAllClicked(section: GlobalSearchContract.Section) = Unit
+            override fun onMoreClicked(section: GlobalSearchContract.Section) = Unit
+        })
+        adapter.submitList(
+            listOf(
+                SearchRow.Group(GroupUIData(gid = "g1", name = "One", members = emptyList()), "o", divider = true),
+                SearchRow.Message(SearchChatHistoryViewData("g1", label = "One", type = SearchChatHistoryViewData.Type.Group), "o", divider = false),
+                SearchRow.Group(GroupUIData(gid = "g2", name = "Two", members = emptyList()), "o", divider = false),
+            )
+        )
+        adapter.selectedId = "g1"
+
+        assertEquals(bg3(), color(bind(adapter, 0)))
+        assertEquals(bg3(), color(bind(adapter, 1)))
+        assertEquals(Color.TRANSPARENT, color(bind(adapter, 2)))
     }
 }

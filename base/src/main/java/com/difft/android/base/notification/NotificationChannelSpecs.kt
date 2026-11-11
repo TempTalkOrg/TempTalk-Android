@@ -7,31 +7,31 @@ import androidx.annotation.VisibleForTesting
 import androidx.core.app.NotificationCompat
 import com.difft.android.base.log.lumberjack.L
 
-/**
- * Specs of the shared [NotificationChannelIds.OTHER_ALERTS] and
- * [NotificationChannelIds.RUNNING_IN_BACKGROUND] channels, and the verify-before-use rules that
- * keep every post and every `startForeground` off a missing channel (#1354).
- *
- * A `startForeground` on a missing channel makes the system kill the app asynchronously, beyond
- * any catch, so a foreground service only ever promotes on an id verified to exist:
- * 1. A starter calls [preflightForegroundChannel] before `startForegroundService`; a null result
- *    means the service is not started. A verified id is kept in [verifiedForegroundChannel].
- * 2. The service calls [serviceForegroundChannel] at every promotion: the live lookup's id, or the
- *    preflight id when the lookup itself throws, or null, on which it stops without promoting.
- *
- * App-owned [NotificationChannelIds.KEEP] channels never disappear once verified: only
- * [NotificationChannelIds.OBSOLETE] ids are deleted, and only the system or the app can delete.
- * Starters and services share one process (no service declares `android:process`). Nothing here
- * touches DataStore, so every call is safe on the main thread.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 object NotificationChannelSpecs {
 
-    /** The foreground channel the latest preflight in this process verified; null in a fresh process. */
+    
     @Volatile
     var verifiedForegroundChannel: String? = null
         private set
 
-    /** Creates [id] when missing; returns whether it exists afterwards. Never throws. */
+    
     fun ensure(context: Context, id: String): Boolean {
         val nm = notificationManager(context) ?: return false
         return try {
@@ -43,15 +43,15 @@ object NotificationChannelSpecs {
         }
     }
 
-    /**
-     * The first foreground channel that exists: [NotificationChannelIds.RUNNING_IN_BACKGROUND]
-     * (created when missing), else [NotificationChannelIds.MESSAGE], present since the first
-     * release on any device old enough to hit the per-app channel cap. Null when neither exists
-     * or the lookup throws.
-     */
+    
+
+
+
+
+
     fun foregroundChannel(context: Context): String? = (lookupForeground(context) as? Lookup.Found)?.id
 
-    /** Starter-side check before `startForegroundService`; null means do not start [service]. */
+    
     fun preflightForegroundChannel(context: Context, service: String): String? {
         val id = foregroundChannel(context)
         if (id == null) {
@@ -62,10 +62,10 @@ object NotificationChannelSpecs {
         return id
     }
 
-    /**
-     * Service-side check at every promotion: the live result, or the preflight id when the lookup
-     * throws. Null means stop without calling `startForeground`.
-     */
+    
+
+
+
     fun serviceForegroundChannel(context: Context, service: String): String? {
         val id = when (val lookup = lookupForeground(context)) {
             is Lookup.Found -> lookup.id
@@ -78,7 +78,7 @@ object NotificationChannelSpecs {
         return id
     }
 
-    /** Keeps a foreground notification quiet when it fell back to the alerting MESSAGE channel. */
+    
     fun applyForegroundFallback(builder: NotificationCompat.Builder, channelId: String): NotificationCompat.Builder =
         if (channelId == NotificationChannelIds.RUNNING_IN_BACKGROUND) {
             builder
@@ -86,7 +86,7 @@ object NotificationChannelSpecs {
             builder.setSilent(true).setOnlyAlertOnce(true)
         }
 
-    /** Spec of an app-wide channel owned here; the message, call and critical-alert specs live in `:chat`. */
+    
     fun build(context: Context, id: String): NotificationChannel {
         val name = NotificationChannelIds.nameRes(id)?.let { context.getString(it) } ?: id
         return when (id) {
@@ -128,7 +128,7 @@ object NotificationChannelSpecs {
         }
     }
 
-    /** A failed create (the per-app channel cap, a dead system server) is logged; callers re-read. */
+    
     private fun create(context: Context, nm: NotificationManager, id: String) {
         try {
             nm.createNotificationChannel(build(context, id))

@@ -11,37 +11,37 @@ import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.PBEKeySpec
 import javax.crypto.spec.SecretKeySpec
 
-/**
- * Encoder/decoder for the obfuscated proxy share link (format spec v1, see
- * `docs/agents/proxy-share-link-format.md`).
- *
- * ```
- * ytp://config?d=<base64url-nopad( envelope )>
- *
- * envelope = version(1B=0x01) | mode(1B) | body
- *   mode 0x00 (plain)     : body = jsonBytes
- *   mode 0x01 (encrypted) : body = salt(16) | iv(12) | AES-256-GCM(jsonBytes)
- * ```
- *
- * The 2-byte envelope is cleartext (carries no secret) so the client can decide
- * whether to prompt for a passphrase; it is also bound as GCM AAD so mode /
- * version cannot be flipped. Plain mode is **not** confidential — base64 only
- * removes keywords; anyone can decode it. Encrypted mode derives the key from a
- * user passphrase (PBKDF2-HMAC-SHA256) distributed out-of-band.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 object ProxyLinkCodec {
 
     enum class Mode { PLAIN, ENCRYPTED }
 
     sealed interface Decoded {
         data class Success(val config: ProxyConfig) : Decoded
-        /** Passphrase did not authenticate (GCM tag mismatch) or link corrupted. */
+        
         data object WrongPassphrase : Decoded
-        /** Not a structurally valid encrypted link. */
+        
         data object Invalid : Decoded
     }
 
-    /** Returns the [Mode] when [link] is a structurally valid ytp link, else null. */
+    
     fun inspect(link: String): Mode? {
         val blob = blobOf(link) ?: return null
         if (blob.size < ENVELOPE_LEN || blob[0].toInt() and 0xFF != VERSION) return null
@@ -52,22 +52,17 @@ object ProxyLinkCodec {
         }
     }
 
-    /**
-     * True when [link] is a structurally valid ytp envelope (correct scheme /
-     * authority / base64 payload) but its version byte is one this client does
-     * not support. Lets the settings screen distinguish "unsupported version"
-     * (a recognizable-but-too-new link, see proxy design §5.4) from a generic
-     * malformed address, so it can surface the precise message. A malformed link
-     * (bad scheme / not base64 / too short) returns false — [inspect] reports it
-     * as `null` and the caller treats it as invalid.
-     */
+    
+
+
+
     fun isUnsupportedVersion(link: String): Boolean {
         val blob = blobOf(link) ?: return false
         if (blob.size < ENVELOPE_LEN) return false
         return (blob[0].toInt() and 0xFF) != VERSION
     }
 
-    /** Decodes a plain (mode=0x00) link to a [ProxyConfig]; null if not plain/invalid. */
+    
     fun decodePlain(link: String): ProxyConfig? {
         val blob = blobOf(link) ?: return null
         if (blob.size < ENVELOPE_LEN) return null
@@ -77,7 +72,7 @@ object ProxyLinkCodec {
         return configFromJson(json)
     }
 
-    /** Decodes an encrypted (mode=0x01) link using [passphrase]. */
+    
     fun decodeEncrypted(link: String, passphrase: String): Decoded {
         val blob = blobOf(link) ?: return Decoded.Invalid
         val minLen = ENVELOPE_LEN + SALT_LEN + IV_LEN + GCM_TAG_BYTES
@@ -100,24 +95,24 @@ object ProxyLinkCodec {
             val json = cipher.doFinal(cipherText)
             configFromJson(json)?.let { Decoded.Success(it) } ?: Decoded.Invalid
         } catch (e: javax.crypto.BadPaddingException) {
-            // GCM tag mismatch — surfaces as AEADBadTagException (a BadPaddingException
-            // subclass) or, on some providers, a generic BadPaddingException.
+            
+            
             Decoded.WrongPassphrase
         } catch (e: Exception) {
-            // Recoverable failures only — JVM Errors (OOM/StackOverflow) must propagate.
+            
             L.w { "[Proxy] decodeEncrypted error: ${e.message}" }
             Decoded.Invalid
         }
     }
 
-    /** Serializes [config] to a PLAIN ytp link (used for persistence and tests). */
+    
     fun encodePlain(config: ProxyConfig): String {
         val json = jsonOf(config)
         val blob = byteArrayOf(VERSION.toByte(), MODE_PLAIN.toByte()) + json
         return SCHEME_PREFIX + b64uEncode(blob)
     }
 
-    /** Serializes [config] to an ENCRYPTED ytp link (used by tests; server mirrors this). */
+    
     fun encodeEncrypted(config: ProxyConfig, passphrase: String): String {
         val json = jsonOf(config)
         val salt = randomBytes(SALT_LEN)
@@ -132,9 +127,8 @@ object ProxyLinkCodec {
         return SCHEME_PREFIX + b64uEncode(blob)
     }
 
-    // --- internals ---
 
-    /** Validates scheme/authority and returns the base64url-decoded envelope bytes. */
+    
     private fun blobOf(link: String): ByteArray? {
         val uri = runCatching { Uri.parse(link.trim()) }.getOrNull() ?: return null
         if (!uri.scheme.equals(SCHEME, ignoreCase = true)) return null

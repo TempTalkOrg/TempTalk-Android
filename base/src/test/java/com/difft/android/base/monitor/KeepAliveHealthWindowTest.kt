@@ -7,12 +7,12 @@ import kotlin.test.assertTrue
 class KeepAliveHealthWindowTest {
 
     init {
-        // Day slots are tested in UTC regardless of the machine's zone.
+        
         KeepAliveHealthWindow.zoneOffsetMs = { 0L }
     }
 
     private val day = KeepAliveHealthWindow.DAY_MS
-    private val t0 = 100 * day + 5_000L // a UTC day start plus a few seconds
+    private val t0 = 100 * day + 5_000L 
 
     private fun slot(dayIdx: Long, firstWrite: Long, vararg counts: Pair<String, Int>) =
         DailySlot(dayIdx, firstWrite, counts.toMap())
@@ -25,7 +25,7 @@ class KeepAliveHealthWindowTest {
         val later = KeepAliveHealthWindow.mergeSlots(first, mapOf("lat_ws_more" to 1, "pull_ok" to 1), t0 + 3_600_000L)
         assertEquals(listOf(slot(100, t0, "lat_ws_more" to 3, "pull_ok" to 1)), later)
 
-        // Nothing window-relevant: no slot (and so no t0) is created.
+        
         assertEquals(emptyList(), KeepAliveHealthWindow.mergeSlots(emptyList(), mapOf("fgs_alive_s" to 90), t0))
     }
 
@@ -41,7 +41,7 @@ class KeepAliveHealthWindowTest {
     fun `a future-dated slot after a clock rollback empties the window`() {
         val slots = listOf(slot(100, 100 * day, "pull_ok" to 1), slot(103, 103 * day, "pull_ok" to 1))
         assertEquals(emptyList(), KeepAliveHealthWindow.normalize(slots, 101 * day))
-        // The merge after a rollback starts a fresh window instead of reusing the old one.
+        
         assertEquals(
             listOf(slot(101, 101 * day, "pull_ok" to 1)),
             KeepAliveHealthWindow.mergeSlots(slots, mapOf("pull_ok" to 1), 101 * day)
@@ -64,10 +64,10 @@ class KeepAliveHealthWindowTest {
 
     @Test
     fun `latency rule is late deliveries on two days of the window, whatever the count or share`() {
-        // One day, however many late deliveries it holds, is a single released backlog.
+        
         assertEquals("0", verdict(mapOf("late_5m" to 30)).value)
         assertEquals("0", verdict(mapOf("late_5m" to 30, "lat_ws_2h" to 60)).value)
-        // Many slow bucket samples without the late count (not background or catch-up) do not trigger.
+        
         assertEquals("0", verdict(mapOf("lat_ws_2h" to 60, "lat_fcm_more" to 60)).value)
     }
 
@@ -85,9 +85,9 @@ class KeepAliveHealthWindowTest {
 
     @Test
     fun `foreground service rule needs 10 attempts and half failing`() {
-        assertEquals("0", verdict(mapOf("fgs_starts" to 5, "fgs_fail" to 4)).value) // 9 attempts
+        assertEquals("0", verdict(mapOf("fgs_starts" to 5, "fgs_fail" to 4)).value) 
         assertEquals(listOf("F"), verdict(mapOf("fgs_starts" to 5, "fgs_fail" to 5)).why)
-        assertEquals("0", verdict(mapOf("fgs_starts" to 6, "fgs_fail" to 4)).value) // 40%
+        assertEquals("0", verdict(mapOf("fgs_starts" to 6, "fgs_fail" to 4)).value) 
     }
 
     @Test
@@ -105,7 +105,7 @@ class KeepAliveHealthWindowTest {
         val young = verdict(all, ageMs = 3 * day - 1)
         assertEquals("na", young.value)
         assertEquals(emptyList(), young.why)
-        assertEquals(50, young.samples) // diagnostics stay populated
+        assertEquals(50, young.samples) 
         assertEquals("na", KeepAliveHealthWindow.verdict(emptyList(), 200 * day).value)
     }
 
@@ -129,11 +129,11 @@ class KeepAliveHealthWindowTest {
         assertEquals(3, v.stallsOver2h)
         assertEquals(null, verdict(mapOf("lat_ws_10s" to 3)).fcmTransitSlowPercent)
 
-        // A slow transit backlog cannot push a fast latency window over the L rule.
+        
         assertEquals("0", verdict(mapOf("lat_ws_10s" to 50, "fcmt_more" to 50)).value)
         val young = verdict(mapOf("fcmt_more" to 2, "stall_more" to 1), ageMs = day)
         assertEquals("na", young.value)
-        assertEquals(2, young.fcmTransitSamples) // diagnostics stay populated before the window matures
+        assertEquals(2, young.fcmTransitSamples) 
         assertEquals(1, young.stallsOver2h)
     }
 

@@ -32,22 +32,12 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
-/**
- * Route lifecycle wiring through [CallAudioSetup]: Phase-B guard binding (design inventory rows
- * #116 and #117) and the `start()` bring-up critical section (row #127).
- *
- * Row #127 uses a real IO scope and a real thread rather than `runTest`: it asserts that a
- * concurrent `stop()` cannot complete while the bring-up holds the setup monitor, which a single
- * virtual-time thread cannot express.
- *
- * A mock manager on purpose: both rows assert *how many times* the generation reset reaches the
- * manager (never after `stop()`, exactly once for two binds), which is what distinguishes "one guard"
- * from "two guards" — a snapshot assertion cannot, because the second guard's invalidation is a
- * silent no-op on an already-clean snapshot.
- *
- * Robolectric rather than plain JVM: mocking `AudioPipelineProcessor` runs its class initializer,
- * which calls `android.util.Log` — unmocked in the plain android.jar stub.
- */
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33])
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -88,7 +78,6 @@ class CallAudioSetupRouteLifecycleTest {
         routeApplier = routeApplier,
     )
 
-    // ── #116 ────────────────────────────────────────────────────────────────────
     @Test
     fun `binding the room state after stop creates no guard`() = runTest {
         val setup = newSetup(backgroundScope)
@@ -99,12 +88,11 @@ class CallAudioSetupRouteLifecycleTest {
         roomState.value = Room.State.DISCONNECTED
         runCurrent()
 
-        // A hang-up racing Phase B must not leak the guard's collectors.
+        
         verify(exactly = 0) { audioDeviceManager.onAudioSwitchInvalidated(any(), any()) }
         verify(exactly = 1) { routeApplier.stop() }
     }
 
-    // ── #117 ────────────────────────────────────────────────────────────────────
     @Test
     fun `binding the room state twice creates a single guard`() = runTest {
         val setup = newSetup(backgroundScope)
@@ -118,7 +106,7 @@ class CallAudioSetupRouteLifecycleTest {
         verify(exactly = 1) { audioDeviceManager.onAudioSwitchInvalidated(any(), any()) }
     }
 
-    // ── start() critical section: stop() must not interleave with it ──────────────
+    
     @Test
     fun `stop cannot interleave between listener registration and applier start`() {
         val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -127,10 +115,8 @@ class CallAudioSetupRouteLifecycleTest {
             val stopReturned = CountDownLatch(1)
             val stopCompletedDuringBringUp = AtomicBoolean(true)
             every { routeApplier.start() } answers {
-                // A concurrent hang-up must not be able to run to completion here: if it could, it
-                // would flip `stopped` and unregister the listener while this bring-up is still
-                // mid-flight, and the applier started right after would keep its SCO receiver and
-                // collect job alive for the rest of the process — unreachable for a second cleanup.
+                
+                
                 Thread { setup.stop(); stopReturned.countDown() }.start()
                 stopCompletedDuringBringUp.set(stopReturned.await(300, TimeUnit.MILLISECONDS))
             }
@@ -143,7 +129,7 @@ class CallAudioSetupRouteLifecycleTest {
                 "stop() interleaved inside the bring-up critical section",
                 stopCompletedDuringBringUp.get(),
             )
-            // The cleanup therefore always lands after the bring-up: nothing is left running.
+            
             verifyOrder {
                 audioHandler.registerAudioDeviceChangeListener(any())
                 routeApplier.start()

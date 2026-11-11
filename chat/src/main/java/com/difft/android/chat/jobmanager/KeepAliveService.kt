@@ -4,11 +4,11 @@ import android.app.Service
 import android.content.Intent
 import android.os.IBinder
 
-/**
- * Service that keeps the application in memory while the app is closed.
- *
- * Important: Should only be used on API < 26.
- */
+
+
+
+
+
 class KeepAliveService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null

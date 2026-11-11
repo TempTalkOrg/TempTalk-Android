@@ -9,11 +9,10 @@
 
     <androidx.appcompat.widget.AppCompatImageView
         android:id="@+id/pageClose"
-        android:layout_width="24dp"
-        android:layout_height="24dp"
-        android:layout_marginStart="16dp"
-        android:layout_marginTop="10dp"
-        android:src="@drawable/login_arrow_left"
+        android:layout_width="44dp"
+        android:layout_height="52dp"
+        android:paddingVertical="14dp"
+        android:src="@drawable/chative_ic_back"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
         app:tint="@color/icon" />
@@ -77,7 +76,7 @@
             app:psw_text_color="@color/t.primary"
             app:psw_background_color="@android:color/transparent"
             app:psw_border_color="@color/line"
-            app:psw_border_selected_color="@color/t.info"
+            app:psw_border_selected_color="@color/primary"
             app:psw_border_width="1dp"
             app:psw_border_radius="8dp"
             app:psw_item_margin="8dp">

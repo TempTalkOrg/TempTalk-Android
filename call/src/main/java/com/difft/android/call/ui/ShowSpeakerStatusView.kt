@@ -20,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.rememberAsyncImagePainter
 import com.difft.android.base.ui.theme.DifftTheme
@@ -44,7 +45,6 @@ fun ShowSpeakerStatusView(participant: Participant, displayName: String, speakin
 
     var audioMuted by remember { mutableStateOf(true) }
 
-    // monitor audio muted state
     LaunchedEffect(audioPub) {
         val pub = audioPub ?: return@LaunchedEffect
         pub::muted.flow.collect { muted -> audioMuted = muted }
@@ -57,7 +57,6 @@ fun ShowSpeakerStatusView(participant: Participant, displayName: String, speakin
         horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.Start),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // 使用when表达式简化条件判断
         val painter = when {
             audioMuted -> painterResource(id = R.drawable.microphone_off)
             !effectiveIsSpeaking -> painterResource(id = R.drawable.ic_silent)
@@ -66,7 +65,7 @@ fun ShowSpeakerStatusView(participant: Participant, displayName: String, speakin
 
         val tintColor = when {
             audioMuted -> Color.Unspecified
-            else ->  DifftTheme.colors.textInfo
+            else ->  DifftTheme.colors.info
         }
 
         Icon(
@@ -80,7 +79,10 @@ fun ShowSpeakerStatusView(participant: Participant, displayName: String, speakin
         )
 
         Text(
-            text = StringUtil.truncateWithEllipsis(displayName, PARTICIPANT_NAME_MAX_LENGTH),
+            text = StringUtil.truncateWithEllipsis(displayName, NAME_MEASURE_CAP),
+            modifier = Modifier.weight(1f, fill = false),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
             style = DifftTheme.typography.p4,
             color = DifftTheme.colors.textPrimary,
         )

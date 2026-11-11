@@ -31,13 +31,13 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/**
- * Tests for [PushReactionSendJob].
- *
- * `onPushSend` and the inherited `onShouldRetry` are `protected`. We expose them through
- * [TestablePushReactionSendJob] (a thin test subclass) instead of reflection so the test
- * remains readable.
- */
+
+
+
+
+
+
+
 class PushReactionSendJobTest {
 
     private val gson = Gson()
@@ -94,7 +94,7 @@ class PushReactionSendJobTest {
         messageStore = messageStore,
     ).bindLogin()
 
-    // --- 1) buildParameters ---
+    
 
     @Test
     fun `buildParameters has reaction-scoped queue, UNLIMITED attempts, 7 day lifespan, NetworkConstraint`() {
@@ -111,7 +111,7 @@ class PushReactionSendJobTest {
         )
     }
 
-    // --- 2) onPushSend transparently sends the data message ---
+    
 
     @Test
     fun `onPushSend builds DataMessage and forwards it via sendDataMessage with no notification`() = runTest {
@@ -136,17 +136,17 @@ class PushReactionSendJobTest {
         }
     }
 
-    // --- 3) onFailure rolls back via LWW reverse-write (add → remove) ---
+    
 
-    /**
-     * Rollback timestamp is exactly `original.originTimestamp + 1`. This narrow +1 lets the
-     * rollback beat the original optimistic write in DB LWW (which carries
-     * `original.originTimestamp`), while intentionally LOSING to any newer user action whose
-     * `originTimestamp` is strictly greater than `original+1` (typical: a newer optimistic
-     * write driven by [com.difft.android.chat.jobs.ReactionSendCoordinator] supersede).
-     * The previous formula `maxOf(now, original+1)` could overwrite a legitimately newer
-     * optimistic update, silently dropping the user's reaction.
-     */
+    
+
+
+
+
+
+
+
+
     @Test
     fun `onFailure writes a rollback Reaction with flipped remove flag and originTimestamp+1`() {
         val originalTs = 1_700_000_000_000L
@@ -166,7 +166,7 @@ class PushReactionSendJobTest {
         val job = newJob(textMessage)
         job.onFailure()
 
-        // Rollback is synchronous now — plain verify (not coVerify with timeout).
+        
         verify(exactly = 1) {
             messageStore.updateMessageReaction(
                 conversationId = recipient.id,
@@ -188,12 +188,12 @@ class PushReactionSendJobTest {
         )
     }
 
-    // --- 3b) onFailure rolls back the opposite direction (remove → add) ---
+    
 
     @Test
     fun `onFailure rollback for remove=true writes a Reaction with remove=false (re-insert) and originTimestamp+1`() {
-        // Original action was "remove the reaction"; that send permanently failed.
-        // Rollback must re-insert the reaction by writing remove=false at original+1.
+        
+        
         val originalTs = 1_700_000_000_000L
         val textMessage = buildReactionTextMessage(
             emoji = "👎",
@@ -229,8 +229,8 @@ class PushReactionSendJobTest {
         assertEquals(original.uid, rollback.uid)
         assertEquals(original.realSource, rollback.realSource)
         assertFalse(rollback.remove, "rollback of remove=true must re-insert (remove=false)")
-        // Rollback ts is exactly original+1: beats the original optimistic write, loses to any
-        // newer user action (which would carry a strictly greater originTimestamp).
+        
+        
         assertEquals(
             original.originTimestamp + 1,
             rollback.originTimestamp,
@@ -238,7 +238,7 @@ class PushReactionSendJobTest {
         )
     }
 
-    // --- 4) onShouldRetry: IOException is retryable ---
+    
 
     @Test
     fun `onShouldRetry returns true for IOException (inherited from PushSendJob)`() {
@@ -246,7 +246,7 @@ class PushReactionSendJobTest {
         assertTrue(job.invokeOnShouldRetry(IOException("net")))
     }
 
-    // --- 5) onShouldRetry: ServerRejectedException stops retry ---
+    
 
     @Test
     fun `onShouldRetry returns false for ServerRejectedException (terminal failure)`() {
@@ -254,20 +254,20 @@ class PushReactionSendJobTest {
         assertFalse(job.invokeOnShouldRetry(ServerRejectedException()))
     }
 
-    /**
-     * NonSuccessfulResponseCodeException extends IOException, so PushSendJob.onShouldRetry returns
-     * true for it. The reaction job relies on the 7-day lifespan (not onShouldRetry) to bound retry
-     * of server-side 4xx errors that aren't ServerRejectedException — exhausted lifespan triggers
-     * onFailure and the LWW rollback. This test pins that behavior so future refactors don't
-     * accidentally short-circuit legitimate retryable responses.
-     */
+    
+
+
+
+
+
+
     @Test
     fun `onShouldRetry returns true for NonSuccessfulResponseCodeException (relies on lifespan to bound retry)`() {
         val job = newJob()
         assertTrue(job.invokeOnShouldRetry(NonSuccessfulResponseCodeException(430, "blocked")))
     }
 
-    // --- 6) onFailure with null reactions is a no-op ---
+    
 
     @Test
     fun `onFailure does NOT call updateMessageReaction when reactions list is null`() {
@@ -295,7 +295,7 @@ class PushReactionSendJobTest {
         }
     }
 
-    // --- 6b) onFailure with empty reactions list is a no-op (sibling of #6) ---
+    
 
     @Test
     fun `onFailure does NOT call updateMessageReaction when reactions list is empty`() {
@@ -323,9 +323,9 @@ class PushReactionSendJobTest {
         }
     }
 
-    /**
-     * Test-only subclass that exposes the protected `onShouldRetry` and `onPushSend` of the parent.
-     */
+    
+
+
     private class TestablePushReactionSendJob(
         parameters: Job.Parameters?,
         textMessage: TextMessage,

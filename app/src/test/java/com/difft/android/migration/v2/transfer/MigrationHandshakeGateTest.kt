@@ -11,14 +11,14 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * SECURITY-CORE tests for the I4 environment + account + version isolation gate (integration-design
- * §6.1). The headline requirement: a test/TTDev backup MUST be rejected on a prod/TTOnline device AND
- * vice-versa, BEFORE any byte flows. Pure-JVM (a fake [EnvironmentHelper]); no Android needed.
- */
+
+
+
+
+
 class MigrationHandshakeGateTest {
 
-    /** Minimal fake EnvironmentHelper: `currentEnvironment` is fixed; `isThatEnvironment` is equality. */
+    
     private fun envHelper(current: String) = object : EnvironmentHelper {
         override val currentEnvironment: String = current
         override val ENVIRONMENT_DEVELOPMENT: String = ENV_TEST
@@ -44,7 +44,7 @@ class MigrationHandshakeGateTest {
     private fun gate(deviceEnv: String, account: String = ACCOUNT) =
         MigrationHandshakeGate(environmentHelper = envHelper(deviceEnv), loggingInAccount = account)
 
-    // ── environment isolation (the security red line) ──────────────────────────────────────────
+    
 
     @Test
     fun `same environment (test on test) ACCEPTS`() {
@@ -60,27 +60,27 @@ class MigrationHandshakeGateTest {
 
     @Test
     fun `a TEST backup on a PROD device is REJECTED with ENV_MISMATCH`() {
-        // The memory'd hard gate, direction 1: test source → prod device.
+        
         val decision = gate(deviceEnv = ENV_PROD).validate(handshake(env = WIRE_TEST))
         assertEquals(MigrationGateDecision.Reject(MigrationRejectReason.ENV_MISMATCH), decision)
     }
 
     @Test
     fun `a PROD backup on a TEST device is REJECTED with ENV_MISMATCH`() {
-        // The memory'd hard gate, direction 2: prod source → test device.
+        
         val decision = gate(deviceEnv = ENV_TEST).validate(handshake(env = WIRE_PROD))
         assertEquals(MigrationGateDecision.Reject(MigrationRejectReason.ENV_MISMATCH), decision)
     }
 
     @Test
     fun `environment is checked FIRST — an env mismatch rejects even if account also mismatches`() {
-        // Env is the most important reject; it short-circuits before account/version.
+        
         val decision = gate(deviceEnv = ENV_PROD, account = "u_device")
             .validate(handshake(env = WIRE_TEST, account = "u_other"))
         assertEquals(MigrationGateDecision.Reject(MigrationRejectReason.ENV_MISMATCH), decision)
     }
 
-    // ── account match ──────────────────────────────────────────────────────────────────────────
+    
 
     @Test
     fun `account mismatch (same env) is REJECTED with ACCOUNT_MISMATCH`() {
@@ -103,7 +103,7 @@ class MigrationHandshakeGateTest {
         assertEquals(MigrationGateDecision.Reject(MigrationRejectReason.ACCOUNT_MISMATCH), decision)
     }
 
-    // ── version / format compat ──────────────────────────────────────────────────────────────────
+    
 
     @Test
     fun `a cross-MAJOR format version is REJECTED with VERSION_INCOMPATIBLE`() {
@@ -122,7 +122,7 @@ class MigrationHandshakeGateTest {
 
     @Test
     fun `same-MAJOR newer-MINOR is ACCEPTED (additive-only passthrough)`() {
-        // Same MAJOR, a higher MINOR — accepted, matching FormatCompat's rule.
+        
         val sameMajorNewerMinor = bumpMinor(FormatCompat.SUPPORTED_FORMAT_VERSION)
         val decision = gate(deviceEnv = ENV_TEST)
             .validate(handshake(env = WIRE_TEST, formatVersion = sameMajorNewerMinor))
@@ -131,7 +131,7 @@ class MigrationHandshakeGateTest {
 
     @Test
     fun `the gate never throws — every reject is a typed decision`() {
-        // Pathological input (blank everything) returns a Reject, not an exception (handler contract).
+        
         val decision = gate(deviceEnv = ENV_TEST).validate(handshake(env = "", account = "", formatVersion = ""))
         assertTrue(decision is MigrationGateDecision.Reject)
     }
@@ -149,11 +149,11 @@ class MigrationHandshakeGateTest {
     }
 
     companion object {
-        /** This build's own environment names, as `BuildConfig.ENVIRONMENT` spells them. */
+        
         private const val ENV_TEST = "EnvironmentDevelopment"
         private const val ENV_PROD = "EnvironmentOnline"
 
-        /** The names that travel in the handshake — the same on every platform. */
+        
         private const val WIRE_TEST = QrPayloadV2Codec.Environment.TEST
         private const val WIRE_PROD = QrPayloadV2Codec.Environment.PROD
         private const val ACCOUNT = "u_a"

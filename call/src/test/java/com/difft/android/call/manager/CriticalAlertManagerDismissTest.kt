@@ -27,12 +27,12 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
-/**
- * [CriticalAlertManager] room dismissal and page ownership (#1387), and the IndexActivity rule
- * (#213 / #1387): a call end stops only the alerts recorded for its room, the page only when it
- * shows one of them, and sound and flashlight only for the alert that owns the play token; a page
- * released for an ended room leaves another alert's playback alone.
- */
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [33])
 class CriticalAlertManagerDismissTest {
@@ -83,7 +83,7 @@ class CriticalAlertManagerDismissTest {
         verify(exactly = 1) { soundPlayer.stopIfOwner(ID_A1) }
         verify(exactly = 1) { soundPlayer.stopIfOwner(ID_A2) }
         verify(exactly = 0) { soundPlayer.stopIfOwner(ID_B) }
-        // A silenced alert's blinking ends itself; another alert's flashlight is never cut here.
+        
         verify(exactly = 0) { FlashLightBlinker.stopBlinking() }
         assertTrue(registry.isEnded(ROOM_A))
         assertFalse(registry.isEnded(ROOM_B))
@@ -92,7 +92,7 @@ class CriticalAlertManagerDismissTest {
     @Test
     fun `dismissing a room whose alert owns nothing keeps another alert's flashlight`() {
         manager.recordRoomAlert(ROOM_A, ID_A1)
-        // Another alert's sound owns the token: stopIfOwner(ID_A1) is false.
+        
 
         manager.dismissForRoom(ROOM_A)
 
@@ -138,7 +138,7 @@ class CriticalAlertManagerDismissTest {
     fun `the page closes after the sound auto-stopped`() {
         manager.recordRoomAlert(ROOM_A, ID_A1)
         manager.publishPageAndCheckSilence(ID_A1, CONVERSATION, ROOM_A)
-        // The 30 s auto-stop clears the sound state; the page id is independent of it.
+        
         stateManager.resetSoundState()
 
         manager.dismissForRoom(ROOM_A)
@@ -177,7 +177,7 @@ class CriticalAlertManagerDismissTest {
         manager.publishPageAndCheckSilence(ID_A1, CONVERSATION, ROOM_A)
         stateManager.setIsShowing(true)
         stateManager.setConversationId(CONVERSATION)
-        // Room B's alert owns the play token, so the page's alert (room A) does not.
+        
         every { soundPlayer.stopIfOwner(ID_A1) } returns false
 
         manager.releasePage(ID_A1, CONVERSATION, stopOwnedAlert = true)
@@ -206,7 +206,7 @@ class CriticalAlertManagerDismissTest {
         manager.publishPageAndCheckSilence(ID_A1, CONVERSATION, ROOM_A)
         stateManager.setIsShowing(true)
         stateManager.setConversationId(CONVERSATION)
-        // Alert B of the same conversation, another room, rings in the background.
+        
         stateManager.setCurrentNotificationId(ID_B)
 
         manager.releasePage(ID_A1, CONVERSATION, stopOwnedAlert = true)
@@ -227,7 +227,7 @@ class CriticalAlertManagerDismissTest {
     @Test
     fun `a page replaced by a newer alert does not clear the newer alert's state`() {
         manager.publishPageAndCheckSilence(ID_A1, CONVERSATION, ROOM_A)
-        // The page now shows alert B, which published its id and state.
+        
         manager.publishPageAndCheckSilence(ID_B, OTHER_CONVERSATION, ROOM_B)
         stateManager.setIsShowing(true)
         stateManager.setConversationId(OTHER_CONVERSATION)
@@ -281,7 +281,7 @@ class CriticalAlertManagerDismissTest {
         manager.publishPageAndCheckSilence(ID_A1, CONVERSATION, ROOM_A)
         stateManager.setIsShowing(true)
         stateManager.setIsPlayingSound(true)
-        // The page closes for its ended call; it has paused, but onDestroy has not run yet.
+        
         stateManager.setPageClosingSilently(ID_A1)
 
         assertFalse(manager.shouldDismissWhenIndexStarts())
@@ -295,7 +295,7 @@ class CriticalAlertManagerDismissTest {
     fun `a newer page does not leave the closing mark of the page it followed stuck`() {
         manager.publishPageAndCheckSilence(ID_A1, CONVERSATION, ROOM_A)
         stateManager.setPageClosingSilently(ID_A1)
-        // A new page instance publishes before the closing page's onDestroy runs.
+        
         manager.publishPageAndCheckSilence(ID_B, OTHER_CONVERSATION, ROOM_B)
         stateManager.setIsShowing(true)
         stateManager.setIsPlayingSound(true)

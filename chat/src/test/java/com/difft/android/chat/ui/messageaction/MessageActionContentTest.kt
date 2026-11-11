@@ -8,11 +8,11 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * Unit tests for the render-layer pure grid math (design-report §8.1, R1-R15).
- * No Android framework dependency — colsForN / designCellWidth / computeCellWidth / padRows
- * are pure Kotlin over [Dp] value types.
- */
+
+
+
+
+
 class MessageActionContentTest {
 
     private fun dummyActions(n: Int): List<MessageAction> =
@@ -22,7 +22,7 @@ class MessageActionContentTest {
         assertEquals(expected, actual.value, 0.01f)
     }
 
-    // ---------- colsForN ----------
+    
 
     @Test
     fun R1_colsForN_1() {
@@ -52,7 +52,7 @@ class MessageActionContentTest {
         assertEquals(5, colsForN(10))
     }
 
-    // ---------- designCellWidth ----------
+    
 
     @Test
     fun R6_designCellWidth_5col_is64() {
@@ -67,7 +67,7 @@ class MessageActionContentTest {
         assertEquals(68.dp, designCellWidth(4))
     }
 
-    // ---------- computeCellWidth ----------
+    
 
     @Test
     fun R8_computeCellWidth_5col_infinity_noShrink() {
@@ -76,13 +76,13 @@ class MessageActionContentTest {
 
     @Test
     fun R9_computeCellWidth_5col_max300_shrinks() {
-        // (300 - 4) / 5 = 59.2, still above MIN, cols unchanged
+        
         assertDpEquals(59.2f, computeCellWidth(5, 300.dp))
     }
 
     @Test
     fun R10_computeCellWidth_4col_max275_boundary_noShrink() {
-        // designPanel = 68*4 + 1*3 = 275; 275 <= 275 -> no shrink
+        
         assertEquals(68.dp, computeCellWidth(4, 275.dp))
     }
 
@@ -95,17 +95,17 @@ class MessageActionContentTest {
 
     @Test
     fun R12_computeCellWidth_5col_max100_clampsToMin() {
-        // (100 - 4) / 5 = 19.2 < 32 -> clamped to MIN_CELL_WIDTH
+        
         assertEquals(32.dp, computeCellWidth(5, 100.dp))
     }
 
     @Test
     fun R13_computeCellWidth_5col_max200_shrinksAboveMin() {
-        // (200 - 4) / 5 = 39.2 > 32 -> not clamped
+        
         assertDpEquals(39.2f, computeCellWidth(5, 200.dp))
     }
 
-    // ---------- padRows ----------
+    
 
     @Test
     fun R14_padRows_7items_4cols() {
@@ -114,7 +114,7 @@ class MessageActionContentTest {
         assertEquals(4, rows[0].size)
         assertEquals(4, rows[1].size)
         rows[0].forEach { assertNotNull(it) }
-        // last row: 3 real + 1 null
+        
         assertNotNull(rows[1][2])
         assertNull(rows[1][3])
     }
@@ -126,7 +126,7 @@ class MessageActionContentTest {
         assertEquals(5, rows[0].size)
         assertEquals(5, rows[1].size)
         rows[0].forEach { assertNotNull(it) }
-        // last row: 4 real + 1 null
+        
         assertNotNull(rows[1][3])
         assertNull(rows[1][4])
     }

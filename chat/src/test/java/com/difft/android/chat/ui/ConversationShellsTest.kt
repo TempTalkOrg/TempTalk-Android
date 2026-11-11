@@ -21,7 +21,7 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
-/** An Application that routes conversations, as TempTalkApplication does. */
+
 class RoutingTestApplication : Application(), ConversationOpener {
     val opened = mutableListOf<ConversationTarget>()
     override fun openConversation(context: Context, target: ConversationTarget) {
@@ -29,10 +29,10 @@ class RoutingTestApplication : Application(), ConversationOpener {
     }
 }
 
-/**
- * `ChatActivity.startActivity` / `GroupChatContentActivity.startActivity` keep their call sites
- * and go through the app's router when one is installed; otherwise they open the shell as before.
- */
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33])
 class ConversationShellsTest {

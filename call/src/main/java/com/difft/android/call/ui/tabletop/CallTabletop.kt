@@ -10,40 +10,80 @@ import kotlin.math.roundToInt
 import com.difft.android.call.layout.Rect as LayoutRect
 import com.difft.android.call.layout.Size as LayoutSize
 
-/** Half-open postures for calls. Sizes are dp unless named px. */
+
 internal object CallTabletopSpec {
     const val GAP_DP = LCallUiConstants.CHROME_CONTENT_GAP_DP.toFloat()
 
-    /** Console: 16 top + 84 row + 24 gap + 84 row + 24 bottom. */
+    
     const val CONSOLE_HEIGHT_DP = 232f
 
-    /** Console: four columns of 84, each a 56dp control and its label, inside 16 a side. */
+    
     const val CONSOLE_WIDTH_DP = 368f
 
-    /**
-     * The console's size, given to the layout, which places it below the fold (`LayoutPlan.controls`)
-     * and the 1v1 floating window around it (call-layout decision 39). The members panel and the
-     * invite sheet cover the whole region below the fold while open.
-     */
+    
+
+
+
     val CONSOLE_SIZE = LayoutSize(CONSOLE_WIDTH_DP.toDouble(), CONSOLE_HEIGHT_DP.toDouble())
 }
 
 internal enum class CallFoldState { FLAT, HALF_OPENED }
 
-/** A rect in px, JVM-pure so the resolver and its tests need no android.graphics. */
+
 internal data class PxRect(val left: Int, val top: Int, val right: Int, val bottom: Int)
 
-/** One folding feature: [bounds] in activity-window px, as Jetpack WindowManager reports them. */
-internal data class CallFold(val state: CallFoldState, val horizontal: Boolean, val occluding: Boolean, val bounds: PxRect)
 
-/** One window-layout report; an empty [folds] means no folding feature. */
+
+
+
+internal data class CallFold(
+    val state: CallFoldState,
+    val horizontal: Boolean,
+    val occluding: Boolean,
+    val bounds: PxRect,
+    val byHinge: Boolean = false,
+)
+
+
 internal data class CallFoldReport(val folds: List<CallFold>)
 
-/**
- * A half-open fold in call-root px, or the tabletop geometry the page draws around it. [bandTopPx]
- * to [bandBottomPx] is the fold across its thin axis: top to bottom for a [horizontal] fold (the
- * tabletop posture), left to right for a vertical one (book). Equal re-emissions compare equal.
- */
+
+internal object HingeFallback {
+    
+    const val HALF_OPEN_MIN_DEG = 30f
+    const val HALF_OPEN_MAX_DEG = 150f
+
+    
+
+
+
+    const val HYSTERESIS_DEG = 10f
+}
+
+
+
+
+
+
+
+
+
+
+internal fun CallFoldReport.withHingeFallback(hingeDeg: Float?, heldByHinge: Boolean = false): CallFoldReport {
+    if (hingeDeg == null) return this
+    val slack = if (heldByHinge) HingeFallback.HYSTERESIS_DEG else 0f
+    if (hingeDeg < HingeFallback.HALF_OPEN_MIN_DEG - slack || hingeDeg > HingeFallback.HALF_OPEN_MAX_DEG + slack) return this
+    if (folds.none { !it.horizontal && it.state == CallFoldState.FLAT }) return this
+    return CallFoldReport(
+        folds.map { if (!it.horizontal && it.state == CallFoldState.FLAT) it.copy(state = CallFoldState.HALF_OPENED, byHinge = true) else it },
+    )
+}
+
+
+
+
+
+
 data class TabletopGeometry(
     val bandTopPx: Int,
     val bandBottomPx: Int,
@@ -51,7 +91,7 @@ data class TabletopGeometry(
     val heightPx: Int,
     val density: Float,
     val horizontal: Boolean = true,
-    // Where the layout put the console (`LayoutPlan.controls`, window dp); null outside the plan.
+    
     val controls: LayoutRect? = null,
 ) {
     val bandTopDp: Float get() = bandTopPx / density
@@ -62,13 +102,13 @@ data class TabletopGeometry(
     val dockTopDp: Float get() = bandBottomDp + CallTabletopSpec.GAP_DP
     val dockHeightDp: Float get() = heightDp - dockTopDp
 
-    /** The dock region's height in px, from its top to the root's bottom; for views outside Compose. */
+    
     val dockHeightPx: Int get() = heightPx - (dockTopDp * density).roundToInt()
 
-    /**
-     * The console in window dp: where the layout put it, else (a plan laid out before the layout knew
-     * its size) centred at the window bottom above the [bottomInsetDp] system inset.
-     */
+    
+
+
+
     fun consoleDp(bottomInsetDp: Float = 0f): LayoutRect = controls ?: LayoutRect(
         ((widthDp - CallTabletopSpec.CONSOLE_WIDTH_DP) / 2f).coerceAtLeast(0f).toDouble(),
         (heightDp - bottomInsetDp - CallTabletopSpec.CONSOLE_HEIGHT_DP).toDouble(),
@@ -78,24 +118,23 @@ data class TabletopGeometry(
 }
 
 internal sealed interface TabletopResolution {
-    /** No folding feature, or none crosses the call window. */
+    
     data object NoFold : TabletopResolution
 
-    /** A fold lying flat; keyed on the root size so a resize is a new input. */
+    
     data class Flat(val widthPx: Int, val heightPx: Int) : TabletopResolution
 
-    /** A half-open fold, horizontal or vertical. */
+    
     data class Accepted(val geometry: TabletopGeometry) : TabletopResolution
 }
 
-/** A fold mapped into call-root px. */
+
 private class LocalFold(val fold: CallFold, val rect: PxRect)
 
-/**
- * Whether a fold report puts the call root ([rootLeftPx], [rootTopPx] is its position in the
- * activity window) half open, and where the fold lies: the first half-open fold crossing the root,
- * either orientation. Every size rule is the layout's (design §4.5); this only feeds the debounce.
- */
+
+
+
+
 internal fun resolveTabletop(
     report: CallFoldReport?,
     rootLeftPx: Int,
@@ -124,7 +163,7 @@ internal fun resolveTabletop(
     )
 }
 
-/** [fold] in root px when it crosses the root's interior, else null. */
+
 private fun localFold(fold: CallFold, leftPx: Int, topPx: Int, widthPx: Int, heightPx: Int): LocalFold? {
     val b = fold.bounds
     val r = PxRect(b.left - leftPx, b.top - topPx, b.right - leftPx, b.bottom - topPx)
@@ -137,18 +176,18 @@ private fun localFold(fold: CallFold, leftPx: Int, topPx: Int, widthPx: Int, hei
     }
 }
 
-/** The debounced fold as the layout's fold: window dp across the whole window, before padding. */
+
 internal fun TabletopGeometry.foldDp(): LayoutRect = if (horizontal) {
     LayoutRect(0.0, bandTopDp.toDouble(), widthDp.toDouble(), (bandBottomDp - bandTopDp).toDouble())
 } else {
     LayoutRect(bandTopDp.toDouble(), 0.0, (bandBottomDp - bandTopDp).toDouble(), heightDp.toDouble())
 }
 
-/**
- * The tabletop geometry the page draws from the [plan]: while it is in the tabletop posture, the
- * fold the plan was laid out with ([fold], window dp) above, the plan's dock below and the console
- * where the plan put it; null otherwise. The call window is edge to edge, so window dp are the root's.
- */
+
+
+
+
+
 internal fun planTabletop(plan: LayoutPlan?, fold: LayoutRect?, window: LayoutSize, density: Float): TabletopGeometry? {
     if (plan?.posture != Posture.TABLETOP || fold == null || density <= 0f) return null
     val dock = plan.dock ?: return null
@@ -162,12 +201,10 @@ internal fun planTabletop(plan: LayoutPlan?, fold: LayoutRect?, window: LayoutSi
     )
 }
 
-/**
- * What the content keeps clear at the window bottom: in the tabletop posture only the [navBottomDp]
- * inset, both with the controls shown and hidden, since the layout places the console itself
- * (`setTabletopControls`, call-layout decision 39); in the book posture one row of controls;
- * otherwise the bar's own reserve.
- */
+
+
+
+
 internal fun bottomReserveDp(posture: Posture, plan: ActionBarPlan, navBottomDp: Float): Int =
     when (posture) {
         Posture.TABLETOP -> navBottomDp.roundToInt()

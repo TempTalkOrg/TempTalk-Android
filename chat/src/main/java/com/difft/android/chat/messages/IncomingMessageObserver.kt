@@ -15,12 +15,12 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Job
 
-/**
- * The application-level manager of our websocket connection.
- *
- *
- * This class is responsible for opening/closing the websocket based on the app's state and observing new inbound messages received on the websocket.
- */
+
+
+
+
+
+
 @Singleton
 class IncomingMessageObserver @Inject constructor(
     private val incomingEnvelopMessageProcessor: IncomingEnvelopMessageProcessor,
@@ -46,7 +46,7 @@ class IncomingMessageObserver @Inject constructor(
         started = false
         messageReceivingJob?.cancel()
         messageReceivingJob = null
-        // The connection is going away; its replay window must not outlive it.
+        
         priorConversationReporter.onQueueEmpty()
     }
 

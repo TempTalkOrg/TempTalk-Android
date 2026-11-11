@@ -5,11 +5,11 @@ import android.content.Context
 import android.content.Intent
 import com.difft.android.base.log.lumberjack.L
 
-/**
- * Receives the transfer notification's Cancel broadcast and forwards it to
- * [MigrationTransferService.cancel]. Registered non-exported in the manifest with an intent filter
- * matching [MigrationTransferNotificationHelper.ACTION_CANCEL].
- */
+
+
+
+
+
 class MigrationTransferCancelReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {

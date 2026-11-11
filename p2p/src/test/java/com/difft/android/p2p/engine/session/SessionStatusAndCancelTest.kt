@@ -13,11 +13,11 @@ import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * The session token, `/status`, the four-state `/cancel` and terminal retention — the receiver half
- * of the verdict-wait contract. Each rule here is one a sender is allowed to rely on when it decides
- * whether the old device may start over, or has been superseded.
- */
+
+
+
+
+
 class SessionStatusAndCancelTest {
 
     private class MemoryStore : TerminalRecordStore {
@@ -43,7 +43,7 @@ class SessionStatusAndCancelTest {
         assertNotEquals(prepared.slots.getValue("f1").token, prepared.sessionToken)
     }
 
-    // region status
+    
 
     @Test
     fun `status answers a live session with its progress and no terminal, and only for the right token`() {
@@ -55,7 +55,7 @@ class SessionStatusAndCancelTest {
         assertNull(fresh.terminal)
         assertEquals(0L, fresh.progressRevision)
 
-        // Wrong token and unknown id are the same answer on the wire: neither confirms the id exists.
+        
         assertThrows(ProtocolError.NotFound::class.java) { sm.status(p.sessionId, "wrong") }
         assertThrows(ProtocolError.NotFound::class.java) { sm.status("never-existed", p.sessionToken) }
     }
@@ -90,11 +90,11 @@ class SessionStatusAndCancelTest {
         fun rev() = sm.status(p.sessionId, p.sessionToken).progressRevision
 
         sm.stage(TransferStages.RECEIVING); assertEquals(1L, rev())
-        sm.stage(TransferStages.RECEIVING); assertEquals(1L, rev())          // same stage: not work
+        sm.stage(TransferStages.RECEIVING); assertEquals(1L, rev())          
         sm.recordsImported(10); assertEquals(2L, rev())
-        sm.recordsImported(10); assertEquals(2L, rev())                      // no new records: not work
-        sm.recordsImported(5); assertEquals(2L, rev())                       // a lower total is ignored
-        // The rule the stall detector depends on: bytes landing is work, every time, by itself.
+        sm.recordsImported(10); assertEquals(2L, rev())                      
+        sm.recordsImported(5); assertEquals(2L, rev())                       
+        
         sm.attachmentBytesLanded(8_192); assertEquals(3L, rev())
         sm.attachmentBytesLanded(8_192); assertEquals(4L, rev())
         sm.attachmentBytesLanded(0); assertEquals(4L, rev())
@@ -120,10 +120,10 @@ class SessionStatusAndCancelTest {
         val p = sm.createSession("1.1.1.1", mapOf("f1" to meta("f1")))
         sm.authorizeUpload(p.sessionId, "f1", p.slots.getValue("f1").token, "1.1.1.1")
         assertEquals(CancelState.ROLLED_BACK, sm.cancel(p.sessionId, p.sessionToken).state)
-        // The import reaches its commit entry after the sender was told rolled_back: it must not commit.
+        
         assertFalse(sm.committing(p.sessionId))
         assertEquals(TransferTerminal.CANCELLED, sm.status(p.sessionId, p.sessionToken).terminal)
-        // Idempotent: a repeated cancel is answered by the retained CANCELLED record, never too late.
+        
         assertEquals(CancelState.STOPPED, sm.cancel(p.sessionId, p.sessionToken).state)
     }
 
@@ -133,16 +133,16 @@ class SessionStatusAndCancelTest {
         val old = sm.createSession("1.1.1.1", mapOf("f1" to meta("f1")))
         assertNull("no body yet", sm.bodySessionId())
         sm.authorizeUpload(old.sessionId, "f1", old.slots.getValue("f1").token, "1.1.1.1")
-        // The old import binds itself to its session when it starts.
+        
         val oldImport = sm.bodySessionId()
         assertEquals(old.sessionId, oldImport)
         sm.cancel(old.sessionId, old.sessionToken)
-        // A newer session is live and its body started before the old import reaches its commit entry.
+        
         val fresh = sm.createSession("1.1.1.1", mapOf("f1" to meta("f1")))
         sm.authorizeUpload(fresh.sessionId, "f1", fresh.slots.getValue("f1").token, "1.1.1.1")
 
         assertFalse(sm.committing(oldImport))
-        // The fresh session can still be cancelled: nothing marked it committing.
+        
         assertEquals(CancelState.ROLLED_BACK, sm.cancel(fresh.sessionId, fresh.sessionToken).state)
     }
 
@@ -180,7 +180,7 @@ class SessionStatusAndCancelTest {
         assertTrue(failed.retireLiveForLinger())
         assertEquals(TransferTerminal.FAILED, failed.status(f.sessionId, f.sessionToken).terminal)
 
-        // The receiver's own user cancelled while the session was still live.
+        
         val cancelled = manager()
         val c = cancelled.createSession("1.1.1.1", mapOf("f1" to meta("f1")))
         assertTrue(cancelled.retireLiveForLinger())
@@ -200,7 +200,7 @@ class SessionStatusAndCancelTest {
 
     @Test
     fun `a committing session that fails before promote answers failed whichever side retires it first`() {
-        // Handler first: the upload's failure retires the live session, the linger finds nothing live.
+        
         val handlerFirst = manager()
         val h = handlerFirst.createSession("1.1.1.1", mapOf("f1" to meta("f1")))
         handlerFirst.authorizeUpload(h.sessionId, "f1", h.slots.getValue("f1").token, "1.1.1.1")
@@ -209,8 +209,8 @@ class SessionStatusAndCancelTest {
         assertTrue(handlerFirst.retireLiveForLinger())
         assertEquals(TransferTerminal.FAILED, handlerFirst.status(h.sessionId, h.sessionToken).terminal)
 
-        // Observer first: the linger retires the committing session with no verdict, then the
-        // handler's failure arrives and must still reach /status.
+        
+        
         val store = MemoryStore()
         val observerFirst = manager(store)
         val o = observerFirst.createSession("1.1.1.1", mapOf("f1" to meta("f1")))
@@ -236,9 +236,9 @@ class SessionStatusAndCancelTest {
         assertEquals(TransferTerminal.CANCELLED, sm.status(p.sessionId, p.sessionToken).terminal)
     }
 
-    // endregion
+    
 
-    // region cancel
+    
 
     @Test
     fun `cancel before any byte is stopped, after the upload was authorized it is rolled_back, both tear down`() {
@@ -271,12 +271,12 @@ class SessionStatusAndCancelTest {
         val sm = manager(clock = { now })
         val p1 = sm.createSession("1.1.1.1", mapOf("f1" to meta("f1")))
         sm.markTerminal(p1.sessionId, TransferTerminal.SUCCEEDED)
-        // Done is past the commit point by definition: the caller reads the real outcome from /status.
+        
         assertEquals(CancelOutcome(CancelState.TOO_LATE, tornDown = false), sm.cancel(p1.sessionId, p1.sessionToken))
 
         val p2 = sm.createSession("1.1.1.1", mapOf("f1" to meta("f1")))
         sm.markTerminal(p2.sessionId, TransferTerminal.FAILED)
-        // Long after the failure: this cancel is not the hang-up's follow-up.
+        
         now += SessionManager.CANCEL_FOLLOW_UP_MS + 1
         assertEquals(CancelOutcome(CancelState.ROLLED_BACK, tornDown = false), sm.cancel(p2.sessionId, p2.sessionToken))
 
@@ -294,9 +294,9 @@ class SessionStatusAndCancelTest {
         assertEquals(p.sessionId, sm.activeSessionId())
     }
 
-    // endregion
+    
 
-    // region terminal retention
+    
 
     @Test
     fun `a finished session keeps answering status with its terminal, from the record not the token`() {
@@ -312,7 +312,7 @@ class SessionStatusAndCancelTest {
         assertEquals(42L, ended.records)
         assertThrows(ProtocolError.NotFound::class.java) { sm.status(p.sessionId, "wrong") }
 
-        // The persisted record carries the token's hash, never the token.
+        
         val record = store.saved.single()
         assertEquals(p.sessionId, record.sessionId)
         assertNotEquals(p.sessionToken, record.tokenSha256)
@@ -345,21 +345,21 @@ class SessionStatusAndCancelTest {
         assertThrows(ProtocolError.NotFound::class.java) { sm.status(ids[0].sessionId, ids[0].sessionToken) }
         assertEquals(TransferTerminal.SUCCEEDED, sm.status(ids[9].sessionId, ids[9].sessionToken).terminal)
 
-        // Reload a day and a bit later: the whole batch has aged out; a fresh one has not.
+        
         val fresh = TerminalRecord("s-fresh", "h", TransferTerminal.FAILED, TransferStages.FAILED, 0, 0, 1, at = 2_000L)
         store.toLoad = store.saved + fresh
         val later = SessionManager(terminalStore = store, clock = { 2_000L + SessionManager.RETENTION_MS })
         assertThrows(ProtocolError.NotFound::class.java) { later.status(ids[9].sessionId, ids[9].sessionToken) }
-        // The fresh record is present: a matching hash answers, from the reloaded record alone.
+        
         val freshToken = "the-token"
         store.toLoad = store.saved + fresh.copy(tokenSha256 = sha256Hex(freshToken))
         val reloaded = SessionManager(terminalStore = store, clock = { 2_000L + SessionManager.RETENTION_MS })
         assertEquals(TransferTerminal.FAILED, reloaded.status("s-fresh", freshToken).terminal)
     }
 
-    // endregion
+    
 
-    // region committed-but-unconfirmed (T41b)
+    
 
     @Test
     fun `an unconfirmed session is retired without a terminal and a cancel on it is too late`() {
@@ -368,16 +368,16 @@ class SessionStatusAndCancelTest {
         sm.authorizeUpload(prepared.sessionId, "f1", prepared.slots.getValue("f1").token, "1.1.1.1")
 
         sm.markUnconfirmed(prepared.sessionId)
-        // What the listener teardown does minutes later. Retiring this as CANCELLED would publish a
-        // definite, false verdict about an import that already reached its commit point.
+        
+        
         sm.clear()
 
         val status = sm.status(prepared.sessionId, prepared.sessionToken)
         assertNull(status.terminal)
         assertEquals(TransferStages.PROMOTING, status.stage)
-        // A cancel can undo nothing past the commit point, so it is answered like a promoting session.
+        
         assertEquals(CancelState.TOO_LATE, sm.cancel(prepared.sessionId, prepared.sessionToken).state)
     }
 
-    // endregion
+    
 }

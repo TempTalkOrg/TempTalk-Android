@@ -28,7 +28,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.test.assertTrue
 
-/** G-R6 (#1382): the REST pull holds one ticket per page and is deferred while messaging is closed. */
+
 class PendingMessageHelperMessagingPauseTest {
 
     private val messaging = TestMessagingPause().open()
@@ -52,7 +52,7 @@ class PendingMessageHelperMessagingPauseTest {
         resetPullState()
     }
 
-    /** The reentry lock and the deferred request are process-wide; isolate each test. */
+    
     private fun resetPullState() {
         val type = PendingMessageHelper::class.java
         (type.getDeclaredField("isProcessing").apply { isAccessible = true }.get(null) as AtomicBoolean).set(false)
@@ -77,7 +77,7 @@ class PendingMessageHelperMessagingPauseTest {
     fun `T14 a page in progress at the pause is stored and deleted, the next page is never fetched`() = runBlocking {
         coEvery { httpService.getPendingMessage() } returns PendingMessageResponse(listOf(pending(100L)), more = true)
         coEvery { envelopToMessageProcessor.process(any(), "PendingMessageHelper", any()) } coAnswers {
-            // The pause begins while this page is being processed.
+            
             messaging.pauseMessaging()
             EnvelopeProcessResult.Success(null)
         }
@@ -102,7 +102,7 @@ class PendingMessageHelperMessagingPauseTest {
         messaging.resumeMessaging()
         helper.runDeferredPull(CoroutineScope(job))
         job.children.toList().forEach { it.join() }
-        helper.runDeferredPull(CoroutineScope(job)) // already consumed: no second pull
+        helper.runDeferredPull(CoroutineScope(job)) 
         job.children.toList().forEach { it.join() }
 
         coVerify(exactly = 1) { httpService.getPendingMessage() }
@@ -111,7 +111,7 @@ class PendingMessageHelperMessagingPauseTest {
     @Test
     fun `a pull deferred just as messaging opens still runs`() = runBlocking {
         coEvery { httpService.getPendingMessage() } returns PendingMessageResponse(emptyList(), more = false)
-        // The caller sees the gate closed; it opens (and the resume's deferred run finds nothing) before the request is recorded.
+        
         val gate = spyk(messaging.gate)
         every { gate.isOpen } returnsMany listOf(false, true)
         val racing = PendingMessageHelper(httpClient, envelopToMessageProcessor, mockk(relaxed = true), mockk(relaxed = true), gate)
@@ -127,7 +127,7 @@ class PendingMessageHelperMessagingPauseTest {
     fun `a pull deferred by a running pull still runs when messaging opens before that pull ends`() = runBlocking {
         var pulls = 0
         coEvery { httpService.getPendingMessage() } answers {
-            // The pause begins during the first page, so the running pull is refused its next page and defers it.
+            
             if (pulls++ == 0) {
                 messaging.pauseMessaging()
                 PendingMessageResponse(emptyList(), more = true)
@@ -140,7 +140,7 @@ class PendingMessageHelperMessagingPauseTest {
         val healthCounters = mockk<KeepAliveHealthCounters>()
         lateinit var racing: PendingMessageHelper
         every { healthCounters.onPullResult(any()) } answers {
-            // Messaging opens and its deferred run fires while the refused pull still holds the reentry lock.
+            
             messaging.resumeMessaging()
             racing.runDeferredPull(scope)
         }

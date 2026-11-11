@@ -6,9 +6,9 @@ import androidx.annotation.StringRes
 import com.difft.android.chat.R
 import com.difft.android.chat.message.TextChatMessage
 
-/**
- * Represents a message action item
- */
+
+
+
 data class MessageAction(
     val type: Type,
     @DrawableRes val iconRes: Int,
@@ -17,14 +17,14 @@ data class MessageAction(
     val isDestructive: Boolean = false
 ) {
     enum class Type {
-        // Quick actions
+        
         QUOTE,
         COPY,
         TRANSLATE,
         TRANSLATE_OFF,
         FORWARD,
         
-        // More actions
+        
         SPEECH_TO_TEXT,
         SPEECH_TO_TEXT_OFF,
         SAVE,
@@ -33,12 +33,12 @@ data class MessageAction(
         DELETE_SAVED,
         RECALL,
         MORE_INFO,
-        FAVORITE_GIF,  // Add a gif message to GIF favorites (M3)
+        FAVORITE_GIF,  
 
-        // Special
-        SELECT_ALL,  // Text selection: select all text
         
-        // Failed message actions
+        SELECT_ALL,  
+        
+        
         RESEND,
         DELETE
     }
@@ -138,7 +138,7 @@ data class MessageAction(
             labelRes = R.string.chat_message_action_select_all
         )
         
-        /** For text preview selection menu */
+        
         fun translateAction() = MessageAction(
             type = Type.TRANSLATE,
             iconRes = R.drawable.chat_message_action_translate,
@@ -161,7 +161,7 @@ data class MessageAction(
     }
 }
 
-/** Routes a full-menu action to its [MessageActionCoordinator.ActionListener] method. */
+
 internal fun MessageAction.Type.dispatchTo(listener: MessageActionCoordinator.ActionListener, message: TextChatMessage) {
     when (this) {
         MessageAction.Type.QUOTE -> listener.onQuote(message)
@@ -178,8 +178,8 @@ internal fun MessageAction.Type.dispatchTo(listener: MessageActionCoordinator.Ac
         MessageAction.Type.RECALL -> listener.onRecall(message)
         MessageAction.Type.MORE_INFO -> listener.onMoreInfo(message)
         MessageAction.Type.FAVORITE_GIF -> listener.onFavoriteGif(message)
-        MessageAction.Type.SELECT_ALL -> { /* Via SelectionMenuCallbacks.onSelectAll(); never dispatched here */ }
+        MessageAction.Type.SELECT_ALL -> {  }
         MessageAction.Type.RESEND,
-        MessageAction.Type.DELETE -> { /* Handled by FailedMessageActionPopup */ }
+        MessageAction.Type.DELETE -> {  }
     }
 }

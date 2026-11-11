@@ -35,17 +35,10 @@ import com.difft.android.selector.utils.ValueOf
 import java.io.File
 import java.util.ArrayList
 
-/**
- * Local media database query class. Supports paging.
- *
- * 1:1 MediaStore cursor/paging port (issue #1077); structural split deferred — see #1077 future work.
- */
+
 @Suppress("LargeClass")
 class LocalMediaPageLoader(context: Context, config: SelectorConfig) : IBridgeMediaLoader(context, config) {
 
-    /**
-     * Query conditions in all modes
-     */
     private fun getSelectionArgsForAllMediaCondition(
         timeCondition: String,
         sizeCondition: String,
@@ -70,9 +63,6 @@ class LocalMediaPageLoader(context: Context, config: SelectorConfig) : IBridgeMe
         }
     }
 
-    /**
-     * Query conditions in image modes
-     */
     private fun getSelectionArgsForImageMediaCondition(fileSizeCondition: String, queryMimeTypeOptions: String): String {
         val stringBuilder = StringBuilder()
         return if (isWithAllQuery()) {
@@ -85,9 +75,6 @@ class LocalMediaPageLoader(context: Context, config: SelectorConfig) : IBridgeMe
         }
     }
 
-    /**
-     * Video mode conditions
-     */
     private fun getSelectionArgsForVideoMediaCondition(durationCondition: String, queryMimeCondition: String): String {
         val stringBuilder = StringBuilder()
         return if (isWithAllQuery()) {
@@ -97,9 +84,6 @@ class LocalMediaPageLoader(context: Context, config: SelectorConfig) : IBridgeMe
         }
     }
 
-    /**
-     * Audio mode conditions
-     */
     private fun getSelectionArgsForAudioMediaCondition(durationCondition: String, queryMimeCondition: String): String {
         val stringBuilder = StringBuilder()
         return if (isWithAllQuery()) {
@@ -226,12 +210,8 @@ class LocalMediaPageLoader(context: Context, config: SelectorConfig) : IBridgeMe
         })
     }
 
-    /**
-     * Query the local gallery data
-     */
     override fun loadAllAlbum(query: OnQueryAllAlbumListener<LocalMediaFolder>?) {
         PictureThreadUtils.executeByIo(object : PictureThreadUtils.SimpleTask<List<LocalMediaFolder>>() {
-            // 1:1 Java→Kotlin port (issue #1077); cursor/paging logic kept verbatim, structural split deferred.
             @Suppress("LongMethod")
             override fun doInBackground(): List<LocalMediaFolder> {
                 val data = getContext().contentResolver.query(
@@ -304,7 +284,6 @@ class LocalMediaPageLoader(context: Context, config: SelectorConfig) : IBridgeMe
                                     totalCount += size
                                 } while (data.moveToNext())
                             }
-                            // 相机胶卷
                             val allMediaFolder = LocalMediaFolder()
                             val selfFolder = SandboxFileLoader
                                 .loadInAppSandboxFolderFile(getContext(), getConfig().sandboxDir)
@@ -381,9 +360,9 @@ class LocalMediaPageLoader(context: Context, config: SelectorConfig) : IBridgeMe
         })
     }
 
-    /**
-     * Synchronous first data cover
-     */
+    
+
+
     private fun synchronousFirstCover(mediaFolders: List<LocalMediaFolder>) {
         for (i in mediaFolders.indices) {
             val mediaFolder = mediaFolders[i]
@@ -418,13 +397,13 @@ class LocalMediaPageLoader(context: Context, config: SelectorConfig) : IBridgeMe
     private fun getPageSelectionArgs(bucketId: Long): Array<String>? {
         return when (getConfig().chooseMode) {
             SelectMimeType.TYPE_ALL -> if (bucketId == PictureConfig.ALL.toLong()) {
-                // ofAll
+
                 arrayOf(
                     MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE.toString(),
                     MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO.toString(),
                 )
             } else {
-                //  Gets the specified album directory
+
                 arrayOf(
                     MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE.toString(),
                     MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO.toString(),
@@ -433,15 +412,15 @@ class LocalMediaPageLoader(context: Context, config: SelectorConfig) : IBridgeMe
             }
 
             SelectMimeType.TYPE_IMAGE ->
-                // Get photo
+
                 getSelectionArgsForPageSingleMediaType(MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE, bucketId)
 
             SelectMimeType.TYPE_VIDEO ->
-                // Get video
+
                 getSelectionArgsForPageSingleMediaType(MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO, bucketId)
 
             SelectMimeType.TYPE_AUDIO ->
-                // Get audio
+
                 getSelectionArgsForPageSingleMediaType(MediaStore.Files.FileColumns.MEDIA_TYPE_AUDIO, bucketId)
 
             else -> null
@@ -453,22 +432,22 @@ class LocalMediaPageLoader(context: Context, config: SelectorConfig) : IBridgeMe
         val fileSizeCondition = getFileSizeCondition()
         return when (getConfig().chooseMode) {
             SelectMimeType.TYPE_ALL ->
-                // Get all, not including audio
+
                 getSelectionArgsForAllMediaCondition(
                     durationCondition, fileSizeCondition,
                     getImageMimeTypeCondition(), getVideoMimeTypeCondition(),
                 )
 
             SelectMimeType.TYPE_IMAGE ->
-                // Get Images
+
                 getSelectionArgsForImageMediaCondition(fileSizeCondition, getImageMimeTypeCondition())
 
             SelectMimeType.TYPE_VIDEO ->
-                // Access to video
+
                 getSelectionArgsForVideoMediaCondition(durationCondition, getVideoMimeTypeCondition())
 
             SelectMimeType.TYPE_AUDIO ->
-                // Access to the audio
+
                 getSelectionArgsForAudioMediaCondition(durationCondition, getAudioMimeTypeCondition())
 
             else -> null
@@ -478,22 +457,22 @@ class LocalMediaPageLoader(context: Context, config: SelectorConfig) : IBridgeMe
     override fun getSelectionArgs(): Array<String>? {
         return when (getConfig().chooseMode) {
             SelectMimeType.TYPE_ALL ->
-                // Get all
+
                 arrayOf(
                     MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE.toString(),
                     MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO.toString(),
                 )
 
             SelectMimeType.TYPE_IMAGE ->
-                // Get photo
+
                 arrayOf(MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE.toString())
 
             SelectMimeType.TYPE_VIDEO ->
-                // Get video
+
                 arrayOf(MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO.toString())
 
             SelectMimeType.TYPE_AUDIO ->
-                // Get audio
+
                 arrayOf(MediaStore.Files.FileColumns.MEDIA_TYPE_AUDIO.toString())
 
             else -> null
@@ -504,9 +483,6 @@ class LocalMediaPageLoader(context: Context, config: SelectorConfig) : IBridgeMe
         return if (TextUtils.isEmpty(getConfig().sortOrder)) ORDER_BY else getConfig().sortOrder!!
     }
 
-    /**
-     * Query strategy
-     */
     private fun isWithAllQuery(): Boolean {
         return if (SdkVersionUtils.isQ()) {
             true
@@ -515,7 +491,6 @@ class LocalMediaPageLoader(context: Context, config: SelectorConfig) : IBridgeMe
         }
     }
 
-    // 1:1 Java→Kotlin port (issue #1077); cursor column parsing kept verbatim, structural split deferred.
     @Suppress("LongMethod")
     override fun parseLocalMedia(data: Cursor, isUsePool: Boolean): LocalMedia? {
         val idColumn = data.getColumnIndexOrThrow(PROJECTION[0])
@@ -546,8 +521,7 @@ class LocalMediaPageLoader(context: Context, config: SelectorConfig) : IBridgeMe
                 }
             }
         }
-        // Here, it is solved that some models obtain mimeType and return the format of image / *,
-        // which makes it impossible to distinguish the specific type, such as mi 8,9,10 and other models
+        
         if (mimeType!!.endsWith("image/*")) {
             mimeType = MediaUtils.getMimeTypeFromMediaUrl(absolutePath!!)
             if (!getConfig().isGif) {
@@ -591,20 +565,20 @@ class LocalMediaPageLoader(context: Context, config: SelectorConfig) : IBridgeMe
             fileName = PictureMimeType.getUrlToFileName(absolutePath)
         }
         if (getConfig().isFilterSizeDuration && size > 0 && size < FileSizeUnit.KB) {
-            // Filter out files less than 1KB
+            
             return null
         }
         if (PictureMimeType.isHasVideo(mimeType) || PictureMimeType.isHasAudio(mimeType)) {
             if (getConfig().filterVideoMinSecond > 0 && duration < getConfig().filterVideoMinSecond) {
-                // If you set the minimum number of seconds of video to display
+                
                 return null
             }
             if (getConfig().filterVideoMaxSecond > 0 && duration > getConfig().filterVideoMaxSecond) {
-                // If you set the maximum number of seconds of video to display
+                
                 return null
             }
             if (getConfig().isFilterSizeDuration && duration <= 0) {
-                // If the length is 0, the corrupted video is processed and filtered out
+                
                 return null
             }
         }
@@ -626,9 +600,6 @@ class LocalMediaPageLoader(context: Context, config: SelectorConfig) : IBridgeMe
     }
 
     companion object {
-        /**
-         * Gets a file of the specified type
-         */
         private fun getSelectionArgsForPageSingleMediaType(mediaType: Int, bucketId: Long): Array<String> {
             return if (bucketId == PictureConfig.ALL.toLong()) {
                 arrayOf(mediaType.toString())
@@ -690,25 +661,16 @@ class LocalMediaPageLoader(context: Context, config: SelectorConfig) : IBridgeMe
             }
         }
 
-        /**
-         * Get cover uri
-         */
         private fun getFirstUri(cursor: Cursor): String {
             val id = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns._ID))
             val mimeType = cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns.MIME_TYPE))
             return MediaUtils.getRealPathUri(id, mimeType)
         }
 
-        /**
-         * Get cover uri mimeType
-         */
         private fun getFirstCoverMimeType(cursor: Cursor): String? {
             return cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns.MIME_TYPE))
         }
 
-        /**
-         * Get cover url
-         */
         private fun getFirstUrl(cursor: Cursor): String? {
             return cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns.DATA))
         }

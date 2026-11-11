@@ -7,12 +7,12 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
 
-/**
- * The full wipe sweeps the whole data directory. Two things must come out the other side: the log
- * files, and the encrypted `secure_config` store with its keyset — it is where the login module
- * holds a verified sign-in across the wipe of another account's data, and where the global config
- * lives. Everything else, including the other DataStores and their directories, goes.
- */
+
+
+
+
+
+
 class FileUtilWipeTest {
 
     @get:Rule
@@ -44,7 +44,7 @@ class FileUtilWipeTest {
         for (gone in listOf(secureUser, appState, userKeyset, otherPrefs, attachment, database)) {
             assertFalse(gone.path, gone.exists())
         }
-        // Directories that still hold a preserved file stay; emptied ones are removed.
+        
         assertTrue(File(dataDir, "files/datastore").isDirectory)
         assertTrue(File(dataDir, "shared_prefs").isDirectory)
         assertFalse(File(dataDir, "files/attachments").exists())

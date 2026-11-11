@@ -45,22 +45,11 @@ object LCallEngine {
             if (DEBUG) LoggingLevel.VERBOSE else if (environmentHelper.isInsiderChannel()) LoggingLevel.VERBOSE else LoggingLevel.DEBUG
         LiveKit.loggingExternalPrefix = "[livekit] "
         LiveKit.logger = object : LKLog.Logger {
-            /**
-             * LiveKit SDK forwards its log lines through this callback. We deliberately
-             * call `Timber.log` directly here instead of `L.log` for two reasons:
-             *
-             *  - The LiveKit-internal call site lives a few stack frames above this
-             *    method. L's async channel captures the Throwable inside `L.log`, by
-             *    which point the LiveKit frame is unreachable. Only the synchronous
-             *    Timber path keeps the LiveKit frame visible to BaseTree's synthetic-
-             *    Throwable fallback (calibrated via `CALL_STACK_INDEX_LIVEKIT`).
-             *  - UID masking is applied via the explicit `L.replaceUid` call, so
-             *    bypassing L's own redaction layer is intentional, not an oversight.
-             *
-             * History: introduced for F-Droid open-source build (#3726a03a) and
-             * stack-index-calibrated in #18869c50. Do not "fix" by routing through L
-             * without re-validating LiveKit log prefixes on a real device.
-             */
+            
+
+
+
+
             @SuppressLint("TimberDirectCall")
             override fun log(priority: LoggingLevel, t: Throwable?, message: String) {
                 if (L.enabled && Timber.treeCount > 0) {
@@ -76,14 +65,14 @@ object LCallEngine {
         LiveKit.init(context)
     }
 
-    /**
-     * SDK lines that are per-candidate or known-benign are demoted so the file log (INFO and
-     * above) keeps call milestones only. Returns null to keep the SDK's own priority.
-     */
+    
+
+
+
     private fun sdkNoisePriority(message: String): Int? = when {
-        // One line per ICE candidate, carries local addresses.
+        
         "onIceCandidate" in message -> Log.DEBUG
-        // xquic reports the (expected) absence of 0-RTT as [error] on every connect.
+        
         "early data is not enabled" in message -> Log.INFO
         else -> null
     }
@@ -109,10 +98,10 @@ object LCallEngine {
         _serverNodeSelected.value = server
     }
 
-    /**
-     * Clears the user's manual node selection. Used to roll back a rejected manual switch
-     * so the UI can return to showing the currently-connected node.
-     */
+    
+
+
+
     fun resetSelectedServerNode() {
         _serverNodeSelected.value = null
     }
@@ -121,21 +110,21 @@ object LCallEngine {
         _serverUrlConnected.value = url
     }
 
-    // The call session the connected URL belongs to. Claimed on main, cleared from a cleanup step
-    // on IO: both are synchronized so a clear can never undo a claim that landed in between.
+    
+    
     private var serverUrlOwnerSessionId: Long = NO_SERVER_URL_OWNER
 
-    /** Session [sessionId] starts: it owns the connected URL from now on, which starts empty. */
+    
     @Synchronized
     fun claimConnectedServerUrl(sessionId: Long) {
         serverUrlOwnerSessionId = sessionId
         _serverUrlConnected.value = null
     }
 
-    /**
-     * Session [sessionId]'s cleanup: clears the connected URL only while it still owns it, so a late
-     * cleanup of an ended call never clears the URL of the call that started after it.
-     */
+    
+
+
+
     @Synchronized
     fun clearConnectedServerUrl(sessionId: Long) {
         if (serverUrlOwnerSessionId != sessionId) {
@@ -148,9 +137,9 @@ object LCallEngine {
 
     private const val NO_SERVER_URL_OWNER = -1L
 
-    /**
-     * Reports a connection failure (currently used for logging and triggering config refresh).
-     */
+    
+
+
     fun reportConnectionFailure(url: String) {
         L.w { "[Call] LCallEngine reportConnectionFailure url=$url" }
         appScope.launch(Dispatchers.IO) {
@@ -169,23 +158,17 @@ object LCallEngine {
         return hasManualConnectionTypeOverride
     }
 
-    /**
-     * Whether HTTP/3 QUIC may be selected as the signaling transport. When the proxy is
-     * active but advertises no QUIC relay (share-code without `q`), QUIC is forced off
-     * (see [isUseQuicSignal]); selecting it would silently do nothing, so the UI must
-     * refuse the toggle instead of leaving the switch stuck ON.
-     */
+    
+
+
+
+
+
     fun isQuicSelectable(): Boolean = !ProxyConfigProvider.isProxyForCallActiveWithoutQuic
 
     fun isUseQuicSignal(): Boolean {
-        // Self-hosted proxy + QUIC: only allowed when the operator runs a MASQUE-lite
-        // QUIC relay (share-code `q`), which tunnels QUIC signaling over udp/443 (see
-        // design §9.6). Without it the proxy is a TCP-only TLS tunnel that QUIC/UDP
-        // cannot traverse, so we force WSS-over-domain to avoid a dead UDP path.
-        // Single atomic read of the routing state — combining the active and quic
-        // flags as two separate loads could straddle a config change. Gated on the
-        // CALL plane: only force WSS when the proxy actually routes calls
-        // ("Protect IP address in calls" ON) but advertises no QUIC relay.
+        
+        
         if (ProxyConfigProvider.isProxyForCallActiveWithoutQuic) return false
         return _connectionType.value == CONNECTION_TYPE.HTTP3_QUIC
     }

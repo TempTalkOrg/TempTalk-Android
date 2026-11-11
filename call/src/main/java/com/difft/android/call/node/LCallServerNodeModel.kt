@@ -34,22 +34,22 @@ class LCallServerNodeModel @Inject constructor(application: Application) : Andro
     private val _serverNodeConnected = MutableStateFlow<ServerNode?>(null)
     val serverNodeConnected: StateFlow<ServerNode?> get() = _serverNodeConnected
 
-    /**
-     * Real upstream servers (domain + IPs) from `serviceurl/v2`, surfaced only while
-     * the proxy is protecting call IPs. In that mode [serverNodes] shows the proxy
-     * tunnel domains (no IPs, used for the actual connection); this exposes the real
-     * servers the backend returned so the diagnostics screen isn't misleading. Empty
-     * when the proxy is off (the primary list already carries the real IPs).
-     */
+    
+
+
+
+
+
+
     private val _upstreamServerNodes = MutableStateFlow<List<ServerNode>>(emptyList())
     val upstreamServerNodes: StateFlow<List<ServerNode>> get() = _upstreamServerNodes
 
-    /**
-     * Whether to render the upstream-servers section at all — true only while the
-     * proxy is protecting call IPs. Decoupled from [upstreamServerNodes] being empty
-     * so the section can show an explicit empty-state (e.g. after a failed warm-up
-     * fetch) instead of silently disappearing.
-     */
+    
+
+
+
+
+
     private val _showUpstreamSection = MutableStateFlow(false)
     val showUpstreamSection: StateFlow<Boolean> get() = _showUpstreamSection
 
@@ -91,17 +91,17 @@ class LCallServerNodeModel @Inject constructor(application: Application) : Andro
         }
     }
 
-    /**
-     * Populates [upstreamServerNodes] with the real `serviceurl/v2` servers (domain +
-     * IPs) while the proxy is protecting call IPs — [serverNodes] only shows the
-     * tunnel domains in that mode. Cleared when the proxy is off, since the primary
-     * list already carries the real IPs.
-     *
-     * When proxied and the upstream cache is still empty (e.g. fresh login before any
-     * foreground refresh has run), warms it with a single [fetchCallServiceUrlAndCache]
-     * so the diagnostics card isn't blank on first entry. Gated on empty-cache to avoid
-     * a redundant request on every open; coalesced (5s) with any concurrent fetch.
-     */
+    
+
+
+
+
+
+
+
+
+
+
     private suspend fun loadUpstreamNodes() {
         val proxied = ProxyConfigProvider.isProxyActiveForCall
         _showUpstreamSection.value = proxied
@@ -133,15 +133,15 @@ class LCallServerNodeModel @Inject constructor(application: Application) : Andro
         return embeddedServiceUrlsFallbackOrNull()
     }
 
-    /**
-     * Embedded `serviceUrls` fallback for the node-list display — gated OFF while
-     * the proxy is active. Under the proxy the call domain comes solely from
-     * `proxy.tunnelDomains.call` (via [LCallManager.getCachedServiceUrls] /
-     * [LCallManager.ensureCallServiceUrlsForCall]); the embedded `serviceUrls`
-     * block is a separate source that can drift from the tunnel-host whitelist,
-     * so we never surface it as a node while proxied (mirrors
-     * `CallConnectionCoordinator.embeddedServiceUrlsFallbackOrNull`).
-     */
+    
+
+
+
+
+
+
+
+
     private fun embeddedServiceUrlsFallbackOrNull(): ServiceUrls? =
         if (ProxyConfigProvider.isProxyActiveForCall) null
         else DefaultGlobalConfigCallServiceUrlsReader.read(getApplication())

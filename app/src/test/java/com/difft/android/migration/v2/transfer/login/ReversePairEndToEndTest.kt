@@ -46,21 +46,21 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/**
- * T43 — reverse pairing end to end over a REAL loopback
- * [com.difft.android.p2p.android.server.ReceiverHttpServer]: a fake computer that holds
- * `/reverse-pair` open, opens `/prepare-upload` with the pair token **before** it answers 200, and
- * then uploads a real container on that session.
- *
- * What this pins is the race the registration-before-the-request design exists for — the pairing
- * branch of `/prepare-upload` authorizes a peer this device has not yet heard a 200 from — plus the
- * key seam behind it: the registry hands the receive path the transfer key scanned off the
- * computer's code, not the one this listener minted for its own (never shown) QR.
- *
- * The body is consumed by the byte-pipe receiver rather than the real importer, so the assertions
- * stay about the pairing handshake; the streaming import itself is covered by the fusion and
- * orchestrator tests.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [34])
 class ReversePairEndToEndTest {
@@ -100,7 +100,7 @@ class ReversePairEndToEndTest {
         override fun getScheme(): String = "quicall"
     }
 
-    /** Collects the container into memory so it can be uploaded as one body. */
+    
     private class MemorySink : ArchiveSink {
         val bytes = ByteArrayOutputStream()
         override fun openStream(): OutputStream = bytes
@@ -123,14 +123,14 @@ class ReversePairEndToEndTest {
             account = account,
             resolve = { it },
             pair = { _, body ->
-                // The computer connects back and uploads while its own /reverse-pair is still hanging.
+                
                 connectBackAndUpload(port, body.pairToken, container)
                 ReversePairResponse(sessionId = "mac-session", connectWithinMs = 30_000L)
             },
         )
         withTimeout(TEST_TIMEOUT_MS) {
-            // run() hands the outcome over the moment the peer is authorized, which is well before the
-            // body is in — so the receive's own outcome is what the assertions below wait for.
+            
+            
             controller.run(scope = scope, mac = macQr(port, receiver.qrPayload.fp), listen = receiver.qrPayload)
             receiver.awaitOutcome()
         }
@@ -197,7 +197,7 @@ class ReversePairEndToEndTest {
         return sink.bytes.toByteArray()
     }
 
-    /** The fake computer's two calls, in the order spec §3.1 allows: prepare-upload, then upload. */
+    
     private fun connectBackAndUpload(port: Int, pairToken: String, container: ByteArray) {
         val prepared = prepareUpload(port, pairToken, container.size.toLong())
         assertEquals(200, prepared.status, prepared.body)
@@ -212,10 +212,10 @@ class ReversePairEndToEndTest {
         assertEquals(200, upload.status, upload.body)
     }
 
-    /**
-     * The request body is written by hand: `:app` does not have kotlinx-serialization on its
-     * classpath, and this is the one place a test has to speak the peer's side of the wire.
-     */
+    
+
+
+
     private fun prepareUpload(port: Int, pairToken: String, size: Long): Reply {
         val body = """
             {"info":{"alias":"desk","version":"2.1","deviceType":"desktop","fingerprint":"mac-fp",
@@ -226,14 +226,14 @@ class ReversePairEndToEndTest {
         return request(port, "POST", "/api/localsend/v2/prepare-upload?pin=$macPin", body.toByteArray())
     }
 
-    /** The first `"<name>":"<value>"` in this JSON text. */
+    
     private fun String.field(name: String): String =
         Regex("\"" + Regex.escape(name) + "\"\\s*:\\s*\"([^\"]+)\"").find(this)?.groupValues?.get(1)
             ?: error("no $name in $this")
 
     private class Reply(val status: Int, val body: String)
 
-    /** One request, whole response: the server closes the connection, so the body ends at EOF. */
+    
     private fun request(port: Int, method: String, target: String, body: ByteArray): Reply =
         trustAllSocket(port).use { socket ->
             socket.soTimeout = SOCKET_TIMEOUT_MS
@@ -252,7 +252,7 @@ class ReversePairEndToEndTest {
             Reply(text.substringAfter("HTTP/1.1 ").take(3).toInt(), text.substringAfter("\r\n\r\n", ""))
         }
 
-    /** The pin is not the subject here — accept whatever certificate the loopback server presents. */
+    
     private fun trustAllSocket(port: Int): Socket {
         val trustAll = object : X509TrustManager {
             override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) = Unit

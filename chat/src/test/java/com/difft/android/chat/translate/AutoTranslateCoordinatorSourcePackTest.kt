@@ -14,18 +14,18 @@ import org.junit.Before
 import org.junit.Test
 import java.util.concurrent.ConcurrentLinkedQueue
 
-/**
- * [AutoTranslateCoordinator] on a manual translation whose SOURCE language pack is missing — a
- * pack only the engine can discover, after identifying the text. The row keeps its placeholder
- * while the pack downloads and the job runs once more, instead of failing on the first answer.
- * Fixture in [AutoTranslateCoordinatorTestBase].
- */
+
+
+
+
+
+
 class AutoTranslateCoordinatorSourcePackTest : AutoTranslateCoordinatorTestBase() {
 
     private val ja = ModelId("ja")
     private val notReadyJa = TranslateResult.ModelNotReady(setOf(ja))
 
-    /** Answers handed out in submit order; once drained, every submit translates. */
+    
     private val answers = ConcurrentLinkedQueue<TranslateResult>()
 
     @Before
@@ -37,7 +37,7 @@ class AutoTranslateCoordinatorSourcePackTest : AutoTranslateCoordinatorTestBase(
             val target = arg<TranslateLang>(5)
             submissions += Submission(owner, key, messageId, arg(4))
             val result = answers.poll() ?: TranslateResult.Translated("译:$messageId", "ja")
-            // Broadcast like the real worker; the collector must not turn a manual not-ready into a failure.
+            
             scope.launch { completions.emit(TranslateQueue.Completion(owner, key, messageId, target, result)) }
             CompletableDeferred(result) as Deferred<TranslateResult>
         }
@@ -89,7 +89,7 @@ class AutoTranslateCoordinatorSourcePackTest : AutoTranslateCoordinatorTestBase(
         awaitOverlay("the model failure state") { it["m0"]?.translateStatus == TranslateStatus.FailedModel }
         assertEquals(1, submissions.size)
 
-        // The target pack alone is not enough: the entry also waits for the source pack.
+        
         modelState.value = mapOf(ModelId("zh") to ModelState.Ready)
         delay(SETTLE_MS)
         assertEquals(1, submissions.size)

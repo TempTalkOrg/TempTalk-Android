@@ -3,9 +3,9 @@ package com.difft.android.chat.util
 import androidx.recyclerview.widget.DefaultItemAnimator
 import androidx.recyclerview.widget.RecyclerView
 
-/**
- * Disable animations for changes to same item
- */
+
+
+
 class NoCrossfadeChangeDefaultAnimator : DefaultItemAnimator() {
 
     override fun animateChange(

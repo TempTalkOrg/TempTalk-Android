@@ -19,10 +19,10 @@ import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
-/**
- * Unit tests for [ServerTimeCaptureConverterFactory]: verifies the read-only time-capture hook fires
- * only on a positive-serverTimestamp [BaseResponse] and that all other conversions delegate unchanged.
- */
+
+
+
+
 class ServerTimeCaptureConverterFactoryTest {
 
     private val delegate = mockk<Converter.Factory>()
@@ -34,7 +34,7 @@ class ServerTimeCaptureConverterFactoryTest {
 
     @Before
     fun setUp() {
-        // Deterministic clocks; anchor cleared so isAnchored() reflects only what this test does.
+        
         ServerTimeProvider.resetForTest(wallClock = { 100_000L }, elapsedClock = { 5_000L })
     }
 
@@ -60,9 +60,9 @@ class ServerTimeCaptureConverterFactoryTest {
         val result = wrappedConverter(inner).convert(mockk())
 
         assertTrue(ServerTimeProvider.isAnchored())
-        // elapsedClock == anchorElapsed at update time, so nowMillis collapses to serverNow.
+        
         assertEquals(serverTs, ServerTimeProvider.nowMillis())
-        // The delegate's payload is returned unchanged (capture is a read-only side effect).
+        
         assertEquals(serverTs, (result as BaseResponse<*>).serverTimestamp)
     }
 

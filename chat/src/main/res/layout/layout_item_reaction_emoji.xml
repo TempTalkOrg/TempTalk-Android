@@ -5,7 +5,7 @@
     android:layout_width="@dimen/reaction_emoji_item_size"
     android:layout_height="@dimen/reaction_emoji_item_size">
 
-    <!--    android:background="@drawable/reactions_old_background"-->
+    
     <androidx.appcompat.widget.AppCompatTextView
         android:id="@+id/tv_emoji"
         android:layout_width="35dp"

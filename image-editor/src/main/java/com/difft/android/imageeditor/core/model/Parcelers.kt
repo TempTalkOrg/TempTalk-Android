@@ -6,12 +6,12 @@ import kotlinx.parcelize.Parceler
 import java.util.Stack
 import java.util.UUID
 
-/**
- * @Parcelize [Parceler]s that replace the hand-rolled ParcelUtils serialization. Each reproduces the
- * original wire form 1:1 (parcel bytes are transient, same-process only). #1093
- */
 
-/** 9-float [Matrix] serialization (getValues/setValues), matching the former ParcelUtils.writeMatrix/readMatrix. */
+
+
+
+
+
 object MatrixParceler : Parceler<Matrix> {
     override fun create(parcel: Parcel): Matrix {
         val values = FloatArray(9)
@@ -26,7 +26,7 @@ object MatrixParceler : Parceler<Matrix> {
     }
 }
 
-/** Two-long [UUID] serialization (most-significant, least-significant), matching the former ParcelUtils.writeUUID/readUUID. */
+
 object UuidParceler : Parceler<UUID> {
     override fun create(parcel: Parcel): UUID = UUID(parcel.readLong(), parcel.readLong())
 
@@ -36,7 +36,7 @@ object UuidParceler : Parceler<UUID> {
     }
 }
 
-/** Single-int [EditorFlags] serialization via [EditorFlags.asInt], matching the former EditorElement parcel contract. */
+
 object FlagsParceler : Parceler<EditorFlags> {
     override fun create(parcel: Parcel): EditorFlags = EditorFlags(parcel.readInt())
 
@@ -45,9 +45,9 @@ object FlagsParceler : Parceler<EditorFlags> {
     }
 }
 
-/**
- * [Stack] of byte arrays serialization (count then each entry), matching the former ElementStack parcel contract.
- */
+
+
+
 object StackParceler : Parceler<Stack<ByteArray>> {
     override fun create(parcel: Parcel): Stack<ByteArray> {
         val count = parcel.readInt()

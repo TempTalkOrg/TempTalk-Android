@@ -5,11 +5,11 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.lang.reflect.Modifier
 
-/**
- * [TimeTextFormatTracker] (#1395): the retained chat-list ViewModel re-formats only when its texts
- * were built with a format signature other than the current one. The recorded signature is written
- * on the formatting thread and read on another thread, so the field must be volatile.
- */
+
+
+
+
+
 class TimeTextFormatTrackerTest {
 
     private var current = "en|false|UTC"

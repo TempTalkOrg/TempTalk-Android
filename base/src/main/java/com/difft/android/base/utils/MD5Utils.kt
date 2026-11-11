@@ -4,9 +4,9 @@ import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.security.NoSuchAlgorithmException
 
-/**
- * MD5 hashing helpers. Hex output is lower-case.
- */
+
+
+
 object MD5Utils {
 
     private val DIGESTER_CONTEXT = object : ThreadLocal<MessageDigest>() {

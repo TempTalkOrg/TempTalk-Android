@@ -43,11 +43,11 @@ class SelectedElementGuideRenderer : Renderer {
 
   private val path = Path()
 
-  /**
-   * Draw self to the context.
-   *
-   * @param rendererContext The context to draw to.
-   */
+  
+
+
+
+
   override fun render(rendererContext: RendererContext) {
     rendererContext.canvasMatrix.mapPoints(allPointsOnScreen, allPointsInLocalCords)
     performRender(rendererContext)

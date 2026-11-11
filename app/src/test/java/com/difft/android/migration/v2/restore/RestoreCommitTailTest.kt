@@ -33,16 +33,16 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/**
- * T36-T38b: the commit boundary. Everything up to the database rename stays an ordinary, retryable
- * failure; from the rename on, the data is kept, no verdict is published, and the device finishes the
- * promote on its next cold start.
- *
- * Same strategy as `PromoteStepTest`: the file moves and the marker lifecycle run for real against
- * temp files, and only the Keystore-bound `WCDBKeyManager` calls are stubbed, because Robolectric does
- * not emulate the AndroidKeystore. The staging database itself is a relaxed mock — the tail only reads
- * its key and discards it.
- */
+
+
+
+
+
+
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = Application::class)
@@ -100,9 +100,9 @@ class RestoreCommitTailTest {
         workDir.deleteRecursively()
     }
 
-    // ── fixtures ───────────────────────────────────────────────────────────────────────────────
+    
 
-    /** Lay down the staging products a finished import leaves behind, plus a spool with real bytes. */
+    
     private fun stageEverything() {
         File(paths.stagingDbPath).apply { parentFile!!.mkdirs(); writeBytes(dbBytes) }
         File(paths.stagingDbPath + "-wal").writeBytes(byteArrayOf(9))
@@ -117,7 +117,7 @@ class RestoreCommitTailTest {
         every { it.stagingKey } returns stagingKey
     }
 
-    /** A flag store that records its advances and fails the ones named in [failOn]. */
+    
     private fun flagStore(vararg failOn: RestorePhase, advanced: MutableList<RestorePhase>): RestoreFlagStore =
         mockk<RestoreFlagStore>(relaxed = true).also { store ->
             every { store.advance(any()) } answers {
@@ -149,7 +149,7 @@ class RestoreCommitTailTest {
         )
     }
 
-    // ── T36 ────────────────────────────────────────────────────────────────────────────────────
+    
 
     @Test
     fun `a post-commit sign-in-flag failure keeps the data and publishes no verdict`() = runTest {
@@ -217,14 +217,14 @@ class RestoreCommitTailTest {
         assertEquals(RestoreResult.Rejected(MigrationError.Cancelled), result)
         assertFalse(PromoteStep.isDatabasePromoted(paths.stagingDbPath, paths.realDbPath), "nothing was promoted")
         assertFalse(advanced.contains(RestorePhase.PROMOTING))
-        // The newer session was not marked committing by the cancelled import.
+        
         assertEquals(
             com.difft.android.p2p.engine.model.TransferStages.PREPARED,
             sessions.status(fresh.sessionId, fresh.sessionToken).stage,
         )
     }
 
-    // Real key shapes: the tail validates the identity before it reaches the commit entry.
+    
     private fun carriedIdentity() = com.difft.android.migration.v2.model.NeutralIdentity(
         aciPublicKey = Base64.encodeBytes(byteArrayOf(0x05) + ByteArray(32) { (it + 1).toByte() }),
         aciPrivateKey = Base64.encodeBytes(ByteArray(32) { (it + 101).toByte() }),
@@ -288,7 +288,7 @@ class RestoreCommitTailTest {
         assertDataKept()
     }
 
-    // ── T37 ────────────────────────────────────────────────────────────────────────────────────
+    
 
     @Test
     fun `a failure writing the final result is committed-unconfirmed too`() = runTest {
@@ -331,7 +331,7 @@ class RestoreCommitTailTest {
         assertTrue(advanced.contains(RestorePhase.COMPLETED))
     }
 
-    // ── T37b ───────────────────────────────────────────────────────────────────────────────────
+    
 
     @Test
     fun `a P1 key-install failure is an ordinary failure, not committed-unconfirmed`() = runTest {
@@ -352,7 +352,7 @@ class RestoreCommitTailTest {
         assertTrue(markerStore.exists(), "and so does the marker the resume reads them through")
     }
 
-    // ── T37c ───────────────────────────────────────────────────────────────────────────────────
+    
 
     @Test
     fun `a pre-P2 failure is finished in process by the resume and the tail continues`() = runTest {
@@ -370,7 +370,7 @@ class RestoreCommitTailTest {
         assertFalse(markerStore.exists(), "the resume's own P4 cleared the marker")
     }
 
-    // ── T37d ───────────────────────────────────────────────────────────────────────────────────
+    
 
     @Test
     fun `the tail reclaim deletes the spool and nothing else`() = runTest {
@@ -388,7 +388,7 @@ class RestoreCommitTailTest {
         assertTrue(File(paths.containerWorkFile).exists())
     }
 
-    // ── T38 ────────────────────────────────────────────────────────────────────────────────────
+    
 
     @Test
     fun `a tail failure that clears on the retry completes normally`() = runTest {
@@ -405,7 +405,7 @@ class RestoreCommitTailTest {
         assertDataKept()
     }
 
-    // ── T38b ───────────────────────────────────────────────────────────────────────────────────
+    
 
     @Test
     fun `a stuck flag with no marker left is cleared rather than left at PROMOTING`() = runTest {

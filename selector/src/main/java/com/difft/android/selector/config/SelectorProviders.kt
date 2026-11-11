@@ -10,7 +10,7 @@ class SelectorProviders {
         selectionConfigsQueue.add(config)
     }
 
-    /** Exposed as a property so Java sees getSelectorConfig() and Kotlin can use `.selectorConfig`. */
+    
     val selectorConfig: SelectorConfig
         get() = if (selectionConfigsQueue.size > 0) selectionConfigsQueue.last() else SelectorConfig()
 

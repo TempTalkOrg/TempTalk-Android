@@ -7,11 +7,11 @@ import com.difft.android.websocket.internal.websocket.WebsocketResponse
 import java.util.Optional
 import java.util.concurrent.ExecutionException
 
-/**
- * Encapsulates a parsed API response regardless of where it came from (WebSocket or REST). Not only
- * includes the success result but also any application errors encountered (404s, parsing, etc.) or
- * execution errors encountered (IOException, etc.).
- */
+
+
+
+
+
 class ServiceResponse<Result>(
     val status: Int,
     body: String?,

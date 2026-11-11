@@ -32,6 +32,9 @@
     </style>
 
     <style name="Theme.TT.RoundedBottomSheet" parent="ThemeOverlay.Material3.BottomSheetDialog">
+        
+        <item name="android:scrollbarThumbVertical">@android:color/transparent</item>
+        <item name="android:scrollbarThumbHorizontal">@android:color/transparent</item>
         <item name="android:windowIsFloating">false</item>
         <item name="bottomSheetStyle">@style/Widget.TT.BottomSheet.Rounded</item>
 
@@ -49,8 +52,10 @@
         <item name="android:singleLine">false</item>
     </style>
 
-    <!-- Transparent Activity Theme for Bottom Sheet style presentation -->
+    
     <style name="Theme.TT.TransparentActivity" parent="Theme.Chative">
+        
+        <item name="android:windowAnimationStyle">@android:style/Animation.Translucent</item>
         <item name="android:windowIsTranslucent">true</item>
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:backgroundDimEnabled">false</item>

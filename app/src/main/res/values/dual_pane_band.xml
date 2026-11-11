@@ -1,7 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Dimens band the dual-pane tree was inflated with; stamped on list_pane as its tag so
-         DualPaneReconciler can detect a stale band without reading runtime-resized widths.
-         Overridden in values-w900dp/. Not user-visible. -->
+    
     <string name="dual_pane_band" translatable="false">compact</string>
 </resources>

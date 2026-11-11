@@ -7,11 +7,11 @@ import retrofit2.Converter
 import retrofit2.Retrofit
 import java.lang.reflect.Type
 
-/**
- * Delegating [Converter.Factory] wrapping the Gson factory: on a successful deserialize to a
- * [BaseResponse] with a positive outer `serverTimestamp`, it feeds [ServerTimeProvider]. One hook
- * covers every service; all other conversions delegate unchanged (behaviour-preserving).
- */
+
+
+
+
+
 class ServerTimeCaptureConverterFactory(
     private val delegate: Converter.Factory
 ) : Converter.Factory() {

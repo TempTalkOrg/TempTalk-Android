@@ -4,12 +4,12 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
-/**
- * Content-uri key resolution — the one place that must keep working for uris minted by ANY past
- * version of the app, since external apps and Glide hand them back long after they were created.
- *
- * The rows come from a fake so the assertions pin the ORDER, which is the whole contract.
- */
+
+
+
+
+
+
 class AttachmentUriRowLookupTest {
 
     private data class Row(val label: String, val fileName: String?, val synthesizedLocalId: String = "")
@@ -121,9 +121,9 @@ class AttachmentUriRowLookupTest {
 
     @Test
     fun `a pre-backfill forward uri resolves by the id synthesized from its row`() {
-        // The window before the backfill runs: the row's localId column is NULL and a forward row
-        // carries no messageId, so only the synthesized id can name it — and the uri was minted
-        // under exactly that id.
+        
+        
+        
         val row = resolve(
             SYNTHESIZED,
             lookupOf(
@@ -178,7 +178,7 @@ class AttachmentUriRowLookupTest {
     }
 
     private companion object {
-        /** Shape of `UUID.nameUUIDFromBytes(...)`, which is what a synthesized local id is. */
+        
         const val SYNTHESIZED = "6d5f2f4b-9f3a-3a1c-8b0e-0f1a2b3c4d5e"
         const val OTHER_SYNTHESIZED = "11112222-3333-4444-5555-666677778888"
     }

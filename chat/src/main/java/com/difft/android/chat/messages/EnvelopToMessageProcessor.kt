@@ -4,6 +4,7 @@ import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.migration.pause.MessagingTicket
 import com.difft.android.base.monitor.DeliveryChannel
 import com.difft.android.base.monitor.KeepAliveHealthCounters
+import com.difft.android.chat.group.GroupUtil
 import com.difft.android.base.monitor.LateDeliveryTracker
 import com.difft.android.messageserialization.db.store.DBMessageStore
 import com.difft.android.websocket.api.messages.SignalServiceDataClass
@@ -11,6 +12,7 @@ import com.google.gson.JsonSyntaxException
 import com.google.protobuf.InvalidProtocolBufferException
 import difft.android.messageserialization.For
 import difft.android.messageserialization.model.Message
+import difft.android.messageserialization.model.TextMessage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -27,10 +29,11 @@ class EnvelopToMessageProcessor @Inject constructor(
     private val dbMessageStore: DBMessageStore,
     private val healthCounters: KeepAliveHealthCounters,
     private val lateDeliveryTracker: LateDeliveryTracker,
+    private val groupUtil: GroupUtil,
 ) {
 
     companion object {
-        // #1328 latency: WebSocket, FCM payload and server pull only; local retries/deferred queues would skew it.
+        
         private val LIVE_DELIVERY_CHANNELS = mapOf(
             "message" to DeliveryChannel.WS,
             "fcm" to DeliveryChannel.FCM,
@@ -38,39 +41,27 @@ class EnvelopToMessageProcessor @Inject constructor(
         )
     }
 
-    /**
-     * Decrypt + content-process + persist a single envelope, returning an
-     * [EnvelopeProcessResult] classifying the outcome.
-     *
-     * Replaces the previous "throw any exception" contract: callers now branch
-     * on `when` so deterministic failures (decryption, protobuf, JSON, Base64)
-     * stop feeding the failed_message retry queue at the source.
-     *
-     * Persistence (`putWhenNonExist`) is included inside this method so its
-     * WCDBException flows through the same [classify] boundary as decryption
-     * and MessageContentProcessor exceptions — callers don't need their own
-     * try-catch around the DB write. `putWhenNonExist` is idempotent
-     * (primary-key dedup + in-memory `processingMessageIds`), so multiple
-     * delivery channels (WebSocket / FCM / pull) safely converge.
-     *
-     * Dispatcher: `Dispatchers.IO`. The work mix is IO-dominated —
-     * `MessageContentProcessor` issues many WCDB writes (group / contact /
-     * reaction / room) plus occasional network calls (group sync), and
-     * `putWhenNonExist` is a blocking WCDB write. The only CPU-bound piece
-     * is `decrypt()` (DtProto JNI, ~5–10 ms per envelope) which is short
-     * enough that running it on the IO pool is fine — the alternative
-     * (`Dispatchers.Default`, ~CPU-count threads) would block app-wide
-     * Default consumers when those DB writes stall, and is dramatically
-     * smaller than the IO pool's default 64 threads under burst load.
-     * All callers (`appScope`, `IncomingMessageObserver` scope) are also
-     * `Dispatchers.IO`, so this `withContext` is a no-op in the steady
-     * state and only kicks in if a Default-scoped caller is added.
-     *
-     * @param admission the caller's open receive ticket (#1382); the caller acquired it before its
-     *   first side effect and closes it after its own ACK, server delete or persistence, whichever
-     *   it owns. Admitted work is never refused; a closed ticket is a caller bug and returns
-     *   [EnvelopeProcessResult.Paused] untouched.
-     */
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     suspend fun process(envelope: Envelope, tag: String, admission: MessagingTicket): EnvelopeProcessResult {
         if (admission.isClosed) {
             L.e { "[MigrationPause] event=process_without_ticket tag=$tag ts=${envelope.timestamp}" }
@@ -92,58 +83,61 @@ class EnvelopToMessageProcessor @Inject constructor(
                 ?.processContentToMessage(tag, admission)
                 ?.compatTimestamp()
             val inserted = result?.let { dbMessageStore.putWhenNonExist(it.message) } ?: 0
+            if (inserted > 0 && result != null) {
+                result.groupExpiryClearReason?.let { groupUtil.clearExpiry(result.conversation.id, it) }
+            }
             val channel = LIVE_DELIVERY_CHANNELS[tag]
-            // Only a newly stored message is sampled: a redelivery after a process restart would
-            // otherwise be counted again with latency measured from the original server time.
+            
+            
             if (inserted > 0 && channel != null) {
-                // Telemetry must never turn a processed message into a failure.
+                
                 runCatching { healthCounters.onEnvelopeDelivered(envelope.systemShowTimestamp, channel) }
                 runCatching { lateDeliveryTracker.onEnvelopeDelivered(envelope.systemShowTimestamp) }
             }
             EnvelopeProcessResult.Success(result)
         } catch (e: CancellationException) {
-            // Coroutine cancellation (logout / scope shutdown) is not a message
-            // failure — rethrow so the caller's coroutine actually cancels.
+            
+            
             throw e
         } catch (e: Throwable) {
-            // System-level errors (OOM, StackOverflow) bubble up to crash
-            // reporters; don't try to handle them as message failures.
+            
+            
             if (e is OutOfMemoryError || e is StackOverflowError) throw e
             classify(envelope, tag, e)
         }
     }
 
-    /**
-     * Map a thrown exception to a [EnvelopeProcessResult]. Permanent failures
-     * are deterministic (same input → same failure); transient failures might
-     * recover on retry. When in doubt we default to transient — losing a
-     * recoverable message is a worse failure mode than retrying a doomed one,
-     * because `MAX_RETRIES` caps the latter.
-     *
-     * `WCDBException` from `putWhenNonExist` (above) lands here in the `else`
-     * branch — transient (disk full, DB lock are recoverable). Same for
-     * `IOException` (network) / `NullPointerException` (race) / other
-     * `DtProtoException` variants whose internal semantics aren't deterministic.
-     */
+    
+
+
+
+
+
+
+
+
+
+
+
     private fun classify(envelope: Envelope, tag: String, e: Throwable): EnvelopeProcessResult {
         val reason: DropReason? = when (e) {
-            // Both ACI key fallbacks failed → ciphertext / MAC is junk. Deterministic.
+            
             is DtProtoException.DecryptMessageDataException -> DropReason.DECRYPTION_FAILED
-            // Protobuf bytes are corrupt — will fail the same way every time.
+            
             is InvalidProtocolBufferException -> DropReason.DECRYPTION_DATA_CORRUPT
-            // NOTIFY JSON is corrupt.
+            
             is JsonSyntaxException -> DropReason.MALFORMED_NOTIFY_JSON
-            // Envelope identityKey / peerContext was not valid Base64 — see
-            // [NewMessageDecryptionUtil.decodeBase64OrThrow].
+            
+            
             is Base64DecodeException -> DropReason.BASE64_DECODE_FAILED
-            // Everything else → Transient. MAX_RETRIES bounds the cost if it
-            // turns out to be permanent.
+            
+            
             else -> null
         }
         return if (reason != null) {
-            // Local log + Crashlytics record happen in [reportPermanentDrop] at
-            // the call site (it has the canonical `tag` and bundles both writes
-            // so they can't drift apart).
+            
+            
+            
             EnvelopeProcessResult.PermanentFailure(reason, e)
         } else {
             L.e {
@@ -172,17 +166,29 @@ class EnvelopToMessageProcessor @Inject constructor(
     }
 
     private fun Envelope.decrypt(): SignalServiceDataClass? {
-        // 对 envelope 的 content 进行解密（针对端上加密）
         return newMessageDecryptionUtil.decrypt(this)
     }
 
     private suspend fun SignalServiceDataClass.processContentToMessage(tag: String, admission: MessagingTicket): Result? {
         L.d { "[Message][${tag}] Start processing Message " }
         return messageContentProcessor.process(content = this, tag, admission)?.let {
+            val service = signalServiceContent
+            val isSentSync = service?.hasSyncMessage() == true && service.syncMessage.hasSent()
+            val data = when {
+                service?.hasDataMessage() == true -> service.dataMessage
+                isSentSync -> service?.syncMessage?.sent?.message
+                else -> null
+            }
+            val clearReason = if (it is TextMessage && conversation is For.Group && data != null &&
+                !data.hasRecall() && !data.hasReaction()
+            ) {
+                if (isSentSync || senderId == myId) "sent" else "incoming"
+            } else null
             Result(
                 message = it,
                 shouldShowNotification = shouldShowNotification,
-                conversation = conversation
+                conversation = conversation,
+                groupExpiryClearReason = clearReason,
             )
         }
     }
@@ -198,5 +204,6 @@ class EnvelopToMessageProcessor @Inject constructor(
         val message: Message,
         val shouldShowNotification: Boolean,
         val conversation: For,
+        val groupExpiryClearReason: String? = null,
     )
 }

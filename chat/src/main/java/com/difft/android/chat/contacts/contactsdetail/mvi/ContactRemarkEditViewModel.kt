@@ -30,11 +30,11 @@ import kotlinx.coroutines.withContext
 import org.difft.app.database.cache.ContactRemarkCache
 import org.difft.app.database.models.ContactorModel
 
-/**
- * Remark name / remark avatar editing for the contact card. Wire format is unchanged from the
- * retired remark sub-page: `POST v1/conversation/set` with `remark` / `remarkAvatar`, each
- * client-encrypted as `"V1|" + base64(iv ‖ AES-GCM(uid-derived key))`; an empty string clears.
- */
+
+
+
+
+
 @HiltViewModel
 class ContactRemarkEditViewModel @Inject constructor(
     private val contactAvatarUploader: ContactAvatarUploader,
@@ -68,24 +68,24 @@ class ContactRemarkEditViewModel @Inject constructor(
         }
     }
 
-    /** The input opens on the stored remark only — the real name is reachable through quick-fill. */
+    
     private fun enterEdit() {
         _state.update {
             it.copy(
                 isEditing = true,
                 editBaseline = it.remarkName,
                 editingName = it.remarkName,
-                // Decided once here: later typing must not make the row flicker in and out.
+                
                 showQuickFill = shouldOfferQuickFill(it.quickFillName, it.remarkName),
             ).withDerived()
         }
     }
 
-    /**
-     * Using the shortcut retires it for the rest of this edit, even when it had nothing to append.
-     * The result is capped at [MAX_REMARK_LENGTH] the same way the input caps typing and pasting —
-     * the shortcut writes the draft directly, so the field's own filter never sees it.
-     */
+    
+
+
+
+
     private fun quickFill() {
         _state.update {
             it.copy(
@@ -99,7 +99,7 @@ class ContactRemarkEditViewModel @Inject constructor(
         _state.update { it.copy(editingName = value).withDerived() }
     }
 
-    /** Close / back while editing: ask only when the user actually changed the text away from the baseline. */
+    
     private fun requestClose() {
         val s = _state.value
         if (s.hasUnsavedChanges) {
@@ -113,7 +113,7 @@ class ContactRemarkEditViewModel @Inject constructor(
     private fun State.withDerived(): State =
         copy(hasUnsavedChanges = isEditing && editingName.trim() != editBaseline.trim())
 
-    /** Edit actions need a loaded contact; the header can be tapped before the first [Intent.Load] lands. */
+    
     private fun loadedContactId(action: String): String? {
         val id = _state.value.contactId
         if (id.isEmpty()) {
@@ -132,18 +132,18 @@ class ContactRemarkEditViewModel @Inject constructor(
         val remarkAvatar = ContactRemarkCache.getRemarkAvatar(contactor.id)?.takeIf { it.isNotEmpty() }
             ?: contactor.remarkAvatar?.takeIf { it.isNotEmpty() }
             ?: contactor.groupMemberContactor?.remarkAvatar?.takeIf { it.isNotEmpty() }
-        // Quick-fill source: public name → name → group display name. The base58 id fallback the card
-        // renders is deliberately excluded, so a nameless peer gets no quick-fill row at all.
+        
+        
         val originalName = contactor.publicName?.takeIf { it.isNotEmpty() }
             ?: contactor.name?.takeIf { it.isNotEmpty() }
             ?: contactor.groupMemberContactor?.displayName?.takeIf { it.isNotEmpty() }
             ?: ""
-        // While editing, the draft and the baseline are frozen: a refresh must never overwrite them.
+        
         _state.update {
             it.copy(
                 contactId = contactor.id,
                 remarkName = remark,
-                // Frozen while editing: a refresh must not change what the shortcut offers.
+                
                 quickFillName = if (it.isEditing) it.quickFillName else originalName,
                 hasRemarkAvatar = !remarkAvatar.isNullOrEmpty(),
                 editingName = if (it.isEditing) it.editingName else remark,
@@ -162,11 +162,11 @@ class ContactRemarkEditViewModel @Inject constructor(
         _effect.trySend(if (s.hasRemarkAvatar) Effect.ShowAvatarActionSheet else Effect.RequestPickAvatar)
     }
 
-    /**
-     * "Done" commits exactly what the unsaved-changes prompt considers pending ([State.hasUnsavedChanges]):
-     * the trimmed input differs from the trimmed [State.editBaseline]. Empty against a stored remark
-     * deletes it; anything else creates or updates it, a remark equal to the real name included.
-     */
+    
+
+
+
+
     private fun submitName(closeAfter: Boolean = false) {
         val s = _state.value
         if (s.isSubmitting) return
@@ -179,7 +179,7 @@ class ContactRemarkEditViewModel @Inject constructor(
         val contactId = loadedContactId("save name") ?: return
         val encrypted = ContactRemarkUtil.encryptRemarkV1(contactId, newRemark)
         if (newRemark.isNotEmpty() && encrypted.isEmpty()) {
-            // Empty ciphertext would be sent as "clear"; never turn a typed remark into a deletion.
+            
             L.w { "[ContactRemarkEdit] name encrypt produced empty payload uid=$contactId" }
             _effect.trySend(Effect.ShowToast(null))
             return
@@ -256,7 +256,7 @@ class ContactRemarkEditViewModel @Inject constructor(
         }
     }
 
-    /** `remarkAvatar = ""` clears on the server (empty = clear, null = untouched). */
+    
     private fun setRemarkAvatar(encryptedValue: String, uploadedPath: String?) {
         val contactId = loadedContactId("reset avatar") ?: return
         viewModelScope.launch {
@@ -278,7 +278,7 @@ class ContactRemarkEditViewModel @Inject constructor(
         }
     }
 
-    /** Shared tail of upload / restore: server write, local write, wait dismissal. Throws on I/O. */
+    
     private suspend fun setRemarkAvatarInternal(contactId: String, encryptedValue: String, uploadedPath: String?) {
         val result = withContext(Dispatchers.IO) {
             httpClient.httpService.fetchConversationSet(

@@ -10,11 +10,11 @@ import org.difft.app.database.models.PublicKeyInfoModel
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * WCDB-backed store. All methods internally switch to [Dispatchers.IO] so
- * callers can invoke them from any coroutine context without worrying about
- * blocking a CPU thread on the default pool.
- */
+
+
+
+
+
 @Singleton
 class DBPublicKeyInfoStore @Inject constructor(
     private val wcdb: WCDB

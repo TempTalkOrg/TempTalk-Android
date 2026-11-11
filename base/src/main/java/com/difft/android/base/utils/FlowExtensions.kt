@@ -10,17 +10,17 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
-/**
- * Variant with [predicate] that decides which element should bypass the sampling window and be emitted immediately
- * the first time the predicate returns true. All elements (including ones that don't satisfy the predicate or the
- * subsequent ones after the first immediate emission) will be sampled with the usual [periodMillis] logic.
- *
- * If the sampling period passes without any new elements, the *next* element that arrives
- * will be emitted immediately, and the sampling window resets.
- *
- * The two-parameter overload (periodMillis only) behaves exactly like the old `sampleAfterFirst`: the very first
- * element is emitted right away regardless of its content.
- */
+
+
+
+
+
+
+
+
+
+
+
 fun <T> Flow<T>.sampleAfterFirst(
     periodMillis: Long,
     predicate: (T) -> Boolean = { true }
@@ -29,48 +29,48 @@ fun <T> Flow<T>.sampleAfterFirst(
 
     return channelFlow {
         var firstEmitted = false
-        var beforeFirst: T? = null      // cache before first predicate-true element
-        var latest: T? = null           // cache after first emission
+        var beforeFirst: T? = null      
+        var latest: T? = null           
         val mutex = Mutex()
-        var isAfterSilentPeriod = false // New: Tracks if the last ticker run was silent
+        var isAfterSilentPeriod = false 
 
         var tickerJob: Job? = null
 
         suspend fun startTicker() {
-            // Cancel existing ticker if running, to reset the timing
+            
             tickerJob?.cancel()
             tickerJob = launch {
                 while (isActive) {
                     delay(periodMillis)
                     val toSend: T? = mutex.withLock {
-                        if (!firstEmitted) { // Ticker fired before the first *actual* emission by predicate
+                        if (!firstEmitted) { 
                             val cached = beforeFirst
                             beforeFirst = null
                             if (cached != null) {
-                                firstEmitted = true // Mark as first emitted (by ticker, due to predicate false initially)
+                                firstEmitted = true 
                                 cached
                             } else {
-                                // This case implies predicate was true immediately, or beforeFirst was already consumed.
-                                // If beforeFirst is null, and firstEmitted is false, it means the very first element
-                                // satisfied the predicate and was sent immediately by the collector.
-                                // Or, predicate was false, beforeFirst was cached, then ticker fired and sent it.
-                                // If ticker fires again and firstEmitted is *still* false, something is odd,
-                                // but practically, we check `latest` for subsequent emissions.
-                                // For this branch, if `cached` is null, we effectively had a silent tick for `beforeFirst`.
-                                isAfterSilentPeriod = true // Mark as silent if no `beforeFirst` was pending
+                                
+                                
+                                
+                                
+                                
+                                
+                                
+                                isAfterSilentPeriod = true 
                                 null
                             }
-                        } else { // Ticker fired after the first *actual* emission
+                        } else { 
                             val cached = latest
                             latest = null
-                            if (cached == null) { // No new value arrived during the sampling window
+                            if (cached == null) { 
                                 isAfterSilentPeriod = true
                             }
                             cached
                         }
                     }
                     toSend?.let {
-                        mutex.withLock { isAfterSilentPeriod = false } // Reset on actual send by ticker
+                        mutex.withLock { isAfterSilentPeriod = false } 
                         trySend(it)
                     }
                 }
@@ -82,36 +82,36 @@ fun <T> Flow<T>.sampleAfterFirst(
                 if (!firstEmitted) {
                     if (predicate(value)) {
                         firstEmitted = true
-                        beforeFirst = null // clear cache
-                        mutex.withLock { isAfterSilentPeriod = false } // Reset on this immediate send
+                        beforeFirst = null 
+                        mutex.withLock { isAfterSilentPeriod = false } 
                         trySend(value)
-                        startTicker() // Start sampling window relative to this first emission
+                        startTicker() 
                     } else {
                         mutex.withLock { beforeFirst = value }
-                        // Ensure ticker is started so cached `beforeFirst` can be emitted later
-                        // if it's the only thing, or if predicate-true item never arrives.
+                        
+                        
                         if (tickerJob?.isActive != true) {
                             startTicker()
                         }
                     }
-                } else { // firstEmitted is true
+                } else { 
                     val emitImmediatelyDueToSilence = mutex.withLock {
                         if (isAfterSilentPeriod) {
-                            latest = null // Current value is being sent, so no 'latest' to hold
-                            isAfterSilentPeriod = false // Reset: we are consuming the post-silent value
+                            latest = null 
+                            isAfterSilentPeriod = false 
                             true
                         } else {
-                            latest = value // Cache for normal sampling by ticker
+                            latest = value 
                             false
                         }
                     }
 
                     if (emitImmediatelyDueToSilence) {
                         trySend(value)
-                        startTicker() // Restart ticker relative to this new immediate emission
+                        startTicker() 
                     }
-                    // If not emitting immediately, the value is in 'latest' and ticker is already running.
-                    // Ensure ticker is running if it somehow wasn't (e.g. very first element was via predicate)
+                    
+                    
                     else if (tickerJob?.isActive != true) {
                          startTicker()
                     }

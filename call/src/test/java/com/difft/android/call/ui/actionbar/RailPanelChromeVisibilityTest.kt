@@ -21,11 +21,11 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/**
- * Beside the side rail an open sheet (More, Emoji, End menu) neither fades the chrome nor frees the
- * rail's band; with the bar it fades the chrome as before (#1451, #1196). The window is
- * driven through [LocalWindowInfo], so one composition can switch between rail and bar mode.
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [30], qualifiers = "w860dp-h608dp-land-xhdpi")
 class RailPanelChromeVisibilityTest {
@@ -35,7 +35,7 @@ class RailPanelChromeVisibilityTest {
 
     private val ui = CallUiController()
 
-    // xhdpi: 860x608dp shows the rail, 860x400dp is a wide window below the rail's minimum height.
+    
     private val railWindow = IntSize(1720, 1216)
     private val barWindow = IntSize(1720, 800)
     private var window by mutableStateOf(railWindow)
@@ -92,7 +92,7 @@ class RailPanelChromeVisibilityTest {
             open(false)
             rule.waitForIdle()
         }
-        // The user's toggle still hides the chrome and frees the rail's band.
+        
         ui.toggleOverlays()
         rule.waitForIdle()
         assertFalse(topVisible)

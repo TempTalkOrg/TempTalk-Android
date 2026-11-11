@@ -23,10 +23,10 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/**
- * Robolectric tests for [AppUpgradeNotifier]. Asserts channels (#1354) and per-state notification
- * flags / PendingIntent presence via [org.robolectric.shadows.ShadowNotificationManager].
- */
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class AppUpgradeNotifierTest {
@@ -86,8 +86,8 @@ class AppUpgradeNotifierTest {
         assertEquals(Notification.GROUP_ALERT_SUMMARY, notification?.groupAlertBehavior)
     }
 
-    // Uses showFailed: FileProvider caches its roots across tests, so only one test here may
-    // go through getUriForFile.
+    
+    
     @Test
     fun terminal_recreatesAMissingOtherAlertsChannel() {
         notificationManager.deleteNotificationChannel(NotificationChannelIds.OTHER_ALERTS)
@@ -119,12 +119,12 @@ class AppUpgradeNotifierTest {
 
     @Test
     fun showComplete_postsToTerminalIdAndCancelsProgress() {
-        // File must live under a FileProvider-configured root so getUriForFile resolves.
+        
         val apkFile = File(context.filesDir, "upgrade_test.apk").apply {
             parentFile?.mkdirs()
             writeBytes(byteArrayOf(1, 2, 3))
         }
-        // Progress notification present; terminal post must cancel it and post under its own id.
+        
         notifier.showProgress(80)
 
         notifier.showComplete(apkFile)
@@ -155,8 +155,8 @@ class AppUpgradeNotifierTest {
         assertNotNull(notification, "failed notification must post under terminal id")
         assertNotNull(notification.contentIntent, "failed notification must carry retry PendingIntent")
 
-        // The retry goes through the receiver, whose starter runs the channel preflight,
-        // never straight to the foreground service.
+        
+        
         val pending = shadowOf(notification.contentIntent)
         assertTrue(pending.isBroadcast, "retry must be a broadcast, not a foreground-service start")
         val retry = pending.savedIntent

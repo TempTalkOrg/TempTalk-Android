@@ -28,19 +28,17 @@ import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import java.util.concurrent.TimeUnit
 
-/**
- * The settings-page write pattern of design §3.11 O1 and §3.4 (group / global notification
- * pages): a write tracked by key outlives a fold, the restored page shows the write's wait while
- * the key runs and re-reads the stored value when it ends (also while the app is in the
- * background), and a page re-reads on resume, which covers returning from a page that changed it.
- * The page here wires exactly what GroupNotificationSettingsFragment and
- * GroupGlobalNotificationSettingsFragment wire; those need Hilt, which these tests do not boot.
- */
+
+
+
+
+
+
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [33], qualifiers = "w840dp-h900dp")
 class OutlivingWriteRestoreTest {
 
-    /** Stands in for the server and the stored value (userManager / WCDB). */
+    
     object Store {
         var value = 0
         var server = CompletableDeferred<Unit>()
@@ -91,7 +89,7 @@ class OutlivingWriteRestoreTest {
 
     private fun settle() = shadowOf(Looper.getMainLooper()).idleFor(1, TimeUnit.SECONDS)
 
-    /** One task at a time (bounded): the wait dialog's spinner keeps scheduling frames. */
+    
     private fun runTasksUntil(done: () -> Boolean) {
         val looper = shadowOf(Looper.getMainLooper())
         repeat(MAX_TASKS) {
@@ -109,12 +107,12 @@ class OutlivingWriteRestoreTest {
         return page()
     }
 
-    /**
-     * The fold: the page is recreated while its write keeps running on the application scope. The
-     * recreation is done before the write is let into the key (Robolectric's recreate idles the
-     * looper, which never settles while the wait dialog's spinner runs); the write then runs as
-     * the destroyed page left it, under the same key.
-     */
+    
+
+
+
+
+
     private fun foldThenWriteFromGonePage(newValue: Int): SettingPage {
         val old = launchWithPage()
         controller!!.recreate()
@@ -156,7 +154,7 @@ class OutlivingWriteRestoreTest {
         nav.push(TAB_CHATS, StackPageFragment.newInstance("global"))
         settle()
 
-        Store.value = 5 // the global page stored a new default
+        Store.value = 5 
         nav.pop(TAB_CHATS)
         settle()
 

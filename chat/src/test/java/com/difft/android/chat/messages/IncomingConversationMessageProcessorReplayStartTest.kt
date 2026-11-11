@@ -25,11 +25,11 @@ import org.whispersystems.signalservice.internal.push.SignalServiceProtos.Envelo
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos.ReadPosition
 import kotlin.time.Duration.Companion.seconds
 
-/**
- * `queue/conversation/empty` is the first end-marker of every connection and always precedes the
- * backlog envelopes, so `endReceive` is where the prior-conversation window opens: the reporter is
- * told exactly once per connection, after the previews are persisted and acknowledged.
- */
+
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28])
@@ -81,8 +81,8 @@ class IncomingConversationMessageProcessorReplayStartTest {
         verify(exactly = 1) { priorConversationReporter.onReplayStarted() }
     }
 
-    // G-R3 (#1382): while messaging is closed a preview is neither stored nor ACKed, and the end
-    // marker ACKs and reports nothing.
+    
+    
     @Test
     fun `while paused previews are neither ACKed nor processed`() = runTest {
         val webSocket = mockk<AppWebSocketHelper>(relaxed = true)
@@ -102,9 +102,9 @@ class IncomingConversationMessageProcessorReplayStartTest {
         verify(exactly = 0) { priorConversationReporter.onReplayStarted() }
     }
 
-    // #1382: an ACKed preview is consumed on the server, so it is stored under the ticket that ACKed
-    // it. A pause that begins before the end marker is read then has nothing outstanding to wait
-    // for and nothing in memory to drop when the end marker is refused.
+    
+    
+    
     @Test
     fun `an ACKed preview is stored before the pause even when its end marker is refused`() = runTest {
         val messaging = TestMessagingPause().open()
@@ -124,7 +124,7 @@ class IncomingConversationMessageProcessorReplayStartTest {
         messaging.pauseMessaging()
 
         assertTrue(messaging.gate.closeAndAwaitIdle(TestMessagingPause.OWNER, 1.seconds))
-        // The snapshot point: the ACKed preview is already stored.
+        
         verify(exactly = 1) { webSocket.sendAckToChatDataWebSocketWithoutLog(REQUEST_ID) }
         coVerify(exactly = 1) { envelopToMessageProcessor.process(any(), PREVIEW_TAG, any()) }
         coVerify(exactly = 1) { dbRoomStore.updateMessageReadPosition(For.Account(ROOM), READ_POSITION) }

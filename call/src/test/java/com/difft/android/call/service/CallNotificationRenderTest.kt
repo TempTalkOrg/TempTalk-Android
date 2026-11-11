@@ -9,19 +9,19 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
-/**
- * Rules of the ongoing-call notification decision layer. Plain JUnit — the layer is deliberately
- * free of Android and injection so these can run without Robolectric or Hilt.
- */
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class CallNotificationRenderTest {
 
     @Test
     fun `renders the already-known call status once the service reaches the foreground`() = runTest {
-        // The collector starts in onCreate, before the first onStartCommand. A combine over
-        // StateFlows does not re-emit an unchanged value, so if the foreground flag were merely
-        // read, the whole waiting-for-answer window would keep the plain starting notification
-        // and never gain a hang-up action.
+        
+        
+        
+        
         val status = MutableStateFlow(CallStatus.CALLING)
         val connectedAt = MutableStateFlow(0L)
         val foregroundStarted = MutableStateFlow(false)
@@ -65,9 +65,9 @@ class CallNotificationRenderTest {
 
     @Test
     fun `renders nothing until the call has a room id, so the hang-up action can route`() = runTest {
-        // An outgoing 1v1 call is CALLING as soon as the view model exists, but the room id only
-        // arrives with the create-call response. A notification posted in that window would carry
-        // a hang-up button whose broadcast the handler drops for want of a room id.
+        
+        
+        
         val status = MutableStateFlow(CallStatus.CALLING)
         val connectedAt = MutableStateFlow(0L)
         val foregroundStarted = MutableStateFlow(true)
@@ -84,9 +84,9 @@ class CallNotificationRenderTest {
 
     @Test
     fun `renders nothing for a status arriving after the room id was cleared`() = runTest {
-        // Teardown clears the room id and resets the ending flag, but the view model's status
-        // bridge outlives cleanup. Without the room-id gate a late write would re-post a live
-        // call notification over a call that already ended.
+        
+        
+        
         val status = MutableStateFlow(CallStatus.CONNECTED)
         val connectedAt = MutableStateFlow(1_000L)
         val foregroundStarted = MutableStateFlow(true)
@@ -103,7 +103,7 @@ class CallNotificationRenderTest {
 
     @Test
     fun `re-renders with the connect instant when it is stamped after the status turns connected`() = runTest {
-        // 1v1 ordering: CONNECTED arrives before the duration timer stamps the instant.
+        
         val status = MutableStateFlow(CallStatus.CONNECTED)
         val connectedAt = MutableStateFlow(0L)
         val foregroundStarted = MutableStateFlow(true)
@@ -135,7 +135,7 @@ class CallNotificationRenderTest {
             com.difft.android.call.R.string.call_status_calling,
             contentTextRes(CallStatus.CALLING)
         )
-        // Terminal states must not read as if the call were still coming up.
+        
         assertEquals(
             com.difft.android.call.R.string.call_disconnected_title,
             contentTextRes(CallStatus.DISCONNECTED)

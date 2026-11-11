@@ -31,20 +31,19 @@ import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import java.util.concurrent.TimeUnit
 
-/** A plain page as a layer destination (the message search / More pages stand in). */
+
 private class TestSearchDestination(private val label: String) : DetailDestination {
     override fun newFragment(): Fragment = StackPageFragment.newInstance(label, handlesBack = false)
     override fun shellIntent(context: Context): Intent = Intent()
     override val pageKey: String get() = "test:$label"
 }
 
-/**
- * The list pane's layer on the real `activity_index` trees (design "global search in the list
- * pane" §4.2, §4.4, §4.6; R1-F1, R1-F5, R2-F1; folded groups as a layer §3.1): one host per
- * `open()`, the root kind a request asks for, a FIFO queue that waits for a saved state, the Back
- * order with the layer, the accessibility coverage of the covered views and the selection
- * forwarded to every page of the layer.
- */
+
+
+
+
+
+
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [33])
 class ListPaneLayerHostTest {
@@ -99,7 +98,7 @@ class ListPaneLayerHostTest {
         view.importantForAccessibility == View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS &&
             (view as ViewGroup).descendantFocusability == ViewGroup.FOCUS_BLOCK_DESCENDANTS
 
-    // ------------------------------------------------------------------ host and queue
+    
 
     @Test
     @Config(qualifiers = "w840dp-h900dp")
@@ -110,6 +109,7 @@ class ListPaneLayerHostTest {
 
         open()
         assertTrue(layer.active)
+        assertTrue(layer.coversList.value)
         assertEquals(View.VISIBLE, container.visibility)
         assertEquals(listOf("search"), pages())
         assertEquals(1, layer.depth)
@@ -130,6 +130,7 @@ class ListPaneLayerHostTest {
         assertTrue(hostFragment().detailNavigation.pop(hostFragment().rootPage()!!))
         settle()
         assertFalse(layer.active)
+        assertFalse(layer.coversList.value)
         assertNull(layer.host)
         assertEquals(View.GONE, container.visibility)
         assertEquals(0, layer.depth)
@@ -182,10 +183,11 @@ class ListPaneLayerHostTest {
         settle()
         assertTrue(layer.active)
         assertEquals(listOf("search", "message-search"), pages())
+        assertTrue(layer.coversList.value)
         assertEquals(View.VISIBLE, container.visibility)
         assertTrue(hostFragment().rootPage()!!.isHidden)
 
-        // Saved state and FragmentManager disagree: the flag wins and the orphan host goes.
+        
         val saved = Bundle()
         controller!!.saveInstanceState(saved)
         saved.remove("list_layer_active")
@@ -193,11 +195,12 @@ class ListPaneLayerHostTest {
         controller = Robolectric.buildActivity(PaneNavigatorTestHost::class.java).setup(saved)
         settle()
         assertFalse(layer.active)
+        assertFalse(layer.coversList.value)
         assertNull(layer.host)
         assertEquals(View.GONE, container.visibility)
     }
 
-    // ------------------------------------------------------------------ Back
+    
 
     @Test
     @Config(qualifiers = "w840dp-h900dp")
@@ -279,7 +282,7 @@ class ListPaneLayerHostTest {
         assertFalse(covered(list))
     }
 
-    // ------------------------------------------------------------------ status strip colour
+    
 
     private fun stripColors(): Pair<Int, Int?> {
         val root = (host.findViewById<ViewGroup>(android.R.id.content)).getChildAt(0)
@@ -320,7 +323,7 @@ class ListPaneLayerHostTest {
         assertEquals("a fold/unfold recreation keeps the layer's strip colour", color(com.difft.android.base.R.color.bg1), stripColors().first)
     }
 
-    // ------------------------------------------------------------------ selection
+    
 
     @Test
     @Config(qualifiers = "w840dp-h900dp")
@@ -383,7 +386,7 @@ class ListPaneLayerHostTest {
         assertEquals(listOf("search", "more"), pages())
     }
 
-    // ------------------------------------------------------------------ root kinds
+    
 
     @Test
     @Config(qualifiers = "w840dp-h900dp")
@@ -420,6 +423,39 @@ class ListPaneLayerHostTest {
         open(ListPaneLayerRoot.FOLDED_GROUPS)
         assertTrue("the same root keeps its host", folded === hostFragment())
     }
+
+    @Test
+    @Config(qualifiers = "w840dp-h900dp")
+    fun `the create root carries its preselection in the host args, keeps it across a recreation, and only other ids replace it`() {
+        launch("w840dp-h900dp")
+        layer.open(ListPaneLayerRoot.CREATE_GROUP, args = createArgs("a", "b"))
+        settle()
+        assertEquals(ListPaneLayerRoot.CREATE_GROUP, layer.root)
+        assertEquals(listOf("create:a,b"), pages())
+        assertTrue(hostFragment().hasRootArgs(createArgs("a", "b")))
+
+        controller!!.recreate()
+        settle()
+        assertTrue(layer.active)
+        assertEquals(listOf("create:a,b"), pages())
+        assertTrue(hostFragment().hasRootArgs(createArgs("a", "b")))
+
+        
+        val before = hostFragment()
+        layer.open(ListPaneLayerRoot.CREATE_GROUP, args = createArgs("a", "b"))
+        settle()
+        assertTrue("same ids keep the host", before === hostFragment())
+
+        
+        layer.open(ListPaneLayerRoot.CREATE_GROUP, args = createArgs("c"))
+        settle()
+        assertEquals(1, hosts())
+        assertEquals(listOf("create:c"), pages())
+        assertTrue("a replacement keeps the layer active", layer.active)
+    }
+
+    private fun createArgs(vararg ids: String): Bundle =
+        Bundle().apply { putStringArrayList(PaneNavigatorTestHost.TestPages.CREATE_IDS, ArrayList(ids.toList())) }
 
     @Test
     @Config(qualifiers = "w840dp-h900dp")
@@ -466,6 +502,82 @@ class ListPaneLayerHostTest {
         assertFalse(layer.active)
         assertNull(layer.host)
         assertEquals("the conversation stays", 1, nav.depth())
+    }
+
+    
+
+    
+    
+    @Test
+    @Config(qualifiers = "w840dp-h900dp")
+    fun `the layer and the list are at rest after the open slide, and a reopen during the close keeps its pages`() {
+        launch("w840dp-h900dp")
+        val listContent = host.findViewById<View>(R.id.list_content)
+        layer.open(ListPaneLayerRoot.SEARCH)
+        settle()
+        assertEquals(View.VISIBLE, container.visibility)
+        assertEquals(0f, container.translationX, 0f)
+        assertEquals(0f, listContent.translationX, 0f)
+        assertNull(listContent.foreground)
+        assertTrue(push("more"))
+        assertEquals(listOf("search", "more"), pages())
+
+        layer.close()
+        assertFalse("the request is already closed", layer.active)
+        assertTrue("the still-visible outgoing page retains chrome ownership", layer.coversList.value)
+        shadowOf(Looper.getMainLooper()).runOneTask() 
+        assertEquals(View.VISIBLE, container.visibility)
+        assertTrue("no early reveal of the underlying header during the slide", layer.coversList.value)
+        layer.open(ListPaneLayerRoot.SEARCH) 
+        settle()
+        assertTrue(layer.active)
+        assertTrue(layer.coversList.value)
+        assertEquals(1, hosts())
+        assertEquals(listOf("search", "more"), pages())
+        assertEquals(View.VISIBLE, container.visibility)
+        assertEquals(0f, container.translationX, 0f)
+        assertEquals(0f, listContent.translationX, 0f)
+        assertNull(listContent.foreground)
+
+        layer.close()
+        settle()
+        assertFalse(layer.coversList.value)
+        assertEquals(View.GONE, container.visibility)
+        assertEquals(0, hosts())
+        assertEquals(0f, container.translationX, 0f)
+        assertEquals(0f, listContent.translationX, 0f)
+        assertNull(listContent.foreground)
+    }
+
+    @Test
+    @Config(qualifiers = "w840dp-h900dp")
+    fun `a reopen between the end of the close slide and the queued take-down puts the layer back in place`() {
+        launch("w840dp-h900dp")
+        layer.open(ListPaneLayerRoot.SEARCH)
+        settle()
+        val width = container.width.toFloat()
+
+        layer.close()
+        
+        
+        val looper = shadowOf(Looper.getMainLooper())
+        var steps = 0
+        while (!(container.translationX == width && hosts() == 1) && steps < 200) {
+            looper.runOneTask()
+            steps++
+        }
+        assertEquals("precondition: the slide ended off screen with the host still up", width, container.translationX, 0f)
+        assertEquals(1, hosts())
+        assertEquals(View.INVISIBLE, container.visibility)
+        assertFalse("ownership ends in the same frame the layer hides", layer.coversList.value)
+
+        layer.open(ListPaneLayerRoot.SEARCH)
+        settle()
+        assertTrue(layer.active)
+        assertTrue(layer.coversList.value)
+        assertEquals(1, hosts())
+        assertEquals(View.VISIBLE, container.visibility)
+        assertEquals(0f, container.translationX, 0f)
     }
 
     private companion object {

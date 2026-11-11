@@ -64,21 +64,21 @@ class ChatSettingViewModel @AssistedInject constructor(
     translateBackend: TranslateBackend,
 ) : ViewModel() {
 
-    /**
-     * Whether this build can translate at all. A plain value, not a flow: it is fixed for the
-     * process, and the two entry screens use it to decide whether the translate row exists.
-     */
+    
+
+
+
     val translateSupported: Boolean = translateBackend.isSupported
 
     private val _conversationSet = MutableStateFlow<ConversationSetResponseBody?>(null)
     val conversationSet: StateFlow<ConversationSetResponseBody?> = _conversationSet.asStateFlow()
 
-    /**
-     * Message expiry derived from [conversationSet], falling back to the default archive time
-     * when no config is loaded. Exposed as [StateFlow] so Compose can collect via
-     * `collectAsState()` without invoking flow operators inside composition
-     * (see lint rule FlowOperatorInvokedInComposition).
-     */
+    
+
+
+
+
+
     val messageExpiry: StateFlow<Long> = conversationSet
         .map { it?.messageExpiry ?: messageArchiveManager.getDefaultMessageArchiveTime() }
         .stateIn(
@@ -87,41 +87,36 @@ class ChatSettingViewModel @AssistedInject constructor(
             messageArchiveManager.getDefaultMessageArchiveTime()
         )
 
-    /**
-     * Save-to-photos value derived from [conversationSet]. Exposed as [StateFlow] so Compose
-     * can collect via `collectAsState()` without invoking flow operators inside composition.
-     */
+    
+
+
+
     val saveToPhotos: StateFlow<Int?> = conversationSet
         .map { it?.saveToPhotos }
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
-    /**
-     * Conversation auto-translate target derived from [conversationSet]. 0: off, 1: Chinese,
-     * 2: English. Read-only here — the settings screen owns the write path.
-     */
+    
+
+
+
     val translateSetting: StateFlow<Int> = conversationSet
         .map { it?.translateSetting ?: 0 }
         .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
 
-    /**
-     * 获取当前会话配置的快照值
-     * 用于需要同步获取配置的场景（如发送消息时）
-     */
+    
     val currentConversationSet: ConversationSetResponseBody?
         get() = _conversationSet.value
 
-    /**
-     * 获取消息过期时间（秒）
-     * 优先从当前配置获取，如果未加载则使用默认值
-     * @return 消息过期时间（秒），Int类型用于消息发送
-     */
+    
+
+
+
     fun getMessageExpirySeconds(): Int {
         return currentConversationSet?.messageExpiry?.toInt()
             ?: messageArchiveManager.getDefaultMessageArchiveTime().toInt()
     }
 
     init {
-        // 监听配置更新通知，直接更新对应字段
         conversationSettingsManager.conversationSettingUpdate
             .filter { it.conversationId == conversation.id }
             .onEach { update ->
@@ -130,21 +125,20 @@ class ChatSettingViewModel @AssistedInject constructor(
             }
             .launchIn(viewModelScope)
 
-        // 初始化时加载配置
         refreshConversationConfigs()
     }
 
-    /**
-     * Handle conversation setting update event, directly update changed fields
-     * null means the field has not changed, keep original value
-     * For saveToPhotos: SAVE_TO_PHOTOS_SET_DEFAULT (-1) means "set to null (default)"
-     */
+    
+
+
+
+
     private fun handleConversationSettingUpdate(update: ConversationSettingUpdate) {
-        // Handle saveToPhotos specially: -1 means "set to null (default)"
+        
         val newSaveToPhotos = when (update.saveToPhotos) {
-            null -> null // no change, will use current value
-            SAVE_TO_PHOTOS_SET_DEFAULT -> null // set to default (null)
-            else -> update.saveToPhotos // 0 or 1
+            null -> null 
+            SAVE_TO_PHOTOS_SET_DEFAULT -> null 
+            else -> update.saveToPhotos 
         }
         val hasSaveToPhotosUpdate = update.saveToPhotos != null
 
@@ -165,7 +159,7 @@ class ChatSettingViewModel @AssistedInject constructor(
                     allowGroupCall = update.allowGroupCall ?: current.allowGroupCall
                 )
         } ?: run {
-            // If no current config, create a new config with update values
+            
             _conversationSet.value = ConversationSetResponseBody(
                 conversation = update.conversationId,
                 muteStatus = update.muteStatus ?: 0,
@@ -186,10 +180,10 @@ class ChatSettingViewModel @AssistedInject constructor(
         _conversationSet.value = conversationSetResponseBody
     }
 
-    /**
-     * Applies the fields a config change carries; null means "not changed, keep the current value".
-     * Covers exactly the fields `setConversationConfigs` can request.
-     */
+    
+
+
+
     private fun ConversationSetResponseBody.applying(
         remark: String? = null,
         muteStatus: Int? = null,
@@ -210,19 +204,19 @@ class ChatSettingViewModel @AssistedInject constructor(
 
     private val _archiveBusy = MutableStateFlow(false)
 
-    /** An archive-time update is running; the page shows its wait from this. */
+    
     val archiveBusy: StateFlow<Boolean> = _archiveBusy.asStateFlow()
 
     private val _archiveErrors = Channel<String>(Channel.BUFFERED)
 
-    /** One message per failed archive-time update, shown once by the page. */
+    
     val archiveErrors: Flow<String> = _archiveErrors.receiveAsFlow()
 
-    /**
-     * Sets the conversation's message archive time. Runs on [viewModelScope]: it survives a fold
-     * (the page's ViewModel is retained) and is cancelled when the page closes for good. One at a
-     * time; a request while one runs is ignored.
-     */
+    
+
+
+
+
     fun updateArchiveTime(time: Long) {
         if (!_archiveBusy.compareAndSet(expect = false, update = true)) return
         viewModelScope.launch {
@@ -242,14 +236,14 @@ class ChatSettingViewModel @AssistedInject constructor(
     }
 
 
-    /**
-     * Applies conversation config changes. On success [conversationSet] re-emits, which is how a
-     * controlled toggle learns it may move; on failure it does not emit at all, so the toggle stays
-     * where it was.
-     *
-     * @return the request's job, so a caller can gate its UI on it (see
-     * `DifftToggleView.guardWhile`).
-     */
+    
+
+
+
+
+
+
+
     fun setConversationConfigs(
         activity: Activity,
         conversation: String,
@@ -281,31 +275,31 @@ class ChatSettingViewModel @AssistedInject constructor(
                 if (result.status == 0) {
                     val echoed = result.data
                     if (echoed != null) {
-                        // The echo is a full server snapshot: the applier version-gates it, keeps a
-                        // pending local confidential toggle untouched and writes the row. The row is
-                        // created first when the contact was never chatted with, exactly as opening
-                        // the chat would, so there is always one row of truth to reflect.
+                        
+                        
+                        
+                        
                         val applied = withContext(Dispatchers.IO) {
                             dbRoomStore.createRoomIfNotExist(this@ChatSettingViewModel.conversation)
                             settingsApplier.applyServerSnapshot(ServerConfigSnapshot.fromEcho(echoed), SnapshotSource.Echo)
                         }
                         reflectRow(applied, fallback = null)
                     } else {
-                        // Accepted with nothing echoed back: apply the values this request asked
-                        // for, exactly as an update event would. A re-fetch instead would discard
-                        // them, report nothing when the GET fails, and could land after a newer write.
+                        
+                        
+                        
                         val mergedConfig = _conversationSet.updateAndGet { latest ->
                             latest?.applying(remark, muteStatus, blockStatus, allowMentionMe = allowMentionMe, allowMentionAll = allowMentionAll, allowGroupCall = allowGroupCall)
                         }
                         if (mergedConfig == null) {
-                            // No local config to merge into: pull the whole thing, and await it so
-                            // this job (and the caller's guard) stays alive until the config is loaded.
+                            
+                            
                             refreshConversationConfigs().join()
                             if (_conversationSet.value == null) {
                                 ToastUtil.show(activity.getString(R.string.operation_failed))
                             }
                         } else {
-                            // Only what was requested: the untouched columns keep their stored values.
+                            
                             withContext(Dispatchers.IO) {
                                 updateCachedSettings(
                                     conversationId = conversation,
@@ -341,24 +335,17 @@ class ChatSettingViewModel @AssistedInject constructor(
         }
     }
 
-    /**
-     * 刷新会话配置，采用缓存优先策略：
-     * 1. 先从数据库加载缓存配置，立即更新 UI
-     * 2. 同时从网络请求最新配置
-     * 3. 网络请求成功后更新数据库并再次更新 UI
-     */
+    
     private fun refreshConversationConfigs(): Job {
         val conversationId = conversation.id
 
         return viewModelScope.launch {
-            // Step 1: 从数据库加载缓存配置
             val cachedConfig = loadCachedConfig(conversationId)
             if (cachedConfig != null) {
                 L.i { "[ChatSettings] cached config ${cachedConfig.toLogString()}" }
                 updateConversationSetResponseBody(cachedConfig)
             }
 
-            // Step 2: 从网络请求最新配置
             try {
                 val response = withContext(Dispatchers.IO) {
                     httpClient.httpService.fetchGetConversationSet(
@@ -370,9 +357,9 @@ class ChatSettingViewModel @AssistedInject constructor(
                     response.data?.let { conversationSets ->
                         val conversationSet = conversationSets.conversations.find { body -> body.conversation == conversationId }
                         conversationSet?.let { set ->
-                            // The applier version-gates the pull and leaves a pending local
-                            // confidential toggle alone; merge what it wrote. The row is created
-                            // first (as opening the chat would) so the pull always has one to land in.
+                            
+                            
+                            
                             val applied = withContext(Dispatchers.IO) {
                                 dbRoomStore.createRoomIfNotExist(conversation)
                                 settingsApplier.applyServerSnapshot(ServerConfigSnapshot.fromPull(set), SnapshotSource.Pull)
@@ -391,14 +378,14 @@ class ChatSettingViewModel @AssistedInject constructor(
                 throw e
             } catch (e: Exception) {
                 L.w { "[ChatSettings] refreshConversationConfigs network error: ${e.message}" }
-                // 网络错误时不处理，因为已经使用了缓存配置
+                
             }
         }
     }
 
-    /**
-     * Load cached conversation config from database
-     */
+    
+
+
     private suspend fun loadCachedConfig(conversationId: String): ConversationSetResponseBody? {
         return withContext(Dispatchers.IO) {
             try {
@@ -427,13 +414,13 @@ class ChatSettingViewModel @AssistedInject constructor(
         }
     }
 
-    /**
-     * Brings [conversationSet] in line with the row after a write to it. A loaded flow merges only
-     * the fields that changed (an atomic merge cannot be overtaken by an update landing meanwhile).
-     * A flow that never loaded is seeded from the row itself, never from a delta or a snapshot: the
-     * row may hold a pending local confidential toggle the snapshot does not. [fallback] is used
-     * only when the row cannot be read.
-     */
+    
+
+
+
+
+
+
     private suspend fun reflectRow(applied: ConversationSettingUpdate?, fallback: ConversationSetResponseBody?) {
         if (_conversationSet.value != null) {
             applied?.let { handleConversationSettingUpdate(it) }
@@ -447,20 +434,20 @@ class ChatSettingViewModel @AssistedInject constructor(
         }
     }
 
-    /**
-     * Normalises a server-provided expiry: the self conversation has none, a negative value means
-     * "use the default archive time". Mirrors `ConversationSettingsApplier`.
-     */
+    
+
+
+
     private fun normalizeMessageExpiry(conversationId: String, messageExpiry: Long): Long = when {
         conversationId == globalServices.myId -> 0L
         messageExpiry >= 0 -> messageExpiry
         else -> messageArchiveManager.getDefaultMessageArchiveTime()
     }
 
-    /**
-     * Local-first confidential toggle: the row and this flow change at once, and a sync job
-     * carries the value to the server. See [ConfidentialModeSyncCoordinator].
-     */
+    
+
+
+
     fun setConfidentialMode(target: Int) {
         viewModelScope.launch {
             val written = confidentialSync.setConfidentialMode(conversation, target)
@@ -472,10 +459,10 @@ class ChatSettingViewModel @AssistedInject constructor(
         }
     }
 
-    /**
-     * Update conversation config cache in database; a null field leaves its column alone.
-     * Only the fields `setConversationConfigs` can request; confidentialMode is owned by the sync job.
-     */
+    
+
+
+
     private fun updateCachedSettings(
         conversationId: String,
         muteStatus: Int? = null,
@@ -484,8 +471,8 @@ class ChatSettingViewModel @AssistedInject constructor(
         allowMentionAll: Boolean? = null,
         allowGroupCall: Boolean? = null
     ) {
-        // The store skips null columns and writes nothing when all are null; mirror that here so
-        // the log never claims a write that did not happen.
+        
+        
         if (listOf<Any?>(muteStatus, blockStatus, allowMentionMe, allowMentionAll, allowGroupCall).all { it == null }) return
         try {
             dbRoomStore.createRoomIfNotExist(conversation)
@@ -506,24 +493,24 @@ class ChatSettingViewModel @AssistedInject constructor(
         }
     }
 
-    /**
-     * Update save to photos setting for the conversation (local only, no server sync)
-     * @param saveToPhotos Save to photos setting (null: follow global, 0: disabled, 1: enabled)
-     */
+    
+
+
+
     fun setSaveToPhotos(saveToPhotos: Int?) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                // Update database
+                
                 dbRoomStore.updateSaveToPhotos(conversation.id, saveToPhotos)
 
-                // Update in-memory state
+                
                 withContext(Dispatchers.Main) {
                     _conversationSet.value?.let { current ->
                         _conversationSet.value = current.copy(saveToPhotos = saveToPhotos)
                     }
                 }
 
-                // Notify other listeners (e.g., GroupInfoActivity, SingleChatSettingActivity)
+                
                 conversationSettingsManager.emitSaveToPhotosUpdate(conversation.id, saveToPhotos)
 
                 L.i { "[ChatSettings] setSaveToPhotos updated locally: $saveToPhotos" }

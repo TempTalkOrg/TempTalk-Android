@@ -23,10 +23,10 @@ import kotlinx.coroutines.launch
 import java.util.Locale
 import javax.inject.Inject
 
-/**
- * Bottom sheet dialog for displaying translation results.
- * Shows original text (max 2 lines) and translated text with expand/collapse support.
- */
+
+
+
+
 @AndroidEntryPoint
 class TranslateBottomSheetFragment : BaseBottomSheetDialogFragment() {
 
@@ -64,18 +64,18 @@ class TranslateBottomSheetFragment : BaseBottomSheetDialogFragment() {
         super.onCreate(savedInstanceState)
         originalText = arguments?.getString(ARG_ORIGINAL_TEXT) ?: ""
 
-        // Determine target language based on app language setting
-        // First translation goes to app language, label shows alternative for switching
+        
+        
         val appLocale = LanguageUtils.getLanguage(requireContext())
         when (appLocale.language) {
             Locale.CHINA.language, "zh" -> {
-                // App is Chinese: translate to Chinese, show "Translate to English" as switch option
+                
                 targetLanguage = TranslateLang.ZH
                 alternativeLanguage = TranslateLang.EN
                 alternativeLanguageName = getString(R.string.language_english)
             }
             else -> {
-                // App is English: translate to English, show "Translate to Chinese" as switch option
+                
                 targetLanguage = TranslateLang.EN
                 alternativeLanguage = TranslateLang.ZH
                 alternativeLanguageName = getString(R.string.language_chinese)
@@ -92,18 +92,18 @@ class TranslateBottomSheetFragment : BaseBottomSheetDialogFragment() {
     }
 
     private fun setupUI() {
-        // Display original text (max 2 lines with ellipsis)
+        
         binding.tvOriginalText.text = originalText
 
-        // Set translate label to show alternative language (switch option)
+        
         updateTranslateLabel()
 
-        // Click to switch translation language
+        
         binding.tvTranslateLabel.setOnClickListener {
             switchLanguage()
         }
 
-        // Initial state: show loading
+        
         showLoading()
     }
 
@@ -112,10 +112,10 @@ class TranslateBottomSheetFragment : BaseBottomSheetDialogFragment() {
     }
 
     private fun switchLanguage() {
-        // Swap target and alternative languages
+        
         val tempLang = targetLanguage
 
-        // Determine new alternative name based on new target
+        
         alternativeLanguageName = if (alternativeLanguage == TranslateLang.ZH) {
             getString(R.string.language_english)
         } else {
@@ -125,7 +125,7 @@ class TranslateBottomSheetFragment : BaseBottomSheetDialogFragment() {
         targetLanguage = alternativeLanguage
         alternativeLanguage = tempLang
 
-        // Update label and re-translate
+        
         updateTranslateLabel()
         showLoading()
         startTranslation()
@@ -133,18 +133,18 @@ class TranslateBottomSheetFragment : BaseBottomSheetDialogFragment() {
 
     private fun startTranslation() {
         val target = targetLanguage
-        // A selection preview has no message id, so the text has to be part of the dedup key —
-        // otherwise a second selection joins the first one's result.
+        
+        
         viewLifecycleOwner.lifecycleScope.launch {
             val result = try {
-                // The loading state stays up while a missing pack downloads, instead of failing at once.
+                
                 val ready = modelStore.awaitReady(target)
                 if (_binding == null || targetLanguage != target) return@launch
                 if (!ready) {
                     showError(R.string.chat_translate_model_failed)
                     return@launch
                 }
-                // A missing source-language pack is waited for too, then the translation runs once more.
+                
                 submitWaitingForPacks(modelStore, { _binding != null && targetLanguage == target }) {
                     translateQueue.submit(
                         owner = OWNER,
@@ -171,7 +171,7 @@ class TranslateBottomSheetFragment : BaseBottomSheetDialogFragment() {
     private fun render(result: TranslateResult) {
         when (result) {
             is TranslateResult.Translated -> showResult(result.text)
-            // AUTO-only answer; MANUAL (this sheet) gets the original as a Translated result instead.
+            
             TranslateResult.SameLanguage -> showResult(originalText)
             is TranslateResult.ModelNotReady -> showError(R.string.chat_translate_model_not_ready_short)
             is TranslateResult.Unsupported -> showError(

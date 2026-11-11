@@ -12,11 +12,11 @@ import com.difft.android.base.widget.ToastUtil
 import com.difft.android.chat.R
 import com.difft.android.chat.focus.FocusActionLauncher
 
-/**
- * Row actions shared by the chat list and the folded-groups list: the long-press menus, the swipe
- * buttons and their confirmations. Group focus entries (PRD 7.4.3/7.4.4) follow
- * [RoomViewData.focusAction], which the assembler leaves NONE when the feature is off.
- */
+
+
+
+
+
 class ChatListRowActions(
     private val activity: FragmentActivity,
     private val viewModel: RecentChatViewModel,
@@ -25,11 +25,11 @@ class ChatListRowActions(
 ) {
     private var popupWindow: PopupWindow? = null
 
-    /**
-     * Long-press menu (chat-list gesture design): Read/Unread → Pin/Unpin → Focus / End Focus
-     * (groups) → Delete. Mute and leave/disband live in the chat settings only; Note-to-Self
-     * cannot be deleted. Pin/Unpin follows the pin the list shows (focus display pin included).
-     */
+    
+
+
+
+
     fun showItemActions(rootView: View, data: RoomViewData, touchX: Int, touchY: Int) {
         val itemList = mutableListOf<ChativePopupView.Item>().apply {
             if (data.displayUnreadNum > 0) {
@@ -68,7 +68,7 @@ class ChatListRowActions(
         popupWindow = ChativePopupWindow.showAtTouchPosition(rootView, itemList, touchX, touchY)
     }
 
-    /** The folded-groups row offers only "End Focus". */
+    
     fun showFoldedGroupsActions(rootView: View, touchX: Int, touchY: Int) {
         val items = listOf(item(R.drawable.chat_ic_focus, R.string.focus_dialog_end_focus) { endFocus() })
         popupWindow = ChativePopupWindow.showAtTouchPosition(rootView, items, touchX, touchY)
@@ -83,12 +83,12 @@ class ChatListRowActions(
         if (data.displayUnreadNum > 0) viewModel.markAsRead(data) else viewModel.markAsUnread(data)
     }
 
-    /** The ViewModel toasts "Pinned" / "Unpinned" once the write succeeded. */
+    
     fun togglePin(data: RoomViewData) {
         viewModel.pinChattingRoom(!data.isPinned, data)
     }
 
-    /** Not the focus group: the duration sheet (or D2 when focusing another group); the focus group: end at once. */
+    
     fun toggleFocus(data: RoomViewData) {
         when (data.focusAction) {
             FocusRowAction.START -> focusActions.requestFocus(activity, data.roomId, data.roomName?.toString().orEmpty())

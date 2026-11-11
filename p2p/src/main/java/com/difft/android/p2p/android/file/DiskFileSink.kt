@@ -9,18 +9,18 @@ import okio.sink
 import okio.source
 import java.io.File
 
-/**
- * Receiver-side [FileSink] writing incoming files to a download directory. Each file streams into a
- * temp `.part` file; [finalizeFile] renames it to the final name only when the SHA-256 matched (or
- * no digest was declared), and deletes the partial on mismatch so no corrupt file is surfaced.
- *
- * [com.difft.android.p2p.engine.upload.UploadHandler] already hashes the stream; the recompute from
- * disk on finalize is a second, independent integrity check.
- */
+
+
+
+
+
+
+
+
 class DiskFileSink(private val downloadDir: File) : FileSink {
 
     private val lock = Any()
-    private val partFiles = HashMap<String, File>() // fileId -> temp part; guarded by [lock] (one connection per coroutine)
+    private val partFiles = HashMap<String, File>() 
 
     override fun openWrite(meta: FileMetadata): Sink {
         downloadDir.mkdirs()
@@ -53,7 +53,7 @@ class DiskFileSink(private val downloadDir: File) : FileSink {
         return if (part.renameTo(finalFile)) {
             Result.success(finalFile.absolutePath)
         } else {
-            // Cross-filesystem rename can fail; fall back to copy.
+            
             runCatching {
                 part.copyTo(finalFile, overwrite = true)
                 part.delete()
@@ -62,7 +62,7 @@ class DiskFileSink(private val downloadDir: File) : FileSink {
         }
     }
 
-    /** Resolves name collisions: `photo.jpg` → `photo (1).jpg`. */
+    
     private fun uniqueDestination(fileName: String): File {
         val safe = safeName(fileName)
         var candidate = File(downloadDir, safe)

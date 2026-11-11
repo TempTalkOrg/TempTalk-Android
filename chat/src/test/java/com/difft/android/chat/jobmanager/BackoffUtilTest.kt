@@ -10,7 +10,7 @@ class BackoffUtilTest {
 
     @Test
     fun `attempt 1 with maxBackoff 60000 returns value in expected range`() {
-        // 2^1 * 1000 = 2000, jitter 0.75-1.25 → [1500, 2500]
+        
         repeat(100) {
             val result = BackoffUtil.exponentialBackoff(1, 60_000L)
             assertTrue(
@@ -22,7 +22,7 @@ class BackoffUtilTest {
 
     @Test
     fun `attempt 2 with maxBackoff 60000 returns value in expected range`() {
-        // 2^2 * 1000 = 4000, jitter 0.75-1.25 → [3000, 5000]
+        
         repeat(100) {
             val result = BackoffUtil.exponentialBackoff(2, 60_000L)
             assertTrue(
@@ -34,7 +34,7 @@ class BackoffUtilTest {
 
     @Test
     fun `attempt 5 with maxBackoff 60000 returns value in expected range`() {
-        // 2^5 * 1000 = 32000, jitter 0.75-1.25 → [24000, 40000]
+        
         repeat(100) {
             val result = BackoffUtil.exponentialBackoff(5, 60_000L)
             assertTrue(
@@ -46,8 +46,8 @@ class BackoffUtilTest {
 
     @Test
     fun `attempt 10 is capped at maxBackoff with jitter`() {
-        // 2^10 * 1000 = 1024000, capped to 60000, jitter 0.75-1.25 → [45000, 75000]
-        // But since actualBackoff is capped at maxBackoff, upper bound is 60000 * 1.25 = 75000
+        
+        
         repeat(100) {
             val result = BackoffUtil.exponentialBackoff(10, 60_000L)
             assertTrue(
@@ -59,7 +59,7 @@ class BackoffUtilTest {
 
     @Test
     fun `very large attempt count does not overflow`() {
-        // pastAttemptCount is coerced to 30, so 2^30 * 1000 = very large, capped at maxBackoff
+        
         repeat(100) {
             val result = BackoffUtil.exponentialBackoff(100, 60_000L)
             assertTrue(
@@ -71,7 +71,7 @@ class BackoffUtilTest {
 
     @Test
     fun `different maxBackoff values respected`() {
-        // attempt 1, maxBackoff = 5000: 2^1 * 1000 = 2000, jitter → [1500, 2500]
+        
         repeat(50) {
             val result = BackoffUtil.exponentialBackoff(1, 5_000L)
             assertTrue(
@@ -80,7 +80,7 @@ class BackoffUtilTest {
             )
         }
 
-        // attempt 1, maxBackoff = 1000: 2^1 * 1000 = 2000, capped to 1000, jitter → [750, 1250]
+        
         repeat(50) {
             val result = BackoffUtil.exponentialBackoff(1, 1_000L)
             assertTrue(
@@ -92,8 +92,8 @@ class BackoffUtilTest {
 
     @Test
     fun `small maxBackoff caps exponential growth`() {
-        // attempt 5 with maxBackoff = 3000: 2^5 * 1000 = 32000, capped to 3000
-        // jitter 0.75-1.25 → [2250, 3750]
+        
+        
         repeat(100) {
             val result = BackoffUtil.exponentialBackoff(5, 3_000L)
             assertTrue(
@@ -109,7 +109,7 @@ class BackoffUtilTest {
             BackoffUtil.exponentialBackoff(3, 60_000L)
         }.toSet()
 
-        // With random jitter, we should get more than just 1 unique value
+        
         assertTrue(
             results.size > 1,
             "Expected varied results from jitter but got ${results.size} unique values"
@@ -140,7 +140,7 @@ class BackoffUtilTest {
 
     @Test
     fun `attempt 3 with maxBackoff 60000 returns value in expected range`() {
-        // 2^3 * 1000 = 8000, jitter 0.75-1.25 → [6000, 10000]
+        
         repeat(100) {
             val result = BackoffUtil.exponentialBackoff(3, 60_000L)
             assertTrue(
@@ -152,7 +152,7 @@ class BackoffUtilTest {
 
     @Test
     fun `boundary attempt 30 is max bounded attempt`() {
-        // 2^30 * 1000 = 1073741824000, capped to maxBackoff
+        
         val maxBackoff = 120_000L
         repeat(50) {
             val result = BackoffUtil.exponentialBackoff(30, maxBackoff)
@@ -166,7 +166,7 @@ class BackoffUtilTest {
     @Test
     fun `attempt 31 same as 30 due to coercion`() {
         val maxBackoff = 120_000L
-        // Both coerce to 30, so behavior should be identical range
+        
         val results30 = (1..200).map { BackoffUtil.exponentialBackoff(30, maxBackoff) }
         val results31 = (1..200).map { BackoffUtil.exponentialBackoff(31, maxBackoff) }
 
@@ -175,8 +175,8 @@ class BackoffUtilTest {
         val min31 = results31.min()
         val max31 = results31.max()
 
-        // They should be in the same range (jitter makes exact comparison impossible)
-        // Both should be capped at maxBackoff, so range is [maxBackoff*0.75, maxBackoff*1.25]
+        
+        
         val expectedMin = (maxBackoff * 0.75).toLong()
         val expectedMax = (maxBackoff * 1.25).toLong()
 
@@ -190,7 +190,7 @@ class BackoffUtilTest {
     fun `maxBackoff of 1 returns values in 0 to 1 range`() {
         repeat(100) {
             val result = BackoffUtil.exponentialBackoff(1, 1L)
-            // 1 * jitter(0.75..1.25) → toLong → [0, 1]
+            
             assertTrue(
                 result in 0..1,
                 "Expected result in [0, 1] but got $result"

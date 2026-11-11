@@ -34,6 +34,10 @@ import com.difft.android.chat.message.NoticeAggregator
 import com.difft.android.chat.message.TextChatMessage
 import com.difft.android.chat.attachment.AttachmentDownloadDecision
 import com.difft.android.chat.attachment.AttachmentPathResolver
+import com.difft.android.chat.attachment.opensInAppViewer
+import com.difft.android.chat.attachment.videoprobe.VideoProbeCoordinator
+import com.difft.android.chat.attachment.videoprobe.containsAttachment
+import com.difft.android.chat.attachment.videoprobe.withProbedAttachment
 import com.difft.android.chat.message.generateMessageFromForward
 import com.difft.android.chat.message.getAttachmentProgress
 import com.difft.android.chat.message.isAttachmentMessage
@@ -64,11 +68,13 @@ import com.difft.android.chat.media.AttachmentPreview
 import com.difft.android.chat.media.EncryptedAttachmentAccess
 import com.difft.android.chat.media.applyExportPolicy
 import difft.android.messageserialization.model.isImage
-import difft.android.messageserialization.model.isVideo
+import difft.android.messageserialization.model.isPlayableVideo
+import difft.android.messageserialization.model.isVideoShownAsFile
 import org.difft.app.database.models.ContactorModel
 import com.difft.android.chat.dependencies.ApplicationDependencies
 import com.difft.android.chat.jobs.DownloadAttachmentJob
 import com.difft.android.chat.util.SaveAttachmentUtil
+import com.difft.android.chat.util.viewFile
 import util.TimeFormatter
 import java.io.File
 
@@ -87,14 +93,17 @@ class ChatForwardMessageFragment : Fragment() {
     @Inject
     lateinit var activityNoticeDispatcher: com.difft.android.chat.message.ActivityNoticeDispatcher
 
+    @Inject
+    lateinit var videoProbeCoordinator: VideoProbeCoordinator
+
     private val messageActionHelper by lazy {
         MessageActionHelper(requireActivity(), viewLifecycleOwner.lifecycleScope, selectChatsUtils)
     }
 
-    // Fragment-scoped: the forward screen has no GIF panel to share it with (unlike the chat).
+    
     private val favoriteViewModel: com.difft.android.chat.gif.favorite.FavoriteViewModel by viewModels()
 
-    /** Outer combined-forward message context — source attribution for copy/forward notices. */
+    
     private val outerSourceConversation: difft.android.messageserialization.For?
         get() = (activity as? ChatForwardMessageActivity)?.getOuterSourceConversation()
     private val outerSourceAuthorIds: List<String>?
@@ -120,10 +129,10 @@ class ChatForwardMessageFragment : Fragment() {
     private val title: String by lazy { arguments?.getString(ARG_TITLE) ?: "" }
     private val stackIndex: Int by lazy { arguments?.getInt(ARG_STACK_INDEX, 0) ?: 0 }
 
-    /**
-     * Page-level contact cache
-     * Released automatically when Fragment lifecycle ends
-     */
+    
+
+
+
     private val contactorCache = MessageContactsCacheUtil()
     
     private var messageActionCoordinator: MessageActionCoordinator? = null
@@ -140,11 +149,11 @@ class ChatForwardMessageFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        // Set chat background for content area
+        
         mBinding.root.background = ChatBackgroundDrawable(requireContext(), mBinding.root, false)
 
-        // Apply navigation bar inset as bottom margin to root layout
-        // This ensures both RecyclerView and reaction overlay have correct height
+        
+        
         ViewCompat.setOnApplyWindowInsetsListener(mBinding.root) { v, insets ->
             val navigationBarHeight = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
             val layoutParams = v.layoutParams as? ViewGroup.MarginLayoutParams
@@ -155,14 +164,14 @@ class ChatForwardMessageFragment : Fragment() {
 
         initView()
 
-        // Favorites effects (cap dialog / toast) — no GIF panel here, so wire our own collection.
+        
         collectFavoriteEffects(favoriteViewModel)
     }
 
     override fun onDestroyView() {
-        // Clear adapter to prevent memory leak
+        
         mBinding.recyclerViewMessage.adapter = null
-        // Dismiss any showing popup
+        
         messageActionCoordinator?.dismiss()
         messageActionCoordinator = null
 
@@ -188,14 +197,12 @@ class ChatForwardMessageFragment : Fragment() {
                 }
             }
             MessageAction.Type.FORWARD -> {
-                // Notice attribution: outer combined-forward sender, not nested authors.
-                // PRD §5.3.2: operation inside a CF detail view → SUB_COMBINED_FORWARD.
+                
                 messageActionHelper.forwardMessage(
                     message,
                     sourceConversation = outerSourceConversation,
                     sourceAuthorIdsOverride = outerSourceAuthorIds,
                     combinedForwardMode = CombinedForwardMode.SUB_COMBINED_FORWARD,
-                    // PRD v2.0 §改动1/§改动2 条件①④: real author of the moved inner = message.authorId.
                     carriesForeignContent = NoticeAggregator.forwardCarriesForeignContent(listOf(message), globalServices.myId),
                 )
             }
@@ -206,12 +213,9 @@ class ChatForwardMessageFragment : Fragment() {
     private fun dispatchOuterCopyNotice(message: TextChatMessage) {
         val conv = outerSourceConversation ?: return
         val authors = outerSourceAuthorIds ?: return
-        // PRD v2.0 §改动1/§改动2 条件①④⑤: trace only when the copied sub-message carries another
-        // person's real content. Its real author is the inner sub-author (message.authorId);
-        // a nested-CF / contact-card sub-message copies as a placeholder and leaks nothing.
+        
         val myId = globalServices.myId
         if (!NoticeAggregator.copyCarriesForeignContent(listOf(message), myId)) return
-        // PRD §5.3.2: copy from inside a CF detail view → SUB_COMBINED_FORWARD.
         activityNoticeDispatcher.dispatchCopyNotice(
             sourceConversation = conv,
             sourceAuthorIds = authors,
@@ -221,9 +225,9 @@ class ChatForwardMessageFragment : Fragment() {
         )
     }
 
-    /**
-     * Check if the message should show the reaction menu
-     */
+    
+
+
     private fun shouldShowMenu(data: TextChatMessage): Boolean {
         if (data.isAttachmentMessage()) return true
         if (!data.message.isNullOrEmpty()) return true
@@ -282,12 +286,12 @@ class ChatForwardMessageFragment : Fragment() {
     }
 
     private fun favoriteGif(message: TextChatMessage) {
-        // Favorite-without-download: build a message attachment ref (no decrypt, no IO). The write path
-        // derives the account fileHash from the key, isExist-fast-passes, and only downloads the message
-        // ciphertext on a miss. Shares resolveActionAttachment with saveAttachment so the path can't drift.
+        
+        
+        
         val (attachment, messageId) = resolveActionAttachment(message) ?: return
-        // Reject oversized gifs up front using the known attachment size (the write path also enforces
-        // MAX_FAVORITE_ASSET_BYTES as a backstop).
+        
+        
         if (attachment.size > MAX_FAVORITE_ASSET_BYTES) {
             L.w { "[ChatForwardMessageFragment] favorite gif: too large size=${attachment.size} messageId=$messageId" }
             ToastUtil.show(getString(R.string.gif_favorites_add_size_limit))
@@ -308,20 +312,21 @@ class ChatForwardMessageFragment : Fragment() {
         val progress = data.getAttachmentProgress()
         val isFileValid = EncryptedAttachmentAccess.isReadable(attachmentPath)
 
-        // Encrypted-at-rest media keeps only the ciphertext (.encrypt) on disk — the plaintext
-        // file is gone, so File(...).exists() is false. Gate on isReadable and feed the save the
-        // decrypting content uri so SaveAttachmentUtil can stream the plaintext on demand.
+        
+        
+        
         if (isFileValid && (progress == null || progress == 100)) {
-            // Prefer the durable ciphertext (content uri) over the plaintext file — a self-sent
-            // attachment's plaintext is deleted right after upload, so a plaintext uri resolved here
-            // can ENOENT by the time this async save reads it. See EncryptedAttachmentAccess.exportContentUriIfEncrypted.
+            
+            
+            
             val saveUri = EncryptedAttachmentAccess.exportContentUriIfEncrypted(messageId, attachmentPath)
                 ?: File(attachmentPath).toUri()
             val attachmentToSave = SaveAttachmentUtil.Attachment(
                 uri = saveUri,
                 contentType = attachment.contentType,
                 date = System.currentTimeMillis(),
-                fileName = attachment.fileName
+                fileName = attachment.fileName,
+                saveAsFile = attachment.isVideoShownAsFile()
             )
             viewLifecycleOwner.lifecycleScope.launch {
                 SaveAttachmentUtil.saveWithUI(requireContext(), attachmentToSave)
@@ -334,16 +339,16 @@ class ChatForwardMessageFragment : Fragment() {
         }
     }
 
-    // resolveActionAttachment / handleAttachmentTapBeforeOpen are the shared top-level helpers in
-    // ChatMessageListFragment.kt — one copy of the policy for both surfaces.
+    
+    
 
-    /**
-     * What a main-thread read gate does when the file it needs is not readable: ask for the bytes
-     * when the row says they were transferred, and report whether it did so the caller can keep its
-     * own error message for the cases this cannot recover. Same policy as the chat list's gate —
-     * [AttachmentDownloadDecision.shouldRescueMissingFile] is where it lives, only the download
-     * enqueue differs between the two surfaces.
-     */
+    
+
+
+
+
+
+
     private fun rescueMissingAttachment(
         message: TextChatMessage,
         attachment: Attachment?,
@@ -359,17 +364,17 @@ class ChatForwardMessageFragment : Fragment() {
         return true
     }
 
-    /**
-     * The copy's own localId is both the job's row identity and its progress key — the collecting
-     * bubble derives the same value through `getAttachmentIdForProgress`.
-     */
+    
+
+
+
     private fun downloadAttachment(message: TextChatMessage, attachment: Attachment) {
         val filePath = AttachmentPathResolver.fileFor(attachment)
-        // Auto-save only for non-confidential images/videos when conversation setting allows
+        
         val forwardActivity = activity as? ChatForwardMessageActivity
         val shouldSaveToPhotos = forwardActivity?.getShouldSaveToPhotos() == true
         val isConfidential = forwardActivity?.isConfidentialMessage() == true
-        val autoSave = shouldSaveToPhotos && !isConfidential && (attachment.isImage() || attachment.isVideo())
+        val autoSave = shouldSaveToPhotos && !isConfidential && (attachment.isImage() || attachment.isPlayableVideo())
         ApplicationDependencies.getJobManager().add(
             DownloadAttachmentJob(
                 attachment.localId,
@@ -391,8 +396,10 @@ class ChatForwardMessageFragment : Fragment() {
                     val attachment = data.attachment ?: return
                     if (handleAttachmentTapBeforeOpen(attachment, data.getAttachmentProgress()) { downloadAttachment(data, attachment) }) return
 
-                    if (data.attachment?.isImage() == true || data.attachment?.isVideo() == true) {
+                    if (attachment.opensInAppViewer(isConfidentialPage())) {
                         openPreview(data)
+                    } else if (attachment.isVideoShownAsFile()) {
+                        openVideoAsFile(data)
                     }
                 } else if (data.forwardContext != null && !data.forwardContext?.forwards.isNullOrEmpty()) {
                     val forwardContext = data.forwardContext ?: return
@@ -401,12 +408,14 @@ class ChatForwardMessageFragment : Fragment() {
                         val attachment = forward.attachments?.getOrNull(0) ?: return
                         if (handleAttachmentTapBeforeOpen(attachment, data.getAttachmentProgress()) { downloadAttachment(data, attachment) }) return
 
-                        if (attachment.isImage() || attachment.isVideo()) {
+                        if (attachment.opensInAppViewer(isConfidentialPage())) {
                             openPreview(generateMessageFromForward(forward) as TextChatMessage)
+                        } else if (attachment.isVideoShownAsFile()) {
+                            openVideoAsFile(generateMessageFromForward(forward) as TextChatMessage)
                         }
                     } else {
-                        // Navigate to nested forward - use Fragment navigation
-                        // Generate dynamic title matching the message bubble display
+                        
+                        
                         val nestedTitle = getForwardTitle(forwardContext)
                         (activity as? ChatForwardMessageActivity)?.navigateToNestedForward(
                             nestedTitle,
@@ -419,23 +428,21 @@ class ChatForwardMessageFragment : Fragment() {
 
         override fun onItemLongClick(rootView: View, data: ChatMessage) {
             if (data !is TextChatMessage) return
-            // PRD v2.0 §改动5: a confidential combined-forward may be expanded for viewing, but ALL
-            // long-press operations (copy / forward / save / text-selection) are blocked — consistent
-            // with the main conversation, where a confidential message gets no action menu at all.
+            
             if ((activity as? ChatForwardMessageActivity)?.isConfidentialMessage() == true) return
             if (!shouldShowMenu(data)) return
 
-            // Get bubble view (ChatMessageContainerView with id contentContainer)
+            
             val bodyBubble = rootView.findViewById<View>(R.id.contentContainer) ?: return
             
-            // Get text view for text selection - check if message has text content
+            
             val textView: TextView? = if (hasTextContent(data)) {
                 rootView.findViewById<View>(R.id.contentFrame)?.findViewById(R.id.textView)
             } else {
                 null
             }
             
-            // Initialize coordinator if needed
+            
             if (messageActionCoordinator == null) {
                 messageActionCoordinator = MessageActionCoordinator(requireActivity(), globalConfigsManager, translateBackend.isSupported).apply {
                     setActionListener(object : MessageActionCoordinator.ActionListener {
@@ -455,19 +462,17 @@ class ChatForwardMessageFragment : Fragment() {
                         override fun onTranslateOff(message: TextChatMessage) {}
                         override fun onForward(message: TextChatMessage, selectedText: String?) {
                             if (selectedText != null) {
-                                // Partial selection - forward as plain text (outer-attributed notice).
-                                // PRD §5.3.2: operation inside a CF detail view → SUB_COMBINED_FORWARD.
+                                
                                 selectChatsUtils.showChatSelectAndSendDialog(
                                     requireActivity(),
                                     selectedText,
                                     sourceConversation = outerSourceConversation,
                                     sourceAuthorIds = outerSourceAuthorIds,
                                     combinedForwardMode = CombinedForwardMode.SUB_COMBINED_FORWARD,
-                                    // PRD v2.0 §改动1/§改动2 条件①: real author of the selected inner text = message.authorId.
                                     carriesForeignContent = NoticeAggregator.forwardCarriesForeignContent(listOf(message), globalServices.myId),
                                 )
                             } else {
-                                // Full selection - forward as original message
+                                
                                 handleActionSelected(MessageAction.Type.FORWARD, message)
                             }
                         }
@@ -493,23 +498,23 @@ class ChatForwardMessageFragment : Fragment() {
                 message = data,
                 messageView = bodyBubble,
                 textView = textView,
-                mostUseEmojis = null,  // No emoji reactions in forward mode
+                mostUseEmojis = null,  
                 isForForward = true,
                 isSaved = false,
                 touchPoint = Point(bodyBubble.width / 2, 0),
                 containerView = mBinding.recyclerViewMessage,
-                enableTextSelection = textView != null  // Enable text selection only when there's a text view
+                enableTextSelection = textView != null  
             )
         }
         
-        /**
-         * Check if message has text content that can be selected
-         */
+        
+
+
         private fun hasTextContent(data: TextChatMessage): Boolean {
-            // Direct text message
+            
             if (!data.message.isNullOrEmpty()) return true
             
-            // Single forward with text
+            
             val forwards = data.forwardContext?.forwards
             if (forwards?.size == 1) {
                 val forward = forwards.firstOrNull()
@@ -525,8 +530,8 @@ class ChatForwardMessageFragment : Fragment() {
         override fun onReactionClick(message: ChatMessage, emoji: String, remove: Boolean, originTimeStamp: Long) {}
         override fun onReactionLongClick(message: ChatMessage, emoji: String) {}
 
-        // The combined-forward detail view never auto-translates: it has no AutoTranslateCoordinator
-        // and no overlay flows into it, so there is no failed translation here to retry.
+        
+        
         override fun onTranslateRetry(message: TextChatMessage) {}
     }
 
@@ -535,67 +540,85 @@ class ChatForwardMessageFragment : Fragment() {
             layoutManager = LinearLayoutManager(context)
             itemAnimator = null
             adapter = chatMessageAdapter
+            chatMessageAdapter.followBubbleWidth(this)
         }
 
-        // Set shouldSaveToPhotos from Activity (original conversation setting)
-        // Note: This is combined with isConfidentialMessage check in downloadAttachment
+        
+        
         val forwardActivity = activity as? ChatForwardMessageActivity
         val shouldSaveToPhotos = forwardActivity?.getShouldSaveToPhotos() == true
         val isConfidential = forwardActivity?.isConfidentialMessage() == true
         chatMessageAdapter.shouldSaveToPhotos = shouldSaveToPhotos && !isConfidential
 
-        // Get ForwardContext from Activity using stackIndex (avoids JSON serialization on main thread)
+        
         val forwardContext = forwardActivity?.getForwardContext(stackIndex)
         if (forwardContext != null) {
-            viewLifecycleOwner.lifecycleScope.launch {
-                val list = mutableListOf<ChatMessage>()
-                forwardContext.forwards?.forEach { forward ->
-                    list.add(generateMessageFromForward(forward))
-                }
+            viewLifecycleOwner.lifecycleScope.launch { submitForwardContext(forwardContext) }
+        }
+        observeVideoProbeResults()
+    }
 
-                val contactIds = MessageContactsCacheUtil.collectContactIds(list)
-                contactorCache.loadContactors(contactIds)
+    
 
-                val newList = list.sortedBy { message -> message.systemShowTimestamp }
-                    .mapIndexed { index, message ->
-                        val previousMessage = if (index > 0) list[index - 1] else null
-                        val isSameDayWithPreviousMessage = TimeFormatter.isSameDay(message.timeStamp, previousMessage?.timeStamp ?: 0L)
 
-                        val nextMessage = if (index < list.size - 1) list[index + 1] else null
-                        val isSameDayWithNextMessage = TimeFormatter.isSameDay(message.timeStamp, nextMessage?.timeStamp ?: 0L)
 
-                        message.showName = !isSameDayWithPreviousMessage || message.authorId != previousMessage?.authorId
-                        message.showDayTime = !isSameDayWithPreviousMessage
-                        message.showTime = !isSameDayWithNextMessage || message.authorId != nextMessage?.authorId
-                        message
-                    }
 
-                // PRD §5.3.2 SUB_COMBINED_FORWARD: decorate inner CF messages with the
-                // outermost CF's source attribution so any derived surface (large-font /
-                // translation / STT) dispatched from inside CF detail emits correctly
-                // attributed notices. outerSource* is Activity-scope on
-                // ChatForwardMessageActivity and stays pinned across navigateToNestedForward(),
-                // so this same decoration is correct at any nesting level.
-                val outerActivity = activity as? ChatForwardMessageActivity
-                val outerConv = outerActivity?.getOuterSourceConversation()
-                val outerAuthorId = outerActivity?.getOuterSourceAuthorId()
-                chatMessageAdapter.submitList(
-                    newList.map { msg ->
-                        msg.apply {
-                            forWhat = outerConv ?: forWhat
-                            sourceAuthorOverride = outerAuthorId
-                            sourceMode = CombinedForwardMode.SUB_COMBINED_FORWARD
-                        }
-                    }
-                )
+    private fun observeVideoProbeResults() {
+        viewLifecycleOwner.lifecycleScope.launch {
+            videoProbeCoordinator.results.collect { result ->
+                val forwardActivity = activity as? ChatForwardMessageActivity ?: return@collect
+                val current = forwardActivity.getForwardContext(stackIndex) ?: return@collect
+                if (!current.containsAttachment(result.attachmentKey)) return@collect
+                val row = videoProbeCoordinator.readRow(result.databaseId) ?: return@collect
+                val updated = current.withProbedAttachment(result.attachmentKey, row)
+                forwardActivity.replaceForwardContext(stackIndex, updated)
+                submitForwardContext(updated)
             }
         }
     }
 
-    /**
-     * Generate forward title matching the message bubble display
-     * Same logic as ContentBinders.kt line 558-567
-     */
+    
+    private suspend fun submitForwardContext(forwardContext: ForwardContext) {
+        val list = mutableListOf<ChatMessage>()
+        forwardContext.forwards?.forEach { forward ->
+            list.add(generateMessageFromForward(forward))
+        }
+
+        val contactIds = MessageContactsCacheUtil.collectContactIds(list)
+        contactorCache.loadContactors(contactIds)
+
+        val newList = list.sortedBy { message -> message.systemShowTimestamp }
+            .mapIndexed { index, message ->
+                val previousMessage = if (index > 0) list[index - 1] else null
+                val isSameDayWithPreviousMessage = TimeFormatter.isSameDay(message.timeStamp, previousMessage?.timeStamp ?: 0L)
+
+                val nextMessage = if (index < list.size - 1) list[index + 1] else null
+                val isSameDayWithNextMessage = TimeFormatter.isSameDay(message.timeStamp, nextMessage?.timeStamp ?: 0L)
+
+                message.showName = !isSameDayWithPreviousMessage || message.authorId != previousMessage?.authorId
+                message.showDayTime = !isSameDayWithPreviousMessage
+                message.showTime = !isSameDayWithNextMessage || message.authorId != nextMessage?.authorId
+                message
+            }
+
+        
+        val outerActivity = activity as? ChatForwardMessageActivity
+        val outerConv = outerActivity?.getOuterSourceConversation()
+        val outerAuthorId = outerActivity?.getOuterSourceAuthorId()
+        chatMessageAdapter.submitList(
+            newList.map { msg ->
+                msg.apply {
+                    forWhat = outerConv ?: forWhat
+                    sourceAuthorOverride = outerAuthorId
+                    sourceMode = CombinedForwardMode.SUB_COMBINED_FORWARD
+                }
+            }
+        )
+    }
+
+    private fun isConfidentialPage(): Boolean = (activity as? ChatForwardMessageActivity)?.isConfidentialMessage() == true
+
+    
     private fun getForwardTitle(forwardContext: ForwardContext): String {
         val forwards = forwardContext.forwards
         return if (forwards?.firstOrNull()?.isFromGroup == true) {
@@ -609,6 +632,23 @@ class ChatForwardMessageFragment : Fragment() {
                 getString(R.string.chat_history_for, authorId.formatBase58Id())
             }
         }
+    }
+
+    
+
+
+
+    private fun openVideoAsFile(message: TextChatMessage) {
+        if (AttachmentDownloadDecision.isTransferInFlight(message.getAttachmentProgress())) return
+        val attachment = message.attachment
+        val filePath = attachment?.let { AttachmentPathResolver.fileFor(it) } ?: ""
+        if (!EncryptedAttachmentAccess.isReadable(filePath)) {
+            if (!rescueMissingAttachment(message, attachment, isFileValid = false)) {
+                ToastUtil.showLong(R.string.file_load_error)
+            }
+            return
+        }
+        requireContext().viewFile(filePath)
     }
 
     private fun openPreview(message: TextChatMessage) {

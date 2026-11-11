@@ -25,15 +25,15 @@ import org.difft.app.database.models.TranslateModel
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * winq `IN` batch reads for [MessageChildRowLoader]. Deliberately trivial: every method is one
- * predicate + one ordering term, no grouping and no logging (13+ log lines per emission would be
- * pure noise). All the logic that could be wrong lives in [MessageHydrator], which is winq-free
- * and therefore host-JVM testable.
- *
- * All foreign keys cross this boundary as `Long` even though `databaseId` primary keys are `Int` —
- * a mismatched key type here silently returns nothing instead of failing.
- */
+
+
+
+
+
+
+
+
+
 @Singleton
 class WcdbMessageChildRowLoader @Inject constructor(
     private val wcdb: WCDB,
@@ -153,20 +153,20 @@ class WcdbMessageChildRowLoader @Inject constructor(
         }
 }
 
-/**
- * winq inlines `IN` list literals into the SQL text, so a very long key set bloats the statement.
- */
+
+
+
 internal const val IN_CHUNK_SIZE = 500
 
-/**
- * Splits [keys] into `IN` chunks and concatenates the results.
- *
- * Chunking is BY KEY, never by row: every row belonging to one key therefore lands in exactly one
- * chunk, so concatenating chunk results cannot interleave or reorder a group. Chunking by row
- * would break the `databaseId ASC` intra-group contract that [MessageHydrator] relies on.
- *
- * An empty key list issues no query at all.
- */
+
+
+
+
+
+
+
+
+
 internal fun <K, R> chunkKeys(keys: List<K>, query: (List<K>) -> List<R>): List<R> = when {
     keys.isEmpty() -> emptyList()
     keys.size <= IN_CHUNK_SIZE -> query(keys)

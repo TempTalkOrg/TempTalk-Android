@@ -43,19 +43,19 @@ import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import kotlin.system.exitProcess
 
-/**
- * IndexActivity's renderer for the startup gates and the coordinator's prompt (#1355).
- *
- * Nothing is mounted until the host is presentable: RESUMED, no app-lock decision pending, then a
- * 600 ms settle that a pause cancels (so a lock that starts right after the decision never gets a
- * dialog underneath it). Gates render before prompts: a forced update hides the security warnings,
- * which show one at a time; any gate removes a prompt on screen (the coordinator drops it without
- * recording a decline).
- *
- * Close reasons map to outcomes here; [DialogCloseReason.PROGRAMMATIC] is always the host's own
- * doing and records nothing. Outcomes are recorded before any Activity is started: persisted, or kept
- * in coordinator memory for this process when the write fails.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
 class IndexStartupPromptHost @Inject constructor(
     private val coordinator: StartupPromptCoordinator,
     private val updateChecker: StartupUpdateChecker,
@@ -78,7 +78,7 @@ class IndexStartupPromptHost @Inject constructor(
     private var shownSecurity: SecurityWarning? = null
     private var shownForced: CheckUpdateResponse? = null
 
-    /** Call from onCreate: the permission launcher must be registered before the host is started. */
+    
     fun attach(
         activity: FragmentActivity,
         updateManager: UpdateManager,
@@ -116,7 +116,7 @@ class IndexStartupPromptHost @Inject constructor(
         }
     }
 
-    /** The dual-pane detail pane opened or closed a conversation. */
+    
     fun onDetailPaneChanged() {
         if (attached && presentable) reportHostState()
     }
@@ -145,7 +145,7 @@ class IndexStartupPromptHost @Inject constructor(
         coordinator.setHostState(presentable, dualPaneConversationOpen(), notificationRationale())
     }
 
-    /** Whether the system would still show its POST_NOTIFICATIONS dialog. */
+    
     private fun notificationRationale(): Boolean =
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ActivityCompat.shouldShowRequestPermissionRationale(activity, Manifest.permission.POST_NOTIFICATIONS)
@@ -155,11 +155,11 @@ class IndexStartupPromptHost @Inject constructor(
         val forced = updateChecker.blockingForced.value
         val security = securityChecks.pending.value.firstOrNull()
         val ticket = coordinator.current.value
-        // The app-wide gates render themselves; a prompt never stays or mounts under them.
+        
         val appGate = InactiveDeviceNotifier.pending.value || NetworkRiskNotifier.warningPending.value
-        // Removals also run while not presentable: a prompt that is gone (answered, preempted,
-        // resolved, replaced) or covered by any gate never stays mounted. An unanswered prompt keeps
-        // its ticket across a trip to the background, so it stays mounted.
+        
+        
+        
         if (forced != null || security != null || appGate || ticket == null || ticket.seq != renderedSeq) dismissPrompt()
         if (forced == null && shownForced != null) {
             shownForced = null
@@ -205,6 +205,10 @@ class IndexStartupPromptHost @Inject constructor(
                 showPromptDialog(ticket, activity.getString(R.string.background_connection_prompt_delay), cancelable = false) {
                     BackgroundConnectionSettingsActivity.startActivity(activity)
                 }
+            PromptId.BACKGROUND_RESTRICTED ->
+                showPromptDialog(ticket, activity.getString(R.string.background_connection_prompt_restricted, appName), cancelable = false) {
+                    BackgroundConnectionSettingsActivity.startActivity(activity)
+                }
             PromptId.FULL_SCREEN -> {
                 val issue = ticket.issue ?: return
                 val message = NotificationReadinessText.promptMessage(activity, issue, appName) ?: return
@@ -220,10 +224,10 @@ class IndexStartupPromptHost @Inject constructor(
         }
     }
 
-    /**
-     * Prompts that decide whether messages arrive at all (notifications, background connection) are
-     * not cancelable, so a stray outside tap is not taken as a decline; "Not now" is always shown.
-     */
+    
+
+
+
     private fun showPromptDialog(ticket: PromptTicket, message: String, cancelable: Boolean = true, action: suspend () -> Unit) {
         promptDialog = ComposeDialogManager.showMessageDialog(
             context = activity,
@@ -238,7 +242,7 @@ class IndexStartupPromptHost @Inject constructor(
     }
 
     private fun onPromptClosed(ticket: PromptTicket, reason: DialogCloseReason, action: suspend () -> Unit) {
-        // Programmatic closes are the host's own (preempted, resolved, replaced): already recorded.
+        
         if (reason == DialogCloseReason.PROGRAMMATIC) return
         promptDialog = null
         when (reason) {
@@ -255,12 +259,12 @@ class IndexStartupPromptHost @Inject constructor(
         }
     }
 
-    /**
-     * Records the primary action, then performs it. If this host is destroyed in between (its scope
-     * is cancelled), the action never runs from the dead Activity and the coordinator undoes the
-     * recorded trip, so the recreated host shows the prompt again instead of counting a decline.
-     * The record is awaited non-cancellably so the undo can never run before it.
-     */
+    
+
+
+
+
+
     private suspend fun recordThenAct(ticket: PromptTicket, rationaleBefore: Boolean, action: suspend () -> Unit) {
         val recorded = withContext(NonCancellable) { coordinator.onActionTaken(ticket, rationaleBefore) }
         if (!recorded) return
@@ -287,7 +291,7 @@ class IndexStartupPromptHost @Inject constructor(
     }
 
     private fun onPermissionResult(granted: Boolean) {
-        // The rationale read before the request is on the record, so a recreation keeps it.
+        
         val after = !granted && notificationRationale()
         activity.lifecycleScope.launch { coordinator.onNotificationRequestResult(granted, after) }
     }

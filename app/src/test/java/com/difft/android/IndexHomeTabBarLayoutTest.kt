@@ -15,18 +15,18 @@ import org.robolectric.Robolectric
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
-/**
- * Structure of the floating home tab capsule host in both `activity_index.xml` trees: it sits
- * inside `list_content` next to the pager (so IndexActivity's collapse freeze moves both as one
- * block), the pager reaches the bottom of its pane (content scrolls under the capsule), the
- * search and detail layers are declared after it (they cover it), and the host does not clip
- * its padding (the capsule's shadow draws into the bottom gap).
- */
+
+
+
+
+
+
+
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [33])
 class IndexHomeTabBarLayoutTest {
 
-    /** The ComposeView needs a window (recomposer) before it can be measured, so lay out via the Activity. */
+    
     private fun inflate(): View {
         val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup()
         val activity = controller.get()

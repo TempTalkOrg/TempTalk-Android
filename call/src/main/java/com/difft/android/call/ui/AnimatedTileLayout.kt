@@ -27,29 +27,29 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
-/** How long a tile takes to reach its new place and size, and to fade in or out (guide §5.1). */
+
 internal const val TILE_MOVE_ANIM_MS = 280
 
-/** CSS `ease-in-out`, the curve the three platforms share for tile moves (guide §5.1). */
+
 internal val TileMoveEasing = CubicBezierEasing(0.42f, 0f, 0.58f, 1f)
 
-/** Scale a tile enters from (guide §5.1). */
+
 private const val TILE_ENTER_SCALE = 0.96f
 
-/**
- * One tile to draw: where (px, relative to the layout), at which depth, and what it shows ([data],
- * kept for a tile fading out after it left). With [fill] the tile takes the layout's whole size from
- * the measure pass and [rect] is ignored, so it follows a window resize in the same frame.
- */
+
+
+
+
+
 internal data class TilePlacement(val id: String, val rect: IntRect, val z: Float, val data: Any? = null, val fill: Boolean = false)
 
-/** Moves a tile's drawn rect from outside the layout, e.g. a floating window let go mid-drag. */
+
 @Stable
 internal class TileMotionState internal constructor(internal val motion: TileMotion) {
-    /** The tile [id] is drawn at [rect] now and eases from there to its target. */
+    
     fun releaseAt(id: String, rect: IntRect) = motion.releaseAt(id, rect)
 
-    /** Where the tile [id] is drawn now, mid-animation included; null before its first placement. */
+    
     fun currentRect(id: String): IntRect? = motion.currentRect(id)
 }
 
@@ -59,13 +59,13 @@ internal fun rememberTileMotionState(): TileMotionState {
     return remember(scope) { TileMotionState(TileMotion(scope)) }
 }
 
-/**
- * Draws [tiles] keyed by id, so a tile that moves, resizes or changes role keeps its node (and its
- * video renderer). Tiles ease to new rects over [TILE_MOVE_ANIM_MS] unless [snap]; a new tile fades
- * in from [TILE_ENTER_SCALE]; a tile that leaves fades out and stays composed until then, so an id
- * that comes back inside that time reuses the same node. Depth comes from [TilePlacement.z]; rects
- * are absolute (no RTL mirroring).
- */
+
+
+
+
+
+
+
 @Composable
 internal fun AnimatedTileLayout(
     tiles: List<TilePlacement>,
@@ -76,7 +76,7 @@ internal fun AnimatedTileLayout(
 ) {
     val retention = remember { TileRetention() }
     var expired by remember { mutableIntStateOf(0) }
-    // Read so an expiry recomposes; the retention itself is plain state, written only here.
+    
     val drawn = retention.update(tiles, snap, expired)
     val byId = drawn.associate { it.placement.id to it.placement }
     Layout(
@@ -116,7 +116,7 @@ internal fun AnimatedTileLayout(
     }
 }
 
-/** One keyed tile node with its enter and exit fade. */
+
 @Composable
 private fun RetainedTile(
     id: String,
@@ -149,13 +149,13 @@ private fun RetainedTile(
     ) { content() }
 }
 
-/** A tile as drawn: still shown, entering, or fading out after it left the plan. */
+
 internal data class RetainedPlacement(val placement: TilePlacement, val departing: Boolean, val entering: Boolean)
 
-/**
- * The keyed list [AnimatedTileLayout] draws: the current tiles, then those that left and are still
- * fading out. Main thread only; [update] is idempotent for the same input.
- */
+
+
+
+
 internal class TileRetention {
     private var current: Map<String, TilePlacement> = emptyMap()
     private val departed = LinkedHashMap<String, TilePlacement>()
@@ -166,10 +166,10 @@ internal class TileRetention {
     private var lastDrawn: List<RetainedPlacement> = emptyList()
     private var entering: Set<String> = emptySet()
 
-    /**
-     * The tiles to draw for [tiles]. With [snap] a tile that left goes at once and a new one appears
-     * without fading in; the first list never fades in. [expired] changes after each [expire].
-     */
+    
+
+
+
     fun update(tiles: List<TilePlacement>, snap: Boolean, expired: Int = 0): List<RetainedPlacement> {
         if (tiles == lastTiles && snap == lastSnap && expired == lastExpired) return lastDrawn
         if (tiles != lastTiles) {
@@ -179,7 +179,7 @@ internal class TileRetention {
                 if (id !in next) departed[id] = placement
             }
             if (snap) {
-                // Gone at once: forgotten, so a return later enters with its fade.
+                
                 seen.removeAll(departed.keys - next.keys)
                 departed.clear()
             }
@@ -196,7 +196,7 @@ internal class TileRetention {
         return lastDrawn
     }
 
-    /** The fade of [id] ended: drop it if it is still departed. Returns whether the list changed. */
+    
     fun expire(id: String): Boolean {
         if (departed.remove(id) == null) return false
         seen.remove(id)
@@ -204,7 +204,7 @@ internal class TileRetention {
     }
 }
 
-/** Per-tile bounds animation state, driven from the layout phase. */
+
 internal class TileMotion(private val scope: CoroutineScope) {
     private class Tile(var target: IntRect) {
         var from: IntRect = target
@@ -216,10 +216,10 @@ internal class TileMotion(private val scope: CoroutineScope) {
 
     private val tiles = HashMap<Any, Tile>()
 
-    // Bumped when a tile is moved from outside a layout pass, so the layout measures again.
+    
     private var version by mutableIntStateOf(0)
 
-    /** Read by a layout pass so a [releaseAt] measures it again. */
+    
     fun observe(): Int = version
 
     fun rectOf(id: Any, target: IntRect, eased: Boolean): IntRect {
@@ -251,7 +251,7 @@ internal class TileMotion(private val scope: CoroutineScope) {
         val progress = Animatable(0f)
         tile.from = from
         tile.progress = progress
-        // Undispatched, so the tile holds its current rect until the first animation frame.
+        
         tile.job = scope.launch(start = CoroutineStart.UNDISPATCHED) {
             progress.animateTo(1f, tween(TILE_MOVE_ANIM_MS, easing = TileMoveEasing))
         }

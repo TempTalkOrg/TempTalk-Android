@@ -12,10 +12,10 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
-/**
- * The real [CallCleanupExecutor] on a real IO thread (session tests capture its starts instead).
- * Row: T5-21.
- */
+
+
+
+
 class CallCleanupExecutorTest {
 
     @Test
@@ -38,7 +38,7 @@ class CallCleanupExecutorTest {
             },
             CallCleanupExecutor.Step("second") {
                 scopeActiveAtSecond = runScope.isActive
-                delay(1) // throws CancellationException unless the run is NonCancellable
+                delay(1) 
                 secondRuns.incrementAndGet()
             },
             CallCleanupExecutor.Step("third") {

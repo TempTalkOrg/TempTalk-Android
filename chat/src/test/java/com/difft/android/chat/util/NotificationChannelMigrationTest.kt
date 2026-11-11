@@ -27,7 +27,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** #1354: retiring the obsolete channel ids at startup. */
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class NotificationChannelMigrationTest {
@@ -79,7 +79,7 @@ class NotificationChannelMigrationTest {
 
         assertEquals(survivors, fake.channels.keys)
         assertEquals(NotificationChannelManager.CHANNEL_VERSION, version())
-        // The unknown id was logged once and is not re-logged.
+        
         assertEquals(true, store.data.first()[AppStateKeys.NOTIFICATION_CHANNEL_UNKNOWN_LOGGED])
         NotificationChannelIds.OBSOLETE.forEach { id -> verify(exactly = 1) { nm.deleteNotificationChannel(id) } }
         verify(exactly = NotificationChannelIds.OBSOLETE.size) { nm.deleteNotificationChannel(any()) }
@@ -139,7 +139,7 @@ class NotificationChannelMigrationTest {
         assertEquals(NotificationChannelManager.CHANNEL_VERSION, version())
     }
 
-    // Below API 31 the summary channel is left while a summary sits on it.
+    
     @Test
     @Config(sdk = [26, 30])
     fun `below API 31 an active summary defers the summary channel delete`() = runBlocking {
@@ -222,7 +222,7 @@ class NotificationChannelMigrationTest {
         assertEquals(NotificationChannelManager.CHANNEL_VERSION, version())
     }
 
-    // Ensures racing the deletes never lose a kept channel, and only obsolete ids are deleted.
+    
     @Test
     fun `ensures interleaved with the migration keep every kept channel`() = runBlocking {
         presetAllObsolete()

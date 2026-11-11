@@ -3,10 +3,10 @@ package com.difft.android.dualpane
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/**
- * Back order for IndexActivity once the visible page's own callbacks declined (phase-1 design
- * §3.9; search layer: design "global search in the list pane" §4.4).
- */
+
+
+
+
 class IndexBackDecisionTest {
 
     @Test

@@ -6,7 +6,6 @@
     android:layout_height="match_parent"
     android:orientation="vertical">
 
-    <!-- 初始/确认页面 -->
     <LinearLayout
         android:id="@+id/container_initial"
         android:layout_width="match_parent"
@@ -15,24 +14,20 @@
         android:background="@color/bg.popup.night"
         android:visibility="visible">
 
-        <!-- 顶部标题栏 -->
         <RelativeLayout
             android:layout_width="match_parent"
             android:layout_height="52dp"
-            android:paddingStart="16dp"
             android:paddingEnd="16dp">
 
             <ImageView
                 android:id="@+id/iv_close_initial"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
                 android:layout_centerVertical="true"
                 android:src="@drawable/close"
-                android:background="?attr/selectableItemBackgroundBorderless"
                 android:clickable="true"
                 android:focusable="true"
                 android:importantForAccessibility="no"
-                android:padding="4dp"
                 app:tint="@color/t.primary.night" />
 
             <androidx.appcompat.widget.AppCompatTextView
@@ -54,15 +49,13 @@
                 android:layout_centerVertical="true"
                 android:gravity="center_vertical"
                 android:text="@string/call_toolbar_bottom_invite_text"
-                android:textColor="@color/primary"
+                android:textColor="@color/info"
                 android:textSize="17sp"
                 android:alpha="0.5"
                 android:enabled="false" />
         </RelativeLayout>
 
-        <!-- 成员标题 -->
 
-        <!-- 添加按钮 -->
         <LinearLayout
             android:id="@+id/ll_add_member"
             android:layout_width="match_parent"
@@ -92,7 +85,6 @@
                 app:tint="@color/t.secondary.night" />
         </LinearLayout>
 
-        <!-- 已选成员列表 -->
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/recyclerview_selected_members"
             android:layout_width="match_parent"
@@ -100,7 +92,6 @@
             android:layout_weight="1" />
     </LinearLayout>
 
-    <!-- 添加成员页面 -->
     <LinearLayout
         android:id="@+id/container_add_members"
         android:layout_width="match_parent"
@@ -109,24 +100,20 @@
         android:background="@color/bg.popup.night"
         android:visibility="gone">
 
-        <!-- 顶部导航栏 -->
         <RelativeLayout
             android:layout_width="match_parent"
             android:layout_height="52dp"
-            android:paddingStart="16dp"
             android:paddingEnd="16dp">
 
             <ImageView
                 android:id="@+id/iv_close_add"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
                 android:layout_centerVertical="true"
                 android:src="@drawable/close"
-                android:background="?attr/selectableItemBackgroundBorderless"
                 android:clickable="true"
                 android:focusable="true"
                 android:importantForAccessibility="no"
-                android:padding="4dp"
                 app:tint="@color/t.primary.night" />
 
             <androidx.appcompat.widget.AppCompatTextView
@@ -148,7 +135,7 @@
                 android:layout_centerVertical="true"
                 android:gravity="center_vertical"
                 android:text="@string/call_invite_done"
-                android:textColor="@color/primary"
+                android:textColor="@color/info"
                 android:textSize="17sp"
                 android:alpha="0.5"
                 android:enabled="false"
@@ -158,7 +145,6 @@
                 android:padding="8dp" />
         </RelativeLayout>
 
-        <!-- 搜索框 -->
         <androidx.constraintlayout.widget.ConstraintLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -202,7 +188,6 @@
                 app:layout_constraintTop_toTopOf="@+id/edittext_search_input" />
         </androidx.constraintlayout.widget.ConstraintLayout>
 
-        <!-- 已选择成员区 -->
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/recyclerview_selected_strip"
             android:layout_width="match_parent"
@@ -218,7 +203,6 @@
             android:scrollbars="none"
             android:visibility="gone" />
 
-        <!-- 无结果提示 -->
         <androidx.appcompat.widget.AppCompatTextView
             android:id="@+id/tv_no_result"
             android:layout_width="match_parent"
@@ -230,7 +214,6 @@
             android:textSize="16sp"
             android:visibility="gone" />
 
-        <!-- 联系人列表 -->
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/recyclerview_contacts"
             android:layout_width="match_parent"

@@ -20,15 +20,15 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
-/**
- * Assembles the ordered list of cleanup [CallCleanupExecutor.Step]s a call session runs when it
- * ends. Process-wide slots (statistics room ids, the connected server URL) are cleared only while
- * [sessionId] still owns them.
- *
- * Kept stateless (a plain builder object) so the session only pays the cost of one
- * call to produce the list rather than carrying ~30 lines of setup in the
- * class body.
- */
+
+
+
+
+
+
+
+
+
 internal object CallCleanupSteps {
 
     @Suppress("LongParameterList")
@@ -58,10 +58,10 @@ internal object CallCleanupSteps {
         CallCleanupExecutor.Step("shouldTriggerFeedbackView") { shouldTriggerFeedbackView() },
         CallCleanupExecutor.Step("cancelCallTimeoutCheck") { timeoutMonitor.cancelIfActive() },
         CallCleanupExecutor.Step("cancelRoomEventDispatcher") { roomEventDispatcher?.cancelJobs() },
-        // Before disconnectAndRelease: stops the tick and the room-state collector so the room can't
-        // be released while a tick is still reading the quality providers. The hop to main is
-        // required, not cosmetic: steps run on Dispatchers.IO, while the coordinator drives a
-        // lock-free state machine that every other entry point touches from the main dispatcher.
+        
+        
+        
+        
         CallCleanupExecutor.Step("resetNetworkQuality") {
             withContext(Dispatchers.Main.immediate) { networkQualityCoordinator?.stop() }
         },
@@ -71,9 +71,9 @@ internal object CallCleanupSteps {
         },
         CallCleanupExecutor.Step("stopAudioHandler") {
             audioProcessor.release()
-            // audioSetup first: it cancels the route guard and the applier, both of which drive the
-            // handler. Stopping the handler first left a window where the applier could still call
-            // selectDevice on a dead switch, and where the guard's rebuild could restart one.
+            
+            
+            
             audioSetup.stop()
             audioHandler.stop()
         },

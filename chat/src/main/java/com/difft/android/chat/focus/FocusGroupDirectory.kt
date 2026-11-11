@@ -12,7 +12,7 @@ import org.difft.app.database.wcdb
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** One selectable group in the focus group picker. */
+
 data class FocusGroupItem(
     val gid: String,
     val name: String,
@@ -20,11 +20,11 @@ data class FocusGroupItem(
     val avatar: GroupAvatarData?,
 )
 
-/** Local group lookups for the focus UI (names for captions and dialogs, the picker's list). */
+
 @Singleton
 class FocusGroupDirectory @Inject constructor() {
 
-    /** The group's display name, or null when the group is not stored (or the read failed). */
+    
     suspend fun name(gid: String): String? = withContext(Dispatchers.IO) {
         try {
             wcdb.group.getFirstObject(DBGroupModel.gid.eq(gid))?.name
@@ -36,7 +36,7 @@ class FocusGroupDirectory @Inject constructor() {
         }
     }
 
-    /** Active groups (status 0), sorted by name. */
+    
     suspend fun activeGroups(): List<FocusGroupItem> = withContext(Dispatchers.IO) {
         try {
             wcdb.group.getAllObjects(DBGroupModel.status.eq(0))

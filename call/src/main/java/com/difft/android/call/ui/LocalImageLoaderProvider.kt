@@ -9,7 +9,6 @@ import coil3.gif.AnimatedImageDecoder
 import coil3.gif.GifDecoder
 
 object LocalImageLoaderProvider {
-    // 创建一个 Composable 函数来提供 ImageLoader
     @Composable
     fun localImageLoader(): ImageLoader {
         val context = LocalContext.current

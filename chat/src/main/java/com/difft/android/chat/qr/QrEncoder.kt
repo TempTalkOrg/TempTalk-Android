@@ -13,7 +13,7 @@ import com.google.zxing.MultiFormatWriter
 import com.google.zxing.common.BitMatrix
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 
-/** EC level passed through to ZXing. HIGH survives a center logo (~30% damage tolerance). */
+
 enum class QrErrorCorrection(internal val zxing: ErrorCorrectionLevel) {
     LOW(ErrorCorrectionLevel.L),
     MEDIUM(ErrorCorrectionLevel.M),
@@ -21,19 +21,19 @@ enum class QrErrorCorrection(internal val zxing: ErrorCorrectionLevel) {
     HIGH(ErrorCorrectionLevel.H),
 }
 
-/**
- * Stateless QR encoder: string -> square QR [Bitmap]. Fresh [MultiFormatWriter] per call, so it is
- * callable from any thread. Logs encode length, never the content (invite codes / device-link keys
- * are sensitive).
- */
+
+
+
+
+
 object QrEncoder {
 
-    private const val LOGO_RATIO = 0.20f   // logo edge ~= 20% of QR edge (matches BGA ~size/5)
+    private const val LOGO_RATIO = 0.20f   
 
-    /**
-     * Render [content] to a square [sizePx]x[sizePx] QR bitmap.
-     * Returns null on failure (empty content, sizePx <= 0, writer error, OOM) — never throws.
-     */
+    
+
+
+
     fun encode(
         content: String,
         sizePx: Int,

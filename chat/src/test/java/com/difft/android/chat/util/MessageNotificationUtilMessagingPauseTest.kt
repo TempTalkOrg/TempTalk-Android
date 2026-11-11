@@ -26,10 +26,10 @@ import org.junit.Before
 import org.junit.Test
 import java.util.Optional
 
-/**
- * G-R9 (#1382): ordinary message notifications are not posted while messaging is closed, checked
- * at entry and again after the suspending lookups (T29, T32).
- */
+
+
+
+
 class MessageNotificationUtilMessagingPauseTest {
 
     private val messaging = TestMessagingPause().open()
@@ -67,7 +67,7 @@ class MessageNotificationUtilMessagingPauseTest {
             groupNotifyGate = mockk(relaxed = true),
             messagingGate = messaging.gate,
         )
-        // The mute/read/group checks read WCDB, which cannot load in a JVM test; let every message through.
+        
         util = spyk(real, recordPrivateCalls = true)
         coEvery { util["shouldInterceptNotification"](any<For>(), any<Message>(), any<NotificationDelivery>()) } returns false
     }
@@ -116,7 +116,7 @@ class MessageNotificationUtilMessagingPauseTest {
 
     @Test
     fun `an incoming-call notification whose lookup outlasts the pause boundary is not posted`() = runBlocking {
-        // ResUtils resolves the application lazily; give it one so the stub below can be installed.
+        
         ApplicationHelper.init(mockk<ScopeApplication>(relaxed = true))
         mockkObject(ResUtils)
         every { ResUtils.getString(any()) } returns ""
@@ -130,7 +130,7 @@ class MessageNotificationUtilMessagingPauseTest {
         withTimeout(5_000) { while (util.hasPendingCallNotification(roomId.hashCode())) delay(10) }
 
         io.mockk.coVerify(exactly = 1) { ContactorUtil.getContactWithID(any(), any()) }
-        // The notification is built only after the check, so no string lookup means nothing was built.
+        
         verify(exactly = 0) { ResUtils.getString(any()) }
         verify(exactly = 0) { nm.notify(any(), any()) }
     }

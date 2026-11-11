@@ -10,6 +10,7 @@ import androidx.core.view.isVisible
 import androidx.core.widget.doAfterTextChanged
 import com.difft.android.R
 import com.difft.android.base.BaseActivity
+import com.difft.android.base.ui.sidechrome.sideChromeBar
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.PackageUtil
 import com.difft.android.base.utils.liftAboveKeyboard
@@ -37,6 +38,10 @@ class SetPasscodeActivity : BaseActivity() {
     lateinit var userManager: UserManager
 
 
+    override fun participatesInSideChrome(): Boolean = true
+
+    override fun padsRootForSideChrome(): Boolean = true
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         SecurityResultNonce.resultData(intent)?.let { setResult(RESULT_CANCELED, it) }
@@ -60,12 +65,10 @@ class SetPasscodeActivity : BaseActivity() {
     }
 
     private fun initView() {
-        mBinding.ibBack.setOnClickListener {
-            onBackPressedDispatcher.onBackPressed()
-        }
+        sideChromeBar().setBack(mBinding.ibBack, { onBackPressedDispatcher.onBackPressed() })
 
         mBinding.tvPasscodeTips1.text = getString(R.string.settings_passcode_tips, PackageUtil.getAppName())
-        // Short windows: keep the current step's button above the keyboard.
+        
         mBinding.root.liftAboveKeyboard(
             field = { if (mBinding.llStep1.isVisible) mBinding.etPasscode1 else mBinding.etPasscode2 }
         ) { if (mBinding.llStep1.isVisible) mBinding.btnNext else mBinding.btnConfirm }

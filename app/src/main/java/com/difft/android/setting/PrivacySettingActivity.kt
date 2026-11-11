@@ -8,10 +8,10 @@ import com.difft.android.R
 import com.difft.android.base.BaseActivity
 import dagger.hilt.android.AndroidEntryPoint
 
-/**
- * Activity container for PrivacySettingFragment
- * The actual UI logic is in PrivacySettingFragment for dual-pane support
- */
+
+
+
+
 @AndroidEntryPoint
 class PrivacySettingActivity : BaseActivity() {
 
@@ -21,6 +21,9 @@ class PrivacySettingActivity : BaseActivity() {
             activity.startActivity(intent)
         }
     }
+
+    
+    override fun participatesInSideChrome(): Boolean = true
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

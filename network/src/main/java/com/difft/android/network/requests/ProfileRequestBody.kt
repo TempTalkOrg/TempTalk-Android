@@ -5,7 +5,7 @@ data class ProfileRequestBody(
     val avatar: String? = null,
     val name: String? = null,
     val meetingVersion: Int? = null,
-    val msgEncVersion: Int? = null,// 1: Encryption Disabled, 2: Encryption Enabled
+    val msgEncVersion: Int? = null,
     val privateConfigs: PrivateConfigsRequestBody? = null,
     val publicConfigs: PublicConfigsRequestBody? = null,
 )

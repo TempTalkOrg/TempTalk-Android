@@ -11,15 +11,15 @@ import org.whispersystems.signalservice.internal.push.EncryptedMessageProtos
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos
 import uniffi.dtproto.DtProto
 
-/**
- * Self-contained encrypted-envelope fixture for the pipeline benchmarks (issue #1166 L2/L3).
- *
- * Keypairs are generated in-process (libsignal Curve); every envelope is encrypted with the
- * production send-path call shape (`encryptMessage(receiverPub-minus-type-byte, emptyMap(),
- * senderPriv, paddedPlaintext)` at MESSAGE_CURRENT_VERSION). For a 1:1 message the envelope's
- * peerContext is empty — the send path fills it only for group recipients — so decryption
- * needs nothing outside this process.
- */
+
+
+
+
+
+
+
+
+
 class PipelineFixture private constructor(
     val plaintextContents: List<ByteArray>,
     val envelopeBytes: List<ByteArray>,
@@ -30,7 +30,7 @@ class PipelineFixture private constructor(
         fun create(count: Int): PipelineFixture {
             val senderKeys = ECKeyPair.generate()
             val receiverKeys = ECKeyPair.generate()
-            // The wire form carries the key-type byte; the receive path Base64-decodes then drop(1)s.
+            
             val senderIdentityKeyB64 = Base64.encodeBytes(senderKeys.publicKey.serialize())
             val receiverPubDropped = receiverKeys.publicKey.serialize().drop(1).map { b -> b.toUByte() }
             val senderPrivate = senderKeys.privateKey.serialize().map { b -> b.toUByte() }
@@ -67,9 +67,9 @@ class PipelineFixture private constructor(
                         .setSystemShowTimestamp(BASE_TS + i)
                         .setContent(
                             ByteString.copyFrom(
-                                // Wire prefix is a packed nibble pair (current<<4 | minimum),
-                                // matching NewSignalServiceMessageSender.intsToByteHigh — the
-                                // receive path reads the version back out of the high nibble.
+                                
+                                
+                                
                                 byteArrayOf(
                                     ((MESSAGE_CURRENT_VERSION shl 4) or MESSAGE_MINIMUM_SUPPORTED_VERSION).toByte(),
                                 ) + encryptContent.toByteArray(),
@@ -96,9 +96,9 @@ class PipelineFixture private constructor(
         const val SENDER = "+benchsender"
     }
 
-    /** Production decrypt call shape — NewMessageDecryptionUtil.kt:81-107, re-expressed. */
+    
     fun decryptOne(envelope: SignalServiceProtos.Envelope): ByteArray {
-        // Version comes off the high nibble of the wire prefix, as production does.
+        
         val version = envelope.content.first().toUInt().shr(4).toInt()
         val identityKeyBytes = Base64.decode(envelope.identityKey)
         val peerContextBytes = Base64.decode(envelope.peerContext)
@@ -120,14 +120,14 @@ class PipelineFixture private constructor(
     }
 }
 
-/**
- * Minimal text-message Content→MessageModel mapping shared by the L2 convert stage and the
- * L3 half-pipeline: the persistence-relevant fields of a plain 1:1 text message, nothing
- * more. This is a SHAPE re-expression — the production mapping lives inside
- * MessageContentProcessor, which is not constructible in a benchmark process (15+ Hilt
- * dependencies) and additionally performs group/contact/receipt side effects that are out
- * of scope for a compute-stage benchmark.
- */
+
+
+
+
+
+
+
+
 fun toMessageModel(
     envelope: SignalServiceProtos.Envelope,
     content: SignalServiceProtos.Content,

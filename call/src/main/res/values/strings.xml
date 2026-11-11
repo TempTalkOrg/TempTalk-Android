@@ -65,10 +65,10 @@
     <string name="call_toolbar_bottom_invite_text">Invite</string>
     <string name="call_toolbar_bottom_switch_text">Switch</string>
     <string name="call_toolbar_bottom_critical_alert_text">Critical Alert</string>
-    <!-- Action bar labels (two-row layout + More sheet quick actions) -->
+    
     <string name="call_action_mute">Mute</string>
     <string name="call_action_unmute">Unmute</string>
-    <!-- Mute-other menu: item names the target; failure toast when the RTM mute request fails -->
+    
     <string name="call_mute_participant_menu_item">Mute %1$s</string>
     <string name="call_mute_participant_failed">Couldn\'t mute %1$s. Try again.</string>
     <string name="call_action_video">Video</string>
@@ -153,7 +153,7 @@
     <string name="call_critical_alert_confirm_view_button_send">Send</string>
     <string name="call_critical_alert_tooltip">Breaks through Silent Mode and Do Not Disturb. Use only for urgent situations.</string>
 
-    <!-- Server node selection (not translatable) -->
+    
     <string name="call_server_node_page_title" translatable="false">Call Network</string>
     <string name="call_server_node_select_route" translatable="false">Selected: %s</string>
     <string name="call_server_node_connected" translatable="false">Connected</string>

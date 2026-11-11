@@ -1,9 +1,9 @@
-// Synced from call-layout bf6b84ecbe, ports/kotlin/src/test/kotlin/org/difft/calllayout/ConfigEntries.kt (spec v25), by scripts/sync-apps.ts.
-// Do not edit here: change call-layout and sync again.
+
+
 
 package com.difft.android.call.layout
 
-// Every config value by its JSON key, to compare with the file's copy of DEFAULT_CONFIG.
+
 internal fun configEntries(c: LayoutConfig): Map<String, Any> = mapOf(
     "wideMinWidth" to c.wideMinWidth,
     "wideMinHeight" to c.wideMinHeight,
@@ -19,9 +19,11 @@ internal fun configEntries(c: LayoutConfig): Map<String, Any> = mapOf(
     "adaptiveMaxCount" to c.adaptiveMaxCount,
     "cardMinWidth" to c.cardMinWidth,
     "widenBarsMax" to c.widenBarsMax,
+    "cropMax" to c.cropMax,
+    "cardAreaRatioMax" to c.cardAreaRatioMax,
+    "regroupGain" to c.regroupGain,
     "adaptiveAspectMin" to c.adaptiveAspectMin,
     "adaptiveAspectMax" to c.adaptiveAspectMax,
-    "rowsHeightRatioMax" to c.rowsHeightRatioMax,
     "scrollAspectMax" to c.scrollAspectMax,
     "scrollStretch" to c.scrollStretch,
     "moreMaxTiles" to c.moreMaxTiles,
@@ -34,6 +36,10 @@ internal fun configEntries(c: LayoutConfig): Map<String, Any> = mapOf(
     "pipMargin" to c.pipMargin,
     "pipMinScale" to c.pipMinScale,
     "promoteSpeakingMs" to c.promoteSpeakingMs,
+    "speakingHangoverMs" to c.speakingHangoverMs,
+    "speakerSwitchMs" to c.speakerSwitchMs,
+    "speakerSwitchMaxMs" to c.speakerSwitchMaxMs,
+    "speakerHoldMs" to c.speakerHoldMs,
     "promoteVideoMs" to c.promoteVideoMs,
     "holdMs" to c.holdMs,
     "recentSpeakMs" to c.recentSpeakMs,

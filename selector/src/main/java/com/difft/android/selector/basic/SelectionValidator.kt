@@ -14,10 +14,10 @@ import com.difft.android.selector.utils.ActivityCompatHelper
 import com.difft.android.selector.utils.DateUtils
 import com.difft.android.selector.utils.PictureFileUtils
 
-/**
- * Selection count / mime / duration / file-size validation extracted from
- * PictureCommonFragment (issue #1077). Reaches base state through [host].
- */
+
+
+
+
 internal class SelectionValidator(private val host: PictureCommonFragment) {
 
     private val config get() = host.selectorConfig
@@ -48,7 +48,7 @@ internal class SelectionValidator(private val host: PictureCommonFragment) {
         return resultCode
     }
 
-    /** Validate whether the selection is allowed. */
+    
     fun isCheckSelectValidity(currentMedia: LocalMedia, isSelected: Boolean): Int {
         val curMimeType = currentMedia.mimeType
         val curDuration = currentMedia.duration
@@ -252,7 +252,7 @@ internal class SelectionValidator(private val host: PictureCommonFragment) {
         return false
     }
 
-    /** Validate the precondition to complete the selection. */
+    
     fun checkCompleteSelectLimit(): Boolean {
         if (config.selectionMode != SelectModeConfig.MULTIPLE || config.isOnlyCamera) {
             return false
@@ -314,7 +314,7 @@ internal class SelectionValidator(private val host: PictureCommonFragment) {
         return false
     }
 
-    /** Tips dialog. */
+    
     fun showTipsDialog(tips: String) {
         if (ActivityCompatHelper.isDestroy(host.activity)) {
             return
@@ -332,7 +332,7 @@ internal class SelectionValidator(private val host: PictureCommonFragment) {
         }
     }
 
-    /** Toast text by mime type. */
+    
     @SuppressLint("StringFormatInvalid")
     private fun getTipsMsg(context: Context, mimeType: String?, maxSelectNum: Int): String {
         return if (PictureMimeType.isHasVideo(mimeType)) {

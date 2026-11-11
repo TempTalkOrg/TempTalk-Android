@@ -16,22 +16,22 @@ import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Foreground catch-up for a warm process (#1395). A process woken in the background never ran
- * IndexActivity, so the archive loop may not be running and the FCM binding may never have been
- * retried; this re-runs both on every foreground. [MessageArchiveManager.startCheckTask] starts
- * the loop at most once per process and [PushUtil.resyncBind] applies its own cooldown.
- *
- * The gate runs first, because on a cold start the foreground callback fires as soon as
- * MainActivity starts, before its database-health routing and local-token check: the database
- * must have passed this process's health probe and be accessible, and the stored session must
- * pass the same two checks MainActivity applies ([LocalTokenVerifier.isLocalTokenValid] and
- * [needsIdentityKeyRelogin]). A gate that fails skips everything and changes no state. When the
- * probe has not finished yet the gate waits for it, bounded, then checks once more.
- *
- * Runs outside the Application's foreground/background mutex, so a slow task never delays
- * `onBackground`.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 @Singleton
 class WarmProcessResync @Inject constructor(
     private val userManager: UserManager,
@@ -74,7 +74,7 @@ class WarmProcessResync @Inject constructor(
             !needsIdentityKeyRelogin(user)
     }
 
-    // One task's failure never skips the next; cancellation still propagates.
+    
     private suspend fun runTask(name: String, task: suspend () -> ResyncResult) {
         try {
             when (task()) {

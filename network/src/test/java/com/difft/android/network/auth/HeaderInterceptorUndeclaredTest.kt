@@ -16,16 +16,16 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/**
- * [HeaderInterceptor]'s fail-safe path: a request carrying no `Invocation` tag, and therefore no
- * [Auth] declaration, keeps the pre-declaration rule — a header already present wins, absent means
- * implicit Basic — except that a token header is now always the current stored token rather than
- * the caller's possibly stale or empty copy. The `AuthStyleMissing` lint rule keeps every Retrofit
- * endpoint out of this path; only a request built outside Retrofit can reach it (issue #1231).
- *
- * Mocked `Interceptor.Chain`, following `ProxyHostInterceptorTest`; Robolectric because the
- * interceptor reads the `application` global.
- */
+
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class)
 class HeaderInterceptorUndeclaredTest {
@@ -44,7 +44,7 @@ class HeaderInterceptorUndeclaredTest {
         authProvider = provider,
         tokenProvider = lazyOf<AuthTokenProvider>(tokenProvider),
         handleRejection = true,
-        // The declaration is exactly what is missing here, so the debug guard has to be off.
+        
         failFastOnMissingDeclaration = false,
     )
 
@@ -53,7 +53,7 @@ class HeaderInterceptorUndeclaredTest {
             authorization?.let { header("Authorization", it) }
         }.build()
 
-    // T10 — a header-less, undeclared request still gets the implicit Basic credential.
+    
     @Test
     fun `header-less request gets basic and never consults the token provider`() {
         val tokens = FakeAuthTokenProvider(token = JWT)
@@ -65,7 +65,7 @@ class HeaderInterceptorUndeclaredTest {
         assertEquals(0, tokens.currentCalls)
     }
 
-    // T11 — a caller-supplied JWT is replaced by the current stored one.
+    
     @Test
     fun `caller supplied token is replaced by the current token`() {
         val (chain, sent) = chainOf(request(authorization = "stale-token"), 200)
@@ -75,7 +75,7 @@ class HeaderInterceptorUndeclaredTest {
         assertEquals(JWT, sent.single.headers["Authorization"])
     }
 
-    // T12 — an EMPTY caller-supplied token header is replaced by the provider's token, never sent empty.
+    
     @Test
     fun `empty token header is filled from the provider`() {
         val (chain, sent) = chainOf(request(authorization = ""), 200)
@@ -85,7 +85,7 @@ class HeaderInterceptorUndeclaredTest {
         assertEquals(JWT, sent.single.headers["Authorization"])
     }
 
-    // T13 — no credential at all: no header, and the terminal 401 keeps its caller contract.
+    
     @Test
     fun `no credential sends no header and a 401 becomes NetworkException`() {
         val (chain, sent) = chainOf(request(authorization = ""), 401)
@@ -98,7 +98,7 @@ class HeaderInterceptorUndeclaredTest {
         assertEquals(401, error.errorCode)
     }
 
-    // T14 — a Basic 401 is not refreshable.
+    
     @Test
     fun `a basic 401 is not refreshed`() {
         val tokens = FakeAuthTokenProvider(token = JWT)

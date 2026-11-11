@@ -6,9 +6,9 @@ import android.os.Build
 import com.difft.android.imageeditor.core.Renderer
 import com.difft.android.imageeditor.core.RendererContext
 
-/**
- * TypefaceProvider that provides system bold typeface for image editor text rendering.
- */
+
+
+
 class FontTypefaceProvider : RendererContext.TypefaceProvider {
 
   override fun getSelectedTypeface(context: Context, renderer: Renderer, invalidate: RendererContext.Invalidate): Typeface {

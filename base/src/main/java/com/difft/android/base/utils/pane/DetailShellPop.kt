@@ -3,7 +3,7 @@ package com.difft.android.base.utils.pane
 import android.app.Activity
 import android.content.Intent
 
-/** Result chain for participating detail shells; unrelated parent Activities stop it (#1457). */
+
 object DetailShellPop {
     const val RESULT_POP_MORE = 0x504f50
     const val EXTRA_REMAINING = "detail_shell_remaining"
@@ -23,7 +23,7 @@ object DetailShellPop {
 
     fun finish(activity: Activity, count: Int): Boolean {
         if (count <= 0) return false
-        // Only a participating shell can close a parent, using the identity of its own launch.
+        
         val origin = (activity as? DetailShellActivity)?.inheritedShellRequest
         if (count > 1 && origin != null) {
             activity.setResult(RESULT_POP_MORE, origin.writeTo(Intent().putExtra(EXTRA_REMAINING, count - 1)))

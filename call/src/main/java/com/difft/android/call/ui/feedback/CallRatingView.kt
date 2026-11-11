@@ -133,7 +133,7 @@ internal fun CallRatingView(
             }
         }
 
-        // A low score (1-2 stars) asks what went wrong before submitting.
+        
         CallFeedbackActions(
             onCancel = onDismiss,
             submitEnabled = rating > 0,

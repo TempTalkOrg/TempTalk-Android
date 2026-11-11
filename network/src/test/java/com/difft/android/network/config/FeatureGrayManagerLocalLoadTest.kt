@@ -21,12 +21,12 @@ import org.robolectric.annotation.Config
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/**
- * [FeatureGrayManager]'s first read loads the persisted gray map itself (#1395): a process woken
- * for an incoming call reads `quic` before IndexActivity ever runs [FeatureGrayManager.init].
- * Server values already in the cache win over the persisted ones; a corrupt map reads as off;
- * with no user yet the load waits until one exists. Robolectric for the real `org.json`.
- */
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [33])
 class FeatureGrayManagerLocalLoadTest {
@@ -73,7 +73,7 @@ class FeatureGrayManagerLocalLoadTest {
         val read = async { FeatureGrayManager.isEnabled(FeatureGrayManager.FEATURE_GRAY_CALL_QUICK) }
         FeatureGrayManager.init()
         read.await()
-        // A later persisted change is not reloaded: the cache holds the full server map now.
+        
         userManager.setUserData(userManager.getUserData()!!.copy(grayMapJson = """{"quic":true}"""), commit = false)
 
         assertFalse(FeatureGrayManager.isEnabled(FeatureGrayManager.FEATURE_GRAY_CALL_QUICK))

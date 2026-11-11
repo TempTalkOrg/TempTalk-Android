@@ -31,22 +31,7 @@ import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Call-message handler.
- *
- * Entry point for all `Calling`, `Joined`, `Cancel`, `Reject` and `Hangup`
- * messages received over the WebSocket. This class keeps only:
- *
- * - Injected dependencies (exposed as `internal` so that extension files in
- *   this package can access them).
- * - The top-level dispatch ([handleCallMessage], [handleCallEndNotification]).
- * - Small helpers shared between more than one message type.
- *
- * The per-message logic lives in:
- * - `CallMessageCallingProcessor.kt` — `Calling` pipeline + [CallInfo].
- * - `CallMessageTextHelper.kt` — text-message generation.
- * - `CallMessageActionProcessor.kt` — `Joined`/`Cancel`/`Reject`/`Hangup`.
- */
+
 @Singleton
 class CallMessageHandler @Inject constructor(
     @param:ChativeHttpClientModule.Call
@@ -59,7 +44,7 @@ class CallMessageHandler @Inject constructor(
     internal val groupRepo: GroupRepo,
     internal val dbRoomStore: DBRoomStore,
     internal val criticalAlertManager: CriticalAlertManager,
-    // Lazy: CallSessionCommands → holder → session factory → LCallToChatController → this class.
+    
     private val callSessionCommands: Lazy<CallSessionCommands>,
     internal val messagingGate: MessagingGate,
 ) {
@@ -75,12 +60,12 @@ class CallMessageHandler @Inject constructor(
         internal const val RESPONSE_STATUS_SUCCESS = 0
     }
 
-    /**
-     * Top-level dispatch for an incoming call message.
-     *
-     * @param admission the envelope's open receive ticket; the asynchronous `Calling` and `Joined`
-     *   work retains its own ticket from it until its database writes are done (#1382).
-     */
+    
+
+
+
+
+
     fun handleCallMessage(message: SignalServiceDataClass, admission: MessagingTicket, fromServerPush: Boolean = false) {
         val envelope = message.signalServiceEnvelope
         val content = message.signalServiceContent?.callMessage
@@ -103,13 +88,13 @@ class CallMessageHandler @Inject constructor(
         }
     }
 
-    /**
-     * Handle the server-sent "call ended" notification.
-     */
+    
+
+
     fun handleCallEndNotification(roomId: String) {
         if (roomId.isEmpty()) return
 
-        // #1387: the call is over, so its critical alerts stop presenting.
+        
         criticalAlertManager.dismissForRoom(roomId)
 
         callDataManager.removeCallData(roomId)
@@ -122,12 +107,12 @@ class CallMessageHandler @Inject constructor(
         }
     }
 
-    // region shared helpers
+    
 
-    /**
-     * Cancel the incoming-call notification and either signal the action to
-     * the incoming-call page or stop the incoming-call service.
-     */
+    
+
+
+
     internal fun cancelNotificationAndHandleService(
         roomId: String,
         actionType: CallActionType,
@@ -142,11 +127,11 @@ class CallMessageHandler @Inject constructor(
         }
     }
 
-    /** A remote end for the call this device is in: goes straight to the live call session. */
+    
     internal fun endOngoingCall(actionType: CallActionType, roomId: String) =
         callSessionCommands.get().onRemoteControl(actionType, roomId)
 
-    /** Signal for the incoming-call page only. */
+    
     internal fun updateControlMessage(actionType: CallActionType, roomId: String) {
         val controlMessage = OnGoingCallStateManager.ControlMessage(
             actionType = actionType,
@@ -161,7 +146,7 @@ class CallMessageHandler @Inject constructor(
             val members = resp.data?.members.orEmpty()
             members.any { it.uid == userId }
         } catch (e: CancellationException) {
-            // Preserve structured concurrency — never swallow coroutine cancellation.
+            
             throw e
         } catch (e: Exception) {
             L.e { "[Call] CallMessageHandler checkUserIsInGroup error: ${e.stackTraceToString()}" }
@@ -173,7 +158,7 @@ class CallMessageHandler @Inject constructor(
         return try {
             callToChatController.getSingleGroupInfo(conversationId)?.name
         } catch (e: CancellationException) {
-            // Preserve structured concurrency — never swallow coroutine cancellation.
+            
             throw e
         } catch (e: Exception) {
             L.e { "[Call] CallMessageHandler getGroupNameSafely error: ${e.stackTraceToString()}" }
@@ -181,12 +166,12 @@ class CallMessageHandler @Inject constructor(
         }
     }
 
-    /**
-     * Incoming-call gate: only surface a notification or activity when the
-     * user's other device hasn't joined, the message didn't originate from
-     * the current user, no incoming-call notification is already being shown
-     * for this room, and no ongoing call with the same roomId exists.
-     */
+    
+
+
+
+
+
     internal fun checkIfShowIncomingCall(
         anotherDeviceJoined: Boolean,
         msgSenderId: String,
@@ -198,12 +183,12 @@ class CallMessageHandler @Inject constructor(
                 onGoingCallStateManager.getCurrentRoomId() != callData.roomId
     }
 
-    /**
-     * Rings (or shows the full-screen page) for [callData]. A group call that arrived over the socket
-     * first passes the local notify policy (mute sub-options, focus); the call data is already recorded
-     * by then, so a suppressed call stays joinable from the list. [fromServerPush] calls were judged by
-     * the server and are not re-judged.
-     */
+    
+
+
+
+
+
     internal suspend fun showIncomingNotificationOrActivity(callData: CallData, fromServerPush: Boolean) {
         if (!fromServerPush && callData.type == CallType.GROUP.type) {
             val gid = callData.conversation
@@ -216,8 +201,8 @@ class CallMessageHandler @Inject constructor(
     }
 
     private suspend fun presentIncomingCall(callData: CallData) = withContext(Dispatchers.Main) {
-        // No ringing while messaging is paused for a migration (#1382), also for a call admitted
-        // just before the pause or replayed by the owner's drain; its chat record is still stored.
+        
+        
         if (!messagingGate.isOpen) {
             L.i { "[Call] event=incoming_ring_skipped reason=messaging_paused roomId=${callData.roomId}" }
             return@withContext
@@ -233,5 +218,5 @@ class CallMessageHandler @Inject constructor(
         LCallManager.startIncomingCallService(intentNotify)
     }
 
-    // endregion
+    
 }

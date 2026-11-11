@@ -20,12 +20,13 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
@@ -53,36 +54,39 @@ import io.livekit.android.room.track.Track
 import kotlin.math.min
 import kotlin.math.roundToInt
 
-/** Video fades in on its first frame, the avatar on camera off (guide §5.1). */
+
 private const val CONTENT_FADE_MS = 200
 
-/** Card corner for grid, floating window and "+N" cards; main, solo and share are square (guide §5.1). */
-private val CARD_RADIUS = 12.dp
 
-/** Avatar diameter: the card's short side × 0.46, kept within 48–120dp (guide §5.1). */
+
+
+
+private val CARD_RADIUS = CARD_RADIUS_DP.dp
+
+
 private const val AVATAR_SHORT_SIDE_RATIO = 0.46f
 private const val AVATAR_MIN_DP = 48f
 private const val AVATAR_MAX_DP = 120f
 
-/**
- * The floating window's drag: [clamp] keeps an offset inside the stage, [onRelease] drops it where
- * it was let go, [onCancel] returns it to its corner.
- */
+
+
+
+
 internal class PipDrag(val clamp: (Offset) -> Offset, val onRelease: (Offset) -> Unit, val onCancel: (Offset) -> Unit)
 
-/** How one [CallTile] is drawn this frame; everything else about the tile stays put across roles. */
+
 internal data class CallTileStyle(
     val role: TileRole,
     val contentMode: ContentMode?,
-    /** The card's size, for the avatar. */
+    
     val size: DpSize,
-    /** Picture in picture: kept composed but not shown, its video paused. */
+    
     val hidden: Boolean = false,
-    /** Picture in picture: the one tile shown, with no decorations (the window draws its own). */
+    
     val pipFocus: Boolean = false,
-    /** Its letterbox bands are thick enough for the ambient treatment ([ambientBandOf]). */
+    
     val ambient: Boolean = false,
-    /** Where its edge colours go, for the stage to draw the 1on1 main view's bands; stable per tile. */
+    
     val ambientSlot: AmbientSlot? = null,
 )
 
@@ -95,17 +99,22 @@ private fun cardShape(style: CallTileStyle): Shape = when {
     else -> RectangleShape
 }
 
-/**
- * One participant's card in every role (guide §5.1–5.2). The camera renderer sits at the same place
- * in this tree whatever the role, so a tile that moves between grid, main, floating window and
- * pages keeps it. The renderer is mounted whenever the tile is, so a camera's first frame arrives
- * even while the plan still shows the avatar ([CallTileStyle.contentMode] null); the avatar stays
- * on top until the plan shows video and the renderer has drawn.
- *
- * Role [TileRole.PIP] drags through [pipDrag] (clamped to the stage, released or cancelled with the
- * drag offset in px) and swaps
- * on a tap; [TileRole.GRID] toggles the controls on a tap and opens the mute menu on a long press.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 @Composable
 internal fun CallTile(
     viewModel: LCallViewModel,
@@ -122,7 +131,7 @@ internal fun CallTile(
     val coroutineScope = rememberCoroutineScope()
     val firstFrameGate = remember { FirstFrameGate() }
     val cameraOn = rememberCameraVideoOn(participant)
-    // A muted renderer keeps its last image: frames count only while the camera is on.
+    
     LaunchedEffect(cameraOn) { firstFrameGate.setAccepting(cameraOn) }
 
     val showVideo = style.contentMode != null && firstFrameGate.hasFrame
@@ -135,15 +144,19 @@ internal fun CallTile(
     val ambient = rememberTileAmbient(style, cameraOn, showVideo)
 
     val shape = cardShape(style)
-    // Solo and 1v1 main fill the window: nothing is drawn over the video, and the camera-off
-    // avatar column carries the name and mic (guide §5.1, #1366).
+    val cornerState = remember { TileCornerState() }
+    val screenCorners = LocalCallScreenCorners.current.takeIf { takesScreenCorners(style.role, style.pipFocus, style.hidden) }
+    val corners = TileCorners(shape, cornerState, screenCorners)
+    val density = LocalDensity.current.density
+    
+    
     val fullWindow = (style.role == TileRole.SOLO || style.role == TileRole.MAIN) && !style.pipFocus
     val displayName = rememberParticipantDisplayName(participant, displayInfo.name)
     val menu = remember { TileMuteMenuState() }
     val menuAvailable = style.role == TileRole.GRID && !style.hidden && !style.pipFocus &&
         participant.isMuteMenuTarget(muteOtherEnabled)
     val fit = style.contentMode == ContentMode.FIT
-    // A menu left open when the card loses it (picture in picture) must not come back with it.
+    
     LaunchedEffect(menuAvailable) { if (!menuAvailable) menu.close() }
 
     Box(
@@ -158,28 +171,26 @@ internal fun CallTile(
                 },
             )
             .tileGestures(viewModel, style, menuAvailable, menu, participant)
+            
+            .onGloballyPositioned { cornerState.place(it, density) }
             .graphicsLayer { alpha = if (style.hidden) 0f else 1f }
-            .clip(shape)
+            .cardClip(corners)
             .background(DifftTheme.colors.background)
             .cardAmbient(ambient.cardPaint, DifftTheme.colors.background),
     ) {
-        // The renderer first and unconditionally, so its place in the tree never changes.
+        
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             VideoItemTrackSelector(
                 coroutineScope = coroutineScope,
                 room = room,
                 participant = participant,
                 sourceType = Track.Source.CAMERA,
-                // Unsized on purpose: under loose constraints FIT shrinks the renderer to the video,
-                // and the card's own background, or its ambient bands, show around it.
+                
+                
                 scaleType = if (fit) ScaleType.FitInside else ScaleType.Fill,
-                // A TextureView moves and resizes with the card and can sit under other cards.
+                
                 viewType = ViewType.Texture,
-                // Pinch zoom on the 1on1 main view while it shows the whole video.
-                draggable = style.role == TileRole.MAIN && fit && !style.pipFocus,
                 reconnectCount = reconnectCount,
-                // The plan size, not the measured one, which changes every frame of a move.
-                zoomResetKey = Triple(style.size, style.role, style.pipFocus),
                 firstFrameGate = firstFrameGate,
                 hidden = style.hidden,
                 onEdgeColors = ambient.onEdgeColors,
@@ -213,7 +224,7 @@ internal fun CallTile(
                 uid = uid,
                 displayName = displayName,
                 participantCount = participantCount,
-                shape = shape,
+                corners = corners,
                 muteOtherEnabled = muteOtherEnabled,
                 menu = menu.takeIf { menuAvailable },
             )
@@ -222,11 +233,11 @@ internal fun CallTile(
     }
 }
 
-/**
- * The floating window's drag and tap: it follows the finger in window coordinates (never mirrored
- * in RTL), kept inside the stage by [PipDrag.clamp]; let go it is dropped, cancelled it goes back.
- * A tap calls [onTap].
- */
+
+
+
+
+
 @Composable
 internal fun Modifier.floatingWindowDrag(pipDrag: PipDrag, onTap: () -> Unit): Modifier {
     var drag by remember { mutableStateOf(Offset.Zero) }
@@ -248,7 +259,7 @@ internal fun Modifier.floatingWindowDrag(pipDrag: PipDrag, onTap: () -> Unit): M
         }
 }
 
-/** A grid card's gestures: a tap toggles the controls, a long press opens the mute menu. */
+
 private fun Modifier.tileGestures(
     viewModel: LCallViewModel,
     style: CallTileStyle,
@@ -261,7 +272,7 @@ private fun Modifier.tileGestures(
         TileRole.GRID -> this.pointerInput(menuAvailable) {
             detectTapGestures(
                 onTap = { viewModel.callUiController.toggleOverlays() },
-                // Long press anywhere on the card opens the same menu as the pill; it never mutes directly.
+                
                 onLongPress = { touch ->
                     if (menuAvailable && participant.isMicrophoneEnabled) menu.open(TileMenuAnchor.CARD, touch)
                 },

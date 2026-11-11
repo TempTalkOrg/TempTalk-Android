@@ -35,14 +35,14 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 
-/**
- * [JobRunner] with real send jobs and a real messaging gate (#1382): a refused send is deferred
- * without consuming an attempt, and an admitted send holds its ticket until its result is recorded,
- * so the pause's quiescence wait covers the whole send.
- *
- * Like [JobRunnerTest], the runner runs on real IO threads and the management dispatcher is
- * unconfined, so the controller callbacks run inline on the runner's thread.
- */
+
+
+
+
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class JobRunnerSendAdmissionTest {
 
@@ -72,7 +72,7 @@ class JobRunnerSendAdmissionTest {
     @Test
     fun `a refused send is deferred on every run and never fails on its last attempt`() = runBlocking {
         pause.open().pauseMessaging()
-        // The last of three attempts: a retry here would be converted to a failure.
+        
         val job = ProbeSendJob(pause.gate, maxAttempts = 3).apply { runAttempt = 2 }
         val parked = serve(List(DEFERRALS) { job })
 
@@ -149,14 +149,14 @@ class JobRunnerSendAdmissionTest {
         assertTrue(pause.gate.closeAndAwaitIdle(TestMessagingPause.OWNER, 1.seconds), "the refusal's ticket must be closed")
     }
 
-    // -- Helpers --
+    
 
     private fun launchRunner() {
         JobRunner(application, 1, jobController, JobPredicate.NONE, UnconfinedTestDispatcher())
             .launchIn(runnerScope)
     }
 
-    /** Hands out [jobs] one per pull, then parks the runner and completes the returned signal. */
+    
     private fun serve(jobs: List<Job>): CompletableDeferred<Unit> {
         val queue = ArrayDeque(jobs)
         val parked = CompletableDeferred<Unit>()

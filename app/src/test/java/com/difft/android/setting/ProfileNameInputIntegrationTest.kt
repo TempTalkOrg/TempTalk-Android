@@ -54,11 +54,11 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/**
- * The profile name on the shared input: typing, the field's ✕ and names set from code keep the
- * draft and the Done button in step; IME Done obeys the button's eligibility; the page alone
- * restores the name. Real fragment, view models and saver wiring; only transport is mocked.
- */
+
+
+
+
+
 @HiltAndroidTest
 @RunWith(RobolectricTestRunner::class)
 @Config(application = FoldableTestApplication_Application::class, sdk = [34])
@@ -114,7 +114,7 @@ class ProfileNameInputIntegrationTest {
         every { RandomNameUtil.getRandomName(any()) } returns "Generated"
     }
 
-    /** The register flow: the page is the shell's own content. */
+    
     private fun registerPage(): ContactProfileSettingFragment {
         prepareGeneratedProfile()
         val page = ContactProfileSettingFragment.newInstance(ContactProfileSettingFragment.FROM_REGISTER)
@@ -123,7 +123,7 @@ class ProfileNameInputIntegrationTest {
         return page
     }
 
-    /** The Me flow: the page sits in a detail stack. */
+    
     private fun contactPage(): ContactProfileSettingFragment {
         val page = ContactProfileSettingFragment.newInstance(ContactProfileSettingFragment.FROM_CONTACT)
         val host = SecurityFlowHost()
@@ -194,8 +194,8 @@ class ProfileNameInputIntegrationTest {
         assertTrue(restored.done().isEnabled)
     }
 
-    // A stale empty entry for the field's id, seeded apart from the page's own save path, must not
-    // replace a newer draft nor feed an empty name back to the editor.
+    
+    
     @Test fun `a stale hierarchy entry for the field neither shows nor dispatches`() {
         val page = contactPage()
         type("Newer")

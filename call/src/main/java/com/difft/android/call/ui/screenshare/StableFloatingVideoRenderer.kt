@@ -25,21 +25,21 @@ import io.livekit.android.util.flow
 import livekit.org.webrtc.RendererCommon
 import livekit.org.webrtc.VideoSink
 
-/**
- * Stable video renderer for the floating speaker window.
- *
- * Key differences from [com.difft.android.call.ui.VideoItemTrackSelector] + VideoRenderer:
- *
- * 1. **Single TextureViewRenderer**: Created once in [AndroidView.factory], never released until
- *    the composable leaves the tree. Camera toggles only trigger [VideoTrack.removeRenderer] /
- *    [VideoTrack.addRenderer] — no EGL context churn.
- *
- * 2. **Synchronous track binding**: [AndroidView.update] runs on Main thread during recomposition.
- *    Track swaps happen inline — no coroutine dispatch, no race conditions.
- *
- * 3. **Always-visible**: Uses [ScreenShareVisibility] so adaptive streaming never sends
- *    `disabled=true` for this renderer.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 @Composable
 fun StableFloatingVideoRenderer(
     room: Room,
@@ -57,7 +57,7 @@ fun StableFloatingVideoRenderer(
 
     val visibility = remember { ScreenShareVisibility() }
 
-    // Mirror the local front camera like every other self view (VideoItemTrackSelector).
+    
     var mirror by remember { mutableStateOf(false) }
     LaunchedEffect(participant, videoTrack) {
         val localTrack = videoTrack as? LocalVideoTrack

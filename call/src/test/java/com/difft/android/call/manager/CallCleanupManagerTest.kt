@@ -20,14 +20,14 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
-/**
- * The call page's `onDestroy` cleanup ([CallCleanupManager.cleanup]) releases only that page
- * instance: its lifecycle observer, dialogs, back callback, picture-in-picture manager and unlock
- * receiver, on every destroy. The call is the session's: the cleanup cannot reach the presence, the
- * ongoing-call service, the sounds, the participant observation or the app-unlock listener (it is
- * not handed them), and leaves the projection and the incoming page's control message as they are.
- * Row T5-20 (inverted: call-level teardown is the session's).
- */
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [33])
 class CallCleanupManagerTest {

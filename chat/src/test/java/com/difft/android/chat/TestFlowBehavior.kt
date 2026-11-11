@@ -26,12 +26,12 @@ class TestFlowBehavior {
                             println("current value after set 3 is ${stateFlow.value}")
                             stateFlow.value = 6
                             println("current value after set 6 is ${stateFlow.value}")
-                            delay(2000)  // Short delay to ensure emission is collected
+                            delay(2000)  
                             println("set 5")
                             stateFlow.value = 5
                             println("set 3")
                             stateFlow.value = 3
-                            delay(4000)  // Short delay to ensure emission is collected
+                            delay(4000)  
                             stateFlow.value = 4
                         }
                     }
@@ -40,7 +40,7 @@ class TestFlowBehavior {
                     }
                     4 -> {
                         println("Complete")
-                        cancel() // Ends the test when value reaches 4
+                        cancel() 
                     }
                 }
             }
@@ -49,7 +49,7 @@ class TestFlowBehavior {
         yield()
         stateFlow.value = 2
 
-        job.join() // Wait for the job to complete
+        job.join() 
     }
 
     @Test

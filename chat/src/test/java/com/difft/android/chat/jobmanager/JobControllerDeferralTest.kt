@@ -22,11 +22,11 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/**
- * [JobController] under the migration message pause (#1382): a deferred job goes back to the queue
- * with its attempt count unchanged, and the execution hold keeps send jobs from being picked while
- * messaging is not open without blocking other jobs.
- */
+
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class JobControllerDeferralTest {
 
@@ -57,7 +57,7 @@ class JobControllerDeferralTest {
         )
     }
 
-    // -- onDeferred --
+    
 
     @Test
     fun `onDeferred keeps the attempt count and re-serializes the job`() {
@@ -96,7 +96,7 @@ class JobControllerDeferralTest {
         verify(exactly = 0) { jobStorage.updateJobAfterRetry("many", any(), neq(0), any(), any()) }
     }
 
-    // -- Execution hold --
+    
 
     @Test
     fun `while paused a send job is skipped and the next eligible job runs`() = runTest {
@@ -140,7 +140,7 @@ class JobControllerDeferralTest {
         assertEquals("send", picked.id)
     }
 
-    // -- Helpers --
+    
 
     private fun mockJob(id: String, runAttempt: Int = 0): Job {
         val job = mockk<Job>(relaxed = true)

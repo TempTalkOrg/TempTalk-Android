@@ -5,11 +5,11 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
-/**
- * Runs [fetch] with at most one in flight. A [request] that arrives while one runs is not dropped:
- * it is remembered once and a single trailing run starts when the current one finishes, so the
- * state read last is never older than the last trigger.
- */
+
+
+
+
+
 internal class FocusFetchCoalescer(
     private val scope: CoroutineScope,
     private val fetch: suspend () -> Unit,
@@ -37,7 +37,7 @@ internal class FocusFetchCoalescer(
                     } catch (e: Exception) {
                         L.w { "[GroupFocus] fetch failed: ${e.javaClass.simpleName} ${e.message}" }
                     }
-                    // Check and release in one critical section so a request arriving now is never lost.
+                    
                 } while (synchronized(lock) { trailing.also { if (!it) running = false } })
             } catch (e: CancellationException) {
                 synchronized(lock) { running = false }

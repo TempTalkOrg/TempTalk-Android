@@ -28,11 +28,11 @@ abstract class ChatHiltBindsModule {
     @Binds
     abstract fun bindNewMessageEncryptor(newMessageEncryptor: NewMessageEncryptor): INewMessageContentEncryptor
 
-    //Bind ConversationManagerImpl to ConversationManager
+    
     @Binds
     abstract fun bindConversationManager(conversationManagerImpl: ConversationManagerImpl): ConversationManager
 
-    //Bind ChativeWebSocketHealthMonitor to HealthMonitor
+    
     @Binds
     @Singleton
     abstract fun bindWebSocketHealthMonitor(webSocketHealthMonitor: WebSocketHealthMonitor): HealthMonitor
@@ -48,12 +48,12 @@ abstract class ChatHiltBindsModule {
     @Singleton
     abstract fun bindConnectionRefresher(webSocketManager: WebSocketManager): IConnectionRefresher
 
-    //Bind SessionAuthGuard to AuthFailureSink so :network can report 401/403 without seeing :chat
+    
     @Binds
     @Singleton
     abstract fun bindAuthFailureSink(sessionAuthGuard: SessionAuthGuard): AuthFailureSink
 
-    // The migration message pause (:base) drops held sends through the job manager (#1382).
+    
     @Binds
     @Singleton
     abstract fun bindHeldSendJobs(drop: MessagingPauseJobHold.Drop): HeldSendJobs

@@ -18,18 +18,18 @@ import java.lang.ref.WeakReference
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
-/**
- * Field diagnostics for #1454 (a fold that leaves an activity on the other panel's layout for ~40 s).
- * After a panel change it samples what the activity was told (configuration, window, root) next to
- * the panel and main-looper latency, to tell "the platform withheld the configuration or relaunch"
- * from "the main thread stalled". Log-only: it never writes orientation, recreates or reconciles.
- *
- * Every value is read on the main thread and formatted before `L`; androidx.window is touched there too.
- * The one exception is the stall sampler, which reads the main thread's stack from a background coroutine.
- */
+
+
+
+
+
+
+
+
+
 object FoldDiagnostics {
 
-    /** Activity-specific extras appended to each snapshot line. */
+    
     interface Host {
         fun foldDiagExtras(): String
     }
@@ -44,7 +44,7 @@ object FoldDiagnostics {
     @Volatile
     private var latest: FoldDiagSession? = null
 
-    /** Starts a session for [activity] after its host panel changed [from] -> [to]. Main thread. */
+    
     fun onPanelChanged(activity: Activity, display: Display, from: String, to: String) {
         val now = SystemClock.uptimeMillis()
         when (throttle.tryStart(now)) {
@@ -61,10 +61,10 @@ object FoldDiagnostics {
         FOLD_DIAG_OFFSETS_MS.forEach { schedule(session, it) }
     }
 
-    /**
-     * A configuration reached [activity] ([via] `onConfigurationChanged`, or `create` for a relaunch)
-     * while a session is live. [restored]: created from saved state.
-     */
+    
+
+
+
     fun onConfigurationArrived(activity: Activity, via: String, restored: Boolean = false) {
         val session = latest ?: return
         val now = SystemClock.uptimeMillis()
@@ -88,7 +88,7 @@ object FoldDiagnostics {
             ran.set(true)
             runSnapshot(session, offsetMs, planned)
         }, session.token, planned)
-        // Main-looper latency probe: a snapshot still pending a second after its time samples the main stack.
+        
         stallScope.launch {
             delay(planned + STALL_WAIT_MS - SystemClock.uptimeMillis())
             if (!ran.get() && !session.destroyed.get() && session.tryStallLine()) {
@@ -121,7 +121,7 @@ object FoldDiagnostics {
         }
     }
 
-    /** Logs one snapshot line and returns the short sides it read; null when nothing was logged. */
+    
     private fun snapshot(activity: Activity, session: FoldDiagSession, offsetMs: Long, lagMs: Long, display: Display?): OrientationPolicy.ShortSides? {
         if (!session.trySnapshotLine()) return null
         return try {
@@ -150,7 +150,7 @@ object FoldDiagnostics {
             )
             val policy = FoldDiagPolicy(
                 sides = sides,
-                // Logged even where applyTo would return early unchanged.
+                
                 target = OrientationPolicy.targetForDisplayShortSide(sides.resolvedDp),
                 requested = activity.requestedOrientation,
                 multiWindow = activity.isInMultiWindowMode,

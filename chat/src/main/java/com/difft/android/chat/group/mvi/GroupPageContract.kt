@@ -38,7 +38,7 @@ object GroupPageContract {
     }
 
     sealed interface Effect {
-        /** [messageRes] wins over [text]; [messageArg] formats it. Completion is kept in [State.completionPopCount]. */
+        
         data class Message(
             val text: String? = null,
             val accepted: Boolean = false,
@@ -49,7 +49,7 @@ object GroupPageContract {
     }
 }
 
-/** Selection always belongs to the full eligible set, independent of a search filter. */
+
 internal fun selectGroupMember(
     selected: Set<String>, eligible: Set<String>, uid: String, single: Boolean, enabled: Boolean,
 ): Set<String> = when {

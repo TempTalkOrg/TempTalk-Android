@@ -4,16 +4,16 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * #33 (chunking half) — `chunkKeys` is the production splitter `WcdbMessageChildRowLoader` runs
- * every query through. It is asserted directly rather than through the fake loader:
- * `WcdbMessageChildRowLoader` cannot be instantiated on the host JVM (its winq expressions load
- * WCDB's native library), and a fake that re-implemented chunking would only be testing itself.
- *
- * The load-bearing invariant is "chunk by KEY, never by row": every row of one key must stay in a
- * single chunk, otherwise concatenating chunk results reorders the group and breaks the
- * `databaseId ASC` contract the hydrator depends on.
- */
+
+
+
+
+
+
+
+
+
+
 class MessageChildRowChunkingTest {
 
     @Test
@@ -23,7 +23,7 @@ class MessageChildRowChunkingTest {
 
         val rows = chunkKeys(keys) { chunk ->
             chunks += chunk
-            // Two rows per key, so a row-based split would be visible as a chunk of odd size.
+            
             chunk.flatMap { listOf("$it-a", "$it-b") }
         }
 

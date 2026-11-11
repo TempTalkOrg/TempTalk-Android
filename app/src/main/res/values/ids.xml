@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Page container inside each DetailTabHostFragment; stable so child stacks restore. -->
+    
     <item name="detail_tab_stack" type="id" />
-    <!-- Page container inside ListPaneLayerHostFragment; stable so the layer's stack restores. -->
+    
     <item name="list_layer_stack" type="id" />
 </resources>

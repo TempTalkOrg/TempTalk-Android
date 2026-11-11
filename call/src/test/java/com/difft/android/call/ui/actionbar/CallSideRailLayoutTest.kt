@@ -35,16 +35,16 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import kotlin.math.abs
 
-/** dp tolerance for bounds comparisons (px rounding at xhdpi). */
+
 private const val TOLERANCE = 1f
 
-/**
- * Rendered placement of the side rail (#1451) through the production [CallSideRailOverlay] and
- * [CallSideRail]: bottom-end anchoring with the prototype insets, minimize at the top, slot order, RTL mirroring, and
- * that empty rail area does not swallow the root tap that toggles the chrome. Slots are plain
- * tagged boxes (the real controls need a call view model) except End, which is the production
- * [RailGroupEndButton].
- */
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(application = TestScopeApplication::class, sdk = [30], qualifiers = "w860dp-h608dp-land-xhdpi")
@@ -53,7 +53,7 @@ class CallSideRailLayoutTest {
     @get:Rule
     val composeTestRule = createComposeRule()
 
-    /** Stands in for the status-bar band the production rail reserves. */
+    
     private val topInset = 24.dp
 
     private val rail = SideRail(topInset = topInset)
@@ -87,7 +87,7 @@ class CallSideRailLayoutTest {
         composeTestRule.setContent {
             DifftTheme(darkTheme = true) {
                 CompositionLocalProvider(LocalLayoutDirection provides direction) {
-                    // Stands in for the call root, whose tap toggles the chrome.
+                    
                     Box(Modifier.fillMaxSize().clickable { rootClicks.intValue++ }) {
                         CallSideRailOverlay(
                             rail = rail,
@@ -142,7 +142,7 @@ class CallSideRailLayoutTest {
         assertDp("minimize size", CallSideRailSpec.BUTTON_DP.dp, minimize.bottom - minimize.top)
         assertDp("minimize column", end.left, minimize.left)
         assertTrue("gap to the stack", mic.top - minimize.bottom >= CallSideRailSpec.MIN_MINIMIZE_GAP_DP.dp - TOLERANCE.dp)
-        // The stack stays bottom-anchored; the free space sits between minimize and the stack.
+        
         assertDp("End bottom", root.bottom - CallSideRailSpec.BOTTOM_INSET_DP.dp, end.bottom)
 
         composeTestRule.onNodeWithTag("call_rail_zoom_out").performClick()
@@ -199,9 +199,9 @@ class CallSideRailLayoutTest {
         val root = rootBounds()
 
         with(composeTestRule.density) {
-            // The 12dp gap between More and End.
+            
             val gap = Offset(((more.left + more.right) / 2).toPx(), (more.bottom + 6.dp).toPx())
-            // The end inset beside End.
+            
             val inset = Offset((root.right - 12.dp).toPx(), ((end.top + end.bottom) / 2).toPx())
             composeTestRule.onRoot().performTouchInput { click(gap) }
             composeTestRule.onRoot().performTouchInput { click(inset) }

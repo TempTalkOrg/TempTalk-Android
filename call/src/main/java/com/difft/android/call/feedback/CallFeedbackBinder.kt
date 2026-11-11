@@ -5,13 +5,13 @@ import com.difft.android.call.manager.CallFeedbackManager
 import com.difft.android.call.manager.TimerManager
 import com.difft.android.call.util.IdUtil
 
-/**
- * Holds feedback-related session state (sid/identity/network poor flag) and
- * decides whether the feedback view should be triggered on call teardown.
- *
- * Centralizing this removes three mutable fields + a helper pair from
- * `LCallViewModel`.
- */
+
+
+
+
+
+
+
 class CallFeedbackBinder(
     private val timerManager: TimerManager,
     private val callFeedbackManager: CallFeedbackManager,

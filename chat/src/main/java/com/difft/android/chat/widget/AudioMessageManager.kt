@@ -35,7 +35,7 @@ object AudioMessageManager {
     const val PLAY_STATUS_PLAYED = 0
     const val PLAY_STATUS_NOT_PLAY = 1
 
-    // Available playback speeds
+    
     val PLAYBACK_SPEEDS = listOf(1.0f, 1.5f, 2.0f)
 
     private val _playStatusUpdate = MutableSharedFlow<Pair<TextChatMessage, Int>>(replay = 0, extraBufferCapacity = 64)
@@ -48,13 +48,13 @@ object AudioMessageManager {
     private val _progressUpdate = MutableSharedFlow<Pair<TextChatMessage, Float>>(replay = 0, extraBufferCapacity = 64)
     val progressUpdate: SharedFlow<Pair<TextChatMessage, Float>> = _progressUpdate
 
-    // Playback speed state flow - for UI observation
+    
     private val _playbackSpeed = MutableStateFlow(1.0f)
     val playbackSpeed: StateFlow<Float> = _playbackSpeed.asStateFlow()
 
     private var mediaPlayer: MediaPlayer? = null
     var currentPlayingMessage: TextChatMessage? = null
-    var isPaused: Boolean = false // 标记是否暂停
+    var isPaused: Boolean = false
     private var currentPlayPosition: Int = 0
     var currentProgress: Float = 0f
     private var currentFilePath: String? = null
@@ -62,12 +62,12 @@ object AudioMessageManager {
     private var playJob: kotlinx.coroutines.Job? = null
     private var prepareTimeoutJob: kotlinx.coroutines.Job? = null
 
-    /**
-     * Built-in output types. Anything outside this set counts as an external output, so the set is
-     * a whitelist on purpose: unknown or newly added external types (HDMI, DOCK, BLE broadcast)
-     * fall on the safe side and leave the platform route alone. A blacklist would wrongly force
-     * the earpiece for any type it does not enumerate.
-     */
+    
+
+
+
+
+
     private val BUILTIN_OUTPUT_TYPES: Set<Int> = buildSet {
         add(AudioDeviceInfo.TYPE_BUILTIN_EARPIECE)
         add(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER)
@@ -77,11 +77,11 @@ object AudioMessageManager {
         }
     }
 
-    /**
-     * Read-only device enumeration only. Process-global communication state (mode,
-     * communication device, speakerphone) belongs exclusively to the call module; writing it from
-     * here tears down in-call Bluetooth routing.
-     */
+    
+
+
+
+
     private val audioManager: AudioManager
         get() = ServiceUtil.getAudioManager(application)
 
@@ -91,27 +91,27 @@ object AudioMessageManager {
         })
     }
 
-    /**
-     * Target output for the voice-message player, or null to fall back to platform default
-     * routing. The earpiece is only forced when no external output is attached: with a headset
-     * connected, "phone at ear" carries no routing intent.
-     */
+    
+
+
+
+
     internal fun preferredOutputType(isNear: Boolean, availableTypes: Set<Int>): Int? {
         if (!isNear) return null
         if (availableTypes.any { it !in BUILTIN_OUTPUT_TYPES }) return null
         return AudioDeviceInfo.TYPE_BUILTIN_EARPIECE.takeIf { it in availableTypes }
     }
 
-    /**
-     * Routes the voice-message player only, through player-scoped device affinity. Never touches
-     * process-global communication state. A rejected or failed apply degrades to the platform
-     * default route; it must not fall back to writing global state.
-     *
-     * `MediaPlayer#setPreferredDevice`/`#getRoutedDevice` require API 28 (minSdk is 26): on 26/27
-     * this is a deliberate no-op, not a fallback to global `AudioManager` writes — voice-message
-     * playback simply keeps the platform's default route and the "phone at ear -> earpiece"
-     * sub-feature is unavailable on those two versions.
-     */
+    
+
+
+
+
+
+
+
+
+
     internal fun applyProximityRoute(isNear: Boolean) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return
         val player = mediaPlayer ?: return
@@ -119,22 +119,22 @@ object AudioMessageManager {
             val outputs = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
             val targetType = preferredOutputType(isNear, outputs.mapTo(mutableSetOf()) { it.type })
             val target = targetType?.let { type -> outputs.firstOrNull { it.type == type } }
-            val accepted = player.setPreferredDevice(target) // null reverts to default routing
+            val accepted = player.setPreferredDevice(target) 
             if (accepted) {
                 L.i { "[AudioMessageManager] voice route applied isNear=$isNear target=${targetType ?: "default"} routed=${player.routedDevice?.type}" }
             } else {
                 L.w { "[AudioMessageManager] voice route rejected isNear=$isNear target=${targetType ?: "default"} routed=${player.routedDevice?.type}" }
             }
-            // Screen off travels with the earpiece decision: listening at the ear means the face is
-            // on the chat screen. Any other outcome (far, headset attached, no earpiece, or the
-            // platform rejecting the earpiece so audio stays on the speaker) lets go.
+            
+            
+            
             VoiceMessageProximityLock.requestHeld(held = accepted && targetType == AudioDeviceInfo.TYPE_BUILTIN_EARPIECE)
         } catch (e: Exception) {
             L.e { "[AudioMessageManager] applyProximityRoute failed isNear=$isNear: ${e.stackTraceToString()}" }
         }
     }
 
-    /** Sensor and screen-off lock start with playback and stop with it, always together. */
+    
     private fun startProximityTracking() {
         VoiceMessageProximityLock.enable()
         ProximitySensorManager.start()
@@ -145,20 +145,20 @@ object AudioMessageManager {
         VoiceMessageProximityLock.disable()
     }
 
-    /**
-     * Set the playback speed and apply it immediately if audio is playing
-     * @param speed The playback speed (1.0f, 1.5f, or 2.0f)
-     */
+    
+
+
+
     fun setPlaybackSpeed(speed: Float) {
         if (speed !in PLAYBACK_SPEEDS) return
         _playbackSpeed.value = speed
         applyPlaybackSpeed()
     }
 
-    /**
-     * Cycle to the next playback speed (1.0 -> 1.5 -> 2.0 -> 1.0)
-     * @return The new speed value
-     */
+    
+
+
+
     fun cyclePlaybackSpeed(): Float {
         val currentIndex = PLAYBACK_SPEEDS.indexOf(_playbackSpeed.value)
         val nextIndex = (currentIndex + 1) % PLAYBACK_SPEEDS.size
@@ -167,9 +167,9 @@ object AudioMessageManager {
         return newSpeed
     }
 
-    /**
-     * Apply the current playback speed to the media player
-     */
+    
+
+
     private fun applyPlaybackSpeed() {
         try {
             mediaPlayer?.let { player ->
@@ -183,7 +183,6 @@ object AudioMessageManager {
         }
     }
 
-    // 初始化 MediaPlayer，并准备播放
     private fun initMediaPlayer() {
         mediaPlayer = MediaPlayer().apply {
             setAudioAttributes(
@@ -195,7 +194,6 @@ object AudioMessageManager {
         }
     }
 
-    // 播放或暂停指定的音频文件
     fun playOrPauseAudio(message: TextChatMessage, filePath: String) {
         playJob?.cancel()
         playJob = appScope.launch(Dispatchers.IO) {
@@ -218,20 +216,17 @@ object AudioMessageManager {
                     }
 
                     if (currentPlayingMessage == null || currentPlayingMessage?.id != message.id) {
-                        // 如果当前没有播放任何音频或播放的是其他音频文件，则重新开始播放
                         currentPlayingMessage?.let {
-                            // 如果有正在播放的音频，则发出完成事件
                             emitPlayStatusUpdate(it, PLAY_STATUS_PAUSED)
-                            // The previous session's earpiece pin dies with reset(); its proximity
-                            // lock must not outlive it. The new session re-registers in onPrepared
-                            // and the redelivered reading re-pins and re-acquires if still at the ear.
+                            
+                            
+                            
                             stopProximityTracking()
                         }
                         currentPlayingMessage = message
                         currentFilePath = filePath
                         startPlaying(message, filePath, decryptedBytes)
                     } else {
-                        // 如果是同一个音频，则暂停或恢复播放
                         if (mediaPlayer?.isPlaying == true) {
                             pauseAudio()
                         } else {
@@ -246,7 +241,6 @@ object AudioMessageManager {
         }
     }
 
-    // 开始播放音频
     private fun startPlaying(message: TextChatMessage, filePath: String, decryptedBytes: ByteArray? = null) {
         if (decryptedBytes == null && (filePath.isEmpty() || !File(filePath).exists())) {
             L.e { "[AudioMessageManager] startPlaying: file not exists messageId=${message.id}" }
@@ -260,15 +254,15 @@ object AudioMessageManager {
             } else {
                 mediaPlayer?.reset()
             }
+
             
-            // 设置准备超时，防止无限等待
             prepareTimeoutJob?.cancel()
             prepareTimeoutJob = appScope.launch {
-                delay(10000) // 10秒超时
+                delay(10000)
                 L.w { "[AudioMessageManager] prepare timeout for message: ${message.id}" }
                 releasePlayer()
             }
-            
+
             mediaPlayer?.apply {
                 if (decryptedBytes != null) {
                     setDataSource(ByteArrayMediaDataSource(decryptedBytes))
@@ -279,17 +273,17 @@ object AudioMessageManager {
                     onPlayComplete()
                 }
                 setOnPreparedListener { player ->
-                    prepareTimeoutJob?.cancel() // 取消超时任务
+                    prepareTimeoutJob?.cancel()
                     try {
-                        // Apply playback speed before starting
+                        
                         val params = PlaybackParams().setSpeed(_playbackSpeed.value)
                         player.playbackParams = params
-                        player.start() // 开始播放
+                        player.start()
                         emitPlayStatusUpdate(message, PLAY_STATUS_START)
-                        startUpdatingProgress() // 开始更新进度
+                        startUpdatingProgress()
                         isPaused = false
 
-                        // Start proximity sensor when audio starts playing
+                        
                         startProximityTracking()
                     } catch (e: Exception) {
                         L.e { "[AudioMessageManager] startPlaying onPrepared Exception: ${e.stackTraceToString()}" }
@@ -297,31 +291,30 @@ object AudioMessageManager {
                     }
                 }
                 setOnErrorListener { _, what, extra ->
-                    prepareTimeoutJob?.cancel() // 取消超时任务
+                    prepareTimeoutJob?.cancel()
                     L.e { "[AudioMessageManager] MediaPlayer prepare error: $what, $extra" }
                     releasePlayer()
                     true
                 }
-                prepareAsync() // 异步准备播放器，避免ANR
+                prepareAsync() 
             }
         } catch (e: Exception) {
-            prepareTimeoutJob?.cancel() // 取消超时任务
+            prepareTimeoutJob?.cancel()
             L.e { "[AudioMessageManager] startPlaying Exception: ${e.stackTraceToString()}" }
             releasePlayer()
         }
     }
 
-    // 暂停音频
     private fun pauseAudio() {
         try {
             mediaPlayer?.apply {
                 if (isPlaying) {
                     pause()
                     isPaused = true
-                    currentPlayPosition = currentPosition // 保存当前播放进度
+                    currentPlayPosition = currentPosition
                     emitPlayStatusUpdate(currentPlayingMessage!!, PLAY_STATUS_PAUSED)
 
-                    // No playback to route while paused; resumeAudio() restarts the sensor.
+                    
                     stopProximityTracking()
                 }
             }
@@ -331,21 +324,20 @@ object AudioMessageManager {
         }
     }
 
-    // 恢复播放音频
     private fun resumeAudio() {
         try {
             mediaPlayer?.apply {
                 if (isPaused) {
-                    seekTo(currentPlayPosition) // 恢复到暂停时的进度
-                    // Apply playback speed before resuming
+                    seekTo(currentPlayPosition)
+                    
                     val params = PlaybackParams().setSpeed(_playbackSpeed.value)
                     playbackParams = params
                     start()
                     isPaused = false
                     emitPlayStatusUpdate(currentPlayingMessage!!, PLAY_STATUS_START)
 
-                    // Existing affinity is kept so the route stays continuous across the pause;
-                    // the first (undebounced) sensor event confirms or corrects it.
+                    
+                    
                     startProximityTracking()
                 }
             }
@@ -355,7 +347,6 @@ object AudioMessageManager {
         }
     }
 
-    // 开始更新播放进度
     private fun startUpdatingProgress() {
         progressJob?.cancel()
         progressJob = appScope.launch {
@@ -380,7 +371,6 @@ object AudioMessageManager {
         }
     }
 
-    // 播放完成后调用
     private fun onPlayComplete() {
         val completedMessage = currentPlayingMessage
         completedMessage?.let {
@@ -389,7 +379,7 @@ object AudioMessageManager {
             deleteCurrentFile(it)
         }
 
-        // Reset state - but DON'T cancel playJob because auto-play might have already started
+        
         currentFilePath = null
         currentPlayingMessage = null
         isPaused = false
@@ -397,7 +387,7 @@ object AudioMessageManager {
         currentProgress = 0f
 
         try {
-            mediaPlayer?.reset()  // Reset for reuse, don't release
+            mediaPlayer?.reset()  
         } catch (e: Exception) {
             L.e { "[AudioMessageManager] onPlayComplete reset error: ${e.message}" }
         }
@@ -409,7 +399,6 @@ object AudioMessageManager {
         prepareTimeoutJob = null
     }
 
-    // 删除当前播放的文件
     fun deleteCurrentFile(message: TextChatMessage) {
         if (message.attachment?.isAudioMessage() != true) return
         currentFilePath?.let { path ->
@@ -417,11 +406,11 @@ object AudioMessageManager {
         }
     }
 
-    /**
-     * Deletes a decrypted copy left beside the ciphertext (older builds wrote one for the waveform,
-     * #1438). Only with a usable [key]: a self-sent voice message still uploading has no key yet and
-     * its plaintext is the upload source.
-     */
+    
+
+
+
+
     fun deleteDecryptedFile(filePath: String, key: ByteArray?) {
         if (!EncryptedAttachmentAccess.isUsableKey(key) || !EncryptedAttachmentAccess.hasEncrypted(filePath)) return
         try {
@@ -435,7 +424,6 @@ object AudioMessageManager {
         }
     }
 
-    // 释放播放器资源
     fun releasePlayer() {
         currentPlayingMessage?.let {
             emitPlayStatusUpdate(it, PLAY_STATUS_COMPLETE)
@@ -451,7 +439,7 @@ object AudioMessageManager {
         mediaPlayer?.release()
         mediaPlayer = null
 
-        // Stop proximity sensor when player is released
+        
         stopProximityTracking()
 
         progressJob?.cancel()

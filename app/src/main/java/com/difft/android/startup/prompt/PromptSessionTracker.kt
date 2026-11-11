@@ -9,16 +9,16 @@ import kotlinx.coroutines.flow.asStateFlow
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** One foreground session: [id] grows with every 0 -> 1 start, [active] drops on the 1 -> 0 stop. */
+
 data class PromptSession(val id: Long, val active: Boolean)
 
-/**
- * Foreground sessions for the startup prompts, from the app's own started-activity count.
- *
- * A configuration-change relaunch stops one instance and starts its replacement; both halves are
- * skipped ([pendingRelaunches] is a count, since a fold relaunches every started activity), so a
- * relaunch never ends the session. Main thread only, like every lifecycle callback.
- */
+
+
+
+
+
+
+
 @Singleton
 class PromptSessionTracker @Inject constructor() : Application.ActivityLifecycleCallbacks {
 
@@ -45,7 +45,7 @@ class PromptSessionTracker @Inject constructor() : Application.ActivityLifecycle
         started--
         if (started <= 0) {
             started = 0
-            // Guard against a relaunch that never started again.
+            
             pendingRelaunches = 0
             _session.value = _session.value.copy(active = false)
         }

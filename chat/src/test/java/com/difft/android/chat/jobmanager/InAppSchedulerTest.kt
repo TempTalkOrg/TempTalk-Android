@@ -32,7 +32,7 @@ class InAppSchedulerTest {
 
         scheduler.schedule(1000L, listOf(constraint))
 
-        // Before delay elapses, wakeUp should not have been called
+        
         verify(exactly = 0) { jobManager.wakeUp() }
 
         advanceTimeBy(1001)
@@ -113,7 +113,7 @@ class InAppSchedulerTest {
 
     @Test
     fun `schedule with empty constraints fires wakeUp`() = testScope.runTest {
-        // Empty list -- all() on empty list returns true
+        
         scheduler.schedule(500L, emptyList())
 
         advanceTimeBy(501)

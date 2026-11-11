@@ -3,19 +3,19 @@ package com.difft.android.call.state
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * In-memory map from a call room to the critical alerts published for it, plus the rooms whose
- * call is over (#1387).
- *
- * An alert's notification id is one per alert, and no other component stores its room, so the
- * publisher [record]s it here and a call end [end]s the room: the room is remembered as ended, so
- * every later admission of an alert for it is silenced ([CriticalAlertCallGate.shouldSilence]),
- * and the ids published so far are handed back to be dismissed. Entries expire after [TTL_MS] and
- * the ended set is bounded. The registry is not persisted: after process death no ringtone,
- * flashlight or page survives, only a silent tray notification can.
- *
- * All methods are synchronized on one lock and cheap, so they are safe on any thread.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
 @Singleton
 class CriticalAlertRoomRegistry internal constructor(
     private val nowMs: () -> Long,
@@ -28,13 +28,13 @@ class CriticalAlertRoomRegistry internal constructor(
 
     private val lock = Any()
 
-    // roomId -> alert ids not ended yet. Guarded by lock.
+    
     private val recorded = LinkedHashMap<String, Entry>()
 
-    // roomId -> time it ended. Guarded by lock.
+    
     private val ended = LinkedHashMap<String, Long>()
 
-    /** [notificationId] was published for [roomId]. */
+    
     fun record(roomId: String, notificationId: Int) {
         synchronized(lock) {
             val now = nowMs()
@@ -46,10 +46,10 @@ class CriticalAlertRoomRegistry internal constructor(
         }
     }
 
-    /**
-     * Marks [roomId] as ended, even when nothing was recorded for it, and returns and forgets the
-     * alert ids recorded for it. A second call returns an empty set.
-     */
+    
+
+
+
     fun end(roomId: String): Set<Int> = synchronized(lock) {
         val now = nowMs()
         pruneLocked(now)
@@ -81,7 +81,7 @@ class CriticalAlertRoomRegistry internal constructor(
     }
 
     companion object {
-        /** How long an ended room keeps silencing late alerts, and how long a recorded alert is kept. */
+        
         const val TTL_MS = 5 * 60_000L
 
         private const val MAX_ROOMS = 64

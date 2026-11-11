@@ -14,7 +14,7 @@ import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Final cleanup belongs to the application scope even when the page is permanently removed. */
+
 @Singleton
 class NotificationTestLifetime internal constructor(
     private val repository: NotificationTestRepository,

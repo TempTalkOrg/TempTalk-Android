@@ -33,10 +33,10 @@ import com.difft.android.base.widget.ComposeDialogManager
 import dagger.hilt.android.AndroidEntryPoint
 import kotlin.system.exitProcess
 
-/**
- * Fragment for language settings
- * Can be displayed in both Activity (single-pane) and dual-pane mode
- */
+
+
+
+
 @AndroidEntryPoint
 class LanguageFragment : Fragment(), SettingsIdiomPage {
 
@@ -53,7 +53,7 @@ class LanguageFragment : Fragment(), SettingsIdiomPage {
         setContent { DifftTheme(applyWindowBackground = ownsWindow()) { LanguagePage() } }
     }
 
-    // The host applies system-bar insets, so this page must not pad again.
+    
     @Composable
     private fun LanguagePage() {
         val context = LocalContext.current
@@ -68,8 +68,8 @@ class LanguageFragment : Fragment(), SettingsIdiomPage {
                 showBackButton = showsDetailBackButton(),
                 onBackClick = { detailNavigation().pop(this@LanguageFragment) },
             )
-            // Resolved on every composition: the list carries its own selected flag, and the choice
-            // only ever changes by restarting the process.
+            
+            
             LanguageSettingsContent(
                 languages = LanguageUtils.getLanguageList(context),
                 onSelect = ::onLanguageSelected,

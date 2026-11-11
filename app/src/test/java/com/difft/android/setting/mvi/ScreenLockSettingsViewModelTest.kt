@@ -21,7 +21,7 @@ class ScreenLockSettingsViewModelTest {
     @get:Rule val globals = GlobalStaticMockRule()
     private fun user() = FakeUserManager(UserData(account = "test-user-001", email = "masked", passcode = "existing"))
 
-    /** Records whether a write asked for the blocking disk commit. */
+    
     private class RecordingUserManager(private var data: UserData?) : UserManager {
         val blockingCommits = mutableListOf<Boolean>()
         override fun setUserData(userData: UserData, commit: Boolean) { blockingCommits += commit; data = userData }

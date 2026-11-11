@@ -59,11 +59,11 @@ class NewSignalServiceMessageSender @Inject constructor(
         private const val RETRY_COUNT = 3
     }
 
-    /**
-     * Every public send takes the caller's open send ticket (#1382): the migration message pause
-     * must stop a send at its admission, including one that would fall back to HTTP while the
-     * socket is paused. A closed or receive ticket is a caller bug and the send is refused.
-     */
+    
+
+
+
+
     private fun requireAdmitted(admission: MessagingTicket, what: String) {
         if (admission.kind != AdmissionKind.SEND || admission.isClosed) {
             L.e { "[MigrationPause] event=send_without_ticket what=$what kind=${admission.kind} closed=${admission.isClosed}" }
@@ -74,16 +74,15 @@ class NewSignalServiceMessageSender @Inject constructor(
     private val localAddress: For = For.Account(globalServices.myId)
     private val contentCreator: SignalServiceContentCreator = SignalServiceContentCreator(maxEnvelopeSize)
 
-    /**
-     * Send a message to a single recipient.
-     * group 消息目前(服务端)不支持端上加密，所以发送群消息时 isSecureText 应设置为 false
-     *
-     * @param recipient    The message's destination.
-     * @param message      The message.
-     * @param isSecureText 是否使用端上加密
-     * @throws org.signal.libsignal.protocol.UntrustedIdentityException
-     * @throws IOException
-     */
+    
+
+
+
+
+
+
+
+
     suspend fun sendDataMessage(
         recipient: For,
         room: For,
@@ -97,7 +96,7 @@ class NewSignalServiceMessageSender @Inject constructor(
         val timestamp = message.timestamp
         val content = contentCreator.createFrom(message)
 
-        // 1v1 messages (including memo): generate syncContent encrypted with own public key for server to distribute to other devices
+        
         val syncContent: String? = if (recipient is For.Account) {
             if (conversationManager.hasPublicKeyInfoData(room).not()) {
                 L.i { "[Message] generateSyncContent: updating public key info for room ${room.id}" }
@@ -120,15 +119,15 @@ class NewSignalServiceMessageSender @Inject constructor(
             syncContent
         )
         L.i { "[Message] sendDataMessage result is Success: ${result.success}" }
-        // v4 API: server handles sync for both 1v1 and group messages
+        
         return result
     }
 
-    /**
-     * Send a GroupKeyMessage to distribute R_group to group members.
-     * Used after creating/upgrading an encrypted group (via group message)
-     * or after adding members (via 1v1 message).
-     */
+    
+
+
+
+
     suspend fun sendGroupKeyMessage(
         recipient: For,
         room: For,
@@ -139,7 +138,6 @@ class NewSignalServiceMessageSender @Inject constructor(
         val timestamp = System.currentTimeMillis()
         val content = contentCreator.createFrom(groupKeyMessage)
         L.i { "[Message] [$timestamp] Sending group key message to ${recipient.id}" }
-        // Ensure public key info is available before sending
         if (conversationManager.hasPublicKeyInfoData(room).not()) {
             L.i { "[Message] sendGroupKeyMessage: updating public key info for room ${room.id}" }
             conversationManager.updatePublicKeyInfoData(room)
@@ -150,10 +148,10 @@ class NewSignalServiceMessageSender @Inject constructor(
         )
     }
 
-    /**
-     * Generate syncContent: encrypt sync message content with own public key.
-     * This content is sent with v4 API, server distributes it to other devices.
-     */
+    
+
+
+
     private suspend fun generateSyncContent(
         content: Content,
         room: For,
@@ -167,7 +165,7 @@ class NewSignalServiceMessageSender @Inject constructor(
                 timestamp
             )
 
-            // Get own public key from room's public key list (1v1 room contains [peer, self] keys)
+            
             val publicKeyInfos = conversationManager.getPublicKeyInfos(room)
             val myPublicKey = publicKeyInfos.firstOrNull { it.uid == localAddress.id }?.identityKey
 
@@ -255,7 +253,7 @@ class NewSignalServiceMessageSender @Inject constructor(
         readPositionEntity: Optional<NewOutgoingPushMessage.ReadPositionEntity>,
         realSourceEntity: Optional<NewOutgoingPushMessage.RealSourceEntity>,
         notification: NewOutgoingPushMessage.Notification?,
-        syncContent: String? = null,  // 1v1消息的同步内容（v4接口使用）
+        syncContent: String? = null,  
     ): SendMessageResult {
         val startTime = System.currentTimeMillis()
 
@@ -269,7 +267,7 @@ class NewSignalServiceMessageSender @Inject constructor(
                     readReceipt,
                     readPositionEntity.orElse(null),
                     realSourceEntity.orElse(null),
-                    syncContent,  // 传递 syncContent
+                    syncContent,
                     timestamp = timestamp,
                 )
                 try {
@@ -299,18 +297,18 @@ class NewSignalServiceMessageSender @Inject constructor(
                         val flaggedUids = response.data!!.missing.orEmpty().mapNotNull { it.uid } +
                                 response.data!!.stale.orEmpty().mapNotNull { it.uid }
                         if (flaggedUids.isNotEmpty()) {
-                            // Server flagged specific uids — narrow refresh.
-                            // For 1v1 (For.Account) also add recipient.id as extra hint; for groups,
-                            // recipient.id is a gid (not a uid) so skip it.
+                            
+                            
+                            
                             val staleUids = (flaggedUids +
                                     listOfNotNull((recipient as? For.Account)?.id)).distinct()
                             L.i { "[Message] [sendMessage][$timestamp] retry(ws) narrowed staleUids size=${staleUids.size}" }
                             conversationManager.updatePublicKeyInfoData(staleUids)
                         } else {
-                            // status=11001 without any flagged uids — server didn't tell us which
-                            // uid is stale. Fall back to a broad refresh:
-                            //  - For.Group → For-keyed full-member refresh (matches Rust branch).
-                            //  - For.Account → refresh recipient uid.
+                            
+                            
+                            
+                            
                             if (recipient is For.Group) {
                                 L.i { "[Message] [sendMessage][$timestamp] retry(ws) fallback=group_for_keyed_refresh gid=${recipient.id}" }
                                 conversationManager.updatePublicKeyInfoData(room)
@@ -319,7 +317,7 @@ class NewSignalServiceMessageSender @Inject constructor(
                                 conversationManager.updatePublicKeyInfoData(listOf(recipient.id))
                             }
                         }
-                        continue // Retry with updated key info
+                        continue 
                     } else {
                         return SendMessageResult.success(
                             recipient.id,
@@ -364,7 +362,7 @@ class NewSignalServiceMessageSender @Inject constructor(
                         L.i { "[Message] [sendMessage][$timestamp] retry(http) narrowed staleUids size=${staleUids.size}" }
                         conversationManager.updatePublicKeyInfoData(staleUids)
                     } else {
-                        // status=11001 without flagged uids — see WS branch above for rationale.
+                        
                         if (recipient is For.Group) {
                             L.i { "[Message] [sendMessage][$timestamp] retry(http) fallback=group_for_keyed_refresh gid=${recipient.id}" }
                             conversationManager.updatePublicKeyInfoData(room)
@@ -373,7 +371,7 @@ class NewSignalServiceMessageSender @Inject constructor(
                             conversationManager.updatePublicKeyInfoData(listOf(recipient.id))
                         }
                     }
-                    continue // Retry with updated key info
+                    continue 
                 } else {
                     return SendMessageResult.success(
                         recipient.id,
@@ -402,12 +400,8 @@ class NewSignalServiceMessageSender @Inject constructor(
                     L.w { "[Message] [sendMessage][$timestamp] Forcing public key update (attempt ${i + 1}/$RETRY_COUNT)" }
 
                     conversationManager.updateConversationMemberData(room)
-                    // Branch on recipient type to avoid silent no-op for group sends.
-                    // - 1v1: narrow to recipient uid only (catch block has NO server response with stale uid list).
-                    // - Group: `recipient.id` is a group id, not a member uid — calling the uid-keyed overload
-                    //   with `[groupId]` returns an empty /keys result, upsert is skipped, and the same stale
-                    //   keys are re-read on the next retry → infinite-loop / 3× fail. Fall back to the
-                    //   For-keyed overload so the facade resolves all members internally.
+                    
+                    
                     if (recipient is For.Group) {
                         L.i { "[Message] [sendMessage][$timestamp] retry(rust) path=group_for_keyed_refresh gid=${recipient.id}" }
                         conversationManager.updatePublicKeyInfoData(room)
@@ -432,26 +426,17 @@ class NewSignalServiceMessageSender @Inject constructor(
         readReceipt: Boolean,
         readPositionEntity: NewOutgoingPushMessage.ReadPositionEntity?,
         realSourceEntity: NewOutgoingPushMessage.RealSourceEntity?,
-        syncContent: String? = null,  // 1v1消息的同步内容（v4接口使用）
-        // Message-identifying timestamp from the caller. Becomes Envelope.timestamp.
-        // Must match the basis used for the sender's local DB messageId so the
-        // server-echoed envelope dedupes against the local insert via putWhenNonExist.
-        // No default value — every call site must pass it explicitly to prevent the
-        // silent currentTimeMillis() drift that previously caused dup forward-notice
-        // messages on group sends once the server began echoing back to senders.
+        syncContent: String? = null,  
+        
+        
         timestamp: Long,
     ): NewOutgoingPushMessage {
         if (conversationManager.hasPublicKeyInfoData(room).not()) {
-            // issue #970 ②: only "group invalid" (EntityInvalid = server group status != 0,
-            // reliable and unambiguous) is permanent (stop retrying). ServerEmpty (HTTP200 +
-            // non-null body but an empty keys array) is an **ambiguous** signal — the entity may
-            // be gone, or a valid recipient's keys may not have propagated yet (new group) /
-            // a transient server blank — so it is **transient** (IOException, retry self-heals),
-            // avoiding permanent loss of recoverable messages/group keys (PR #973 code-review).
-            // Network failure / not yet synced are likewise transient. Invalid-group churn is
-            // closed by EntityInvalid, not by ServerEmpty.
+            
+            
+            
             when (conversationManager.updatePublicKeyInfoDataResult(room)) {
-                PublicKeyUpdateResult.Updated -> { /* ok, fallthrough */ }
+                PublicKeyUpdateResult.Updated -> {  }
 
                 PublicKeyUpdateResult.EntityInvalid ->
                     throw NoValidRecipientKeysException(
@@ -462,7 +447,7 @@ class NewSignalServiceMessageSender @Inject constructor(
                 PublicKeyUpdateResult.FetchFailed,
                 PublicKeyUpdateResult.Unresolved ->
                     throw IOException("Failed to update public key info data (transient) room=${room.id}")
-            }.exhaustive  // expression form → a new PublicKeyUpdateResult variant is a compile error, not a silent fallthrough
+            }.exhaustive  
         } else {
             L.i { "[Message] public key info is ready" }
         }
@@ -476,11 +461,8 @@ class NewSignalServiceMessageSender @Inject constructor(
             }
 
         if (publicKeyInfos.isEmpty()) {
-            // Reached here: has=true (cache claims present) but everything filtered out, or
-            // has=false then update=Updated but the read came back empty. Re-confirm entity
-            // status: only EntityInvalid (group status != 0) → permanent; ServerEmpty (empty
-            // array, possibly a valid recipient not yet propagated) and the rest are all treated
-            // as transient, letting the job retry / self-heal (PR #973 code-review).
+            
+            
             when (conversationManager.classifyEmptyKeys(room)) {
                 PublicKeyUpdateResult.EntityInvalid ->
                     throw NoValidRecipientKeysException(
@@ -492,44 +474,11 @@ class NewSignalServiceMessageSender @Inject constructor(
                 PublicKeyUpdateResult.FetchFailed,
                 PublicKeyUpdateResult.Unresolved ->
                     throw IOException("No valid public key info available after filtering (transient) room=${room.id}")
-            }.exhaustive  // expression form → a missing arm for a future variant is a compile error here too
+            }.exhaustive  
         }
 
         val msgType = getMsgType(content)
 
-        /**
-         * fun getDetailMessageType(): OWSDetailMessageType {
-         *     return when {
-         *         this.combinedForwardingMessage != null && this.combinedForwardingMessage.subForwardingMessages != null && this.combinedForwardingMessage.subForwardingMessages.size >= 1 -> {
-         *             OWSDetailMessageType.Forward
-         *         }
-         *         this.isContactShareMessage() -> {
-         *             OWSDetailMessageType.Contact
-         *         }
-         *         this.isTaskMessage() -> {
-         *             OWSDetailMessageType.Task
-         *         }
-         *         this.isRecalMessage() -> {
-         *             OWSDetailMessageType.Recall
-         *         }
-         *         this.isVoteMessgae() -> {
-         *             OWSDetailMessageType.Vote
-         *         }
-         *         this.isReactionMessage() -> {
-         *             OWSDetailMessageType.Reaction
-         *         }
-         *         this.card != null -> {
-         *             OWSDetailMessageType.Card
-         *         }
-         *         this.messageModeType == TSMessageModeType.Confidential -> {
-         *             OWSDetailMessageType.Confidential
-         *         }
-         *         else -> {
-         *             OWSDetailMessageType.Unknow
-         *         }
-         *     }
-         * }
-         */
         val detailMessageType: DetailMessageType = if (content.hasDataMessage()) {
             if (content.dataMessage.hasForwardContext()) DetailMessageType.Forward
             else if (content.dataMessage.contactCount > 0) DetailMessageType.Contact
@@ -624,7 +573,7 @@ class NewSignalServiceMessageSender @Inject constructor(
             .readPositions(readPositionEntity?.let { listOf() } ?: emptyList())
             .timestamp(timestamp)
             .notification(notification)
-            .syncContent(syncContent)  // 1v1消息的同步内容（v4接口使用）
+            .syncContent(syncContent)  
             .build()
     }
 
@@ -656,21 +605,21 @@ class NewSignalServiceMessageSender @Inject constructor(
         } else if (content.hasForwardNotice()) {
             msgType = Envelope.MsgType.MSG_FORWARD_NOTICE_VALUE
         } else if (content.hasActivityNotice()) {
-            // #1347: the server keys its push policy off msgType; activity notices were sent as NORMAL.
+            
             msgType = Envelope.MsgType.MSG_ACTIVITY_NOTICE_VALUE
         }
         return msgType
     }
 
-    /**
-     * Send a read receipt for a received message.
-     *
-     * @param recipient The sender of the received message you're acknowledging.
-     * @param message   The read receipt to deliver.
-     * @param group if the receipt is for a group message. then this value is not null, then used in later flow
-     * @param sendReceiptToSender Whether to send read receipt to the message sender
-     * @param sendSyncToSelf Whether to send sync message to self's other devices
-     */
+    
+
+
+
+
+
+
+
+
     suspend fun sendReceipt(
         recipient: For,
         room: For,
@@ -683,7 +632,6 @@ class NewSignalServiceMessageSender @Inject constructor(
         requireAdmitted(admission, "receipt")
         val sendTimeStamp = System.currentTimeMillis()
 
-        // 1. 发送已读回执给对方（如果需要）
         if (sendReceiptToSender) {
             val content: Content = createReceiptContent(message)
             val receiptResult = sendMessage(
@@ -701,7 +649,6 @@ class NewSignalServiceMessageSender @Inject constructor(
             L.i { "[Message] Skip sending read receipt to sender" }
         }
 
-        // 2. 发送同步消息给自己的其他设备（如果需要）
         if (sendSyncToSelf) {
             val syncMessageContent = createMultiDeviceReadContent(readMessages)
             val syncResult = sendMessage(
@@ -725,11 +672,11 @@ class NewSignalServiceMessageSender @Inject constructor(
         return container.setReceiptMessage(message).build()
     }
 
-    /**
-     * Sync the user's manual "mark as unread / read" state to the account's other devices.
-     * Standalone sync message addressed to self (no primary recipient), same as the read sync in
-     * [sendReceipt]. The caller stores `success.systemShowTimestamp` as the mark time.
-     */
+    
+
+
+
+
     suspend fun sendMarkAsUnread(
         room: For,
         flag: SyncMessage.MarkAsUnread.Flag,
@@ -815,30 +762,18 @@ class NewSignalServiceMessageSender @Inject constructor(
         return result
     }
 
-    /**
-     * Send a ForwardNoticeMessage — a "visible but silent" system message inserted into
-     * the target conversation after a forward action completes. Not a receipt, not a data
-     * message: never carries a notification payload, never counts toward unread count.
-     *
-     * 1v1-to-other: the sender's own other devices need to display the same notice.
-     * The recipient list contains only the peer (sender is not in it), so server-side
-     * fan-out won't reach those devices. Instead, piggyback the SyncMessage-wrapped
-     * envelope as `syncContent` on the SAME request — server extracts it and routes
-     * to the sender's other devices, stamping both envelopes with one
-     * `systemShowTimestamp`. Mirrors [sendDataMessage] / DataMessage's SyncMessage.Sent
-     * transcript, eliminating the cross-device timestamp drift the v1 two-call
-     * implementation produced. See issue #695 for the rationale.
-     *
-     * Group / Note-to-Self: `sendSyncToSelf` is false. Group recipients already include
-     * the sender via membership fan-out; NTS recipient is self → all self devices are
-     * covered by the primary call. `syncContent` stays null in both cases.
-     *
-     * `sendTimestamp` is passed in by the Job so the same value becomes the
-     *  Envelope.timestamp AND the local DB insert's `NotifyMessage.timestamp` —
-     *  three-tuple messageId alignment across paths. See §4.2/§4.11 of the design doc.
-     *
-     * Notification parameter: explicitly `null` — forward notices never trigger APNs/FCM.
-     */
+    
+
+
+
+
+
+
+
+
+
+
+
     suspend fun sendForwardNoticeMessage(
         recipient: For,
         room: For,
@@ -849,8 +784,8 @@ class NewSignalServiceMessageSender @Inject constructor(
     ): SendMessageResult {
         requireAdmitted(admission, "forwardNotice")
         L.i { "[Message] [$sendTimestamp] Sending a forward notice message to ${recipient.id} (sync=$sendSyncToSelf)" }
-        // Primary: Content.forwardNotice → recipient (source conversation).
-        // payload.conversation (tag 4) is filled by caller PushForwardNoticeSendJob.
+        
+        
         val primaryContent = contentCreator.createFrom(message)
 
         val syncContent: String? = if (sendSyncToSelf && recipient is For.Account) {
@@ -878,17 +813,12 @@ class NewSignalServiceMessageSender @Inject constructor(
         return result
     }
 
-    /**
-     * Build the encrypted base64 `syncContent` payload for a forward notice — the
-     * SyncMessage wrapper carrying [forwardNoticeSync], encrypted with my own public
-     * key so the server can route it to my other devices alongside the primary
-     * envelope. Same shape as [generateSyncContent] (DataMessage's SyncMessage.Sent
-     * transcript) but wraps `Content.syncMessage.forwardNoticeSync` instead.
-     *
-     * Returns null if my public key is missing from the room (rare — caller already
-     * tried `updatePublicKeyInfoData`) or if encryption throws. In that case the
-     * primary send still goes through; only cross-device sync is skipped.
-     */
+    
+
+
+
+
+
     private suspend fun generateForwardNoticeSyncContent(
         message: SignalServiceProtos.ForwardNoticeMessage,
         room: For
@@ -927,13 +857,10 @@ class NewSignalServiceMessageSender @Inject constructor(
         }
     }
 
-    /**
-     * Build a SyncMessage-wrapped Content for 1v1-to-other self-sync. Directly
-     * references ForwardNoticeMessage — no inner wrapper type (v1's
-     * `ForwardNoticeSync { destination; message }` had a redundant destination
-     * field since [ForwardNoticeMessage.conversation] now self-carries the source
-     * conversation).
-     */
+    
+
+
+
     internal fun createMultiDeviceForwardNoticeContent(
         message: SignalServiceProtos.ForwardNoticeMessage
     ): Content = content {
@@ -942,15 +869,11 @@ class NewSignalServiceMessageSender @Inject constructor(
         }
     }
 
-    /**
-     * Sends a [MessageActivityNotice] proto (Phase 1 schema; current type: COPY).
-     * Mirrors [sendForwardNoticeMessage] 1:1 — primary send + optional syncContent
-     * piggyback for 1v1-to-other so all of my own devices see the notice with the
-     * same `systemShowTimestamp` (avoids cross-device drift; see PR #705 fix).
-     *
-     * sendTimestamp/sendSyncToSelf/syncContent semantics are identical to
-     * forward notice; see that function's doc for the three-way alignment rationale.
-     */
+    
+
+
+
+
     suspend fun sendActivityNoticeMessage(
         recipient: For,
         room: For,
@@ -988,11 +911,11 @@ class NewSignalServiceMessageSender @Inject constructor(
         return result
     }
 
-    /**
-     * Build the encrypted base64 `syncContent` payload for an activity notice —
-     * mirrors [generateForwardNoticeSyncContent] but wraps
-     * `Content.syncMessage.activityNoticeSync`.
-     */
+    
+
+
+
+
     private suspend fun generateActivityNoticeSyncContent(
         message: SignalServiceProtos.MessageActivityNotice,
         room: For
@@ -1031,10 +954,10 @@ class NewSignalServiceMessageSender @Inject constructor(
         }
     }
 
-    /**
-     * SyncMessage-wrapped Content for 1v1-to-other activity-notice self-sync.
-     * Mirrors [createMultiDeviceForwardNoticeContent].
-     */
+    
+
+
+
     internal fun createMultiDeviceActivityNoticeContent(
         message: SignalServiceProtos.MessageActivityNotice
     ): Content = content {
@@ -1044,8 +967,8 @@ class NewSignalServiceMessageSender @Inject constructor(
     }
 }
 
-/**
- * Forces a `when` to be evaluated as an expression so the compiler enforces exhaustiveness
- * over sealed subjects (a missing arm becomes a compile error, not a silent statement fallthrough).
- */
+
+
+
+
 private val <T> T.exhaustive: T get() = this

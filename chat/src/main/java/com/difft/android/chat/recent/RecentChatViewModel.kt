@@ -64,15 +64,15 @@ import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.minutes
 
-/** The latest inputs of one chat-list assembly besides the calls (see [ChatListInput]). */
+
 data class ChatListSource(
     val rooms: List<RoomViewData> = emptyList(),
     val focus: EffectiveFocus = EffectiveFocus.INACTIVE,
     val synthesizedFocusRoom: RoomViewData? = null,
     val deletedFocusGids: Set<String> = emptySet(),
-    /** False only for the initial placeholder, before the first query result. */
+    
     val isLoaded: Boolean = false,
-    /** Local date (epoch day) of this snapshot: a date change re-assembles, so the folded row's "Tomorrow HH:MM" turns into "HH:MM". */
+    
     val epochDay: Long = 0L,
 )
 
@@ -101,13 +101,13 @@ class RecentChatViewModel @Inject constructor(
     private val focusChatRooms: FocusChatRooms,
 ) : ViewModel() {
 
-    // Read on every use: this ViewModel outlives the Activity recreation a system language change
-    // causes, so a cached value would keep formatting in the old language (#1395).
+    
+    
     private val language get() = LanguageUtils.getLanguage(application)
 
     private val formatTracker = TimeTextFormatTracker { TimeFormatter.formatSignature(language.language) }
 
-    // Re-runs the room query (and so the formatting) after a language, 12/24-hour or time-zone change.
+    
     private val formatRefresh = MutableSharedFlow<Unit>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
     private val callService by lazy {
@@ -118,14 +118,13 @@ class RecentChatViewModel @Inject constructor(
         callDataManagerLazy.get()
     }
 
-    // ✅ 只查询room数据，draft独立管理
     private val latestRoomModelsFlow: Flow<List<RoomModel>> by lazy {
         merge(
             WCDBUpdateService.roomTableUpdated,
-            updateTime.map { },  // 每分钟触发查询，作为兜底机制
+            updateTime.map { },  
             formatRefresh,
         )
-            .onStart { emit(Unit) }  // 初始化时立即触发一次
+            .onStart { emit(Unit) }
             .map {
                 withContext(Dispatchers.IO) {
                     val newRooms = wcdb.room.getAllObjects(
@@ -151,10 +150,10 @@ class RecentChatViewModel @Inject constructor(
         }
     }
 
-    /** Every visible room, unfiltered (tab / launcher badge sums read [RoomViewData.isMuted]). */
+    
     val allRecentRoomsStateFlow = MutableStateFlow(emptyList<RoomViewData>())
 
-    /** What the chat list assembles from: [allRecentRoomsStateFlow]'s rooms plus the focus inputs, published together. */
+    
     val chatListSource = MutableStateFlow(ChatListSource())
 
     private var lastLoggedRoomCount = -1
@@ -164,7 +163,6 @@ class RecentChatViewModel @Inject constructor(
     @Inject
     fun initLoadAndKeepObserving() {
         L.i { "[ChatList] initLoadAndKeepObserving" }
-        // ✅ 分开处理：room变化时查询room，draft变化时查询draft
         combine(
             latestRoomModelsFlow,
             draftRepository.allDraftsFlow.onStart { emit(emptyMap()) },
@@ -177,7 +175,6 @@ class RecentChatViewModel @Inject constructor(
             val signature = TimeFormatter.formatSignature(lang)
 
             val finalRoomList = buildList {
-                // 添加常规房间数据
                 addAll(roomModels.map {
                     val lastActiveTimeText = if (it.lastActiveTime == 0L) "" else TimeFormatter.formatConversationTime(
                         lang,
@@ -217,7 +214,6 @@ class RecentChatViewModel @Inject constructor(
                     )
                 })
 
-                // 添加即时通话房间数据
                 if (instantCallRoomViewData.isNotEmpty()) {
                     addAll(instantCallRoomViewData.values)
                 }
@@ -236,8 +232,8 @@ class RecentChatViewModel @Inject constructor(
             )
             allRecentRoomsStateFlow.value = rooms
             formatTracker.markFormatted(signature)
-            // The flow re-emits every minute (updateTime ticker) and on every room table
-            // change; only a size change is worth a line.
+            
+            
             if (finalRoomList.size != lastLoggedRoomCount) {
                 lastLoggedRoomCount = finalRoomList.size
                 L.i { "[ChatList] rooms=${finalRoomList.size} drafts=${allDrafts.size}" }
@@ -245,11 +241,11 @@ class RecentChatViewModel @Inject constructor(
         }.flowOn(Dispatchers.IO).launchIn(viewModelScope)
     }
 
-    /**
-     * Re-formats the list when the language, 12/24-hour setting or time zone changed since it was
-     * last formatted (#1395). Re-reads the 12/24-hour setting first, off the main thread, so the
-     * check does not race the app-foreground refresh.
-     */
+    
+
+
+
+
     fun refreshIfFormatChanged() {
         viewModelScope.launch(Dispatchers.IO) {
             TimeFormatter.refreshHourFormat()
@@ -343,7 +339,7 @@ class RecentChatViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 if (isGroupId) {
-                    // Records who owns the pin (user vs. focus) and makes a stand-in row real first.
+                    
                     focusPinCoordinator.setGroupPin(channelId, isPinnedItem)
                 } else {
                     withContext(Dispatchers.IO) { dbRoomStore.updatePinnedTime(forWhat, if (isPinnedItem) System.currentTimeMillis() else null) }
@@ -358,14 +354,14 @@ class RecentChatViewModel @Inject constructor(
         }
     }
 
-    /**
-     * The user deleted a conversation from the list. A focus group's deletion is recorded first (local
-     * only), so the row is not synthesized again the moment the room disappears, and the whole step
-     * runs serialized with the pin coordinator so a reconcile cannot recreate the row in between.
-     */
+    
+
+
+
+
     fun deleteChat(data: RoomViewData) {
-        // App scope: the deletion is confirmed already, so closing the screen (e.g. the folded list
-        // finishing when focus ends) must not cancel it.
+        
+        
         appScope.launch {
             try {
                 val remove: suspend () -> Unit = {
@@ -406,8 +402,7 @@ class RecentChatViewModel @Inject constructor(
 
             try {
                 withContext(Dispatchers.IO) {
-                    // Same per-room path as "Mark as read": read receipts + read-position sync + READ flag
-                    // sync, so other devices clear too (the old local-only reset never synced).
+                    
                     wcdb.room.allObjects
                         .filter { it.unreadMessageNum > 0 || isManualUnreadActive(it.markUnreadFlag, it.markUnreadAt, it.lastActiveTime, it.readPosition) }
                         .forEach {
@@ -425,8 +420,8 @@ class RecentChatViewModel @Inject constructor(
             }
 
             delay(1000)
-            // Zero-reset on the same field the FCM increment path uses, so
-            // "mark all as read" reliably zeroes the badge count.
+            
+            
             globalServices.userManager.update { unreadMsgNum = 0 }
             appIconBadgeManager.get().updateAppIconBadgeNum(0)
             messageNotificationUtil.get().cancelAllNotifications()

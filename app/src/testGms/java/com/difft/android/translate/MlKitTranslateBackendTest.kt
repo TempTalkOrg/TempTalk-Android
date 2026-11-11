@@ -27,16 +27,16 @@ import org.junit.Before
 import org.junit.Test
 import java.io.IOException
 
-/**
- * [MlKitTranslateBackend]: the two things that are genuinely ML Kit's and therefore cannot be tested
- * from `:chat` — BCP-47 normalisation, and the error-code mapping that decides the store's retry
- * policy.
- *
- * Both ML Kit clients are created through static factories, so those are the seams: MockK static
- * mocks hand back fake clients whose GMS `Task`s resolve synchronously. `MlKitException`'s
- * constructor reaches into the Android framework for one null check, which a bare JVM unit test
- * answers with "not mocked" — hence the third static mock.
- */
+
+
+
+
+
+
+
+
+
+
 class MlKitTranslateBackendTest {
 
     private lateinit var identifier: LanguageIdentifier
@@ -73,7 +73,7 @@ class MlKitTranslateBackendTest {
         every { identifier.identifyLanguage(any()) } returns successTask(tag)
     }
 
-    // --- identification normalisation ---------------------------------------
+    
 
     @Test
     fun `zh-Hans and zh-Hant normalise to zh`() = runTest {
@@ -105,7 +105,7 @@ class MlKitTranslateBackendTest {
         assertNull(backend.identifyLanguage("whatever"))
     }
 
-    // --- client caching -----------------------------------------------------
+    
 
     @Test
     fun `clients are cached, so a second translation creates nothing new`() = runTest {
@@ -140,7 +140,7 @@ class MlKitTranslateBackendTest {
         verify(exactly = 1) { identifier.close() }
     }
 
-    // --- failure classification ---------------------------------------------
+    
 
     @Test
     fun `network-ish error codes become NETWORK`() {
@@ -166,7 +166,7 @@ class MlKitTranslateBackendTest {
         )
     }
 
-    /** A disabled/absent DownloadManager is reported only in the message, never in an error code. */
+    
     @Test
     fun `a Download manager message wins over the error code`() {
         assertEquals(
@@ -189,7 +189,7 @@ class MlKitTranslateBackendTest {
         )
     }
 
-    // --- GMS Task fakes -----------------------------------------------------
+    
 
     private fun <T> successTask(value: T): Task<T> {
         val task = mockk<Task<T>>(relaxed = true)

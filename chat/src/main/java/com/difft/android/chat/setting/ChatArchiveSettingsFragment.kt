@@ -43,7 +43,7 @@ import difft.android.messageserialization.For
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-/** Disappearing-messages time of one conversation; a page of the home detail stack or its shell. */
+
 @AndroidEntryPoint
 class ChatArchiveSettingsFragment : Fragment(), SettingsIdiomPage {
 
@@ -109,7 +109,7 @@ class ChatArchiveSettingsFragment : Fragment(), SettingsIdiomPage {
                 options = timeList,
                 selected = selectedOption.value,
                 onSelect = { newOption ->
-                    // Re-selecting the current value is a no-op.
+                    
                     if (selectedOption.value != newOption) {
                         showTimeChangeDialog(selectedOption.value, newOption) {
                             chatSettingViewModel.updateArchiveTime(newOption)
@@ -140,7 +140,7 @@ class ChatArchiveSettingsFragment : Fragment(), SettingsIdiomPage {
     }
 }
 
-/** Disappearing-messages time as a detail destination (home detail stack, or its shell Activity). */
+
 class ChatArchiveSettingsDestination(private val target: For) : DetailDestination {
     override fun newFragment(): Fragment = ChatArchiveSettingsFragment.newInstance(target)
     override fun shellIntent(context: Context): Intent = ChatArchiveSettingsActivity.intent(context, target)

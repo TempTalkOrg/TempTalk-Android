@@ -40,10 +40,10 @@ import dagger.hilt.android.AndroidEntryPoint
 import util.TimeUtils
 import javax.inject.Inject
 
-/**
- * Fragment for About page (using Compose)
- * Can be displayed in both Activity (single-pane) and dual-pane mode
- */
+
+
+
+
 @AndroidEntryPoint
 class AboutFragment : Fragment(), SettingsIdiomPage {
     private lateinit var prepareWait: PageWait
@@ -59,13 +59,13 @@ class AboutFragment : Fragment(), SettingsIdiomPage {
     companion object {
         fun newInstance() = AboutFragment()
 
-        /** Display name shown in parentheses after the version, per distribution channel. */
+        
         private fun channelDisplayName(channel: String): String = when (channel) {
             "google" -> "Google"
             "official" -> "Official"
             "insider" -> "Insider"
             "fdroid" -> "F-Droid"
-            else -> channel // fallback: show unknown channel as-is rather than hiding it
+            else -> channel 
         }
     }
 
@@ -103,8 +103,8 @@ class AboutFragment : Fragment(), SettingsIdiomPage {
                             val intent = Intent(requireContext(), LCallServerNodeActivity::class.java)
                             startActivity(intent)
                         },
-                        // Call-service diagnostics: insider channel, plus any debug build so
-                        // devs can reach the node switcher without an insider-flavor install.
+                        
+                        
                         showCallServerEntry = isDebugOrInsider(),
                         showBackButton = showsDetailBackButton()
                     )
@@ -127,7 +127,7 @@ class AboutFragment : Fragment(), SettingsIdiomPage {
         waitWhileVisibleTop(updateBusy, updateWait)
     }
 
-    /** Builds that may see diagnostics affordances: insider installs and any debug build. */
+    
     private fun isDebugOrInsider(): Boolean =
         BuildConfig.DEBUG || globalServices.environmentHelper.isInsiderChannel()
 }

@@ -117,25 +117,6 @@
             tools:translationY="0dp"
             tools:visibility="visible" />
 
-        <!--        <androidx.appcompat.widget.AppCompatImageView-->
-        <!--            android:id="@+id/image_editor_hud_sticker_button"-->
-        <!--            android:layout_width="40dp"-->
-        <!--            android:layout_height="40dp"-->
-        <!--            android:layout_marginBottom="10dp"-->
-        <!--            android:alpha="0"-->
-        <!--            android:contentDescription="@string/ImageEditorHud__add_a_sticker"-->
-        <!--            android:translationY="56dp"-->
-        <!--            android:visibility="gone"-->
-        <!--            app:layout_constraintBottom_toBottomOf="parent"-->
-        <!--            app:layout_constraintEnd_toStartOf="@id/image_editor_hud_blur_button"-->
-        <!--            app:layout_constraintStart_toEndOf="@id/image_editor_hud_text_button"-->
-        <!--            app:layout_goneMarginEnd="10dp"-->
-        <!--            app:layout_goneMarginStart="10dp"-->
-        <!--            app:srcCompat="@drawable/image_editor_hud_sticker"-->
-        <!--            tools:alpha="1"-->
-        <!--            tools:translationY="0dp"-->
-        <!--            tools:visibility="visible" />-->
-
         <androidx.appcompat.widget.AppCompatImageView
             android:id="@+id/image_editor_hud_blur_button"
             android:layout_width="40dp"
@@ -263,7 +244,7 @@
             app:layout_constraintTop_toTopOf="parent"
             tools:visibility="visible" />
 
-        <!-- region Crop Tools -->
+        
 
         <androidx.appcompat.widget.AppCompatImageView
             android:id="@+id/image_editor_hud_rotate_button"
@@ -338,9 +319,9 @@
             tools:alpha="1"
             tools:visibility="visible" />
 
-        <!-- endregion -->
+        
 
-        <!-- region blur stuff -->
+        
 
         <TextView
             android:id="@+id/image_editor_hud_blur_help_text"
@@ -401,7 +382,7 @@
                 android:saveEnabled="false" />
         </LinearLayout>
 
-        <!-- Delete -->
+        
         <androidx.constraintlayout.widget.Guideline
             android:id="@+id/image_editor_bottom_guide"
             android:layout_width="wrap_content"

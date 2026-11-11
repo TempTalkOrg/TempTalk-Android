@@ -50,11 +50,7 @@
             android:textSize="14sp" />
     </LinearLayout>
 
-    <!--
-        Unlocked phone in use: reject / accept tap buttons, each a fixed 72dp circle centred in its
-        half of the row (the hit area used to be the whole half-width slot, which a pocket brush could
-        land on anywhere).
-    -->
+    
     <com.difft.android.call.ui.incoming.IncomingCallControlsView
         android:id="@+id/answer_controls"
         android:layout_width="match_parent"
@@ -66,11 +62,7 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent" />
 
-    <!--
-        Screen lit by the call itself (display was off or keyguard up): single-track slider, drag
-        right to answer / left to decline (design: track 28dp from the sides, 72dp from the bottom).
-        Shown instead of answer_controls, never alongside it.
-    -->
+    
     <com.difft.android.call.ui.incoming.IncomingCallSliderView
         android:id="@+id/answer_slider"
         android:layout_width="match_parent"

@@ -30,10 +30,10 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
-/**
- * Editing state of the field: the host's [text] plus the [TextFieldValue] the editor actually
- * runs on. See [rememberInputFieldValue] for why the two differ.
- */
+
+
+
+
 @Stable
 internal class InputFieldValue(
     val text: String,
@@ -41,13 +41,13 @@ internal class InputFieldValue(
     val onEdit: (TextFieldValue) -> Unit,
 )
 
-/**
- * TextFieldValue internally so a programmatic `value` change places the cursor at the end —
- * the legacy setText(x) + setSelection(x.length) idiom every edit/prefill flow relied on.
- * User edits flow through unchanged. lastEmitted distinguishes a genuine external set from
- * an async host echoing our own edit back one frame late (a ViewModel-fed value): resetting
- * on the echo would drop in-flight keystrokes and snap the caret to the end.
- */
+
+
+
+
+
+
+
 @Composable
 internal fun rememberInputFieldValue(
     value: String,
@@ -62,8 +62,8 @@ internal fun rememberInputFieldValue(
     return InputFieldValue(
         text = value,
         fieldValue = fieldValue,
-        // Truncate (never reject) on overflow — matches XML InputFilter.LengthFilter paste
-        // semantics.
+        
+        
         onEdit = { raw ->
             val capped = capToMaxLength(raw, maxLength, fieldValue)
             fieldValue = capped
@@ -75,27 +75,27 @@ internal fun rememberInputFieldValue(
     )
 }
 
-/**
- * InputFilter.LengthFilter parity: on overflow, trim the tail of the INSERTED run (which ends at
- * the new selection) instead of the end of the whole string — an insert at the start of a full
- * field must not silently delete trailing characters. The cut never splits a surrogate pair:
- * when it would land inside one, the whole pair goes (as LengthFilter does), so no unpaired
- * surrogate can reach the host.
- */
+
+
+
+
+
+
+
 private fun capToMaxLength(raw: TextFieldValue, maxLength: Int?, previous: TextFieldValue): TextFieldValue {
     if (maxLength == null || raw.text.length <= maxLength) return raw
     val overflow = raw.text.length - maxLength
     val insertEnd = raw.selection.end.coerceIn(0, raw.text.length)
     var trimStart = (insertEnd - overflow).coerceAtLeast(0)
-    // If the edit shape is unexpected (selection not at the insert end), fall back to
-    // rejecting the edit outright — still never corrupts existing text.
+    
+    
     if (insertEnd - trimStart != overflow) return previous
     if (trimStart > 0 && raw.text[trimStart - 1].isHighSurrogate() && raw.text[trimStart].isLowSurrogate()) trimStart--
     val text = raw.text.removeRange(trimStart, insertEnd)
     return TextFieldValue(text, TextRange(trimStart.coerceAtMost(text.length)))
 }
 
-/** Focus plumbing: host notification and the optional open-with-the-keyboard behaviour. */
+
 @Composable
 internal fun InputFocusEffects(
     isFocused: Boolean,
@@ -108,17 +108,17 @@ internal fun InputFocusEffects(
     }
     if (autoFocus) {
         LaunchedEffect(Unit) {
-            // Wait one frame so the field is placed before focus: focus-driven autofill/IME
-            // callbacks report the node's bounds, and requesting focus during the first
-            // composition (pre-placement) anchored the system autofill popup at the screen
-            // origin instead of on the field.
+            
+            
+            
+            
             withFrameNanos {}
             focusRequester.requestFocus()
         }
     }
 }
 
-/** Pass-through editor configuration; nothing here affects the box's chrome. */
+
 @Stable
 internal class InputEditorSpec(
     val textStyle: TextStyle,
@@ -132,12 +132,12 @@ internal class InputEditorSpec(
     val contentType: ContentType? = null,
 )
 
-/**
- * Vertical layout of the field's content, decided by `maxLines`.
- *
- * Single line: content centred, natural height. Multi-line is a text area: content and hint anchor
- * to the top so an empty field taller than one line does not float its hint in the middle.
- */
+
+
+
+
+
+
 @Immutable
 internal class FieldLayout(
     val multiLine: Boolean,
@@ -152,21 +152,21 @@ private fun fieldLayout(maxLines: Int): FieldLayout =
         FieldLayout(multiLine = false, Alignment.CenterVertically, Alignment.CenterStart)
     }
 
-/** What occupies the trailing end of the box, and what the box renders under itself. */
+
 @Immutable
 internal class InputTrailing(
     val showClear: Boolean,
     val reserveSlot: Boolean,
-    /** Non-null when the counter sits inside the box (single line). */
+    
     val counterInField: Int?,
-    /** Non-null when the counter sits under the box (text area). */
+    
     val counterBelow: Int?,
 )
 
-/** Everything the field's chrome is made of, derived once per composition. */
+
 @Stable
 internal class InputChrome(
-    /** Width, height rule, clip, fill and border of the box, ready to apply to the field row. */
+    
     val boxModifier: Modifier,
     val contentPadding: PaddingValues,
     val clearIconEndInset: Dp,
@@ -177,10 +177,10 @@ internal class InputChrome(
     val trailing: InputTrailing,
 )
 
-/**
- * Resolves the style/size/state inputs into the concrete chrome the field draws. Defaults mirror
- * the [DifftClearableTextField] parameter defaults, so a call may name only what it changes.
- */
+
+
+
+
 @Composable
 internal fun inputChrome(
     style: DifftTextFieldStyle,
@@ -243,7 +243,7 @@ internal fun inputChrome(
         clearIconEndInset = clearIconEndInset,
         hintColor = hintColor ?: inputHintColor(style, enabled),
         leadingIconColor = inputIconColor(enabled),
-        clearIconTint = clearIconTint ?: inputIconColor(enabled),
+        clearIconTint = clearIconTint ?: inputClearColor(enabled),
         layout = layout,
         trailing = trailing,
     )
@@ -259,14 +259,14 @@ private fun inputTrailing(
     showCounter: Boolean,
     maxLength: Int?,
 ): InputTrailing {
-    // A counter takes over the trailing slot; single-line fields show it in place of the ✕,
-    // multi-line ones move it below the box (library "Long input").
+    
+    
     val counterLimit = maxLength.takeIf { showCounter }
     val counterInField = counterLimit?.takeIf { !multiLine }
-    // Slot reservation and icon rendering are deliberately separate rules: search boxes keep the
-    // 40dp trailing slot permanently (legacy paddingEnd was unconditional — avoids a 40dp text
-    // reflow on the first keystroke); form fields reserve it only while focused so the read-only
-    // display state stays pixel-identical to the pre-migration EditText.
+    
+    
+    
+    
     val slotMode = counterInField == null
     return InputTrailing(
         showClear = slotMode && enabled && !readOnly && when (clearMode) {
@@ -284,12 +284,12 @@ private fun inputTrailing(
     )
 }
 
-/**
- * Height rule for the field's outer row. Without a fixed height the row must be bounded to its
- * content's intrinsic height, or the clear slot's `fillMaxHeight` expands the whole field to the
- * incoming max constraint (a focused form field grew to full screen). With no clear slot there is
- * no such child, so the row may wrap and a multi-line field can grow.
- */
+
+
+
+
+
+
 private fun Modifier.inputFieldHeight(height: Dp?, minHeight: Dp, clearMode: ClearMode): Modifier =
     when {
         height != null -> this.height(height)

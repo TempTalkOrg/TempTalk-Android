@@ -21,32 +21,32 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Duration.Companion.minutes
 
-/** Latest launch-time update check result. */
+
 sealed interface UpdateCheckState {
-    /** Not checked yet, or every check so far failed. */
+    
     data object Unknown : UpdateCheckState
     data object NoUpdate : UpdateCheckState
     data class Optional(val response: CheckUpdateResponse) : UpdateCheckState
     data class Forced(val response: CheckUpdateResponse) : UpdateCheckState
 }
 
-/**
- * Identity of an update offer: the APK hash when the server sends one, else the URL. A different key
- * resets the OPTIONAL_UPDATE record. Gson may leave the declared non-null fields null.
- */
+
+
+
+
 fun updateOfferKey(apkHash: String?, url: String?): String? =
     apkHash?.takeIf { it.isNotBlank() } ?: url?.takeIf { it.isNotBlank() }
 
-/**
- * The non-insider launch-time update check: once per process, and again at a session start when the
- * last check is at least 30 minutes old. A failed check keeps the previous result (fail-open
- * offline, as before). The insider feed keeps its own silent path in IndexActivity.
- *
- * [blockingForced] is the forced offer that gates the app. After the delivery hands the forced offer
- * off (a sideload download started), it stops gating after 30 minutes, so an abandoned download never
- * blocks every other prompt for the rest of the process; the next recheck restores it if the server
- * still forces the update.
- */
+
+
+
+
+
+
+
+
+
+
 @Singleton
 class StartupUpdateChecker internal constructor(
     private val settingRepo: SettingRepo,
@@ -64,7 +64,7 @@ class StartupUpdateChecker internal constructor(
 
     private val _blockingForced = MutableStateFlow<CheckUpdateResponse?>(null)
 
-    /** The forced offer that currently gates the app, or null. */
+    
     val blockingForced: StateFlow<CheckUpdateResponse?> = _blockingForced.asStateFlow()
 
     @Volatile
@@ -76,7 +76,7 @@ class StartupUpdateChecker internal constructor(
     @Volatile
     private var handOffExpiry: Job? = null
 
-    /** The forced offer whose hand-off expiry is running. */
+    
     @Volatile
     private var handedOff: CheckUpdateResponse? = null
 
@@ -87,13 +87,13 @@ class StartupUpdateChecker internal constructor(
         if (last != 0L && elapsed() - last < RECHECK_MS) return
         lastCheckElapsed = elapsed()
         job = scope.launch {
-            // Same settle time as before, so the check does not join the cold-start request wave.
+            
             delay(START_DELAY_MS)
             check()
         }
     }
 
-    /** The delivery took over the forced offer; it stops gating after [HAND_OFF_GATE_MS]. */
+    
     fun onForcedHandOff() {
         val forced = _blockingForced.value ?: return
         handOffExpiry?.cancel()
@@ -118,8 +118,8 @@ class StartupUpdateChecker internal constructor(
                     response.force -> UpdateCheckState.Forced(response)
                     else -> UpdateCheckState.Optional(response)
                 }
-                // A recheck that returns the offer already handed off keeps its expiry running: its
-                // dialog is closed, so restarting the gate would block every prompt with nothing shown.
+                
+                
                 val sameHandedOff = next is UpdateCheckState.Forced && next.response == handedOff && handOffExpiry?.isActive == true
                 if (!sameHandedOff) {
                     handOffExpiry?.cancel()

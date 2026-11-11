@@ -6,11 +6,11 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * The remote gate for the old app's migration entry is read straight off the global-config JSON;
- * pin the wire key and the "absent means closed" default so a server-side rename or a missing
- * section can never open the entry by accident.
- */
+
+
+
+
+
 class NewGlobalConfigMigrationTest {
 
     private val gson = Gson()

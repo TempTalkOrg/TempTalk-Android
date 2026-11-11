@@ -25,16 +25,16 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
-/**
- * Tests for [JobRunner], verifying the `runJob()` logic indirectly through `launchIn`.
- *
- * [JobRunner.launchIn] launches on [Dispatchers.IO] (real threads), so we cannot
- * use [StandardTestDispatcher] to control execution timing. Instead we use:
- * - [UnconfinedTestDispatcher] as `managementDispatcher` so that
- *   `withContext(managementDispatcher)` blocks execute immediately inline.
- * - [CompletableDeferred] signals from the mock [JobController.pullNextEligibleJobForExecution]
- *   to know when the runner has finished processing a job and entered the next pull (blocking).
- */
+
+
+
+
+
+
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class JobRunnerTest {
 
@@ -42,7 +42,7 @@ class JobRunnerTest {
     private val jobController = mockk<JobController>(relaxed = true)
     private val jobPredicate = JobPredicate.NONE
 
-    /** Unconfined so withContext(managementDispatcher) executes inline on the IO thread. */
+    
     private val managementDispatcher = UnconfinedTestDispatcher()
 
     private lateinit var runnerScope: CoroutineScope
@@ -72,7 +72,7 @@ class JobRunnerTest {
         clearMocks(jobController)
     }
 
-    // -- Success path --
+    
 
     @Test
     fun `launchIn calls onJobFinished and onSuccess when job run returns success`() = runTest {
@@ -87,7 +87,7 @@ class JobRunnerTest {
         coVerify { jobController.onSuccess(job) }
     }
 
-    // -- Retry path --
+    
 
     @Test
     fun `launchIn calls onJobFinished and onRetry when job run returns retry`() = runTest {
@@ -104,7 +104,7 @@ class JobRunnerTest {
         verify { job.onRetry() }
     }
 
-    // -- Failure path --
+    
 
     @Test
     fun `launchIn calls onJobFinished onFailure and job onFailure when job run returns failure`() = runTest {
@@ -120,14 +120,14 @@ class JobRunnerTest {
         verify { job.onFailure() }
     }
 
-    // -- Expired job --
+    
 
     @Test
     fun `launchIn fails expired job without calling run`() = runTest {
         val job = createTestJob(
             id = "expired-1",
             createTime = 1000L,
-            lifespan = 100L // expired long ago (createTime + lifespan = 1100 < now)
+            lifespan = 100L 
         )
 
         val done = setupControllerToReturnJobOnce(job)
@@ -140,7 +140,7 @@ class JobRunnerTest {
         verify { job.onFailure() }
     }
 
-    // -- Canceled job --
+    
 
     @Test
     fun `launchIn fails canceled job even when run returns success`() = runTest {
@@ -158,13 +158,13 @@ class JobRunnerTest {
         coVerify(exactly = 0) { jobController.onSuccess(job) }
     }
 
-    // -- maxAttempts exceeded --
+    
 
     @Test
     fun `launchIn converts retry to failure when maxAttempts exceeded`() = runTest {
         val job = createTestJob("max-attempts-1", maxAttempts = 3)
         coEvery { job.run() } returns Job.Result.retry(1000L)
-        every { job.runAttempt } returns 2 // runAttempt + 1 = 3 >= maxAttempts(3)
+        every { job.runAttempt } returns 2 
 
         val done = setupControllerToReturnJobOnce(job)
         jobRunner.launchIn(runnerScope)
@@ -181,7 +181,7 @@ class JobRunnerTest {
         val backoff = 2000L
         val job = createTestJob("unlimited-attempts", maxAttempts = Job.Parameters.UNLIMITED)
         coEvery { job.run() } returns Job.Result.retry(backoff)
-        every { job.runAttempt } returns 100 // high attempt count, but UNLIMITED
+        every { job.runAttempt } returns 100 
 
         val done = setupControllerToReturnJobOnce(job)
         jobRunner.launchIn(runnerScope)
@@ -191,7 +191,7 @@ class JobRunnerTest {
         verify { job.onRetry() }
     }
 
-    // -- CancellationException --
+    
 
     @Test
     fun `launchIn keeps running after a stray CancellationException from job run`() = runTest {
@@ -218,7 +218,7 @@ class JobRunnerTest {
         val coroutineJob = jobRunner.launchIn(runnerScope)
         allDone.await()
 
-        // The stray CancellationException is a job failure; the runner survives for the next job.
+        
         coVerify { jobController.onFailure(strayJob) }
         coVerify { jobController.onSuccess(nextJob) }
         assertTrue("runner must still be active", coroutineJob.isActive)
@@ -247,7 +247,7 @@ class JobRunnerTest {
         coVerify(exactly = 0) { jobController.onSuccess(job) }
     }
 
-    // -- Generic exception treated as failure --
+    
 
     @Test
     fun `launchIn treats generic exception from job run as failure`() = runTest {
@@ -263,7 +263,7 @@ class JobRunnerTest {
         verify { job.onFailure() }
     }
 
-    // -- WakeLock released on exception --
+    
 
     @Test
     fun `launchIn releases wake lock even when job run throws exception`() = runTest {
@@ -295,11 +295,11 @@ class JobRunnerTest {
         verify { com.difft.android.chat.util.WakeLockUtil.release(wakeLock, "wakelock-success") }
     }
 
-    // -- fail-soft key-unavailable loop exit --
+    
 
     @Test
     fun `G1 launchIn breaks loop and completes normally when pull throws WCDBKeyUnavailableException`() = runTest {
-        // Runner must stop cleanly (break), not crash or spin; not a CancellationException subtype.
+        
         coEvery { jobController.pullNextEligibleJobForExecution(any(), any()) } throws
             WCDBKeyUnavailableException("cipher key unavailable")
 
@@ -312,7 +312,7 @@ class JobRunnerTest {
         coVerify(exactly = 0) { jobController.onFailure(any()) }
     }
 
-    // -- launchIn loops and processes multiple jobs --
+    
 
     @Test
     fun `launchIn processes multiple jobs sequentially`() = runTest {
@@ -343,7 +343,7 @@ class JobRunnerTest {
         coVerify { jobController.onSuccess(job2) }
     }
 
-    // -- Helpers --
+    
 
     private fun createTestJob(
         id: String,
@@ -368,15 +368,15 @@ class JobRunnerTest {
         return job
     }
 
-    /**
-     * Sets up the mock [JobController] to return [job] on the first call to
-     * [pullNextEligibleJobForExecution], then suspend indefinitely on subsequent calls.
-     *
-     * Returns a [CompletableDeferred] that completes when the runner has finished
-     * processing the first job and enters the second (blocking) pull call. This
-     * signals to the test that all side effects (onJobFinished, onSuccess, etc.) have
-     * been executed and are safe to verify.
-     */
+    
+
+
+
+
+
+
+
+
     private fun setupControllerToReturnJobOnce(job: Job): CompletableDeferred<Unit> {
         val done = CompletableDeferred<Unit>()
         var called = false
@@ -385,9 +385,9 @@ class JobRunnerTest {
                 called = true
                 job
             } else {
-                // Signal that the first job is fully processed
+                
                 done.complete(Unit)
-                // Suspend forever — simulates waiting for next job
+                
                 CompletableDeferred<Unit>().await()
                 error("unreachable")
             }

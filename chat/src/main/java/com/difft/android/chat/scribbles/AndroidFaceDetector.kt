@@ -7,9 +7,9 @@ import android.graphics.RectF
 import com.difft.android.base.log.lumberjack.L
 import java.util.Locale
 
-/**
- * Detects faces with the built in Android face detection.
- */
+
+
+
 internal class AndroidFaceDetector : FaceDetector {
 
     override fun detect(bitmap: Bitmap): List<FaceDetector.Face> {

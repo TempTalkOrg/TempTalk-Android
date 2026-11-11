@@ -2,103 +2,103 @@ package com.difft.android.base.monitor
 
 import android.app.ApplicationExitInfo
 
-/**
- * Pure (Android-free at runtime) building blocks of the #1328 background-connection health report:
- * counter codec, exit aggregation, report throttle and message format. Kept separate from the
- * DataStore / system-service plumbing so every decision is unit-testable on the JVM.
- *
- * Privacy: only enum names, counts and coarse system-state flags. No identifiers.
- */
 
-/** One historical process exit, reduced to the two facts the report needs. */
+
+
+
+
+
+
+
+
 data class ExitSample(
-    /** Stable reason name, see [KeepAliveHealthModel.exitReasonName]. */
+    
     val reasonName: String,
-    /** True when the process importance at exit was `<= IMPORTANCE_FOREGROUND_SERVICE`. */
+    
     val atForegroundServiceOrAbove: Boolean
 )
 
-/** System-state facts at report time. `null` means "not available on this API level / unreadable". */
+
 data class HealthSnapshot(
     val sdkInt: Int,
     val keepAliveEnabled: Boolean,
     val ignoringBatteryOptimizations: Boolean?,
     val backgroundRestricted: Boolean?,
-    /** `ConnectivityManager.RESTRICT_BACKGROUND_STATUS_*` value. */
+    
     val restrictBackgroundStatus: Int?,
     val notificationsEnabled: Boolean?,
     val canUseFullScreenIntent: Boolean?,
-    /** `UsageStatsManager.STANDBY_BUCKET_*` value. */
+    
     val standbyBucket: Int?,
-    /** `AlarmManager.canScheduleExactAlarms`; sets the stall threshold, so it qualifies the `stall_*` counters. */
+    
     val canScheduleExactAlarms: Boolean? = null,
-    /** USB/wireless debugging on: a developer device whose power numbers adb skews (#1376). */
+    
     val adbEnabled: Boolean? = null
 )
 
-/** What the reporter should do on this launch. */
+
 enum class ReportDecision {
-    /** Not reporting (keepAlive off and outside the control sample): drop pending data and the window start. */
+    
     DISABLED,
 
-    /** First eligible launch (or clock moved backwards): start a window, no report. */
+    
     SEED,
 
-    /** Window not yet 24 h old: keep accumulating. */
+    
     WAIT,
 
-    /** Send the report. */
+    
     REPORT
 }
 
-/**
- * Failure types for [ForegroundServiceFailureRecorder]; the enum name is the persisted key.
- *
- * [terminal] marks failures after which no further start attempt follows. The direct-attempt
- * failures are always followed by a background retry that usually succeeds, so only terminal ones
- * feed the 7-day `fgs_fail` count behind the verdict's F rule; the 24 h report lists every type.
- */
+
+
+
+
+
+
+
 enum class FgsStartFailure(val terminal: Boolean) {
-    /** The direct attempt threw `UnableToStartException` (a wrapped ForegroundServiceStartNotAllowedException). Retried. */
+    
     DIRECT_NOT_ALLOWED(terminal = false),
 
-    /** `startForegroundService` threw SecurityException on the direct attempt. Retried. */
+    
     DIRECT_SECURITY(terminal = false),
 
-    /** Any other exception on the direct attempt. Retried. */
+    
     DIRECT_OTHER(terminal = false),
 
-    /** The deferred background retry (`startWhenCapable`) also failed. */
+    
     RETRY_FAILED(terminal = true),
 
-    /** The service started but `Service.startForeground` was refused (FGSNAE), then stopSelf(). */
+    
     STARTFG_REFUSED(terminal = true),
 
-    /** No notification channel could carry the service notification, so the start was not issued (#1354). */
+    
     NO_CHANNEL(terminal = true)
 }
 
-/** Keys of the in-process event counters ([KeepAliveHealthCounters]); also the report field names. */
+
 object HealthEventKeys {
-    /** Seconds the keep-alive foreground service was alive in the window. Reported as minutes. */
+    
     const val FGS_ALIVE_S = "fgs_alive_s"
     const val FGS_STARTS = "fgs_starts"
     const val FCM_RECV = "fcm_recv"
 
-    /** FCM sent as high priority but delivered as normal (app standby / quota downgrade). */
+    
     const val FCM_DEPRIO = "fcm_deprio"
 
-    /** Outcome of an FCM-triggered HTTP pull ([KeepAliveHealthCounters.onPullResult]). */
+    
     const val PULL_OK = "pull_ok"
     const val PULL_FAIL = "pull_fail"
 
-    /** Daily-window only: foreground-service start failures of every type, see [KeepAliveHealthWindow]. */
+    
     const val FGS_FAIL = "fgs_fail"
 
-    /**
-     * Server-to-device latency bucket upper bounds, inclusive (`latency <= bound`): `2h` plus `more`
-     * is exactly "slower than 30 min" and `more` alone is exactly "slower than 2 h".
-     */
+    
+
+
+
     val LATENCY_BOUNDS: List<Pair<Long, String>> = listOf(
         10_000L to "10s",
         60_000L to "1m",
@@ -108,52 +108,52 @@ object HealthEventKeys {
     )
     const val LATENCY_MORE = "more"
 
-    /** Bucket suffixes in report order. */
+    
     val LATENCY_SUFFIXES: List<String> = LATENCY_BOUNDS.map { it.second } + LATENCY_MORE
 
     fun latencyKey(channel: DeliveryChannel, suffix: String): String = "lat_${channel.key}_$suffix"
 
-    /** All per-channel latency keys, channel-major, in report order. */
+    
     val ALL_LATENCY_KEYS: List<String> =
         DeliveryChannel.entries.flatMap { ch -> LATENCY_SUFFIXES.map { latencyKey(ch, it) } }
 
-    /**
-     * FCM transit latency (`receive - sentTime`) of high-priority messages, bucketed by
-     * [LATENCY_BOUNDS]. Separate from the per-channel latency, which only counts the channel that
-     * stored an envelope first and so hides a late FCM backlog behind the WebSocket reconnect.
-     */
+    
+
+
+
+
     fun fcmTransitKey(suffix: String): String = "fcmt_$suffix"
 
-    /** All FCM transit keys in report order. */
+    
     val ALL_FCM_TRANSIT_KEYS: List<String> = LATENCY_SUFFIXES.map { fcmTransitKey(it) }
 
-    /** App stalls (alarm chain found stale) by duration: `<= 30 min`, `<= 2 h`, longer. */
+    
     const val STALL_30M = "stall_30m"
     const val STALL_2H = "stall_2h"
     const val STALL_MORE = "stall_more"
 
-    /** Total stalled minutes across [STALL_30M], [STALL_2H] and [STALL_MORE]. */
+    
     const val STALL_MIN = "stall_min"
 
-    /** All stall keys in report order. */
+    
     val ALL_STALL_KEYS: List<String> = listOf(STALL_30M, STALL_2H, STALL_MORE, STALL_MIN)
 
-    /**
-     * Deliveries counted by [LateDeliveryTracker] (late more than 5 min, background or catch-up
-     * after opening the app): the evidence behind both the startup prompt and the `L` verdict rule.
-     */
+    
+
+
+
     const val LATE_5M = "late_5m"
 }
 
-/** Arrival path of an envelope; [key] is the infix of its latency counters (`lat_<key>_<bucket>`). */
+
 enum class DeliveryChannel(val key: String) {
-    /** Long-lived WebSocket (`tag == "message"`). */
+    
     WS("ws"),
 
-    /** FCM payload carrying the envelope. */
+    
     FCM("fcm"),
 
-    /** Server pull over HTTP. */
+    
     PULL("pull")
 }
 
@@ -161,21 +161,21 @@ object KeepAliveHealthModel {
 
     const val REPORT_INTERVAL_MS: Long = 24L * 60 * 60 * 1000
 
-    /** Share of keep-alive-off devices that also report, as the FCM-only control group. */
+    
     const val CONTROL_SAMPLE_PERCENT = 20
 
-    /** @param sampleSlot stable per-install value in `0 until 100`. */
+    
     fun isEligible(keepAliveEnabled: Boolean, sampleSlot: Int): Boolean =
         keepAliveEnabled || sampleSlot < CONTROL_SAMPLE_PERCENT
 
-    /** Bucket key for a server-to-device latency; negative values (clock noise) land in the first bucket. */
+    
     fun latencyKey(channel: DeliveryChannel, latencyMs: Long): String =
         HealthEventKeys.latencyKey(channel, latencySuffix(latencyMs))
 
-    /** Bucket key for an FCM transit latency, same bounds and clamping as [latencyKey]. */
+    
     fun fcmTransitKey(latencyMs: Long): String = HealthEventKeys.fcmTransitKey(latencySuffix(latencyMs))
 
-    /** Bucket key for an app stall of [durationMs]. */
+    
     fun stallKey(durationMs: Long): String = when {
         durationMs <= STALL_SHORT_MS -> HealthEventKeys.STALL_30M
         durationMs <= STALL_LONG_MS -> HealthEventKeys.STALL_2H
@@ -188,7 +188,7 @@ object KeepAliveHealthModel {
     private fun latencySuffix(latencyMs: Long): String =
         HealthEventKeys.LATENCY_BOUNDS.firstOrNull { latencyMs <= it.first }?.second ?: HealthEventKeys.LATENCY_MORE
 
-    /** `ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND_SERVICE`. */
+    
     private const val IMPORTANCE_FOREGROUND_SERVICE = 125
 
     fun decide(eligible: Boolean, lastReportTs: Long?, now: Long): ReportDecision = when {
@@ -201,7 +201,7 @@ object KeepAliveHealthModel {
     fun toSample(reason: Int, importance: Int): ExitSample =
         ExitSample(exitReasonName(reason), importance <= IMPORTANCE_FOREGROUND_SERVICE)
 
-    /** Counter key for an exit sample, e.g. `ANR_fg`, `EXIT_SELF_bg`. */
+    
     fun exitKey(sample: ExitSample): String =
         sample.reasonName + if (sample.atForegroundServiceOrAbove) "_fg" else "_bg"
 
@@ -214,7 +214,7 @@ object KeepAliveHealthModel {
         return out
     }
 
-    /** Names every `ApplicationExitInfo.REASON_*`; unknown values fall back to `R<number>`. */
+    
     fun exitReasonName(reason: Int): String = when (reason) {
         ApplicationExitInfo.REASON_UNKNOWN -> "UNKNOWN"
         ApplicationExitInfo.REASON_EXIT_SELF -> "EXIT_SELF"
@@ -236,12 +236,12 @@ object KeepAliveHealthModel {
         else -> "R$reason"
     }
 
-    /**
-     * Single-line `key=value` report. Counters are flat (`exit_ANR_fg=1`) so Crashlytics message
-     * search and later parsing need no nested syntax; totals are always present so an all-zero
-     * report still carries the denominator. Event, verdict and FCM-token fields are always present,
-     * in a fixed order.
-     */
+    
+
+
+
+
+
     fun formatReport(
         snapshot: HealthSnapshot,
         windowMs: Long,
@@ -295,7 +295,7 @@ object KeepAliveHealthModel {
     const val FCM_STATE_NOGMS = "nogms"
     const val FCM_STATE_UNKNOWN = "unknown"
 
-    /** Maps a persisted FCM state to a report value; anything unrecognised is `unknown`. */
+    
     fun fcmStateName(raw: String?): String = when (raw) {
         FCM_STATE_OK, FCM_STATE_FAIL, FCM_STATE_NOGMS -> raw
         else -> FCM_STATE_UNKNOWN
@@ -328,7 +328,7 @@ object KeepAliveHealthModel {
     }
 }
 
-/** `NAME:count,NAME:count` codec for persisted counters. Tolerates corrupt input (drops bad pairs). */
+
 object KeepAliveHealthCodec {
 
     private val KEY_PATTERN = Regex("[A-Za-z0-9_]{1,48}")

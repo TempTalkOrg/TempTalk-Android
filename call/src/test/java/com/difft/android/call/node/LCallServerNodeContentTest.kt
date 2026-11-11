@@ -23,10 +23,10 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/**
- * [LCallServerNodeContent] contract (issue #1209): the selected node is now marked visually, the
- * protocol row toggles the transport, and the upstream section is gated on its own flag.
- */
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34])
@@ -88,7 +88,7 @@ class LCallServerNodeContentTest {
         }
     }
 
-    // T28
+    
     @Test
     fun `only the selected node carries a checkmark`() {
         setContent(selectedNode = nodeB)
@@ -100,20 +100,20 @@ class LCallServerNodeContentTest {
         composeTestRule.onNodeWithText(nodeB.name).assertIsDisplayed()
     }
 
-    // T29
+    
     @Test
     fun `tapping a node reports it`() {
         var picked: ServerNode? = null
         setContent(onServerSelected = { picked = it })
 
-        // The node name also appears in the connection-status row, so pick the clickable one.
+        
         composeTestRule.onAllNodesWithText(nodeA.name)
             .filterToOne(hasClickAction())
             .performClick()
         assertEquals(nodeA, picked)
     }
 
-    // T30
+    
     @Test
     fun `the protocol row reads WebSocket and requests QUIC when toggled`() {
         var requested: Boolean? = null
@@ -124,7 +124,7 @@ class LCallServerNodeContentTest {
         assertEquals(true, requested)
     }
 
-    // T31
+    
     @Test
     fun `a disconnected page shows the disconnected status`() {
         setContent(connectedNode = null)
@@ -132,7 +132,7 @@ class LCallServerNodeContentTest {
         composeTestRule.onNodeWithText(string(R.string.call_server_node_disconnected)).assertExists()
     }
 
-    // T32
+    
     @Test
     fun `the upstream section is gated and shows an empty state`() {
         setContent(showUpstreamSection = false)
@@ -148,7 +148,7 @@ class LCallServerNodeContentTest {
         composeTestRule.onNodeWithText(string(R.string.call_server_node_upstream_empty)).assertExists()
     }
 
-    // T33
+    
     @Test
     fun `loading replaces the refresh action with a spinner`() {
         setContent(isLoading = true)

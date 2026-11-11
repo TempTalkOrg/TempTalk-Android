@@ -8,6 +8,7 @@ import com.difft.android.dualpane.PaneNavigator.Companion.TAB_CHATS
 import com.difft.android.dualpane.PaneNavigator.Companion.TAB_CONTACTS
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -20,11 +21,11 @@ import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import java.util.concurrent.TimeUnit
 
-/**
- * [PaneNavigator]: a removed contact's conversation closes on
- * the home screen from outside its page, pushed one-pane pages are opaque during the slide, and
- * only a one-pane user pop of a pushed page animates (no stored pop animations survive an unfold).
- */
+
+
+
+
+
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [33])
 class PaneNavigatorExternalCloseAndPopTest {
@@ -43,7 +44,7 @@ class PaneNavigatorExternalCloseAndPopTest {
         settle()
     }
 
-    /** Runs posted work without letting animations finish. */
+    
     private fun idle() = shadowOf(Looper.getMainLooper()).idle()
 
     private fun settle() = shadowOf(Looper.getMainLooper()).idleFor(1, TimeUnit.SECONDS)
@@ -58,7 +59,7 @@ class PaneNavigatorExternalCloseAndPopTest {
         settle()
     }
 
-    // ---------------------------------------------------------------- removed conversation
+    
 
     @Test
     @Config(qualifiers = "w840dp-h900dp")
@@ -89,7 +90,7 @@ class PaneNavigatorExternalCloseAndPopTest {
         settle()
     }
 
-    // ---------------------------------------------------------------- opaque pushed pages
+    
 
     @Test
     @Config(qualifiers = "w400dp-h800dp")
@@ -105,23 +106,25 @@ class PaneNavigatorExternalCloseAndPopTest {
 
     @Test
     @Config(qualifiers = "w840dp-h900dp")
-    fun `two-pane pushed pages are left as they are`() {
+    fun `two-pane pushed pages are opaque too, the root keeps the pane background`() {
         launch()
         open("a")
         push("settings")
 
-        assertNull(host.pages(TAB_CHATS).last().view!!.background)
+        val (root, pushed) = host.pages(TAB_CHATS)
+        assertNull(root.view!!.background)
+        assertTrue(pushed.view!!.background is ColorDrawable)
     }
 
-    // ---------------------------------------------------------------- pop animations
+    
 
     @Test
     @Config(qualifiers = "w400dp-h800dp")
-    fun `only a one-pane user pop of a pushed page animates`() {
+    fun `only a user pop of a pushed page slides`() {
         launch()
-        // The pop decides its animations when it happens; nothing is stored with the push.
-        assertNotNull(nav.popAnimations(userPop = true))
-        assertNull("clear, replace and pop-to-root are instant", nav.popAnimations(userPop = false))
+        
+        assertTrue(nav.popSlides(userPop = true))
+        assertFalse("clear, replace and pop-to-root are instant", nav.popSlides(userPop = false))
 
         open("a")
         push("settings")
@@ -132,7 +135,7 @@ class PaneNavigatorExternalCloseAndPopTest {
 
     @Test
     @Config(qualifiers = "w400dp-h800dp")
-    fun `a page pushed in one-pane pops instantly after an unfold`() {
+    fun `a page pushed in one-pane slides out like any pop after an unfold`() {
         launch()
         open("a")
         push("settings")
@@ -142,10 +145,11 @@ class PaneNavigatorExternalCloseAndPopTest {
         settle()
         val pushed = host.pages(TAB_CHATS).last()
 
+        
         assertTrue(nav.pop(TAB_CHATS))
-        idle()
+        settle()
 
-        assertNull("no stored pop animation", pushed.view)
+        assertNull(pushed.view)
         assertEquals(1, nav.depth())
     }
 

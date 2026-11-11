@@ -42,10 +42,10 @@ import difft.android.messageserialization.For
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-/**
- * Conversation-level auto-translate settings: off / Chinese / English, plus the state of the
- * translation pack the selected target needs. A page of the home detail stack or its shell.
- */
+
+
+
+
 @AndroidEntryPoint
 class TranslateSettingsFragment : Fragment(), SettingsIdiomPage {
 
@@ -63,8 +63,8 @@ class TranslateSettingsFragment : Fragment(), SettingsIdiomPage {
         }
     })
 
-    // Every entry point is hidden on a build that cannot translate; reaching here means something
-    // routed past that, so the page leaves instead of showing inert controls.
+    
+    
     private val usable: Boolean get() = target != null && translateBackend.isSupported
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
@@ -121,7 +121,7 @@ class TranslateSettingsFragment : Fragment(), SettingsIdiomPage {
     }
 }
 
-/** Translate settings as a detail destination (home detail stack, or its shell Activity). */
+
 class TranslateSettingsDestination(private val target: For) : DetailDestination {
     override fun newFragment(): Fragment = TranslateSettingsFragment.newInstance(target)
     override fun shellIntent(context: Context): Intent = TranslateSettingsActivity.intent(context, target)

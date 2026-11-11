@@ -34,21 +34,13 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/**
- * Tests for [ContactsUpdater] action=3 (peer disabled / lost friend) behavior.
- *
- * Weak-contact feature decoupling: the directory `action` cannot distinguish "I deleted the friend"
- * (action=2) from "I lost the friend" (action=3), so action=3 now does the **identical hard delete**
- * as action=2 (contactor delete + `removeRoomAndMessages` + unfriend + emit). Whether the contact
- * enters the weak state is signalled independently by `notifyType=25` and never affects this delete.
- * The real private `processContactNotifyMessage` is invoked via reflection (the public
- * `updateBySignalNotifyMessage` only enqueues onto a debounced channel processed asynchronously, not
- * directly testable). This invokes production, not a re-implementation.
- *
- * **WCDB Expression constraint**: the action=3 (and action=0) branches construct
- * `DBContactorModel.id.eq(...)` (CppObject native lib), not loadable on the host JVM, so they are
- * `@Ignore`-d as compilation guards + documented behavior (instrumentation only).
- */
+
+
+
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33])
@@ -75,7 +67,7 @@ class ContactsUpdaterAction3Test {
         clearMocks(userManager, dbMessageStore, wcdb, weakContactReconciler)
     }
 
-    /** Invoke the real private suspend `processContactNotifyMessage(TTNotifyMessage)`. */
+    
     private suspend fun invokeProcess(message: TTNotifyMessage) {
         val method = ContactsUpdater::class.java.getDeclaredMethod(
             "processContactNotifyMessage",
@@ -86,7 +78,7 @@ class ContactsUpdaterAction3Test {
         suspendInvoke(method, updater, message)
     }
 
-    /** Bridge a reflective call to a Kotlin suspend function from a coroutine. */
+    
     private suspend fun suspendInvoke(
         method: java.lang.reflect.Method,
         receiver: Any,
@@ -121,56 +113,49 @@ class ContactsUpdaterAction3Test {
             notifyType = TTNotifyMessage.NOTIFY_MESSAGE_TYPE_UPDATE_CONTACT,
         )
 
-    // ---- action=3 hard deletes (identical to action=2) ----------------------------------
+    
 
     @Test
     @Ignore("action=3 branch builds DBContactorModel.id.eq + removeRoomAndMessages (CppObject native lib); instrumentation only.")
     fun `T7 action 3 hard deletes contactor removes room unfriends and emits, like action 2`() = runTest {
         invokeProcess(notify(listOf(member("peer-x", action = 3))))
 
-        // action=3 is now a hard delete identical to action=2 (weak state is independent of this).
+        
         verify { wcdb.contactor.deleteObjects(any()) }
         verify { dbMessageStore.removeRoomAndMessages("peer-x") }
         verify { ContactorUtil.updateContactRequestStatus("peer-x", isDelete = true) }
         verify { ContactorUtil.emitContactsUpdate(listOf("peer-x")) }
     }
 
-    // ---- companion: action=0 still adds (touches WINQ Expression → @Ignore) -------------
+    
 
     @Test
     @Ignore("action=0 branch builds DBContactorModel.id.eq (CppObject native lib); instrumentation only.")
     fun `T7b action 0 still inserts contactor on same-shaped notify`() = runTest {
         invokeProcess(notify(listOf(member("peer-y", action = 0))))
 
-        // action=0 deletes-then-inserts the contactor and emits an update.
+        
         verify { wcdb.contactor.insertObject(any()) }
         verify { ContactorUtil.emitContactsUpdate(listOf("peer-y")) }
     }
 
-    // ---- action=0 clears any weak placeholder (friend restored) but KEEPS the room ------
-    // 方案1: restoring a friend comes through directory action=0 (not notify ct=1), so action=0
-    // must clear the weak placeholder via clearWeakOnFriendRestored — which preserves the room.
+    
     @Test
     @Ignore("action=0 branch builds DBContactorModel.id.eq (CppObject native lib); instrumentation only.")
     fun `T7c action 0 clears weak placeholder via friend-restored path without deleting room`() = runTest {
         invokeProcess(notify(listOf(member("peer-z", action = 0))))
 
-        // Friend restored → clear the weak placeholder for this uid.
+        
         coVerify(exactly = 1) { weakContactReconciler.clearWeakOnFriendRestored("peer-z") }
-        // The conversation must be PRESERVED on restore — action=0 never deletes the room itself,
-        // and clearWeakOnFriendRestored (vs removeWeak) is the room-preserving entry by contract.
+        
+        
         verify(exactly = 0) { dbMessageStore.removeRoomAndMessages("peer-z") }
     }
 
-    // ---- P1-04 action=0 publicAccountType carry-forward (ARCH-CRIT-1) --------------------
-    // These invoke the real private processContactNotifyMessage, whose action=0 branch reads the
-    // prior row via DBContactorModel.id.eq(...) (CppObject native lib) → instrumentation only.
+    
 
-    // T8b — action=0 RESTORE of an already-OFFICIAL id whose notify omits publicAccountType must
-    // carry the prior type forward (not demote to NORMAL). The handler reads the prior row via
-    // DBContactorModel.id.eq(...) (CppObject native lib) → @Ignore (instrumentation only). The slot
-    // capture pins the inserted publicAccountType so the assertion is meaningful under instrumentation.
-    // The pure carry-forward logic itself is fully pinned on the JVM by ResolvePublicAccountTypeTest.
+    
+    
     @Test
     @Ignore("action=0 branch reads prior row + builds DBContactorModel.id.eq (CppObject native lib); instrumentation only.")
     fun `T8b action 0 restore with null publicAccountType keeps prior OFFICIAL type`() = runTest {
@@ -181,11 +166,11 @@ class ContactsUpdaterAction3Test {
 
         invokeProcess(notify(listOf(member("peer-official", action = 0, publicConfigs = PublicConfigs(publicAccountType = null)))))
 
-        // Carry-forward: absent notify field keeps the prior OFFICIAL type (no demote).
+        
         assertEquals(PublicAccountType.OFFICIAL, inserted.captured.publicAccountType)
     }
 
-    // T8c — action=0 add of a genuinely-new id (no prior row) with an absent field defaults to NORMAL.
+    
     @Test
     @Ignore("action=0 branch reads prior row + builds DBContactorModel.id.eq (CppObject native lib); instrumentation only.")
     fun `T8c action 0 genuinely-new id with null field defaults to NORMAL`() = runTest {
@@ -198,18 +183,17 @@ class ContactsUpdaterAction3Test {
         assertEquals(PublicAccountType.NORMAL, inserted.captured.publicAccountType)
     }
 
-    // T8d — action=0 insert THROWS → the official-account cache membership must stay unchanged
-    // (the put now runs inside the try, only after a successful insert). Handler builds
-    // DBContactorModel.id.eq (CppObject native lib) → @Ignore (instrumentation only).
+    
+    
     @Test
     @Ignore("action=0 branch builds DBContactorModel.id.eq (CppObject native lib); instrumentation only.")
     fun `T8d action 0 insert failure leaves official cache unchanged`() = runTest {
         OfficialAccountCache.clear()
-        OfficialAccountCache.put("peer-fail", true)   // pre-existing OFFICIAL membership
+        OfficialAccountCache.put("peer-fail", true)   
         every { wcdb.contactor.getFirstObject(any<Expression>()) } returns null
         every { wcdb.contactor.insertObject(any<ContactorModel>()) } throws RuntimeException("wcdb insert failed")
 
-        // notify would resolve NORMAL; a pre-fix put(...,false) would wrongly drop membership.
+        
         invokeProcess(notify(listOf(member("peer-fail", action = 0, publicConfigs = PublicConfigs(publicAccountType = null)))))
 
         assertTrue(OfficialAccountCache.contains("peer-fail"))

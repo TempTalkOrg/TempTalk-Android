@@ -16,6 +16,8 @@
 
 package com.difft.android.call.ui.video
 
+import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTransformGestures
@@ -47,6 +49,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.util.lerp
 import androidx.compose.ui.platform.LocalView
 import androidx.lifecycle.Lifecycle
 import androidx.compose.ui.res.painterResource
@@ -68,6 +71,7 @@ import io.livekit.android.room.track.Track
 import io.livekit.android.room.track.VideoTrack
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import livekit.org.webrtc.RendererCommon
@@ -78,16 +82,16 @@ enum class ScaleType {
     Fill,
 }
 
-/** Camera tiles use [Texture] (it moves and resizes with its card); a share keeps its own SurfaceView. */
+
 enum class ViewType {
     Texture,
     ScreenShare,
 }
 
-/**
- * Widget for displaying a VideoTrack. Handles the Compose <-> AndroidView interop needed to use
- * [TextureViewRenderer].
- */
+
+
+
+
 @Composable
 fun VideoRenderer(
     coroutineScope: CoroutineScope,
@@ -98,21 +102,24 @@ fun VideoRenderer(
     mirror: Boolean = false,
     scaleType: ScaleType = ScaleType.Fill,
     viewType: ViewType = ViewType.Texture,
-    draggable: Boolean = true,
+    draggable: Boolean = false,
     reconnectGeneration: Int = 0,
     onFrameAspect: ((Float) -> Unit)? = null,
     onFrameSize: FrameSizeListener? = null,
     zoomResetKey: Any? = null,
+    
+    zoomResetRequest: Int = 0,
     firstFrameGate: FirstFrameGate? = null,
-    // Kept composed but not shown (picture in picture): the view goes INVISIBLE and adaptive stream pauses it.
+    
     hidden: Boolean = false,
-    // How far (px) the view reaches past the visible area on each side, e.g. a share filling the
-    // window: a drag may move it that far even unzoomed.
+    
+    
     panSlack: Offset = Offset.Zero,
-    // Non-null while the card shows an ambient letterbox: the frame's edge colours, sampled twice a second.
+    
+    
     onEdgeColors: ((EdgeColors) -> Unit)? = null,
 ) {
-    // Show a black box for preview.
+    
     if (LocalView.current.isInEditMode) {
         Box(
             modifier = Modifier
@@ -128,8 +135,8 @@ fun VideoRenderer(
         if (sourceType == Track.Source.SCREEN_SHARE) ScreenShareVisibility() else ComposeVisibility()
     }
     var boundVideoTrack by remember { mutableStateOf<VideoTrack?>(null) }
-    // 已绑定的"重绑代"。当 reconnectGeneration 变化（重订阅完成）时，即使 track 对象未变，
-    // 也强制对当前 track 重新 removeRenderer+addRenderer，刷新 sink 让新帧恢复。
+    
+    
     var boundGeneration by remember { mutableIntStateOf(Int.MIN_VALUE) }
     var view by remember { mutableStateOf<Any?>(null) }
 
@@ -145,15 +152,17 @@ fun VideoRenderer(
     val currentOnFrameSize by rememberUpdatedState(onFrameSize)
     val currentPanSlack by rememberUpdatedState(panSlack)
     var viewSize by remember { mutableStateOf(IntSize.Zero) }
-    // The aspect last reported; reset whenever a different track or generation is bound.
+    
     val lastAspect = remember { LastAspect() }
-    // Reports frame sizes from the bound track; one per binding, so a rebind always reports again.
+    
     var boundProbe by remember { mutableStateOf<FrameSizeProbe?>(null) }
     val currentFirstFrameGate by rememberUpdatedState(firstFrameGate)
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
+    
+    val frameShapeChanges = remember { Channel<Unit>(Channel.CONFLATED) }
 
-    // Reports the rotated frame aspect on the main thread; renderers call back on their render/decode thread.
-    // A main-looper Handler (not View.post) so a detached view cannot hold the update back; dropped once released.
+    
+    
     fun frameAspectEvents(): RendererCommon.RendererEvents? {
         if (onFrameAspect == null) return null
         return object : RendererCommon.RendererEvents {
@@ -177,9 +186,9 @@ fun VideoRenderer(
     
     var frameReporter by remember { mutableStateOf<FirstFrameReporter?>(null) }
 
-    // Reports this renderer's first frame once it is drawn to the surface, not merely received:
-    // RendererEvents.onFirstFrameRendered fires on receipt, before a TextureView can show anything.
-    // Scale 0 skips the bitmap readback.
+    
+    
+    
     fun armFirstFrame(renderer: Any) {
         if (firstFrameGate == null) return
         val reporter = FirstFrameReporter(
@@ -194,16 +203,13 @@ fun VideoRenderer(
         reporter.arm()
     }
 
-    // 获取 LifecycleOwner 以检查 Activity 状态
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
 
     fun cleanupVideoTrack() {
-        // 确保在主线程执行，避免线程安全问题
         (boundProbe ?: view as? VideoSink)?.let { sink ->
             try {
                 boundVideoTrack?.removeRenderer(sink)
             } catch (e: Exception) {
-                // 忽略已释放的 renderer 导致的异常
                 L.w { "[VideoRenderer] unbindTrack removeRenderer failed: ${e.stackTraceToString()}" }
             }
         }
@@ -212,62 +218,53 @@ fun VideoRenderer(
         boundVideoTrack = null
     }
     
-    /**
-     * 同步清理所有资源，确保在 Activity 销毁前立即执行
-     */
+    
+
+
     fun cleanupAllResourcesSync() {
         if (isReleased) {
             return
         }
         isReleased = true
         
-        // 1. 先清理 video track 的 renderer 引用
         (boundProbe ?: view as? VideoSink)?.let { sink ->
             try {
                 boundVideoTrack?.removeRenderer(sink)
             } catch (e: Exception) {
-                // 忽略已释放的 renderer 导致的异常
                 L.w { "[VideoRenderer] cleanupAllResourcesSync removeRenderer failed: ${e.stackTraceToString()}" }
             }
         }
         boundProbe?.close()
         boundProbe = null
         
-        // 2. 清理 videoSinkVisibility
         try {
             videoSinkVisibility.onDispose()
         } catch (e: Exception) {
-            // 忽略异常
             L.w { "[VideoRenderer] cleanupAllResourcesSync onDispose failed: ${e.stackTraceToString()}" }
         }
         
-        // 3. 清理 ScreenShareSurfaceViewRenderer 的监听器
         frameStatusListener?.let {
             try {
                 (view as? ScreenShareSurfaceViewRenderer)?.removeFrameStatusListener(it)
             } catch (e: Exception) {
-                // 忽略已释放的 view 导致的异常
                 L.w { "[VideoRenderer] cleanupAllResourcesSync removeFrameStatusListener failed: ${e.stackTraceToString()}" }
             }
             frameStatusListener = null
         }
         
-        // 4. 清理 viewVisibility 引用
         try {
             when (viewType) {
                 ViewType.ScreenShare -> {
                     (view as? ScreenShareSurfaceViewRenderer)?.viewVisibility = null
                 }
                 else -> {
-                    // 其他类型可能也有 viewVisibility，但 ScreenShare 是主要问题
+                    
                 }
             }
         } catch (e: Exception) {
-            // 忽略清理 viewVisibility 时的异常
             L.w { "[VideoRenderer] cleanupAllResourcesSync viewVisibility cleanup failed: ${e.stackTraceToString()}" }
         }
         
-        // 5. 释放 renderer
         try {
             when (viewType) {
                 ViewType.Texture -> {
@@ -278,22 +275,18 @@ fun VideoRenderer(
                 }
             }
         } catch (e: Exception) {
-            // 忽略释放过程中的异常
             L.w { "[VideoRenderer] cleanupAllResourcesSync release failed: ${e.stackTraceToString()}" }
         }
         
-        // 6. 清理所有引用
         view = null
         boundVideoTrack = null
     }
 
     fun setupVideoIfNeeded(videoTrack: VideoTrack?, view: Any) {
-        // 如果已经释放，不再设置新的 video track
         if (isReleased) {
             return
         }
         
-        // 检查 Activity 生命周期状态，如果已销毁则不再执行
         if (lifecycleOwner.lifecycle.currentState == Lifecycle.State.DESTROYED) {
             cleanupAllResourcesSync()
             return
@@ -312,7 +305,7 @@ fun VideoRenderer(
                 if (boundVideoTrack == videoTrack && boundGeneration == reconnectGeneration) {
                     return@withContext
                 }
-                // 重连重绑：先解绑旧 sink（同对象/异对象皆可），再绑到当前 track，刷新帧流。
+                
                 cleanupVideoTrack()
                 boundVideoTrack = videoTrack
                 boundGeneration = reconnectGeneration
@@ -321,7 +314,10 @@ fun VideoRenderer(
                     (view as? VideoSink)?.let { viewSink ->
                         val probe = if (currentOnFrameSize != null) {
                             FrameSizeProbe(viewSink, post = { mainHandler.post(it) }) { width, height, seenAt ->
-                                if (!isReleased) currentOnFrameSize?.invoke(width, height, seenAt)
+                                if (!isReleased) {
+                                    currentOnFrameSize?.invoke(width, height, seenAt)
+                                    frameShapeChanges.trySend(Unit)
+                                }
                             }
                         } else {
                             null
@@ -343,7 +339,7 @@ fun VideoRenderer(
         }
     }
 
-    // Keeps a live renderer in step with scaleType; the factory only covers the first value.
+    
     DisposableEffect(view, scaleType) {
         view?.let { applyScaling(it, scaleType) }
         onDispose { }
@@ -359,7 +355,7 @@ fun VideoRenderer(
         onDispose { }
     }
 
-    // A smaller pan range (a share's region changed) pulls an existing pan back inside it.
+    
     LaunchedEffect(panSlack, viewSize) {
         val limitX = (viewSize.width * scaleFactor - viewSize.width) / 2f + panSlack.x
         val limitY = (viewSize.height * scaleFactor - viewSize.height) / 2f + panSlack.y
@@ -367,16 +363,27 @@ fun VideoRenderer(
         offsetY = offsetY.coerceIn(-limitY, limitY)
     }
 
-    // A zoom/pan made for one scaling mode or slot size does not carry over to another.
+    
     LaunchedEffect(scaleType, zoomResetKey) {
         scaleFactor = 1f
         offsetX = 0f
         offsetY = 0f
     }
 
-    // view 是本 effect 的 key：首次组合时 AndroidView 的 factory 可能尚未给 view 赋值（仍为 null），
-    // 重连重建 renderer 时该时序更易触发。用安全转换跳过 null，待 factory 设置 view（null→非空）
-    // 后本 effect 会因 key 变化自动重跑并应用 mirror，既不崩溃也不丢镜像设置。
+    LaunchedEffect(zoomResetRequest) {
+        if (zoomResetRequest == 0) return@LaunchedEffect
+        val fromScale = scaleFactor
+        val fromX = offsetX
+        val fromY = offsetY
+        animate(0f, 1f, animationSpec = tween(ZOOM_RESET_MILLIS)) { t, _ ->
+            scaleFactor = lerp(fromScale, 1f, t)
+            offsetX = lerp(fromX, 0f, t)
+            offsetY = lerp(fromY, 0f, t)
+        }
+    }
+
+    
+    
     DisposableEffect(view, mirror) {
         when (viewType) {
             ViewType.Texture -> (view as? TextureViewRenderer)?.setMirror(mirror)
@@ -385,15 +392,21 @@ fun VideoRenderer(
         onDispose { }
     }
 
-    // Only camera renderers (TextureView) sample; a share keeps its plain bands.
+    
     val currentOnEdgeColors by rememberUpdatedState(onEdgeColors)
     val sampleEdges = onEdgeColors != null
     LaunchedEffect(view, sampleEdges) {
         val renderer = view as? TextureViewRenderer ?: return@LaunchedEffect
-        if (sampleEdges) sampleEdgeColors(renderer) { colors -> if (!isReleased) currentOnEdgeColors?.invoke(colors) }
+        if (sampleEdges) {
+            
+            frameShapeChanges.tryReceive()
+            sampleEdgeColors(renderer, frameShapeChanges) { colors ->
+                if (!isReleased) currentOnEdgeColors?.invoke(colors)
+            }
+        }
     }
 
-    // The screen-share renderer keeps its own placeholder and never arms the gate.
+    
     DisposableEffect(view, firstFrameGate) {
         val renderer = view?.takeIf { viewType != ViewType.ScreenShare }
         val gate = firstFrameGate
@@ -401,22 +414,19 @@ fun VideoRenderer(
         onDispose { if (renderer != null) gate?.detach(renderer) }
     }
 
-    // A gate reset (camera off) on this kept renderer needs a fresh one-shot listener; the factory's
-    // was spent on the stale image. The reporter skips arming while one is still pending.
+    
+    
     val gateGeneration = firstFrameGate?.generation
     LaunchedEffect(frameReporter, gateGeneration) {
         if (!isReleased) frameReporter?.arm()
     }
 
-    // 注意：不要以 videoTrack 为 key 做清理。全量重连会用**新的** track 对象替换旧 track，
-    // 若 onDispose 在 track 变化时执行 cleanupAllResourcesSync()（含 release()）会黑屏、丢最后一帧。
-    // track 的 old→new 解绑/重绑统一由 `update` 的 setupVideoIfNeeded 原地完成（removeRenderer →
-    // addRenderer，不 release/clearImage）。真正的 release 只交给下面 currentCompositeKeyHash 的
-    // onDispose（renderer 真正离开 composition：participant 离开 / 通话结束）。
+    
+    
+    
     DisposableEffect(currentCompositeKeyHash.toString()) {
         onDispose {
-            // 同步清理所有资源，确保在 Activity 销毁前立即执行
-            // 这是防止内存泄漏的关键：必须在 DisposableEffect 中同步清理
+            
             cleanupAllResourcesSync()
         }
     }
@@ -442,7 +452,7 @@ fun VideoRenderer(
                             }
 
                             override fun onNoFrameAvailable() {
-                                // 占位图仅用于首次加载首帧之前，后续不再展示
+                                
                             }
 
                             override fun onFirstFrameRendered() {
@@ -469,10 +479,8 @@ fun VideoRenderer(
                 .pointerInput(draggable) {
                     if(draggable){
 
-                        val maxScale = 10f
-
                         detectTransformGestures { _, pan, zoom, _ ->
-                            scaleFactor = (scaleFactor * zoom).coerceIn(1.0f, maxScale)
+                            scaleFactor = (scaleFactor * zoom).coerceIn(1.0f, MAX_ZOOM)
 
                             val slack = currentPanSlack
                             if (scaleFactor <= 1f && slack == Offset.Zero) {
@@ -499,7 +507,6 @@ fun VideoRenderer(
                 }
         )
 
-        // 占位 UI（根据 hasFrame 控制显示）
         if ((sourceType == Track.Source.SCREEN_SHARE) && !dismissPlaceHolderView) {
             Box(
                 modifier = Modifier
@@ -537,7 +544,10 @@ fun VideoRenderer(
 
 }
 
-/** Written on the render thread, reset on main when a track is bound. */
+private const val MAX_ZOOM = 8f
+private const val ZOOM_RESET_MILLIS = 250
+
+
 private class LastAspect {
     @Volatile
     var value = 0f

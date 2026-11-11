@@ -15,33 +15,13 @@ import org.robolectric.Robolectric
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
-/**
- * Pins the dual-pane gate mirror: `R.bool.dual_pane_layout_active` answers exactly what
- * `activity_index.xml` inflates.
- *
- * The dual-pane gate is ENFORCED by the resource qualifier on
- * `app/src/main/res/layout-w673dp-h480dp/activity_index.xml`, whose two-pane tree is marked by
- * `list_pane`. Both layouts carry `detail_pane` / `fragment_container_detail` (the per-tab detail
- * stacks restore into either tree across a fold), so IndexActivity reads `isDualPaneMode` from the
- * bool in `app/src/main/res/values-w673dp-h480dp/bools.xml`, as does any code needing the
- * EXPECTATION before/without a tree. That mirror is only sound while the two
- * resources are selected by the SAME qualifier set. Rename or delete one without the other
- * and the two answers diverge permanently — dual-pane branches running against a view tree
- * that has no detail pane, or vice versa. Nothing else in the repo pins the two directories
- * together, which is why this test exists.
- *
- * **What each case asserts.** Only the AGREEMENT: the gate must equal the inflated tree in
- * that configuration, in either direction.
- *
- * **Non-vacuity.** An agreement assertion passes trivially if both sides collapse to one
- * value — e.g. `values-w673dp-h480dp/` deleted, making the gate `false` everywhere, in a grid
- * that happened to inflate the phone layout everywhere too. The last case therefore asserts,
- * from one configuration-scoped `Resources` pair, that the bool actually resolves BOTH ways.
- *
- * **Why a vanilla [Activity].** `IndexActivity` is `@AndroidEntryPoint` and the app's
- * Robolectric tests deliberately never boot it; `setContentView(R.layout.activity_index)` on
- * a plain activity exercises the identical resolver path.
- */
+
+
+
+
+
+
+
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [33])
 class PaneGateResourceAgreementTest {
@@ -116,12 +96,12 @@ class PaneGateResourceAgreementTest {
         assertFalse(message, gateIn(screenWidthDp = width, screenHeightDp = height - 1))
     }
 
-    /**
-     * Inflates `activity_index.xml` in the configuration the case declares and asserts the
-     * resource gate equals what was actually inflated. Both sides are read from the SAME
-     * [Activity], so they are answered by one `Resources` instance from one `Configuration` —
-     * the very property the mirror relies on.
-     */
+    
+
+
+
+
+
     private fun assertGateAgreesWithInflation() {
         val activity = Robolectric.buildActivity(Activity::class.java)
             .create().start().resume().get()
@@ -151,12 +131,12 @@ class PaneGateResourceAgreementTest {
         )
     }
 
-    /**
-     * Reads the gate from a configuration-scoped `Resources` — the one place this file needs a
-     * hand-built [Configuration], because a single test method cannot carry two `@Config`
-     * qualifier sets. Production never does this: runtime code reads the bool from its own
-     * `resources`, which is what every case above exercises.
-     */
+    
+
+
+
+
+
     private fun gateIn(screenWidthDp: Int, screenHeightDp: Int): Boolean {
         val application = RuntimeEnvironment.getApplication()
         val configuration = Configuration(application.resources.configuration).apply {

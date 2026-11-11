@@ -12,7 +12,7 @@
         android:background="@drawable/chat_favorites_avatar_bg"
         android:padding="12dp"
         android:src="@drawable/chat_ic_saved_avatar_glyph"
-        android:tint="@color/white"
+        android:tint="@color/avsys_fg"
         android:visibility="gone"
         app:contentDescription="Avatar image."
         app:layout_constraintBottom_toBottomOf="parent"

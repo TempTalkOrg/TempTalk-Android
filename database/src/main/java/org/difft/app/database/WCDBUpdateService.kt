@@ -50,22 +50,21 @@ import org.difft.app.database.models.DBMessageModel
 import org.difft.app.database.models.DBRoomModel
 import java.util.concurrent.atomic.AtomicBoolean
 
-/**
- * Service for updating database and notifying UI changes.
- * Uses direct notification mechanism instead of SQL listener for better reliability.
- */
+
+
+
+
 object WCDBUpdateService :
     CoroutineScope by CoroutineScope(CoroutineName("WCDBUpdateService") + Dispatchers.IO + SupervisorJob() + dbKeyFailSoftExceptionHandler) {
 
     private val isUpdatingRoomsStarted = AtomicBoolean(false)
 
-    // Room changes merged by roomId, drained fairly. Replaces sampleAfterFirst, which kept only
-    // the latest batch and let a busy room starve quiet 1:1 conversations.
+    
     private val pendingRoomChanges = LinkedHashMap<String, MutableSet<RoomChangeType>>()
     private val pendingRoomChangesMutex = Mutex()
     private val drainSignal = Channel<Unit>(capacity = Channel.CONFLATED)
 
-    // Room table update notification
+    
     private val _roomTableUpdated = MutableSharedFlow<Unit>(
         replay = 0,
         extraBufferCapacity = 10,
@@ -75,8 +74,8 @@ object WCDBUpdateService :
 
     fun start() {
         launch {
-            // Fail-soft: skip all DB work if the cipher key is unavailable (one-way process-lifetime
-            // flag). The CEH on this scope is the crash-safety net if the flag flips mid-run.
+            
+            
             if (wcdb.isDbInaccessible) {
                 L.w { "[WCDBUpdateService] skip start, DB inaccessible" }
                 return@launch
@@ -88,35 +87,35 @@ object WCDBUpdateService :
         }
     }
 
-    /**
-     * Clean empty rooms
-     * Conditions:
-     * 1. Invalid rooms (roomId is empty)
-     * 2. Empty rooms (lastDisplayContent is empty) that exceed timeout
-     *    - New data: use emptyRoomSince for timeout check
-     *    - Old data (emptyRoomSince is null): fallback to lastActiveTime
-     */
+    
+
+
+
+
+
+
+
     suspend fun cleanEmptyRooms(activeConversationConfig: ActiveConversation) = withContext(Dispatchers.IO) {
         try {
             val currentTime = System.currentTimeMillis()
             val groupTimeoutMillis = activeConversationConfig.group * 1000L
             val otherTimeoutMillis = activeConversationConfig.other * 1000L
 
-            // Condition 1: Invalid rooms (roomId is empty)
+            
             val invalidRoomCondition = DBRoomModel.roomId.isNull()
                 .or(DBRoomModel.roomId.`is`(""))
 
-            // Condition 2: Empty content condition (must confirm it's an empty room)
+            
             val emptyContentCondition = DBRoomModel.lastDisplayContent.isNull()
                 .or(DBRoomModel.lastDisplayContent.`is`(""))
 
-            // Condition 3: Expired group rooms (use emptyRoomSince, fallback to lastActiveTime for old data)
-            // New data condition: emptyRoomSince exists and has expired
+            
+            
             val expiredGroupNewData = DBRoomModel.roomType.eq(1)
                 .and(emptyContentCondition)
                 .and(DBRoomModel.emptyRoomSince.gt(0))
                 .and(DBRoomModel.emptyRoomSince.add(groupTimeoutMillis).lt(currentTime))
-            // Old data condition: emptyRoomSince is null, fallback to lastActiveTime
+            
             val expiredGroupOldData = DBRoomModel.roomType.eq(1)
                 .and(emptyContentCondition)
                 .and(DBRoomModel.emptyRoomSince.isNull())
@@ -124,13 +123,13 @@ object WCDBUpdateService :
                 .and(DBRoomModel.lastActiveTime.add(groupTimeoutMillis).lt(currentTime))
             val expiredGroupCondition = expiredGroupNewData.or(expiredGroupOldData)
 
-            // Condition 4: Expired other rooms (use emptyRoomSince, fallback to lastActiveTime for old data)
-            // New data condition: emptyRoomSince exists and has expired
+            
+            
             val expiredOtherNewData = DBRoomModel.roomType.eq(0)
                 .and(emptyContentCondition)
                 .and(DBRoomModel.emptyRoomSince.gt(0))
                 .and(DBRoomModel.emptyRoomSince.add(otherTimeoutMillis).lt(currentTime))
-            // Old data condition: emptyRoomSince is null, fallback to lastActiveTime
+            
             val expiredOtherOldData = DBRoomModel.roomType.eq(0)
                 .and(emptyContentCondition)
                 .and(DBRoomModel.emptyRoomSince.isNull())
@@ -138,17 +137,17 @@ object WCDBUpdateService :
                 .and(DBRoomModel.lastActiveTime.add(otherTimeoutMillis).lt(currentTime))
             val expiredOtherCondition = expiredOtherNewData.or(expiredOtherOldData)
 
-            // Pinned conversations are kept even when empty/expired — only their messages
-            // are auto-archived (by MessageArchiveManager); the room row itself stays. So is a room
-            // whose pin group focus tracks (focusPin != 0): dropping it would lose a manual unpin.
+            
+            
+            
             val notPinnedCondition = DBRoomModel.pinnedTime.isNull().and(DBRoomModel.focusPin.eq(ROOM_FOCUS_PIN_NONE))
 
-            // Final condition: exclude self AND not pinned AND (invalid rooms OR expired empty rooms)
+            
             val finalCondition = DBRoomModel.roomId.notEq(globalServices.myId)
                 .and(notPinnedCondition)
                 .and(invalidRoomCondition.or(expiredGroupCondition).or(expiredOtherCondition))
 
-            // Get rooms to delete first
+            
             val roomsToDelete = wcdb.room.getAllObjects(finalCondition)
             if (roomsToDelete.isEmpty()) {
                 L.i { "[WCDBUpdateService] cleanEmptyRooms: no rooms to delete" }
@@ -158,16 +157,10 @@ object WCDBUpdateService :
             val roomIdsToDelete = roomsToDelete.map { it.roomId }
             L.i { "[WCDBUpdateService] cleanEmptyRooms: deleting ${roomIdsToDelete.size} rooms: $roomIdsToDelete" }
 
-            // Delete all messages in these rooms (should mostly be archive system messages).
-            // #909 R3: use deleteMessagesPaged so we never materialize an entire room's messages
-            // into memory (same unbounded getAllObjects anti-pattern the issue removed elsewhere).
+            
             roomIdsToDelete.forEach { roomId ->
-                // Diagnostic: warn if any business (non-Notify) message survives in an "empty" room.
-                // Archive-expired system messages and forward/copy notices are TYPE_NOTIFY; a
-                // non-Notify message here is unexpected. Checked via COUNT (no object load) — this is a SQL
-                // approximation of the old per-row isArchiveExpiredSystemMessage filter (which parses
-                // messageText JSON and cannot be expressed in SQL); it narrows to "stray business
-                // messages", the case the warning actually exists to surface.
+                
+                
                 val nonArchiveCount = messageCount(
                     DBMessageModel.roomId.eq(roomId)
                         .and(DBMessageModel.type.notEq(MessageModel.TYPE_NOTIFY))
@@ -176,11 +169,9 @@ object WCDBUpdateService :
                     L.w { "[WCDBUpdateService] cleanEmptyRooms: Found $nonArchiveCount non-archive (non-Notify) messages in empty room $roomId" }
                 }
 
-                // Delete all messages with related data (per-row delete preserved by the helper).
-                // #969: snapshot the upper bound (max databaseId) before deleting so concurrent
-                // inserts during the paged delete cannot extend the unbounded `roomId.eq` match set
-                // (the same non-convergence under flood that DBMessageStore.removeRoomAndMessages
-                // fixes). Empty room → snapshotMax 0 → le(0) matches nothing → first page breaks.
+                
+                
+                
                 val snapshotMax = maxMessageDatabaseId(roomId)
                 deleteMessagesPaged(
                     DBMessageModel.roomId.eq(roomId).and(DBMessageModel.databaseId.le(snapshotMax))
@@ -188,7 +179,7 @@ object WCDBUpdateService :
             }
             L.i { "[WCDBUpdateService] cleanEmptyRooms: deleted messages with related data for ${roomIdsToDelete.size} rooms" }
 
-            // Delete room records
+            
             val deletedRooms = wcdb.room.deleteObjects(finalCondition)
             L.i { "[WCDBUpdateService] cleanEmptyRooms: deleted $deletedRooms rooms" }
 
@@ -197,7 +188,7 @@ object WCDBUpdateService :
         }
     }
 
-    // 更新saved(收藏)里面的旧消息为不过期
+    
     private fun updateSavedMessageExpire() {
         wcdb.message.updateValue(
             0L,
@@ -206,16 +197,16 @@ object WCDBUpdateService :
         )
     }
 
-    // In-process single-run guard: start() has no reentry guard, and two concurrent dedup passes
-    // could keep different rows (getAllObjects order is unspecified) and delete both tombstones
+    
+    
     private val isTombstoneMigrationStarted = AtomicBoolean(false)
 
-    /**
-     * Re-anchor legacy archive tombstones (dynamic sort key) to the fixed sentinel, and collapse
-     * per-room duplicates left by the old delete-then-recreate flow (the exists-then-skip path
-     * never deletes, so this is where duplicates converge). Idempotent; a persisted app_state flag
-     * skips the scan after one success — set only on completion, so a failed run retries next start.
-     */
+    
+
+
+
+
+
     private suspend fun migrateArchiveTombstoneSortSentinel() {
         if (!isTombstoneMigrationStarted.compareAndSet(false, true)) return
         val dataStore = runCatching {
@@ -229,8 +220,8 @@ object WCDBUpdateService :
         dataStore.edit { it[AppStateKeys.ARCHIVE_TOMBSTONE_SENTINEL_MIGRATED] = true }
     }
 
-    // messageText LIKE pre-filter narrows the scan to tombstone candidates; the per-row JSON
-    // check confirms the match (actionType is not a DB column).
+    
+    
     private fun reAnchorLegacyArchiveTombstones() {
         val tombstones = wcdb.message.getAllObjects(
             DBMessageModel.type.eq(MessageModel.TYPE_NOTIFY)
@@ -255,31 +246,29 @@ object WCDBUpdateService :
     }
 
     fun updatingRooms() {
-        // Atomic check-then-act: exactly one caller registers the collector, concurrent callers no-op.
+        
         if (!isUpdatingRoomsStarted.compareAndSet(false, true)) return
 
         L.i { "[WCDBUpdateService] Starting room updates listener" }
 
-        // Collector: merge each change into pendingRoomChanges (cheap, never drops), then signal.
+        
         val collectorJob = launch {
             RoomChangeTracker.roomChanges.collect { changes ->
                 pendingRoomChangesMutex.withLock {
                     changes.forEach { pendingRoomChanges.getOrPut(it.roomId) { mutableSetOf() }.add(it.type) }
-                    // Signal inside the lock so write + signal are atomic vs collectorJob.cancel()
-                    // (trySend is non-suspending, so it's safe to call while holding the mutex).
+                    
+                    
                     drainSignal.trySend(Unit)
                 }
             }
         }
 
-        // Drainer: on each signal, process ALL pending rooms (deduped) so a busy room can't starve
-        // quiet ones. RoomChangeTracker already throttles emissions to ~500ms.
+        
+        
         drainedRoomChanges()
             .onEach { changes ->
-                // 按房间ID分组，合并同一房间的多个变更
                 val changesByRoom = changes.groupBy { it.roomId }
 
-                // 一次性获取所有需要更新的房间对象
                 val roomIds = changesByRoom.keys.toList()
                 val roomObjects = wcdb.room.getAllObjects(DBRoomModel.roomId.`in`(roomIds))
                     .associateBy { it.roomId }
@@ -292,39 +281,37 @@ object WCDBUpdateService :
                             try {
                                 L.i { "[Message][WCDBUpdateService] updating room=$roomId changes=${roomChanges.map { it.type }}" }
 
-                                // ✅ 检查是否需要重新查询数据
                                 val needsDataUpdate = roomChanges.any {
                                     it.type != RoomChangeType.REFRESH
                                 }
 
                                 if (!needsDataUpdate) {
-                                    // 只是 REFRESH 类型，数据已经更新，跳过数据查询
+                                    
                                     L.d { "[Message][WCDBUpdateService] Room $roomId: REFRESH only, skipping data queries" }
                                     return@launch
                                 }
 
-                                // 以下是需要重新查询数据的逻辑
                                 if (roomChanges.any { it.type == RoomChangeType.MESSAGE }) {
-                                    // Recompute for an ALREADY-FLAGGED room only (discovering a new failure
-                                    // is the set source's job), gated on the stored value so a NONE room
-                                    // costs zero extra queries — which is why no `sendType` index is needed.
-                                    // The gate is a COST filter, not a correctness gate: the clear re-checks
-                                    // the message table inside its own UPDATE, so a stale read either way is
-                                    // safe. Its own updateRow, FIRST in this branch, deliberately: the
-                                    // preview writes below sit behind `needsUpdate`-style guards that are
-                                    // false in the most common failure case (the failed message is already
-                                    // the preview), which would swallow a merged sendStatus write entirely.
+                                    
+                                    
+                                    
+                                    
+                                    
+                                    
+                                    
+                                    
+                                    
                                     if (needsSendStatusRecompute(roomObject.sendStatus)) {
                                         resolveRoomSendStatus(roomObject.sendStatus, wcdb.hasFailedOutgoingMessage(roomId))
                                             ?.let { targetStatus ->
-                                                // A clear goes through the conditional writer so a
-                                                // source-side FAILED committed since the probe is not lost —
-                                                // that loss would NOT self-heal, and a snapshot CAS would not
-                                                // prevent it. An escalation (SENDING -> FAILED) is written
-                                                // directly: resolve never returns FAILED for a NONE room, so
-                                                // this cannot discover a new failure, and over-flagging a
-                                                // room whose failure was retried away self-heals on that
-                                                // retry's own room change.
+                                                
+                                                
+                                                
+                                                
+                                                
+                                                
+                                                
+                                                
                                                 if (targetStatus == ROOM_SEND_STATUS_NONE) {
                                                     wcdb.clearRoomSendStatusIfNoFailure(roomId)
                                                 } else {
@@ -334,11 +321,11 @@ object WCDBUpdateService :
                                             }
                                     }
 
-                                    // The independent sending aggregate, same doctrine: clear-only here
-                                    // (discovery is PushTextSendJob's job), own cost-filter gate, and the
-                                    // guarded UPDATE re-checks the message table so a send that raced in
-                                    // is never wiped. No escalation branch exists — the two columns never
-                                    // convert into each other.
+                                    
+                                    
+                                    
+                                    
+                                    
                                     if (roomObject.sendingStatus != ROOM_SENDING_STATUS_NONE &&
                                         !wcdb.hasSendingOutgoingMessage(roomId)
                                     ) {
@@ -346,19 +333,19 @@ object WCDBUpdateService :
                                         L.i { "[WCDBUpdateService] room=$roomId sendingStatus cleared (conditional; no-op if a send raced in)" }
                                     }
 
-                                    // Skip forward/copy/translate notices so the preview falls back to the latest
-                                    // non-notice message. notifyType is inside messageText JSON (not a
-                                    // column) — matched via LIKE with a trailing-comma anchor (substring
-                                    // pinned by LocalMessageCreatorForwardNoticeTest); isNull keeps
-                                    // NULL-text notify rows included (NULL LIKE propagates NULL).
+                                    
+                                    
+                                    
+                                    
+                                    
                                     val previewMessage = wcdb.message.getFirstObject(
                                         previewableMessageCondition(roomId),
                                         DBMessageModel.systemShowTimestamp.order(Order.Desc)
                                     )
 
                                     if (previewMessage == null) {
-                                        // No previewable messages (none at all, or only forward/copy
-                                        // notices): set emptyRoomSince (if not set), keep lastActiveTime unchanged
+                                        
+                                        
                                         val emptyRoomSince = roomObject.emptyRoomSince ?: System.currentTimeMillis()
                                         if (roomObject.lastDisplayContent != "" || roomObject.emptyRoomSince == null) {
                                             wcdb.room.updateRow(
@@ -371,11 +358,10 @@ object WCDBUpdateService :
                                     } else {
                                         val lastActiveTime = previewMessage.systemShowTimestamp
 
-                                        // Check if it's an archive system message
                                         val isArchiveMessage = isArchiveExpiredSystemMessage(previewMessage)
 
                                         if (isArchiveMessage) {
-                                            // Archive system message: clear lastDisplayContent, set emptyRoomSince, keep lastActiveTime unchanged
+                                            
                                             val emptyRoomSince = roomObject.emptyRoomSince ?: System.currentTimeMillis()
                                             if (roomObject.lastDisplayContent != "" || roomObject.emptyRoomSince == null) {
                                                 wcdb.room.updateRow(
@@ -385,12 +371,12 @@ object WCDBUpdateService :
                                                 )
                                             }
                                         } else {
-                                            // Normal message: update content and time, clear emptyRoomSince
+                                            
                                             val lastDisplayContent = previewMessage.previewContent()
 
-                                            // Only update lastActiveTime if:
-                                            // 1. New message time is greater (normal case, avoid time rollback on recall/delete)
-                                            // 2. Or current time is 0 (new room initialization, though covered by case 1)
+                                            
+                                            
+                                            
                                             val shouldUpdateTime = lastActiveTime > roomObject.lastActiveTime || roomObject.lastActiveTime == 0L
                                             val finalLastActiveTime = if (shouldUpdateTime) lastActiveTime else roomObject.lastActiveTime
 
@@ -407,7 +393,6 @@ object WCDBUpdateService :
                                             }
                                         }
 
-                                        // Update unread status
                                         if (lastActiveTime == 0L) {
                                             roomObject.resetRoomUnreadState()
                                         } else if (roomObject.readPosition < lastActiveTime) {
@@ -418,7 +403,6 @@ object WCDBUpdateService :
                                     }
                                 }
 
-                                // 检查是否需要更新联系人相关的内容
                                 if (roomChanges.any { it.type == RoomChangeType.CONTACT || it.type == RoomChangeType.GROUP_MEMBER }) {
                                     val contactorModel = wcdb.getContactorFromAllTable(roomId) ?: return@launch
                                     val roomName = contactorModel.getDisplayNameForUI()
@@ -431,7 +415,6 @@ object WCDBUpdateService :
                                     )
                                 }
 
-                                // 检查是否需要更新群组相关的内容
                                 if (roomChanges.any { it.type == RoomChangeType.GROUP }) {
                                     val group = wcdb.group.getFirstObject(DBGroupModel.gid.eq(roomId)) ?: return@launch
                                     val groupName = group.name
@@ -448,7 +431,6 @@ object WCDBUpdateService :
                                     )
                                 }
 
-                                // 如果房间名称为空，尝试更新
                                 if (roomObject.roomName.isNullOrEmpty()) {
                                     roomObject.updateRoomNameAndAvatar()
                                 }
@@ -462,21 +444,20 @@ object WCDBUpdateService :
                     }
                 }
 
-                // ✅ Batch处理完成后统一emit，触发UI刷新
                 _roomTableUpdated.tryEmit(Unit)
                 L.d { "[WCDBUpdateService] Batch processing completed, notification emitted" }
             }
             .catch { e ->
                 L.e(e) { "[Message][WCDBUpdateService] Error in flow:" }
-                // Drainer crashed: stop the collector too (SupervisorJob won't) so re-registration is clean.
+                
                 collectorJob.cancel()
                 isUpdatingRoomsStarted.set(false)
             }
             .launchIn(this)
     }
 
-    // Emits the merged pending changes once per drain signal (conflated). Merges by roomId so no
-    // room is dropped; the conflated signal collapses bursts that arrive while a drain is in flight.
+    
+    
     private fun drainedRoomChanges(): Flow<List<RoomChange>> = flow {
         for (signal in drainSignal) {
             val batch = pendingRoomChangesMutex.withLock {
@@ -488,20 +469,19 @@ object WCDBUpdateService :
         }
     }
 
-    // Earlier messages expired 系统消息的 actionType
-    // 注意：与 TTNotifyMessage.NOTIFY_ACTION_TYPE_MESSAGES_EXPIRED 保持一致
+    
     private const val NOTIFY_ACTION_TYPE_MESSAGES_EXPIRED = 10012
 
-    // Forward/copy notice notifyType (excluded from room preview) — keep in sync with TTNotifyMessage
+    
     private const val NOTIFY_ACTION_TYPE_FORWARD_NOTICE = 10020
     private const val NOTIFY_ACTION_TYPE_COPY_NOTICE = 10021
     private const val NOTIFY_ACTION_TYPE_TRANSLATE_SETTING_CHANGED = 10022
 
-    /**
-     * Messages that may become a room's preview: everything except forward / copy / translate
-     * notices. notifyType is inside the messageText JSON (not a column), matched via LIKE with a
-     * trailing-comma anchor; isNull keeps NULL-text notify rows (NULL LIKE propagates NULL).
-     */
+    
+
+
+
+
     private fun previewableMessageCondition(roomId: String): Expression =
         DBMessageModel.roomId.eq(roomId)
             .and(
@@ -514,10 +494,10 @@ object WCDBUpdateService :
                     )
             )
 
-    /**
-     * The newest [limit] messages that the room preview would pick from, newest first, archive
-     * notices dropped (they clear the preview instead of filling it). Blocking; call on IO.
-     */
+    
+
+
+
     fun latestPreviewMessages(roomId: String, limit: Long): List<MessageModel> =
         wcdb.message.getAllObjects(
             previewableMessageCondition(roomId),
@@ -525,12 +505,9 @@ object WCDBUpdateService :
             limit,
         ).filterNot { isArchiveExpiredSystemMessage(it) }
 
-    /**
-     * 判断是否是归档系统消息（Earlier messages expired）
-     * 用于判断是否需要更新会话预览内容
-     */
+    
     private fun isArchiveExpiredSystemMessage(message: MessageModel): Boolean {
-        if (message.type != 2) return false // 非 Notify 消息
+        if (message.type != 2) return false 
         return try {
             val json = globalServices.gson.fromJson(message.messageText, JsonObject::class.java)
             val data = json?.get("data")?.asJsonObject

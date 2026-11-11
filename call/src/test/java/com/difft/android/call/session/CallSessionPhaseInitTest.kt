@@ -39,12 +39,12 @@ import org.junit.Rule
 import org.junit.Test
 import java.util.Collections
 
-/**
- * Phase A (the session's start) of [CallSession], on the plain JVM, with the room setup (Phase B)
- * parked; Phase B rows live in [CallSessionPhaseBTest]. Also covers the session-side UI helpers and
- * the OnGoingCallStateManager projection writes.
- * Rows: T2-08, T2-09, T2-14, T3-11, T3-19, T5-05 (session half), T5-06, T5-14.
- */
+
+
+
+
+
+
 class CallSessionPhaseInitTest {
 
     private val testDispatcher = StandardTestDispatcher()
@@ -138,23 +138,23 @@ class CallSessionPhaseInitTest {
         val connectedAt = h.ogsm.callConnectedAt()
         advanceTimeBy(1_001)
         runCurrent()
-        session.startCallDurationTimer() // a manual-switch re-connect: no re-stamp
+        session.startCallDurationTimer() 
 
         assertTrue(connectedAt > 0)
         assertEquals(connectedAt, h.ogsm.callConnectedAt())
-        // The tick's text is computed from the wall clock, not from the virtual time advanced here,
-        // so it is compared with the timer's own text rather than a fixed value.
+        
+        
         val tickText = session.graph.timerManager.callDurationText.value
         assertEquals("r1" to tickText, h.ogsm.callingTime.value)
         assertEquals(tickText, h.ogsm.getCallingTime("r1"))
         endSessionsBeforeDrain()
     }
 
-    /**
-     * The duration timer re-arms itself every virtual second on the session's main scope, which runs
-     * on this test's scheduler; runTest drains that scheduler after the body, so the session must end
-     * (cancelling its Job and the timer) inside the body or the drain never finishes.
-     */
+    
+
+
+
+
     private fun endSessionsBeforeDrain() = h.endAll()
 
     @Test
@@ -194,7 +194,23 @@ class CallSessionPhaseInitTest {
         verify(exactly = 1) { h.callTimeoutManager.cancelCallWithTimeout("r1") }
     }
 
-    /** Records the named arguments of every [CallCleanupSteps.build] call (last call wins), then runs the real build. */
+    @Test
+    fun `T5-05b the callee-already-present step stops only this call's ringback and timeout, not the shared alerts`() {
+        val session = h.start()
+        session.graph.onRoomIdAssigned("r1")
+        val timeoutMonitor = CallSessionGraph::class.java.getDeclaredField("timeoutMonitor")
+            .apply { isAccessible = true }.get(session.graph) as CallTimeoutMonitor
+        timeoutMonitor.start1V1Timeout("r1")
+
+        session.graph.stopCallerRingbackAndTimeoutCheck()
+
+        verify(exactly = 1) { h.ringtone.stopCallerRingback(any()) }
+        verify(exactly = 0) { h.ringtone.stopRingTone(any()) }
+        verify(exactly = 0) { h.deps.callVibrationManager.stopVibration(any()) }
+        verify(exactly = 1) { h.callTimeoutManager.cancelCallWithTimeout("r1") }
+    }
+
+    
     private fun captureCleanupStepArgs(): Map<String, Any?> {
         val captured = mutableMapOf<String, Any?>()
         val names = CallCleanupSteps::build.parameters.map { it.name!! }
@@ -247,7 +263,7 @@ class CallSessionPhaseInitTest {
 
     private val collectorScopes = mutableListOf<CoroutineScope>()
 
-    /** Session UI events collected on the test Main dispatcher until `@After`. */
+    
     private fun collectEvents(session: CallSession): List<CallSessionUiEvent> {
         val events = Collections.synchronizedList(mutableListOf<CallSessionUiEvent>())
         val scope = CoroutineScope(testDispatcher)
@@ -263,7 +279,7 @@ class CallSessionPhaseInitTest {
         javaClass.getDeclaredField(name).apply { isAccessible = true }.get(this)
 }
 
-/** True once the `by lazy` property [name] of this graph has been forced. */
+
 internal fun CallSessionGraph.lazyInitialized(name: String): Boolean {
     val field = CallSessionGraph::class.java.getDeclaredField("$name\$delegate").apply { isAccessible = true }
     return (field.get(this) as Lazy<*>).isInitialized()

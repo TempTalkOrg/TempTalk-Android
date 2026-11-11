@@ -12,7 +12,7 @@ import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** T-S4, T-S6, T-S8, T-S9 — session manager + PIN policy (design §13). */
+
 class SessionAndPinTest {
 
     private fun meta(id: String) = FileMetadata(id = id, fileName = "$id.bin", size = 4, fileType = "application/octet-stream")
@@ -49,7 +49,7 @@ class SessionAndPinTest {
         val (sid, slots) = sm.createSession("10.0.0.5", mapOf("f1" to meta("f1")))
         val token = slots.getValue("f1").token
         assertThrows(ProtocolError.Forbidden::class.java) {
-            sm.authorizeUpload(sid, "f1", token, "10.0.0.9") // wrong source IP
+            sm.authorizeUpload(sid, "f1", token, "10.0.0.9") 
         }
     }
 
@@ -67,7 +67,6 @@ class SessionAndPinTest {
         val sm = SessionManager()
         val prepared = sm.createSession("1.1.1.1", mapOf("f1" to meta("f1")))
         sm.cancel(prepared.sessionId, prepared.sessionToken)
-        // No Conflict now:
         sm.createSession("2.2.2.2", mapOf("f2" to meta("f2")))
     }
 
@@ -76,12 +75,12 @@ class SessionAndPinTest {
         var now = 0L
         val policy = PinPolicy(ttlMillis = 1000, clock = { now })
         val pin = policy.issue()
-        assertTrue(policy.validateAndConsume(pin))   // first use OK
-        assertFalse(policy.validateAndConsume(pin))   // reused → rejected
+        assertTrue(policy.validateAndConsume(pin))   
+        assertFalse(policy.validateAndConsume(pin))   
 
         val policy2 = PinPolicy(ttlMillis = 1000, clock = { now })
         val pin2 = policy2.issue()
-        now = 2000 // past TTL
+        now = 2000 
         assertFalse("expired PIN rejected", policy2.validateAndConsume(pin2))
     }
 
@@ -114,15 +113,15 @@ class SessionAndPinTest {
         var now = 0L
         val policy = PinPolicy(ttlMillis = 1000, clock = { now })
         val pin = policy.issue()
-        now = 2000 // past TTL
-        // Far more probes than the cap — an expired PIN must not act as a free attempt counter.
+        now = 2000 
+        
         repeat(PinPolicy.MAX_PIN_ATTEMPTS * 3) { assertFalse(policy.validateAndConsume("000000")) }
-        // Expiry cleared the state, so the old PIN is gone regardless of the clock.
+        
         assertNull("expiry must clear the active PIN", policy.current())
         now = 0L
         assertFalse("expired-then-cleared PIN must not come back", policy.validateAndConsume(pin))
 
-        // A fresh issue works normally with a full attempt budget.
+        
         val fresh = policy.issue()
         repeat(PinPolicy.MAX_PIN_ATTEMPTS - 1) { assertFalse(policy.validateAndConsume("000000")) }
         assertTrue(policy.validateAndConsume(fresh))
@@ -133,7 +132,7 @@ class SessionAndPinTest {
         val policy = PinPolicy()
         policy.issue()
         repeat(PinPolicy.MAX_PIN_ATTEMPTS - 1) { assertFalse(policy.validateAndConsume("000000")) }
-        val pin = policy.issue() // fresh PIN → budget back to full
+        val pin = policy.issue() 
         repeat(PinPolicy.MAX_PIN_ATTEMPTS - 1) { assertFalse(policy.validateAndConsume("000000")) }
         assertTrue("issue() must reset the attempt counter", policy.validateAndConsume(pin))
     }
@@ -143,7 +142,7 @@ class SessionAndPinTest {
         val policy = PinPolicy()
         val pin = policy.issue()
         repeat(PinPolicy.MAX_PIN_ATTEMPTS) { assertFalse(policy.validateAndConsume("000000")) }
-        // No distinguishable behavior post-lockout: all inputs return the same false.
+        
         assertFalse(policy.validateAndConsume(pin))
         assertFalse(policy.validateAndConsume("000000"))
         assertFalse(policy.validateAndConsume(null))

@@ -25,20 +25,20 @@ import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
-/**
- * [MigrationP2pSendViewModel] — the production OLD-device SEND VM state machine + re-attach. Mirrors
- * `MigrationP2pReceiveViewModelTest`: the holder is the single writer's surface; the test plays the
- * writer (the FGS) to prove the VM's read/map side. No socket / cert / gate / FGS is stood up — the VM
- * only collects the holder + emits effects.
- *
- * R3 invariant asserted in [scanned valid QR maps to Ready without surfacing transferKey].
- *
- * DEFERRED (T-SS1/T-SS2 screenshot tier): Roborazzi baselines for `MigrationP2pSendScreen` (all states,
- * light+dark) and `MigrationMainScreen` (p2pSendOffered true/false) are NOT recorded in this pass. RISK:
- * a visual regression on the debug-only P2P send screen would not be caught by CI until baselines are
- * recorded via `recordRoborazzi*`. Deferred because the screen is debug-only + flag-gated (no release
- * surface) and the baselines must be recorded on the agreed reference device before they can gate.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [34])
 class MigrationP2pSendViewModelTest {
@@ -55,11 +55,11 @@ class MigrationP2pSendViewModelTest {
     private fun newVm() =
         MigrationP2pSendViewModel(ApplicationProvider.getApplicationContext<Application>())
 
-    /**
-     * The scanned code's text, built by the real codec. The wire carries a 32-byte key, so any
-     * non-null [transferKey] stands for "a key is present" and the fixed key below is what is encoded;
-     * null is the no-key reject case.
-     */
+    
+
+
+
+
     private fun rawQr(transferKey: String? = "present", dir: String? = null): String =
         com.difft.android.p2p.android.qr.QrPayloadCodec.encodeText(
             com.difft.android.p2p.engine.model.QrPayload(
@@ -84,7 +84,7 @@ class MigrationP2pSendViewModelTest {
         assertEquals(MigrationP2pSendState.Scanning, vm.state.value)
     }
 
-    /** A Desktop-link failure is restarted from the computer's new code, never by re-sending the old payload. */
+    
     @Test
     fun `RescanLink leaves for the scanner without touching the transfer`() = runTest {
         val vm = newVm()
@@ -104,11 +104,11 @@ class MigrationP2pSendViewModelTest {
 
         val state = vm.state.value
         assertIs<MigrationP2pSendState.Ready>(state)
-        // The peer's device name is the only thing the user needs to confirm before sending; the
-        // address and pairing pin stay in the engine and are deliberately absent from the UI state.
+        
+        
         assertEquals("Pixel", state.alias)
-        // R3: the transferKey must NEVER appear in any rendered state field — and neither should the
-        // transport details, now that the screen does not show them.
+        
+        
         assertTrue("tk-secret" !in state.toString())
         assertTrue("192.168.1.7" !in state.toString())
         assertTrue("53317" !in state.toString())
@@ -159,7 +159,7 @@ class MigrationP2pSendViewModelTest {
             assertIs<MigrationP2pSendEffect.Toast>(awaitItem())
             cancelAndIgnoreRemainingEvents()
         }
-        // No FGS start → the holder is untouched (still Idle).
+        
         assertEquals(TransferState.Idle, MigrationTransferStateHolder.state.value)
     }
 
@@ -223,11 +223,11 @@ class MigrationP2pSendViewModelTest {
         }
     }
 
-    /**
-     * T44 — the receiver-only states added for reverse pairing and the commit boundary are no-ops
-     * here. They are part of one sealed [TransferState], so the send screen's exhaustive mapping has
-     * to name them; naming them as no-ops is what keeps a receiver state off the send screen.
-     */
+    
+
+
+
+
     @Test
     fun `the receiver-only reverse-pairing and committed states leave the send state alone`() = runTest {
         val vm = newVm()
@@ -244,8 +244,8 @@ class MigrationP2pSendViewModelTest {
 
     @Test
     fun `late collector re-attaches to in-flight Transferring (holder replay)`() = runTest {
-        // Simulate an Activity recreated mid-send: the FGS already wrote Transferring before the VM's
-        // collector starts. StateFlow replays the latest value → the freshly-created VM re-binds.
+        
+        
         MigrationTransferStateHolder.update(
             TransferState.Transferring(TransferState.Role.SENDER, 0.5f),
         )
@@ -279,11 +279,11 @@ class MigrationP2pSendViewModelTest {
         }
     }
 
-    /**
-     * G1 / T6 — the POSITIVE Send-after-scan path: a valid scan (Ready) then `Send` must start the FGS
-     * with the SCANNED raw QR. The service
-     * companion is mocked so the real `startForegroundService` is never dispatched.
-     */
+    
+
+
+
+
     @Test
     fun `Send after a valid scan starts the FGS with the raw QR and PRODUCTION mode`() = runTest {
         mockkObject(MigrationTransferService.Companion)
@@ -304,7 +304,7 @@ class MigrationP2pSendViewModelTest {
         }
     }
 
-    /** G2 / T10 — `Cancel` tears down the in-flight FGS via [MigrationTransferService.cancel]. */
+    
     @Test
     fun `Cancel calls MigrationTransferService cancel`() = runTest {
         mockkObject(MigrationTransferService.Companion)
@@ -317,12 +317,12 @@ class MigrationP2pSendViewModelTest {
         }
     }
 
-    /**
-     * M1 — `Send` must NOT clobber a CONCURRENT in-flight RECEIVE's holder state, and must not start
-     * a send that would shadow it either: the service would ignore the start (F2), leaving this page
-     * to mirror the receive's progress as if it were its own. The receive's state is preserved and no
-     * start is dispatched.
-     */
+    
+
+
+
+
+
     @Test
     fun `Send neither resets nor shadows a concurrent in-flight receive`() = runTest {
         mockkObject(MigrationTransferService.Companion)
@@ -330,13 +330,13 @@ class MigrationP2pSendViewModelTest {
         try {
             val vm = newVm()
             vm.onIntent(MigrationP2pSendIntent.QrScanned(rawQr(transferKey = "tk-secret")))
-            // A receive is in flight on the SAME shared holder (non-terminal, receiver-owned).
+            
             val receiving = TransferState.Transferring(TransferState.Role.RECEIVER, 0.7f)
             MigrationTransferStateHolder.update(receiving)
 
             vm.onIntent(MigrationP2pSendIntent.Send)
 
-            // The pre-reset was skipped → the receiver's in-flight state survives (NOT wiped to Idle).
+            
             assertEquals(receiving, MigrationTransferStateHolder.state.value)
             verify(exactly = 0) {
                 MigrationTransferService.startSender(any(), any(), any(), any())
@@ -346,10 +346,10 @@ class MigrationP2pSendViewModelTest {
         }
     }
 
-    /**
-     * An idle listener (a QR page backed out of, never scanned) is the service's to evict for a
-     * deliberate new start: the start goes out and the holder is left for the service to reset.
-     */
+    
+
+
+
     @Test
     fun `Send lets the service evict an idle listener`() = runTest {
         mockkObject(MigrationTransferService.Companion)
@@ -371,10 +371,10 @@ class MigrationP2pSendViewModelTest {
         }
     }
 
-    /**
-     * M1 / F3 — when the holder holds a STALE TERMINAL from a previous send, `Send` DOES reset it first
-     * (closing the replay window) before dispatching the FGS start.
-     */
+    
+
+
+
     @Test
     fun `Send resets a stale terminal holder before starting`() = runTest {
         mockkObject(MigrationTransferService.Companion)
@@ -386,7 +386,7 @@ class MigrationP2pSendViewModelTest {
 
             vm.onIntent(MigrationP2pSendIntent.Send)
 
-            // Stale terminal → pre-reset fired → holder back to Idle before the (mocked) FGS start.
+            
             assertEquals(TransferState.Idle, MigrationTransferStateHolder.state.value)
             verify(exactly = 1) {
                 MigrationTransferService.startSender(any(), any(), any())
@@ -396,7 +396,7 @@ class MigrationP2pSendViewModelTest {
         }
     }
 
-    /** The claim got no answer: the two phones are not on one network, and the page says so before start. */
+    
     @Test
     fun `a code whose claim goes unanswered fails as unreachable instead of offering start`() = runTest {
         val raw = com.difft.android.p2p.android.qr.QrPayloadCodec.encodeText(multiAddressPayload().copy(ips = emptyList()))
@@ -411,7 +411,7 @@ class MigrationP2pSendViewModelTest {
         assertEquals(MigrationFailureKind.CONNECTION, classifyFailure(failed.reason))
     }
 
-    /** The receiver took the claim: the confirmation page opens as before. */
+    
     @Test
     fun `an accepted claim opens the confirmation page`() = runTest {
         val raw = com.difft.android.p2p.android.qr.QrPayloadCodec.encodeText(multiAddressPayload().copy(ips = emptyList()))
@@ -425,7 +425,7 @@ class MigrationP2pSendViewModelTest {
         assertIs<MigrationP2pSendState.Ready>(vm.state.value)
     }
 
-    /** A code with several addresses, built by the real codec; the fixed key stands in for the receiver's. */
+    
     private fun multiAddressPayload() = com.difft.android.p2p.engine.model.QrPayload(
         ip = "192.168.1.7",
         ips = listOf("192.168.1.7", "192.168.43.1"),
@@ -436,11 +436,11 @@ class MigrationP2pSendViewModelTest {
         transferKey = "WlpaWlpaWlpaWlpaWlpaWlpaWlpaWlpaWlpaWlpaWlo=",
     )
 
-    /**
-     * Several addresses advertised: the resolver picks the one that answered, and the FGS is
-     * started with a code that names only that address — the claim, the upload and the session
-     * record then agree on it without racing again.
-     */
+    
+
+
+
+
     @Test
     fun `a multi-address code is settled by the resolver and the FGS gets the settled code`() = runTest {
         mockkObject(MigrationTransferService.Companion)
@@ -468,7 +468,7 @@ class MigrationP2pSendViewModelTest {
         }
     }
 
-    /** No address answered: the code is kept as scanned and the ordinary connection reports the failure. */
+    
     @Test
     fun `a multi-address code whose resolver finds nothing keeps the scanned code`() = runTest {
         mockkObject(MigrationTransferService.Companion)
@@ -490,10 +490,10 @@ class MigrationP2pSendViewModelTest {
         }
     }
 
-    /**
-     * The same-device pairing payload is session-scoped: once the new app's receiver went away, the
-     * retry has to ask for a new one instead of re-sending the dead code.
-     */
+    
+
+
+
     @Test
     fun `handoff retry asks the new app for a fresh pairing instead of re-sending`() = runTest {
         val vm = handoffVm()
@@ -508,7 +508,7 @@ class MigrationP2pSendViewModelTest {
         }
     }
 
-    /** The fresh payload re-pairs and restarts from the failure screen without a second tap. */
+    
     @Test
     fun `a fresh pairing payload restarts the send from a failed state`() = runTest {
         mockkObject(MigrationTransferService.Companion)
@@ -529,27 +529,27 @@ class MigrationP2pSendViewModelTest {
         }
     }
 
-    /** Cross-device retries re-scan a code, so there is no peer to ask and the intent does nothing. */
+    
     @Test
     fun `RefreshPairing is a no-op outside the credential handoff`() = runTest {
         val vm = newVm()
         vm.effects.test {
             vm.onIntent(MigrationP2pSendIntent.RefreshPairing)
-            // Close is queued on the same channel right after, so its effect arriving first proves
-            // RefreshPairing emitted nothing.
+            
+            
             vm.onIntent(MigrationP2pSendIntent.Close)
             assertEquals(MigrationP2pSendEffect.Finish, awaitItem())
             cancelAndIgnoreRemainingEvents()
         }
     }
 
-    /** The same-device hand-over sender: no claim, no auth to prove, as the trampoline path builds it. */
+    
     private fun handoffVm() = MigrationP2pSendViewModel(
         ApplicationProvider.getApplicationContext<Application>(),
         credentialHandoff = true,
     )
 
-    /** A pairing payload as the new app hands it over on this device: loopback, with a key. */
+    
     private fun loopbackQr(pin: String = "123456"): String =
         com.difft.android.p2p.android.qr.QrPayloadCodec.encodeText(
             com.difft.android.p2p.engine.model.QrPayload(
@@ -562,9 +562,9 @@ class MigrationP2pSendViewModelTest {
             ),
         )
 
-    // ── #1382: the message pause ──
+    
 
-    /** T19: the live re-check settles through the one settlement path, which owns the receipt. */
+    
     @Test
     fun `a re-checked verdict is settled, not just dropped`() = runTest {
         val session = com.difft.android.migration.v2.transfer.SenderSessionRef("10.0.0.2", 53317, "fp", "s-1", "t", listOf("status-v1"))

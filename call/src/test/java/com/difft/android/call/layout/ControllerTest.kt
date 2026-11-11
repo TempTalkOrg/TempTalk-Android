@@ -1,5 +1,5 @@
-// Synced from call-layout bf6b84ecbe, ports/kotlin/src/test/kotlin/org/difft/calllayout/ControllerTest.kt (spec v25), by scripts/sync-apps.ts.
-// Do not edit here: change call-layout and sync again.
+
+
 
 package com.difft.android.call.layout
 
@@ -16,8 +16,8 @@ import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-// The controller (decision 32), ported from test/controller.test.ts: the app reports events, the
-// controller keeps the state in between and publishes the plan.
+
+
 class ControllerTest {
     private val cfg = LayoutConfig.DEFAULT
     private val phoneSize = Size(411.0, 923.0)
@@ -42,6 +42,127 @@ class ControllerTest {
     private val CallLayoutController.plan get() = state.value.plan
 
     private fun ids(c: CallLayoutController) = c.plan?.tiles?.map { it.id } ?: emptyList()
+
+    
+    
+    @Test
+    fun desktopStartsThe1on1FloatingWindowAtTheTopLeft() {
+        val c = CallLayoutController(overflow = Overflow.MORE, now = { 0.0 })
+        val content = Rect(8.0, 38.0, 752.0, 461.0)
+        c.setWindow(Size(768.0, 576.0), Insets.ZERO, null)
+        c.setContent(content)
+        c.setCallType(CallType.ONE_ON_ONE)
+        c.setParticipants(listOf(CallMember("me", isLocal = true, cameraOn = false), CallMember("p1", isLocal = false, cameraOn = false)))
+        fun pip() = c.plan!!.tiles.first { it.role == TileRole.PIP }
+        assertEquals("me", pip().id)
+        assertTrue(Math.abs(pip().rect.x - (content.x + cfg.pipMargin)) < 1 && Math.abs(pip().rect.y - (content.y + cfg.pipMargin)) < 1)
+        c.dropPip(Point(content.x + content.w - 20, content.y + content.h - 20))
+        assertTrue(pip().rect.x > content.x + content.w / 2 && pip().rect.y > content.y + content.h / 2)
+    }
+
+    
+    
+    
+    
+    @Test
+    fun theSpeakerIndicatorFollowsTheLoudestPersonAndFallsBackAfter2point5s() {
+        val s = setup(3)
+        val c = s.c
+        fun at(t: Double) { s.clock.t = t }
+        fun speaker() = c.state.value.speaker
+        assertEquals("nobody has spoken: you", "me", speaker())
+        at(400.0)
+        c.setSpeakers(listOf("p1"))
+        assertEquals("from the fallback at once", "p1", speaker())
+        at(3400.0)
+        c.setSpeakers(emptyList())
+        at(5300.0)
+        c.tick()
+        assertEquals("held after everyone stops", "p1", speaker())
+        at(5400.0)
+        c.setSpeakers(listOf("p2"))
+        assertEquals("waiting past speakerSwitchMaxMs: at once", "p2", speaker())
+        at(6000.0)
+        c.setSpeakers(listOf("p1", "p2"))
+        at(6100.0)
+        c.tick()
+        assertEquals("another person waits speakerSwitchMs", "p2", speaker())
+        at(6200.0)
+        c.tick()
+        assertEquals("p1", speaker())
+        at(7000.0)
+        c.setSpeakers(emptyList())
+        at(9400.0)
+        c.tick()
+        assertEquals("p1", speaker())
+        at(9500.0)
+        c.tick()
+        assertEquals("speakerHoldMs later: you", "me", speaker())
+        c.setShare(ScreenShare("p2", 1920.0, 1080.0))
+        assertEquals("someone else shares: the sharer", "p2", speaker())
+        c.setShare(ScreenShare("me", 1920.0, 1080.0))
+        assertEquals("you share: you", "me", speaker())
+    }
+
+    
+    @Test
+    fun aSpeakerListThatComesBeforeThePeopleInItCountsOnceTheyJoin() {
+        val clock = Clock()
+        val c = CallLayoutController(now = { clock.t })
+        c.setWindow(phoneSize, phoneSafe, null)
+        c.setContent(shown, hidden)
+        c.setSpeakers(listOf("p2"))
+        assertEquals("nobody in the call yet", null, c.state.value.speaker)
+        c.setParticipants(listOf("me", "p1", "p2").mapIndexed { i, id -> CallMember(id = id, isLocal = i == 0, cameraOn = false) })
+        c.setShare(ScreenShare("p1", 1920.0, 1080.0))
+        assertEquals("p2 speaks, not the sharer", "p2", c.state.value.speaker)
+        clock.t = 5000.0
+        c.tick()
+        assertEquals("still speaking: no fallback", "p2", c.state.value.speaker)
+    }
+
+    
+    @Test
+    fun aLouderPersonWhoJoinsAfterTheSpeakerListCameTakesOver() {
+        val clock = Clock()
+        val c = CallLayoutController(now = { clock.t })
+        c.setWindow(phoneSize, phoneSafe, null)
+        c.setContent(shown, hidden)
+        fun members(vararg ids: String) = ids.mapIndexed { i, id -> CallMember(id = id, isLocal = i == 0, cameraOn = false) }
+        c.setParticipants(members("me", "s", "a"))
+        c.setShare(ScreenShare("s", 1920.0, 1080.0))
+        c.setSpeakers(listOf("b", "a"))
+        assertEquals("a is the loudest in the call", "a", c.state.value.speaker)
+        c.setParticipants(members("me", "s", "a", "b"))
+        clock.t = 100.0
+        c.tick()
+        assertEquals("b waits speakerSwitchMs", "a", c.state.value.speaker)
+        clock.t = 300.0
+        c.tick()
+        assertEquals("b, the loudest, takes over", "b", c.state.value.speaker)
+    }
+
+    @Test
+    fun theSpeakerIndicatorSwitchesBySpeakerSwitchMaxMsWhileListsKeepComingAndLetsGoOfWhoLeft() {
+        val s = setup(3)
+        val c = s.c
+        fun at(t: Double) { s.clock.t = t }
+        fun speaker() = c.state.value.speaker
+        at(0.0)
+        c.setSpeakers(listOf("p1"))
+        var t = 100.0
+        while (t < 700) {
+            at(t)
+            c.setSpeakers(listOf("p2", "p1"))
+            t += 150
+        }
+        assertEquals("each list restarts the wait", "p1", speaker())
+        at(700.0)
+        c.setSpeakers(listOf("p2", "p1"))
+        assertEquals("speakerSwitchMaxMs after the first: at once", "p2", speaker())
+        c.setParticipants(s.list.filter { it.id != "p2" })
+        assertEquals("the speaker left: the fallback at once", "me", speaker())
+    }
 
     @Test
     fun youFirstTheRestInTheOrderTheyJoinedRejoiningGoesLast() {
@@ -130,8 +251,8 @@ class ControllerTest {
         assertTrue("the camera came to the first page once the hold was over", "p13" in ids(c))
     }
 
-    // TS counts the listener's calls; a StateFlow publishes by replacing its value, so here a publish
-    // is a new value.
+    
+    
     @Test
     fun onlyRealChangesArePublishedAndWindowChangesAreNotAnimated() {
         val s = setup(3)
@@ -152,7 +273,7 @@ class ControllerTest {
         assertTrue(c.state.value.animated)
     }
 
-    // Decision 33.
+    
 
     private fun run(s: Setup, from: Long, to: Long) {
         var t = from

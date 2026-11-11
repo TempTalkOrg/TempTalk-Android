@@ -38,16 +38,16 @@ import org.robolectric.annotation.Config
 import java.util.Collections
 import kotlin.concurrent.thread
 
-/**
- * [CallEndController] as the session graph builds it: the no-page toast is posted to the session's
- * main dispatcher even when `finish` runs on another thread (the exit handler finishes from
- * `appScope`), the no-page path ends the session, the page's own exit path finishes through the
- * handler the graph builds, and a page that starts collecting late still finishes exactly once.
- * Robolectric only because `ToastUtil` and the finish collector's `LifecycleRegistry` need a main
- * Looper; the session's main dispatcher is the test dispatcher (run on the main thread).
- * An off-main finish that read an attached page re-checks on main, so a page that detached in
- * between still leaves the session ending. Rows: T4-09 (off-main clause), T4-26, T4-28.
- */
+
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [33])
 class CallEndControllerSessionTest {
@@ -62,7 +62,7 @@ class CallEndControllerSessionTest {
 
     private lateinit var h: CallSessionTestHarness
 
-    /** `(text, ranOnMainLooper)` of every toast shown. */
+    
     private val toasts = Collections.synchronizedList(mutableListOf<Pair<String, Boolean>>())
 
     @Before
@@ -104,11 +104,11 @@ class CallEndControllerSessionTest {
         val session = h.start()
         session.attachUi()
 
-        // The finish reads one attached page; the page detaches before the session's main pass runs.
+        
         thread(name = "exit-handler-appScope") {
             session.graph.endController.finish(CallFinishRequest.remote(CallActionType.HANGUP))
         }.join()
-        // Only the count drops: the session's own last-detach check ran before the request was set.
+        
         session.graph.endController.detachUi()
         testDispatcher.scheduler.runCurrent()
 
@@ -136,7 +136,7 @@ class CallEndControllerSessionTest {
     @Test
     fun `T4-26 the page's E2 exit finishes LOCAL and marks the call ending synchronously`() {
         h.components.callStatus.value = CallStatus.CONNECTED
-        every { h.deps.callDataManager } returns CallDataManager() // no CallData: E2
+        every { h.deps.callDataManager } returns CallDataManager() 
         val session = h.start()
         session.attachUi()
 
@@ -201,7 +201,7 @@ class CallEndControllerSessionTest {
 
     private fun hangupTip() = ResUtils.getString(R.string.call_callee_action_hangup)
 
-    /** A page that is created but never started, as a backgrounded call page is. */
+    
     private fun createdOwner(): LifecycleOwner = object : LifecycleOwner {
         private val registry = LifecycleRegistry(this).apply { currentState = Lifecycle.State.CREATED }
         override val lifecycle: Lifecycle get() = registry

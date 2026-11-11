@@ -9,7 +9,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Local fixes to the synced controller (TempTalk Android); each one is reported back to call-layout. */
+
 class ControllerFixesTest {
     private val cfg = LayoutConfig.DEFAULT
     private val phoneSize = Size(411.0, 923.0)
@@ -30,7 +30,7 @@ class ControllerFixesTest {
         val first = c.state.value
         assertNotNull(first.plan)
         c.setParticipants(emptyList())
-        // Spec v20: nobody reported lays out a plan without cards (not a null plan).
+        
         assertTrue(c.state.value.plan!!.tiles.isEmpty())
         assertNull(c.state.value.focus)
         c.setParticipants(members(2))
@@ -42,7 +42,7 @@ class ControllerFixesTest {
     fun aFoldOutsideTheWindowIsDropped() {
         val c = controller()
         c.setParticipants(members(3))
-        // A tabletop fold reported for a taller window than the current one.
+        
         c.setWindow(Size(400.0, 300.0), Insets.ZERO, Rect(0.0, 450.0, 400.0, 40.0))
         assertEquals(Posture.FLAT, c.state.value.plan!!.posture)
         assertNull(c.lastInput!!.fold)

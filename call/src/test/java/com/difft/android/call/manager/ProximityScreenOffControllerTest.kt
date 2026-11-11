@@ -52,11 +52,11 @@ class ProximityScreenOffPolicyTest {
     }
 }
 
-/**
- * The session-owned lock: held whenever the policy allows, with no page lifecycle involved, and
- * dropped (waiting for no proximity) on [ProximityScreenOffController.release] or when the
- * session's `Job` is cancelled.
- */
+
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class ProximityScreenOffControllerTest {
 

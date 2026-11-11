@@ -39,9 +39,9 @@ class FlowLayout @JvmOverloads constructor(
         var maxWidthUsed = 0
         var totalHeight = 0
         
-        // Reset tracking variables
+        
         lastLineWidth = 0
-        lineCount = if (isNotEmpty()) 1 else 0  // Start with 1 line if we have children
+        lineCount = if (isNotEmpty()) 1 else 0  
 
 
         for (i in 0 until childCount) {
@@ -54,25 +54,25 @@ class FlowLayout @JvmOverloads constructor(
 
 
             if (lineWidth + childWidth <= widthSize - paddingLeft - paddingRight) {
-//                if (lineWidth + childWidth <= minOf(maxWidth, widthSize - paddingLeft - paddingRight)) {
-                // Add the child to the current line
+
+                
                 lineWidth += childWidth
                 lineHeight = max(lineHeight, childHeight)
                 maxWidthUsed = max(maxWidthUsed, lineWidth)
             } else {
-                // Start a new line
+                
                 totalHeight += lineHeight
                 lineWidth = childWidth
                 lineHeight = childHeight
                 maxWidthUsed = max(maxWidthUsed, lineWidth)
-                lineCount++  // Increment line count when starting a new line
+                lineCount++  
             }
 
             if (i == childCount - 1) {
-                // Last child, add the remaining line height
+                
                 totalHeight += lineHeight
                 maxWidthUsed = max(maxWidthUsed, lineWidth)
-                // Track the last line width for time view positioning
+                
                 lastLineWidth = lineWidth
             }
         }
@@ -108,8 +108,8 @@ class FlowLayout @JvmOverloads constructor(
             val childHeight = child.measuredHeight + lp.topMargin + lp.bottomMargin
 
             if (childLeft + childWidth <= right - left - paddingRight) {
-//                if (childLeft + childWidth <= maxOf(maxWidth, right - left - paddingRight)) {
-                // Add the child to the current line
+
+                
                 child.layout(
                     childLeft + lp.leftMargin,
                     childTop + lp.topMargin,
@@ -120,7 +120,7 @@ class FlowLayout @JvmOverloads constructor(
                 childLeft += childWidth
                 lineHeight = max(lineHeight, childHeight)
             } else {
-                // Start a new line
+                
                 childLeft = parentLeft
                 childTop += lineHeight
                 lineHeight = 0

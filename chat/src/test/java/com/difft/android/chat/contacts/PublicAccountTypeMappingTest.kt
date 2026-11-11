@@ -16,15 +16,10 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/**
- * P1-04 mapping/heuristic-replacement tests.
- *
- * - T4: [String.isOfficialAccount] is backed by the server-driven cache — a ≤6-char id that used to
- *   pass the deleted length heuristic is NO LONGER treated as official unless the server tagged it.
- * - T5: [ContactorUtil.from] maps `publicConfigs.publicAccountType` (present / null) onto the model.
- *
- * Design source: tmp/p104-public-account-type/design-report.md §11 (T4, T5).
- */
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33])
 class PublicAccountTypeMappingTest {
@@ -39,16 +34,16 @@ class PublicAccountTypeMappingTest {
         OfficialAccountCache.clear()
     }
 
-    /** T4 — server-driven check; deleted length heuristic no longer grants official to short ids. */
+    
     @Test
     fun `T4 isOfficialAccount reflects server-driven cache not id length`() {
         OfficialAccountCache.replaceAll(setOf("+10000"))
         assertTrue("+10000".isOfficialAccount())
-        // "12345" (<=6 chars) was official under the old length heuristic — now it is not.
+
         assertFalse("12345".isOfficialAccount())
     }
 
-    /** T5 — from() maps the OFFICIAL type. */
+    
     @Test
     fun `T5 from maps publicAccountType OFFICIAL`() {
         val model = ContactorUtil.from(
@@ -57,7 +52,7 @@ class PublicAccountTypeMappingTest {
         assertEquals(PublicAccountType.OFFICIAL, model?.publicAccountType)
     }
 
-    /** T5 — from() maps the explicit NORMAL type. */
+    
     @Test
     fun `T5 from maps publicAccountType NORMAL`() {
         val model = ContactorUtil.from(
@@ -66,7 +61,7 @@ class PublicAccountTypeMappingTest {
         assertEquals(PublicAccountType.NORMAL, model?.publicAccountType)
     }
 
-    /** T5 — from() defaults to NORMAL when publicConfigs (or the field) is absent. */
+    
     @Test
     fun `T5 from defaults to NORMAL when field absent`() {
         val nullConfigs = ContactorUtil.from(ContactResponse(number = "u2", name = "User"))

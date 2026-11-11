@@ -29,6 +29,9 @@ class ContactProfileSettingActivity : BaseActivity() {
             }
     }
 
+    
+    override fun participatesInSideChrome(): Boolean = intent.from == BUNDLE_VALUE_FROM_CONTACT
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_fragment_container)

@@ -45,7 +45,7 @@ class SettingSyncStateTest {
         assertTrue(state.pendingJobs(ROOM, field).isEmpty())
         assertFalse(state.isPending(ROOM, field))
 
-        // Deleted by the framework, then a new job with the same id can never exist; the entry is pruned.
+        
         q.queue()
         assertTrue(state.pendingJobs(ROOM, field).isEmpty())
         q.queue(a)

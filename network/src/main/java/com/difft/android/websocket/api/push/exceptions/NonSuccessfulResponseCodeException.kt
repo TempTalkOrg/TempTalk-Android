@@ -2,9 +2,9 @@ package com.difft.android.websocket.api.push.exceptions
 
 import java.io.IOException
 
-/**
- * Indicates a server response that is not successful, typically something outside the 2xx range.
- */
+
+
+
 open class NonSuccessfulResponseCodeException : IOException {
 
     val code: Int

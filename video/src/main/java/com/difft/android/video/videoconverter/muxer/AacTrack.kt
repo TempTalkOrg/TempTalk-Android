@@ -56,8 +56,8 @@ internal abstract class AacTrack(
         descriptor.setSlConfigDescriptor(slConfigDescriptor)
 
         val decoderConfigDescriptor = DecoderConfigDescriptor()
-        decoderConfigDescriptor.setObjectTypeIndication(0x40 /*Audio ISO/IEC 14496-3*/)
-        decoderConfigDescriptor.setStreamType(5 /*audio stream*/)
+        decoderConfigDescriptor.setObjectTypeIndication(0x40 )
+        decoderConfigDescriptor.setStreamType(5 )
         decoderConfigDescriptor.setBufferSizeDB(1536)
         decoderConfigDescriptor.setMaxBitRate(maxBitrate)
         decoderConfigDescriptor.setAvgBitRate(avgBitrate)
@@ -89,7 +89,7 @@ internal abstract class AacTrack(
     }
 
     override fun getLanguage(): String {
-        return "\u0060\u0060\u0060" // 0 in Iso639
+        return "\u0060\u0060\u0060" 
     }
 
     @Synchronized

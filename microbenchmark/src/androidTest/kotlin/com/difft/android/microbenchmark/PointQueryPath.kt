@@ -27,22 +27,16 @@ import org.difft.app.database.toSharedContactPhone
 import org.difft.app.database.toSpeechToTextData
 import org.difft.app.database.toTranslateData
 
-/**
- * The pre-#1143 per-row point-query path, re-implemented against an injected [WCDB].
- *
- * This measures the historical query SHAPE, not the production Kotlin wrappers: the original
- * functions in `WCDBExtensions.kt` resolve their database through a Hilt/application global that
- * an instrumented benchmark cannot satisfy without a full Hilt host. Every winq expression below
- * is copied verbatim from `WCDBExtensions.kt` (`attachment()`/`mentions()`/`reactions()`/
- * `sharedContacts()`/`translateData()`/`speechToTextData()`/`quote()`/`forwardContext()`), and the
- * per-message call list mirrors the historical `Record2MessageFactory` call shape — including
- * `forwardContext()` being invoked twice (branch test + assignment). Those production functions
- * are off the hot path since PR #1143; if they are ever edited, this copy must follow.
- *
- * Exact statement counts with the benchmark corpora: plain tier 6 SELECTs per message
- * (quote/forwardContext short-circuit on a null FK; sharedContacts issues no phone query when
- * empty), uniform rich tier 24 per message.
- */
+
+
+
+
+
+
+
+
+
+
 class PointQueryPath(private val wcdb: WCDB) {
 
     fun subDataFor(message: MessageModel) {
@@ -84,8 +78,7 @@ class PointQueryPath(private val wcdb: WCDB) {
 
         quote(message)
 
-        // The historical factory queried forwardContext() twice: once as the branch test,
-        // once for the assignment.
+        
         forwardContext(message)
         forwardContext(message)
     }

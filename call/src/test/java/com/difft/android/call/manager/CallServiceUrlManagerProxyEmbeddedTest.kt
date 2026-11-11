@@ -17,14 +17,14 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
-/**
- * Proxy-active hard-switch path: when the proxy is enabled, call connections must
- * be forced onto the proxy call tunnel domains (`proxy.tunnelDomains.call`, no
- * live fetch, no fallback) so the call domain stays inside the relay's
- * `ssl_preread` whitelist. The domains are synthesized into a [ServiceUrls]:
- * first domain → primary, the rest → fallback, no IP `addrs` (the proxy connects
- * by domain only).
- */
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33])
 class CallServiceUrlManagerProxyEmbeddedTest {
@@ -38,8 +38,8 @@ class CallServiceUrlManagerProxyEmbeddedTest {
         val statsLog = mockk<CallStatisticsLogManager>(relaxed = true)
         val httpClient = mockk<ChativeHttpClient>(relaxed = true)
         val proxyProvider = mockk<ProxyConfigProvider>(relaxed = true)
-        // The call hard-switch is gated on isEnabledForCall (proxy active AND
-        // "Protect IP address in calls" ON), not the plain IM-plane isEnabled.
+        
+        
         every { proxyProvider.isEnabledForCall } returns proxyEnabled
         val gcm = mockk<IGlobalConfigsManager>(relaxed = true)
         every { gcm.getProxyTunnelCallDomains() } returns proxyCallDomains
@@ -65,7 +65,7 @@ class CallServiceUrlManagerProxyEmbeddedTest {
         assertEquals("test-primary.ablivekit.org", result.primary?.domain)
         assertEquals(1, result.fallback.size)
         assertEquals("test-fallback.ablivekit.org", result.fallback.first()?.domain)
-        // No IP addrs: the proxy connects by domain only.
+        
         assertEquals(emptyList(), result.primary?.addrs)
     }
 

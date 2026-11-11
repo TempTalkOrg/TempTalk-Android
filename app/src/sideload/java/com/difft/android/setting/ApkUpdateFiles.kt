@@ -13,7 +13,7 @@ import com.difft.android.security.SecurityLib
 import com.difft.android.websocket.api.crypto.CryptoUtil
 import java.io.File
 
-/** Verification and installer hand-off for downloaded update APKs. */
+
 object ApkUpdateFiles {
 
     const val MIME_APK = "application/vnd.android.package-archive"
@@ -23,13 +23,13 @@ object ApkUpdateFiles {
             return false
         }
         try {
-            // 1. 完整性校验：流式计算 SHA256，避免一次性读取整个文件到内存
+            
             val hash = sha256(File(apkPath))
             if (!hash.equals(apkHash, ignoreCase = true)) {
                 L.w { "[UpdateManager] verifyApk hash mismatch." }
                 return false
             }
-            // 2. 来源校验：强制校验下载 APK 的签名证书是否在硬编码白名单内。
+            
             if (!SecurityLib.checkApkFileSign(context, apkPath, context.packageName)) {
                 L.e { "[UpdateManager] verifyApk signature not in whitelist, reject install." }
                 return false
@@ -41,7 +41,7 @@ object ApkUpdateFiles {
         return false
     }
 
-    /** FileProvider uri of [file]; throws IllegalArgumentException when no configured root covers it. */
+    
     fun contentUri(context: Context, file: File): Uri =
         FileProvider.getUriForFile(context, context.applicationContext.packageName + ".provider", file)
 
@@ -59,7 +59,7 @@ object ApkUpdateFiles {
         }
     }
 
-    /** Streamed SHA256, so a large APK is never loaded into memory at once. */
+    
     private fun sha256(file: File): String {
         return file.inputStream().use { inputStream ->
             val digest = java.security.MessageDigest.getInstance("SHA-256")

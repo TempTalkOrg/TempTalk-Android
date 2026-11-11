@@ -52,27 +52,27 @@ class GlobalConfigsManager @Inject constructor(
 ) : IGlobalConfigsManager {
 
     companion object {
-        private const val FOREGROUND_REFRESH_INTERVAL_MS = 5 * 60 * 1000L  // 5 minutes
-        private const val BACKGROUND_REFRESH_INTERVAL_MS = 60 * 60 * 1000L // 1 hour
+        private const val FOREGROUND_REFRESH_INTERVAL_MS = 5 * 60 * 1000L  
+        private const val BACKGROUND_REFRESH_INTERVAL_MS = 60 * 60 * 1000L 
         private const val DEFAULT_CONFIG_FILE_NAME = "default_global_config.json"
 
-        /**
-         * Sentinel for [proxyDomainsConfigRef]'s initial value. A fresh [Any]
-         * is never `===` any real [NewGlobalConfig] nor `null`, so the first
-         * proxy-domain read always recomputes (even when the effective config
-         * is `null`).
-         */
+        
+
+
+
+
+
         private val UNINITIALIZED_CONFIG_REF = Any()
     }
 
-    /** Monotonic refresh throttle; replaced only by tests. */
+    
     @VisibleForTesting
     internal var refreshGate = RefreshGate { SystemClock.elapsedRealtime() }
 
     @Volatile
     private var currentInterval: Long = FOREGROUND_REFRESH_INTERVAL_MS
 
-    // Channel to signal state changes and interrupt the delay
+    
     private val stateChangeSignal = Channel<Unit>(Channel.CONFLATED)
 
     private val isEncryptedConfigEnabled = BuildConfig.CONFIG_PSK.isNotEmpty().also { enabled ->
@@ -139,7 +139,7 @@ class GlobalConfigsManager @Inject constructor(
                 refreshMutex.withLock {
                     doRefreshIfNeeded()
                 }
-                // Wait for either: interval timeout OR state change signal
+                
                 val signaled = withTimeoutOrNull(currentInterval) {
                     stateChangeSignal.receive()
                     true
@@ -151,21 +151,21 @@ class GlobalConfigsManager @Inject constructor(
         }
     }
 
-    /**
-     * Call when app foreground/background state changes.
-     * Updates the interval and triggers immediate check.
-     */
+    
+
+
+
     fun onAppStateChanged(isForeground: Boolean) {
         currentInterval = if (isForeground) FOREGROUND_REFRESH_INTERVAL_MS else BACKGROUND_REFRESH_INTERVAL_MS
-        // Signal to interrupt current delay and check immediately
+        
         stateChangeSignal.trySend(Unit)
     }
 
-    /**
-     * Fetches when the gate is due. Only a fetch that adopted a config stamps the gate, so after a
-     * failed round the next state-change signal retries at once instead of waiting a full
-     * interval (#1395).
-     */
+    
+
+
+
+
     @VisibleForTesting
     internal suspend fun doRefreshIfNeeded() {
         val gate = refreshGate
@@ -175,7 +175,7 @@ class GlobalConfigsManager @Inject constructor(
         if (fetchGlobalConfigsWithRetry()) gate.markRefreshed()
     }
 
-    /** Returns true once one URL's config (code 0) is adopted; false when none is. */
+    
     @VisibleForTesting
     internal suspend fun fetchGlobalConfigsWithRetry(): Boolean {
         if (globalConfigUrls.isEmpty()) {
@@ -221,13 +221,13 @@ class GlobalConfigsManager @Inject constructor(
         return NewGlobalConfig(code = encrypted.code, data = innerData)
     }
 
-    /**
-     * Persists [config] to the encrypted `secure_config.pb` DataStore via
-     * [SecureConfigStore]. Caller is expected to already be on an IO coroutine
-     * (this is invoked from [fetchGlobalConfigsWithRetry] which runs inside
-     * [periodicRefreshJob] on [Dispatchers.IO]); the [SecureConfigStore.saveConfig]
-     * call is `suspend` and routes through DataStore's own actor on IO.
-     */
+    
+
+
+
+
+
+
     private suspend fun saveConfigToStore(config: NewGlobalConfig) {
         try {
             val configJson = gson.toJson(config)
@@ -241,17 +241,17 @@ class GlobalConfigsManager @Inject constructor(
         return inMemoryGlobalConfig ?: loadInitialConfigBlocking().also { inMemoryGlobalConfig = it }
     }
 
-    /**
-     * Parsed snapshot of the bundled assets [DEFAULT_CONFIG_FILE_NAME], cached for
-     * the singleton lifetime. Distinct from [inMemoryGlobalConfig] (which prefers
-     * live/disk cache) — this ALWAYS reflects the embedded file, used as the
-     * per-dimension fallback for the proxy tunnel domains (see
-     * [proxyTunnelDomainsFrom]).
-     *
-     * `by lazy` so a parse failure (`null`) is cached too — a nullable
-     * double-checked-lock would re-enter and re-read the assets on every call
-     * after a failed parse.
-     */
+    
+
+
+
+
+
+
+
+
+
+
     private val embeddedConfig: NewGlobalConfig? by lazy {
         try {
             val json = context.assets.open(DEFAULT_CONFIG_FILE_NAME).bufferedReader().use { it.readText() }
@@ -262,22 +262,11 @@ class GlobalConfigsManager @Inject constructor(
         }
     }
 
-    /**
-     * Cache for the derived proxy tunnel domains, keyed on the identity of the
-     * [NewGlobalConfig] they were derived from. The proxy path reads these on
-     * every connection ([com.difft.android.network.proxy.ProxyConfigProvider.shouldTunnel],
-     * [com.difft.android.network.UrlManager.getBestHost]), so the steady-state
-     * read must be lock-free: when [getNewGlobalConfigs] returns the same
-     * (`===`) config reference as last time, we return the already-derived
-     * lists without re-filtering or re-normalizing.
-     *
-     * A fresh fetch in [fetchGlobalConfigsWithRetry] replaces
-     * [inMemoryGlobalConfig] with a new object, so the next read sees a
-     * different reference and recomputes — this is how a LIVE config update to
-     * `proxy.tunnelDomains` propagates to the whitelist / forced domains without
-     * an app restart. [UNINITIALIZED_CONFIG_REF] (never `===` any real config,
-     * including `null`) forces the first read to compute.
-     */
+    
+
+
+
+
     @Volatile
     private var proxyDomainsConfigRef: Any? = UNINITIALIZED_CONFIG_REF
 
@@ -289,11 +278,11 @@ class GlobalConfigsManager @Inject constructor(
 
     private val proxyDomainsLock = Any()
 
-    /**
-     * Refreshes [cachedProxyChatDomains] / [cachedProxyCallDomains] when the
-     * effective config reference changed. Cheap volatile identity check on the
-     * hot path; the lock is taken only on a config change.
-     */
+    
+
+
+
+
     private fun ensureProxyDomainsCache() {
         val cfg = getNewGlobalConfigs()
         if (cfg === proxyDomainsConfigRef) return
@@ -305,13 +294,7 @@ class GlobalConfigsManager @Inject constructor(
         }
     }
 
-    /**
-     * Live-preferred + per-dimension embedded fallback: takes the selected
-     * dimension ([TunnelDomains.chat] / [TunnelDomains.call]) from the effective
-     * [cfg] when non-empty, else from the bundled assets default. The fallback
-     * covers the rollout window where the live/online config has not yet shipped
-     * a `proxy` block but the embedded baseline has.
-     */
+    
     private fun proxyTunnelDomainsFrom(
         cfg: NewGlobalConfig?,
         select: (TunnelDomains?) -> List<String>?,
@@ -339,29 +322,21 @@ class GlobalConfigsManager @Inject constructor(
         return cachedProxyCallDomains
     }
 
-    /**
-     * Synchronous bridge for [getNewGlobalConfigs] — the public API is non-suspend
-     * and is called from a wide variety of legacy call sites (76+ across the
-     * codebase) that cannot be retrofitted to coroutines without large-scale
-     * refactoring. The DataStore is pre-warmed by `StoragePreloader` during
-     * application startup (issue #725 Task 2), so `.first()` returns from the
-     * in-memory cache immediately and this bridge does NOT block on disk I/O.
-     *
-     * Falls back to the bundled default config JSON on read failure, mirroring
-     * the original [EncryptedSharedPreferences] behavior.
-     */
-    // DataStore pre-warmed by StoragePreloader (#725); .first() returns from
-    // memory cache without blocking on disk I/O. Sync bridge for 76+ legacy
-    // non-suspend caller sites.
+    
+
+
+
+
+    
     @Suppress("BanRunBlockingOutsideTests")
     private fun loadInitialConfigBlocking(): NewGlobalConfig? =
         runBlocking(Dispatchers.IO) { loadInitialConfig() }
 
-    /**
-     * Suspend variant used inside coroutines. Reads from [SecureConfigStore],
-     * decodes the cached JSON, and falls back to the bundled assets default
-     * if the store is empty or the decode fails.
-     */
+    
+
+
+
+
     private suspend fun loadInitialConfig(): NewGlobalConfig? {
         try {
             val cached = secureConfigStore.configFlow.first()
@@ -374,7 +349,7 @@ class GlobalConfigsManager @Inject constructor(
             L.e { "[GlobalConfigsManager] load from secure_config.pb error: ${e.stackTraceToString()}" }
         }
 
-        // Fallback to assets
+        
         return try {
             val json = context.assets.open(DEFAULT_CONFIG_FILE_NAME).bufferedReader().use { it.readText() }
             gson.fromJson(json, NewGlobalConfig::class.java).also {
@@ -393,7 +368,7 @@ class GlobalConfigsManager @Inject constructor(
                 this.mostUseEmojis = emojis.joinToString(",")
             }
         } else {
-            // Keep intersection of current emojis and server emojis
+            
             val newMostUseEmojis = currentMostUseEmojis.filter { it in emojis }
             L.i { "[GlobalConfigsManager][emoji] updateMostUseEmojis newMostUseEmojis: ${newMostUseEmojis.size}" }
             if (newMostUseEmojis.isNotEmpty()) {
@@ -450,37 +425,31 @@ class GlobalConfigsManager @Inject constructor(
         }
     }
 
-    /**
-     * 获取活跃会话过期配置
-     * 用于控制空会话的清理时间
-     */
+    
     fun getActiveConversationConfig(): ActiveConversation {
         return getNewGlobalConfigs()?.data?.disappearanceTimeInterval?.activeConversation
             ?: ActiveConversation()
     }
 
-    /**
-     * 获取群机密消息人数限制
-     * 群人数 >= 此值时，隐藏机密消息开关
-     */
+    
     fun getGroupConfidentialMemberLimit(): Int {
         return getNewGlobalConfigs()?.data?.group?.confidentialModeThreshold ?: 20
     }
 
-    /**
-     * Group encryption feature flag.
-     * When disabled: new groups are created as plain (non-encrypted),
-     * and the upgrade entry is hidden on the group info page.
-     * Existing encrypted groups remain displayed as encrypted regardless of this flag.
-     */
+    
+
+
+
+
+
     fun isGroupEncryptionEnabled(): Boolean {
         return getNewGlobalConfigs()?.data?.group?.encryptionEnabled ?: false
     }
 
-    /**
-     * Independent feature flag for the encrypted-group key reset/rotation entry.
-     * When false, the reset entry is hidden even if group encryption is enabled.
-     */
+    
+
+
+
     fun isGroupEncryptionKeyResetEnabled(): Boolean {
         return getNewGlobalConfigs()?.data?.group?.encryptionKeyResetEnabled ?: false
     }

@@ -13,47 +13,13 @@ import org.junit.runner.RunWith
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
-/**
- * Drift guard for the dual-pane pane budget. Four things are pinned here, and nothing else
- * in the repo pins any of them:
- *
- * 1. **The feasibility invariant.** The `w673dp` component of the qualifier directory
- *    `app/src/main/res/layout-w673dp-h480dp/` — the resource gate that decides whether
- *    `activity_index.xml` inflates a `detail_pane` at all — MUST cover the sum of the two
- *    floor terms of the pane budget: `dual_pane_list_min_width + dual_pane_detail_min_width`
- *    (the home tabs float over the list pane and take no width). If a minimum rises above
- *    the gate, dual-pane engages on a window that cannot satisfy its own declared minimums
- *    and `IndexActivity.applyListPaneWidth()`'s clamp silently starves one pane.
- *    [WindowSizeClassUtil.DUAL_PANE_MIN_WIDTH_DP] is the declared mirror of that directory
- *    name, so asserting against it catches a change to either side.
- * 2. **The two-file dimen layering with the band boundary at 900dp, not 840dp.** An unfolded
- *    Galaxy Z Fold 8 is exactly 840dp wide; on that 7.6" handheld the tablet budget (360dp
- *    list) squeezes the conversation pane, so 673-899dp windows must resolve the compact
- *    budget from `res/values/` and only >= 900dp windows the tablet budget from
- *    `res/values-w900dp/`. The w840dp and w899dp cases pin the deliberate part: Fold-8-class
- *    windows stay on the compact budget. `R.string.dual_pane_band` is the inflation-time
- *    marker of the same band (stamped on `list_pane` for `DualPaneReconciler`), so it is
- *    pinned alongside the dimens it describes.
- * 3. **The drag floor sits above the static floor in every band.**
- *    `dual_pane_detail_drag_min_width` (360dp, band-independent) is the interactive clamp
- *    that keeps the 270dp fixed-width bubbles out of the clipping zone; the static
- *    `dual_pane_detail_min_width` may only go below it in the compact band, where the drag
- *    range is empty.
- * 4. **The runtime gate mirror sits on the same floor as the dimens.**
- *    `R.bool.dual_pane_layout_active` is carried by
- *    `app/src/main/res/values-w673dp-h480dp/bools.xml`, a THIRD directory whose qualifier
- *    digits must track the same floor as the feasibility sum above. The qualifier dp values
- *    are read FROM the constants rather than written as `@Config(qualifiers)` literals
- *    precisely so that a change to either constant fails here.
- *    [PaneGateResourceAgreementTest] pins the complementary half — bool against inflation.
- *
- * Dimen values are compared in dp via `getDimension(...) / density` rather than
- * `getDimensionPixelSize(...)` so the tablet band's 0.5dp divider is exact instead of
- * rounded.
- *
- * `application = Application::class` keeps this a pure resource test — the real
- * application Hilt graph is irrelevant to dimen resolution.
- */
+
+
+
+
+
+
+
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [33], application = Application::class)
 class DualPaneBudgetResourceInvariantTest {
@@ -61,6 +27,9 @@ class DualPaneBudgetResourceInvariantTest {
     private class Budget(resources: Resources) {
         private val density = resources.displayMetrics.density
         val dividerDp = resources.getDimension(R.dimen.dual_pane_divider_width) / density
+
+        
+        val hairlineDp = 1f / density
         val listDefaultDp = resources.getDimension(R.dimen.dual_pane_list_default_width) / density
         val listMinDp = resources.getDimension(R.dimen.dual_pane_list_min_width) / density
         val detailMinDp = resources.getDimension(R.dimen.dual_pane_detail_min_width) / density
@@ -76,7 +45,7 @@ class DualPaneBudgetResourceInvariantTest {
     fun `default config carries the compact budget and its floor fits under the qualifier gate`() {
         val budget = budget()
 
-        assertEquals("divider (res/values/dimens.xml)", 1f, budget.dividerDp, TOLERANCE_DP)
+        assertEquals("divider: the shared hairline", budget.hairlineDp, budget.dividerDp, TOLERANCE_DP)
         assertEquals("list default (res/values/dimens.xml)", 280f, budget.listDefaultDp, TOLERANCE_DP)
         assertEquals("list minimum (res/values/dimens.xml)", 280f, budget.listMinDp, TOLERANCE_DP)
         assertEquals("detail minimum (res/values/dimens.xml)", 320f, budget.detailMinDp, TOLERANCE_DP)
@@ -97,10 +66,8 @@ class DualPaneBudgetResourceInvariantTest {
     fun `w900dp resolves the tablet budget`() {
         val budget = budget()
 
-        // The geometry the dual-pane layout originally shipped with at the w840dp gate,
-        // now applying only from 900dp up. Because these differ from the default config's
-        // values above, this case also proves the LARGEST matching w<N>dp wins.
-        assertEquals("divider (res/values-w900dp/dimens.xml)", 0.5f, budget.dividerDp, TOLERANCE_DP)
+        
+        assertEquals("divider: the shared hairline in every band", budget.hairlineDp, budget.dividerDp, TOLERANCE_DP)
         assertEquals("list default (res/values-w900dp/dimens.xml)", 360f, budget.listDefaultDp, TOLERANCE_DP)
         assertEquals("list minimum (res/values-w900dp/dimens.xml)", 280f, budget.listMinDp, TOLERANCE_DP)
         assertEquals("detail minimum (res/values-w900dp/dimens.xml)", 360f, budget.detailMinDp, TOLERANCE_DP)
@@ -141,8 +108,8 @@ class DualPaneBudgetResourceInvariantTest {
         val compact = budget()
         assertEquals(
             "dual_pane_detail_drag_min_width (res/values/dimens.xml) is the interactive clamp " +
-                "that keeps incoming rows hosting the 270dp fixed-width bubbles (26 + 270 + 40 " +
-                "= 336dp, 340dp with the voice-speed button) out of the clipping zone.",
+                "that keeps incoming rows hosting the 280dp fixed-width cards (26 + 280 + 40 " +
+                "= 346dp) out of the clipping zone.",
             360f,
             compact.detailDragMinDp,
             TOLERANCE_DP
@@ -199,11 +166,11 @@ class DualPaneBudgetResourceInvariantTest {
         )
     }
 
-    /**
-     * Resolves the gate bool in a configuration built from the declared floor constants. A
-     * `@Config(qualifiers = ...)` annotation could not do this: its value has to be a literal,
-     * and a literal cannot fail when a constant moves.
-     */
+    
+
+
+
+
     private fun gateAt(screenWidthDp: Int, screenHeightDp: Int): Boolean {
         val application = RuntimeEnvironment.getApplication()
         val configuration = Configuration(application.resources.configuration).apply {
@@ -216,7 +183,7 @@ class DualPaneBudgetResourceInvariantTest {
     }
 
     private companion object {
-        /** dp comparison tolerance: dimens round-trip through px, so exact float equality is unsafe. */
+        
         const val TOLERANCE_DP = 0.01f
     }
 }

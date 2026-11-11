@@ -17,11 +17,11 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
-/**
- * [FailureObservingBody]: a failure while the body is read is reported, the bytes before it are
- * passed through untouched, and a failure caused by the caller closing the body is not a host
- * signal (#1396).
- */
+
+
+
+
+
 class FailureObservingBodyTest {
 
     private fun bodyOf(source: Source): ResponseBody = object : ResponseBody() {
@@ -30,7 +30,7 @@ class FailureObservingBodyTest {
         override fun source(): BufferedSource = source.buffer()
     }
 
-    /** Yields "abc" once, then fails. */
+    
     private class FailsAfterFirstRead(val error: IOException) : Source {
         private var reads = 0
         override fun read(sink: Buffer, byteCount: Long): Long {
@@ -76,7 +76,7 @@ class FailureObservingBodyTest {
         assertTrue(reported.isEmpty())
     }
 
-    // A reader blocked in read() when the caller closes the body fails with "closed": not the host's fault.
+    
     @Test
     fun `a failure caused by the caller closing the body is not reported`() {
         val blocked = CountDownLatch(1)

@@ -24,11 +24,11 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/**
- * Where a session toast goes: through the call page's event collector when a page collects, else
- * straight to an app toast (before the first page, or with no page left). Robolectric because
- * `ToastUtil` builds a main-Looper `Handler` when its object initializes.
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [33])
 class CallSessionToastTest {

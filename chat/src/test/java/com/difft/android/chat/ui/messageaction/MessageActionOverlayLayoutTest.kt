@@ -34,15 +34,15 @@ import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/**
- * Z1-Z12 (#1294): [MessageActionOverlayLayout] draws the menu above the selection handles and
- * routes a DOWN inside the visible menu to the menu before any child.
- *
- * The menu stand-in is a MATCH_PARENT View whose touch listener records events and returns false
- * (a non-consuming Compose gap). Because the menu is the highest-Z child, the framework also
- * *offers* it the DOWN on the child route; "did not own the sequence" is therefore asserted as
- * "received no event other than that offered DOWN". mdpi, so px == dp.
- */
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(application = TestScopeApplication::class, sdk = [34], qualifiers = "w800dp-h1400dp-mdpi")
@@ -114,7 +114,7 @@ class MessageActionOverlayLayoutTest {
         idle()
     }
 
-    /** Clears the long-press continuation guard; the warm-up tap dismisses, so counters reset. */
+    
     private fun warmUp(overlay: MessageActionOverlayLayout) {
         tap(overlay, 790f, 10f)
         dismissCount = 0
@@ -124,7 +124,7 @@ class MessageActionOverlayLayoutTest {
     private fun View.centerX() = left + width / 2f
     private fun View.centerY() = top + height / 2f
 
-    /** Menu + one end handle at (200, 400), menu bounds (100,380,700,900). */
+    
     private inner class Fixture {
         val activity = newActivity()
         val menu = recordingMenu(activity)
@@ -295,7 +295,7 @@ class MessageActionOverlayLayoutTest {
         val composeView = ComposeView(activity).apply {
             setContent {
                 val sizeDp = with(LocalDensity.current) { 600.toDp() to 520.toDp() }
-                // Mirrors MessageActionPopupOverlay: an outer full-size Box without pointer input.
+                
                 Box(Modifier.fillMaxSize()) {
                     Box(
                         Modifier
@@ -313,24 +313,24 @@ class MessageActionOverlayLayoutTest {
         host(activity, overlay)
         warmUp(overlay)
 
-        // (a) Handle outside the menu: the ComposeView is offered the DOWN first and declines it.
+        
         drag(overlay, handle.centerX(), handle.centerY())
         assertEquals(1, dragStarts)
         assertTrue(drags >= 1)
         assertEquals(1, dragEnds)
         assertEquals(0, dismissCount)
 
-        // (b) Empty space outside the menu dismisses.
+        
         tap(overlay, 650f, 1200f)
         assertEquals(1, dismissCount)
 
-        // (c) Inside the clickable menu: handled by the menu, no dismiss.
+        
         tap(overlay, 300f, 500f)
         assertEquals(1, clicks)
         assertEquals(1, dismissCount)
     }
 
-    /** Z12: a handle drags only with the pointer that started it; other pointers never move or end it. */
+    
     @Test
     fun `Z12 a handle ignores secondary pointers`() {
         val activity = newActivity()
@@ -344,7 +344,7 @@ class MessageActionOverlayLayoutTest {
 
         pointers(handle, MotionEvent.ACTION_DOWN, down, Triple(0, 10f, 10f))
         pointers(handle, MotionEvent.ACTION_POINTER_DOWN or (1 shl shift), down, Triple(0, 10f, 10f), Triple(1, 50f, 50f))
-        // Only the secondary pointer moves: no drag distance is reported.
+        
         pointers(handle, MotionEvent.ACTION_MOVE, down, Triple(0, 10f, 10f), Triple(1, 90f, 120f))
         assertTrue("secondary move must not drag: $deltas", deltas.all { it == 0f to 0f })
         pointers(handle, MotionEvent.ACTION_POINTER_UP or (1 shl shift), down, Triple(0, 10f, 10f), Triple(1, 90f, 120f))
@@ -353,7 +353,7 @@ class MessageActionOverlayLayoutTest {
         pointers(handle, MotionEvent.ACTION_MOVE, down, Triple(0, 15f, 17f))
         assertEquals(5f to 7f, deltas.last())
 
-        // The primary lifts first: the drag ends, and the remaining pointer's moves do not drag.
+        
         pointers(handle, MotionEvent.ACTION_POINTER_DOWN or (1 shl shift), down, Triple(0, 15f, 17f), Triple(1, 50f, 50f))
         pointers(handle, MotionEvent.ACTION_POINTER_UP, down, Triple(0, 15f, 17f), Triple(1, 50f, 50f))
         assertEquals(1, ends)
@@ -364,7 +364,7 @@ class MessageActionOverlayLayoutTest {
         assertEquals(1, ends)
     }
 
-    /** Dispatches a multi-pointer event; [ps] are (pointerId, x, y) in index order. */
+    
     private fun pointers(target: View, action: Int, downTime: Long, vararg ps: Triple<Int, Float, Float>) {
         val props = ps.map { (id, _, _) ->
             MotionEvent.PointerProperties().apply {

@@ -27,15 +27,15 @@ class UndoRedoStacks private constructor(
     fun isChanged(element: EditorElement): Boolean =
         !ElementStack.getBytes(element).contentEquals(unchangedState)
 
-    /**
-     * As long as there is something different in the stack somewhere, then we can undo.
-     */
+    
+
+
     fun canUndo(currentState: EditorElement): Boolean =
         undoStack.stackContainsStateDifferentFrom(currentState)
 
-    /**
-     * As long as there is something different in the stack somewhere, then we can redo.
-     */
+    
+
+
     fun canRedo(currentState: EditorElement): Boolean =
         redoStack.stackContainsStateDifferentFrom(currentState)
 }

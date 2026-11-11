@@ -22,14 +22,14 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
-/**
- * The lazy half of the migration — the path the download job takes before it reaches the network,
- * and the resolver seam it registers.
- *
- * Reaches no database: both entry points work from the identifiers their caller already holds, which
- * is what lets the row-lock and copy behaviour be pinned on the JVM (the native WCDB library is not
- * available there, so the paged stages are verified on device).
- */
+
+
+
+
+
+
+
+
 class ForwardAttachmentMigrationLazyPathTest {
 
     @get:Rule
@@ -118,7 +118,7 @@ class ForwardAttachmentMigrationLazyPathTest {
 
     @Test
     fun `a normal attachment is never served from the authorityId directory`() {
-        // That address belongs to forwarded copies; reading it here would reach into a sibling's file.
+        
         legacyFile("42", "photo.jpg", "bytes")
         val target = currentDirectory("local-1")
 
@@ -151,8 +151,8 @@ class ForwardAttachmentMigrationLazyPathTest {
         assertTrue(migration.materializeFromLegacyAddress(row(), "local-1", File(target, "photo.jpg").path))
         assertEquals("bytes", File(target, "photo.jpg").readText())
 
-        // Second time the file is already there: nothing was migrated, so the caller keeps its own
-        // decision about whether to download.
+        
+        
         assertFalse(migration.materializeFromLegacyAddress(row(), "local-1", File(target, "photo.jpg").path))
     }
 
@@ -193,9 +193,9 @@ class ForwardAttachmentMigrationLazyPathTest {
 
     @Test
     fun `a row the backfill has not reached is rescued under its synthesized identity`() {
-        // The rows whose file is still at a legacy address are exactly the ones the backfill has not
-        // stamped yet, so a NULL localId column must not end the rescue: the caller addresses such a
-        // row by the id every reader synthesizes for it, and that is the key the rescue works under.
+        
+        
+        
         val unbackfilled = row(localId = null)
         val rowKey = unbackfilled.synthesizedLocalId()
         legacyFile("message-7", "photo.jpg", "bytes")

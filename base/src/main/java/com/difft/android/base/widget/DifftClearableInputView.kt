@@ -39,33 +39,31 @@ import androidx.compose.material3.Icon
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.size
 
-/** Leading icon options for [DifftClearableInputView]. */
+
 enum class LeadingIcon { None, Search }
 
-/**
- * XML-hostable shell around [DifftClearableTextField]. Transitional: when a page migrates to
- * Compose, replace this tag with a direct [DifftClearableTextField]/DifftSearchBar call — the
- * composable itself needs no change.
- *
- * ## State ownership
- * [query] is this View's live text (same standing as `EditText.getText()`). The host reads it
- * on demand; a ViewModel-side copy fed by [onQueryChanged] is derived state and must not be
- * written back.
- *
- * ## Setter semantics
- * - user typing            -> [onQueryChanged] only
- * - `query = x` (external) -> NO callback (equal value: complete no-op)
- * - [clear]                -> [onClear] only, unconditionally (even when already empty —
- *                             mirrors TextView.setText's unconditional TextWatcher notification)
- * - user taps ✕            -> [onClear] + refocus + keyboard
- * - instance-state restore -> [onQueryChanged] (posted), never [onClear]
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 open class DifftClearableInputView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
     defStyleAttr: Int = 0,
     private val defaultLeadingIcon: LeadingIcon = LeadingIcon.None,
-    // Library rule: a field with a value always shows its clear icon, focused or not.
+    
     defaultClearMode: ClearMode = ClearMode.WhenNotEmpty,
     defaultImeAction: ImeAction = ImeAction.Default,
     defaultStyle: DifftTextFieldStyle = DifftTextFieldStyle.Form,
@@ -86,11 +84,11 @@ open class DifftClearableInputView @JvmOverloads constructor(
     private var containerColorState by mutableStateOf<Int?>(null)
     private var maxLinesState by mutableStateOf(1)
 
-    /**
-     * Whether the field takes focus (and the keyboard) when first composed; from
-     * `app:dsi_autoFocus`. Set it before the view is attached. A page in a detail stack turns it
-     * off and opens the keyboard itself, only on a fresh open (not after a fold recreation).
-     */
+    
+
+
+
+
     var autoFocus: Boolean
         get() = autoFocusState
         set(value) {
@@ -102,7 +100,7 @@ open class DifftClearableInputView @JvmOverloads constructor(
     private var textSizeSpState by mutableStateOf<Float?>(null)
     private var contentPaddingState by mutableStateOf<PaddingValues?>(null)
 
-    /** Current text. Setter fires no callback; setting an equal value is a complete no-op. */
+    
     var query: String
         get() = queryState
         set(value) {
@@ -115,7 +113,7 @@ open class DifftClearableInputView @JvmOverloads constructor(
             hintState = value
         }
 
-    /** Surface the field sits on (page vs popup / bottom sheet); see [DifftInputSurface]. */
+    
     var surface: DifftInputSurface
         get() = surfaceState
         set(value) {
@@ -128,7 +126,7 @@ open class DifftClearableInputView @JvmOverloads constructor(
             clearModeState = value
         }
 
-    /** Library skin: filled search box or outlined form field. */
+    
     var inputStyle: DifftTextFieldStyle
         get() = styleState
         set(value) {
@@ -148,11 +146,11 @@ open class DifftClearableInputView @JvmOverloads constructor(
             maxLengthState = value
         }
 
-    /**
-     * Visible lines before the text scrolls; from `app:dsi_maxLines`. Above 1 the field is a text
-     * area: it never shows the clear icon ([ClearMode.Never], the component's rule) and its box
-     * grows with the text from `dsi_minHeight` up to this many lines.
-     */
+    
+
+
+
+
     var maxLines: Int
         get() = maxLinesState
         set(value) {
@@ -160,31 +158,31 @@ open class DifftClearableInputView @JvmOverloads constructor(
             if (maxLinesState > 1) clearModeState = ClearMode.Never
         }
 
-    /**
-     * Fill of the box, or null for the style's own fill; from `app:dsi_containerColor`. Setting it
-     * means the host owns the box: the component paints this colour and draws no border, and a
-     * single-line field drops its own content padding and clear-icon end inset (the host's box
-     * supplies them). A transparent value lets the view's own background drawable show through.
-     */
+    
+
+
+
+
+
     var containerColor: Int?
         get() = containerColorState
         set(value) {
             containerColorState = value
         }
 
-    /** Fires only on user typing. External setters, [clear], and the ✕ tap never fire it. */
+    
     var onQueryChanged: (String) -> Unit = {}
 
-    /** Fires when the user taps ✕ or the host calls [clear] — the complete "cleared" signal. */
+    
     var onClear: () -> Unit = {}
 
-    /** Fires on the IME action key (Search / Done / ...). */
+    
     var onImeAction: (() -> Unit)? = null
 
     init {
-        // The shell itself is the autofill target: the system anchors its suggestion popup to a
-        // REAL view's bounds. Compose's virtual autofill nodes mis-anchored the popup at the
-        // screen origin, so descendants are excluded and this view exposes the value instead.
+        
+        
+        
         importantForAutofill = IMPORTANT_FOR_AUTOFILL_YES_EXCLUDE_DESCENDANTS
         if (attrs != null) {
             context.withStyledAttributes(attrs, R.styleable.DifftClearableInputView) {
@@ -233,7 +231,7 @@ open class DifftClearableInputView @JvmOverloads constructor(
                         else -> DifftTextFieldStyle.Search
                     }
                 }
-                // Declaring a size pins the box height; an explicit dsi_height still wins below.
+                
                 if (hasValue(R.styleable.DifftClearableInputView_difft_inputSize)) {
                     sizeState = when (getInt(R.styleable.DifftClearableInputView_difft_inputSize, 1)) {
                         0 -> DifftTextFieldSize.Medium
@@ -257,7 +255,7 @@ open class DifftClearableInputView @JvmOverloads constructor(
         }
     }
 
-    // ---------- Autofill (View-level) ----------
+    
 
     override fun getAutofillType(): Int = if (isEnabled) AUTOFILL_TYPE_TEXT else AUTOFILL_TYPE_NONE
 
@@ -268,7 +266,7 @@ open class DifftClearableInputView @JvmOverloads constructor(
         val text = value.textValue.toString()
         val capped = maxLengthState?.let(text::take) ?: text
         queryState = capped
-        // Autofill behaves like user input — hosts must react (enable buttons, etc.).
+        
         onQueryChanged(capped)
     }
 
@@ -289,35 +287,32 @@ open class DifftClearableInputView @JvmOverloads constructor(
         }.onFailure { L.w { "[DifftInput] autofill notify failed: ${it.stackTraceToString()}" } }
     }
 
-    // ---------- Commands ----------
+    
 
-    /**
-     * Programmatic clear: empties the text and fires [onClear] UNCONDITIONALLY — even when the
-     * text is already empty, mirroring TextView.setText's unconditional TextWatcher notification
-     * (callers like group-update refresh chains rely on firing from an already-empty state).
-     * Does not move focus and does not show the keyboard (matches the legacy
-     * `buttonClear.performClick()` semantics).
-     */
+    
+
+
+
+
+
     fun clear() {
         queryState = ""
         onClear()
     }
 
-    /** Requests focus on the inner text field and shows the keyboard. */
+    
     fun focusAndShowKeyboard() = post(ImeCommand.FOCUS_AND_SHOW)
 
-    /** Requests focus on the inner text field (Compose focus implies an IME session). */
+    
     fun requestInputFocus() = post(ImeCommand.FOCUS)
 
-    /**
-     * Clears the inner Compose focus and hides the keyboard. Replaces the legacy
-     * `clearFocus()` + `KeyboardUtils/ViewUtil.hideKeyboard(view)` pair — a plain View
-     * `clearFocus()` cannot clear Compose's internal FocusState.
-     */
+    
+
+
+
     fun hideKeyboard() {
         post(ImeCommand.HIDE)
-        // The legacy path used windowToken directly, which works even when this subtree is
-        // already GONE; keep that path as an idempotent fallback.
+        
         ContextCompat.getSystemService(context, InputMethodManager::class.java)
             ?.hideSoftInputFromWindow(windowToken, 0)
     }
@@ -331,9 +326,9 @@ open class DifftClearableInputView @JvmOverloads constructor(
         pendingCommand = cmd to commandSeq++
     }
 
-    // ---------- Instance state ----------
-    // AbstractComposeView does not inherit EditText's automatic text freezing; without this,
-    // process death / foldable reconfiguration would drop the query silently.
+    
+    
+    
 
     override fun onSaveInstanceState(): Parcelable = Bundle().apply {
         putParcelable(KEY_SUPER, super.onSaveInstanceState())
@@ -345,8 +340,8 @@ open class DifftClearableInputView @JvmOverloads constructor(
             super.onRestoreInstanceState(state.getParcelable(KEY_SUPER))
             val restored = state.getString(KEY_QUERY).orEmpty()
             queryState = restored
-            // EditText's restore fires the TextWatcher, so hosts re-run their search; posting
-            // keeps that equivalence once listeners are attached. Never route through clear().
+            
+            
             post { onQueryChanged(restored) }
         } else {
             super.onRestoreInstanceState(state)
@@ -401,7 +396,7 @@ open class DifftClearableInputView @JvmOverloads constructor(
             leadingIcon = when (defaultLeadingIcon) {
                 LeadingIcon.None -> null
                 LeadingIcon.Search -> ({
-                    // Untinted: the field supplies the colour via LocalContentColor.
+                    
                     Icon(
                         painter = painterResource(R.drawable.base_ic_search),
                         contentDescription = null,
@@ -417,13 +412,13 @@ open class DifftClearableInputView @JvmOverloads constructor(
             containerColor = containerColorState?.let { Color(it) }
                 ?: if (forceDark) DifftTheme.colors.bg5 else null,
             textStyle = textStyle,
-            // A text area wraps its lines; dsi_minHeight is its floor.
+            
             height = if (multiLine) null else heightState,
             minHeight = minHeightState,
             maxLines = maxLinesState,
-            // Zero shell insets only when the host layout owns a single-line box; a component-drawn
-            // box keeps the library's 12dp insets so text and the clear icon clear the border, and
-            // a text area keeps them because its fill is the box itself.
+            
+            
+            
             contentPadding = contentPaddingState
                 ?: if (hostOwnsBox && !multiLine) defaultContentPadding else null,
             clearIconEndInset = if (hostOwnsBox) defaultClearIconEndInset else DifftInputDefaults.ClearIconEndInset,

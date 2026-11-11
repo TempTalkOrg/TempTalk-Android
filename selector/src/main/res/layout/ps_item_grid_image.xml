@@ -18,7 +18,7 @@
         android:layout_margin="8dp"
         android:background="@drawable/ps_checkbox_selector"
         android:gravity="center"
-        android:textColor="@color/ps_color_white"
+        android:textColor="@color/on_primary"
         android:textSize="12sp" />
 
     <View

@@ -29,21 +29,21 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
-/**
- * Initialization extensions for [LCallActivity].
- *
- * Splits the bulky initializeXxx / registerXxx wiring from [LCallActivity]
- * into extension functions so the Activity body focuses only on lifecycle
- * scheduling and high-level coordination.
- *
- * All extensions depend solely on the Activity's exposed internal members
- * and preserve the original business semantics unchanged.
- */
+
+
+
+
+
+
+
+
+
+
 
 internal fun LCallActivity.initializeState() {
-    // The orientation policy is applied pre-super in LCallActivity.onCreate (it must precede
-    // the first frame); nothing orientation-related belongs here. The session shows the call
-    // (`isInCalling`) from its start; the page writes only its own flags.
+    
+    
+    
     if (isAppLockEnabled()) {
         onGoingCallStateManager.setNeedAppLock(callIntent.needAppLock)
     } else {
@@ -54,7 +54,7 @@ internal fun LCallActivity.initializeState() {
     onGoingCallStateManager.setIsInPipMode(isInPictureInPictureMode)
 }
 
-/** Renders the session's finish request (tip, then the finish-effect end path); the view model is attached to the session. */
+
 internal fun LCallActivity.initializeSessionEffects() {
     launchFinishRequestCollector(
         finishRequest = viewModel.finishRequest,
@@ -63,11 +63,11 @@ internal fun LCallActivity.initializeSessionEffects() {
     )
 }
 
-/**
- * Binds the page to the resolved [LCallActivity.session]: the call it shows comes from the session,
- * the intent that opened the page only says whether its entry point already shows the wait dialog.
- * Creating the view model attaches the page to the session.
- */
+
+
+
+
+
 internal fun LCallActivity.handleIntent(savedInstanceState: Bundle?) {
     callIntent = session.params.callIntent
     launchIntent = CallIntent(intent)
@@ -87,11 +87,11 @@ internal fun LCallActivity.initializeManagers() {
 
 internal fun LCallActivity.registerListeners() {
     registerOnBackPressedHandler()
-    // Broadcast receiver registration involves Binder IPC to system_server,
-    // which can take 100-500ms+ under load. Defer to the next main-looper
-    // pass so onCreate returns promptly and the first frame renders.
-    // NOTE: Must use Dispatchers.Main (not .immediate) — lifecycleScope
-    // defaults to Main.immediate which would execute inline on the main thread.
+    
+    
+    
+    
+    
     lifecycleScope.launch(Dispatchers.Main) {
         registerScreenUnlockReceiver()
     }
@@ -101,8 +101,8 @@ internal fun LCallActivity.configureWindow() {
     window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING)
     allowOnLockScreen()
-    // Edge to edge for the whole call: the layout works in window coordinates and the chrome pads
-    // itself with explicit insets.
+    
+    
     WindowCompat.setDecorFitsSystemWindows(window, false)
     window.hideNavigationBar()
     @Suppress("DEPRECATION")
@@ -113,11 +113,11 @@ internal fun LCallActivity.configureWindow() {
     }
 }
 
-/**
- * Shows the call once the session's room setup resolves: a ready room is rendered, a failed one
- * finishes the page (the session ends itself). While it is pending the page shows a wait dialog,
- * unless its entry point already shows one; both claims are released when it resolves.
- */
+
+
+
+
+
 internal fun LCallActivity.initializeView() {
     L.i { "[Call] LCallActivity initView" }
     val pageWaitToken = if (!launchIntent.callWaitDialogShown && viewModel.roomState.value == CallRoomState.Pending) {
@@ -125,7 +125,7 @@ internal fun LCallActivity.initializeView() {
     } else {
         CallWaitDialogUtil.NO_CLAIM
     }
-    // Dispatchers.Main posts, so the content is set after the rest of onCreate, as the managers expect.
+    
     lifecycleScope.launch(Dispatchers.Main) {
         val state = viewModel.roomState.first { it != CallRoomState.Pending }
         CallWaitDialogUtil.dismiss(pageWaitToken)
@@ -138,7 +138,7 @@ internal fun LCallActivity.initializeView() {
         }
         setContent {
             val isUserSharingScreen by viewModel.callUiController.isShareScreening.collectAsState()
-            // The tabletop layout reads this activity's fold reports (one collector per page).
+            
             CompositionLocalProvider(LocalCallFoldReports provides foldTracker.reports) {
                 CallContent(
                     room = room,
@@ -152,7 +152,7 @@ internal fun LCallActivity.initializeView() {
                     autoHideTimeout = autoHideTimeout,
                     muteOtherEnabled = muteOtherEnabled,
                     onScreenClick = { handleScreenClick() },
-                    // The session publishes the call type to OnGoingCallStateManager itself.
+                    
                     onCallTypeChanged = { updateScreenshotListeningState() },
                     onInviteUsersClick = { handleInviteUsersClick() },
                     onWindowZoomOutClick = { handleWindowZoomOutClick() },

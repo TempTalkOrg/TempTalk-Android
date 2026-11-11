@@ -13,12 +13,12 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/**
- * The binder behind the XML meeting-invite rows: one avatar View per ViewHolder, rebound on every
- * bind — including an equals-equal rebind, because a load that AvatarView dropped while detached
- * needs the retry. It must keep the letter and letter size the per-bind View factory produced for
- * each avatar diameter.
- */
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33])
 class CallAvatarViewBinderTest {
@@ -67,11 +67,11 @@ class CallAvatarViewBinderTest {
 
     @Test
     fun `an equals-equal rebind re-applies the avatar`() {
-        // AvatarView drops an image download that finishes while detached and never retries on
-        // its own; re-applying on every bind (as the XML rows do) is that retry.
+        
+        
         val binder = buildCallAvatarViewBinder(context, avatarSizeDp = 48)
         binder.bind(AvatarData.FromNameOrUid("Alice", "+123.1"))
-        // Written straight onto the hosted View; setAvatar must overwrite it.
+        
         letterOf(binder).text = SENTINEL
 
         binder.bind(AvatarData.FromNameOrUid("Alice", "+123.1"))

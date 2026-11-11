@@ -5,59 +5,65 @@ import com.difft.android.base.utils.DualPaneHost
 import com.difft.android.base.utils.pane.ConversationTarget
 import kotlinx.coroutines.flow.StateFlow
 
-/**
- * Interface for fragments that need to update their selection state
- * when the detail pane content changes in dual-pane mode.
- */
+
+
+
+
 interface DualPaneSelectionListener {
     fun updateDualPaneSelection(selectedId: String?)
 }
 
-/**
- * Callback interface for handling conversation navigation
- * Used to support both single-pane (Activity) and dual-pane (Fragment) navigation
- *
- * Extends DualPaneHost to provide unified dual-pane support across all features
- */
+
+
+
+
+
+
 interface ConversationNavigationCallback : DualPaneHost {
-    /**
-     * The ID of the currently selected conversation/contact shown in the detail pane.
-     * Used by list adapters to highlight the selected item in dual-pane mode.
-     */
+    
+
+
+
     val currentSelectedConversationId: String?
 
-    /**
-     * Called when a one-on-one conversation is selected
-     * @param contactId The contact/user ID
-     * @param jumpMessageTimestamp Optional timestamp to jump to specific message
-     */
+    
+
+
+
+
     fun onOneOnOneConversationSelected(contactId: String, jumpMessageTimestamp: Long? = null)
 
-    /**
-     * Called when a group conversation is selected
-     * @param groupId The group ID
-     * @param jumpMessageTimestamp Optional timestamp to jump to specific message
-     */
+    
+
+
+
+
     fun onGroupConversationSelected(groupId: String, jumpMessageTimestamp: Long? = null)
 
-    /**
-     * Called when a contact detail is selected (for dual-pane mode)
-     * @param contactId The contact/user ID
-     */
+    
+
+
+
     fun onContactDetailSelected(contactId: String)
 
-    /**
-     * Opens [target] in the current tab's detail stack (both layouts). The conversation router
-     * calls it for requests made with this Activity as the context.
-     */
+    
+
+
+
     fun openConversation(target: ConversationTarget)
 
-    /**
-     * Id of the conversation shown as the visible top of the current tab, or null (list only,
-     * another page on top). Not the layout mode: one-pane can show a conversation too.
-     */
+    
+
+
+
     fun currentConversationOnScreen(): String?
 
-    /** One-pane: the detail layer covers the conversation list. Always false in two-pane. */
+    
     val detailCoversList: StateFlow<Boolean>
+
+    
+
+
+
+    val conversationCoversList: StateFlow<Boolean> get() = detailCoversList
 }

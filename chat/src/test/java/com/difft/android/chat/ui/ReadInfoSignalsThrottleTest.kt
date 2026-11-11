@@ -11,22 +11,22 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/**
- * The read-info trigger after it gained the same sampling gate the message-change seam has.
- *
- * The collector under test re-reads the full read-info list from the database on every signal, so
- * the property that matters is not "every signal is delivered" but "the last state is": a burst
- * costs one leading reload plus one trailing reload, and the trailing one observes whatever the
- * database held after the last update.
- */
+
+
+
+
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class ReadInfoSignalsThrottleTest {
 
     @Test
     fun `a burst inside one window costs a leading and a trailing reload`() = runTest {
         val upstream = MutableSharedFlow<String>(extraBufferCapacity = BUFFER)
-        // Stands in for `_readInfoList.value = wcdb.getReadInfoList(roomId)`: each reload reads
-        // whatever the database holds at that moment, which is what makes sampling lossless here.
+        
+        
         var dbGeneration = 0
         val reloads = mutableListOf<Int>()
         readInfoSignals(upstream, ROOM_ID).onEach { reloads += dbGeneration }.launchIn(backgroundScope)

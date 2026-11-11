@@ -17,10 +17,10 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import com.difft.android.base.R as BaseR
 
-/**
- * The migration scan page's viewfinder draws only four primary corners: no mask outside the frame,
- * nothing inside it. The general scanner keeps its dimmed mask.
- */
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(application = TestScopeApplication::class, sdk = [34], qualifiers = "w400dp-h800dp-xxhdpi")
@@ -39,18 +39,24 @@ class ScanFrameOverlayMigrationStyleTest {
     }
 
     @Test
-    fun `migration style draws only the four corners`() {
+    fun `migration style draws only the four corners`() = assertMigrationCorners()
+
+    @Test
+    @Config(qualifiers = "w400dp-h800dp-night-xxhdpi")
+    fun `migration corners remain info blue at night`() = assertMigrationCorners()
+
+    private fun assertMigrationCorners() {
         val bmp = render(migrationStyle = true)
         val cx = bmp.width / 2
         val cy = bmp.height / 2
         val half = (124 * density).toInt()
-        val primary = ContextCompat.getColor(context, BaseR.color.primary)
+        val info = ContextCompat.getColor(context, BaseR.color.info)
 
         assertEquals("no mask outside the frame", Color.TRANSPARENT, bmp.getPixel(4, 4))
         assertEquals("nothing inside the frame", Color.TRANSPARENT, bmp.getPixel(cx, cy))
-        // On the top edge, 20dp in from the left: inside the 42dp corner arm, past the 10dp rounding.
-        assertEquals("corner arm in primary", primary, bmp.getPixel(cx - half + (20 * density).toInt(), cy - half + 1))
-        // Mid top edge: between the two arms, so no stroke there.
+        
+        assertEquals("corner arm stays info blue", info, bmp.getPixel(cx - half + (20 * density).toInt(), cy - half + 1))
+        
         assertEquals("no border between corners", Color.TRANSPARENT, bmp.getPixel(cx, cy - half + 1))
     }
 

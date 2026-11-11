@@ -36,10 +36,10 @@ import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/**
- * Group header edit state machine: editability gating from crypto mode + key presence, name
- * submit validation / commit / discard, and avatar click routing by mode.
- */
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class GroupInfoHeaderViewModelTest {
 
@@ -63,7 +63,7 @@ class GroupInfoHeaderViewModelTest {
 
     private fun vm() = GroupInfoHeaderViewModel(appContext, groupRepo, groupUtil, groupCryptoRepo, groupAvatarUploader)
 
-    /** Load runs its key lookup on Dispatchers.IO, so wait for the state to reflect the new group. */
+    
     private suspend fun GroupInfoHeaderViewModel.load(
         group: GroupModel,
         until: (GroupInfoHeaderContract.State) -> Boolean = { it.groupId == GID && it.name == group.name },
@@ -142,7 +142,7 @@ class GroupInfoHeaderViewModelTest {
         assertTrue(vm.state.value.isEditing)
         assertEquals("Draft", vm.state.value.editingName)
         assertEquals("Team (renamed elsewhere)", vm.state.value.name)
-        assertEquals("Team", vm.state.value.editBaseline) // baseline frozen for the whole edit
+        assertEquals("Team", vm.state.value.editBaseline) 
     }
 
     @Test
@@ -187,7 +187,7 @@ class GroupInfoHeaderViewModelTest {
             assertEquals(Effect.ShowWait, awaitItem())
             assertEquals(Effect.DismissWait, awaitItem())
             assertEquals(Effect.HideKeyboard, awaitItem())
-            expectNoEvents() // no Finish: an outside tap keeps the user on the page
+            expectNoEvents() 
             cancelAndIgnoreRemainingEvents()
         }
         assertEquals("New name", vm.state.value.name)
@@ -312,14 +312,14 @@ class GroupInfoHeaderViewModelTest {
         vm.dispatch(Intent.SubmitName)
         started.await()
 
-        // A pre-save snapshot lands while the request is in flight.
+        
         vm.dispatch(Intent.Load(group(name = "Team")))
         gate.complete(Unit)
         vm.state.first { !it.isEditing && !it.isSubmitting }
 
         assertEquals("New name", vm.state.value.name)
 
-        // The save's own refresh (or any later load) still applies.
+        
         vm.load(group(name = "Fresh from server"))
         assertEquals("Fresh from server", vm.state.value.name)
     }

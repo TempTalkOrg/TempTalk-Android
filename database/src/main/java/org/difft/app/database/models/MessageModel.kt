@@ -15,9 +15,8 @@ import java.util.Objects
     ]
 )
 class MessageModel {
-    // Int (not Long): WCDB-KSP generates `== 0` autoincrement guard which does not
-    // compile for Long primary keys. Column type stays ColumnType.Integer — no schema
-    // change. Local rowid never exceeds 2^31 and is never externally serialized. #901
+    
+    
     @WCDBField(isPrimary = true, isAutoIncrement = true)
     var databaseId: Int = 0
 
@@ -44,7 +43,7 @@ class MessageModel {
     var sendType: Int = 0
 
     @WCDBField
-    var expiresInSeconds: Int = 0 // 0 indicates never expire
+    var expiresInSeconds: Int = 0 
 
     @WCDBField
     var notifySequenceId: Long = 0
@@ -53,7 +52,7 @@ class MessageModel {
     var sequenceId: Long = 0
 
     @WCDBField
-    var mode: Int = 0 // 0: normal, 1: CONFIDENTIAL
+    var mode: Int = 0 
 
     @WCDBField
     var atPersons: String? = null
@@ -65,51 +64,42 @@ class MessageModel {
     @WCDBField
     var roomId: String? = null
 
-    /**
-     * One To One Chat(0),
-     * Group(1),
-     */
+    
+
+
+
     @WCDBField
     var roomType: Int = 0
 
-    // Boxed Long, no isNotNull → nullable. WCDB-KSP now generates a NULL guard on read,
-    // so an absent/orphaned FK resolves to null instead of 0 — the forwarding-bug root
-    // fix. Keep as Long? (FK to QuoteModel.databaseId). #901
+    
     @WCDBField
     var quoteDatabaseId: Long? = null
 
-    // Boxed Long, no isNotNull → nullable. Same NULL-guard root fix as quoteDatabaseId;
-    // FK to ForwardContextModel.databaseId. #901
+    
     @WCDBField
     var forwardContextDatabaseId: Long? = null
 
     @WCDBField
-    var playStatus: Int = 0 // 是否已经播放过，默认已播放，1未播放
+    var playStatus: Int = 0 
 
     @WCDBField
-    var readTime: Long = 0 // 消息已读时间(自己)
+    var readTime: Long = 0 
 
     @WCDBField
-    var receiverIds: String? = null // 接收者id集合 数组序列化
+    var receiverIds: String? = null 
 
-    /**
-     * Critical Alert 消息类型
-     * 0: 普通消息（非 Critical Alert）
-     * 1: Critical Alert 消息
-     * 预留其他值用于后续扩展
-     */
+    
     @WCDBField
     var criticalAlertType: Int = 0
 
-    /**
-     * Screenshot notification JSON data
-     * Stores ScreenShot object as JSON string containing RealSource info
-     */
+    
+
+
+
     @WCDBField
     var screenShotJson: String? = null
 
-    // Faithful 1:1 port of the original Java equals/hashCode. databaseId is intentionally
-    // excluded (matches the original Java implementation). #901
+    
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other !is MessageModel) return false
@@ -163,36 +153,36 @@ class MessageModel {
     )
 
     companion object {
-        /**
-         * Text(0), // type value 0 means the message is a text message
-         * Attachment(1), // type value 1 means the message is a file
-         * Notify(2) // type value 2 means the message is a notify message,
-         * Unsupported(100) // type value 100 means the message requires a newer client version
-         */
+        
+
+
+
+
+
         const val TYPE_TEXT = 0
         const val TYPE_ATTACHMENT = 1
         const val TYPE_NOTIFY = 2
-        const val TYPE_CONFIDENTIAL_PLACEHOLDER = 3 // Confidential message read by recipient, awaiting sender confirmation to delete
+        const val TYPE_CONFIDENTIAL_PLACEHOLDER = 3 
         const val TYPE_UNSUPPORTED = 100
 
-        /**
-         * `sendType` column domain. Mirrors `SendType` in :chat (`SendMessageUtils.kt`), which is
-         * NOT visible from :database (:database does not depend on :chat). The two spellings are
-         * pinned equal by a unit test in :chat where both are visible.
-         *
-         * NOTE 0 == SENDING here (message-level), while `ROOM_SEND_STATUS_NONE == 0` (room-level,
-         * [difft.android.messageserialization.model.ROOM_SEND_STATUS_NONE]). The two domains are
-         * deliberately different — do not cross-assign.
-         */
+        
+
+
+
+
+
+
+
+
         const val SEND_TYPE_SENDING = 0
         const val SEND_TYPE_SENT = 1
         const val SEND_TYPE_FAILED = 2
 
-        /**
-         * Fixed [systemShowTimestamp] for the archive tombstone so it always sorts before real
-         * messages (positive epoch-ms). Must not be 0 — systemShowTimestamp == 0 means "unset"
-         * and gets rewritten to timeStamp (e.g. EnvelopToMessageProcessor).
-         */
+        
+
+
+
+
         const val ARCHIVE_TOMBSTONE_SORT_SENTINEL = 1L
     }
 }

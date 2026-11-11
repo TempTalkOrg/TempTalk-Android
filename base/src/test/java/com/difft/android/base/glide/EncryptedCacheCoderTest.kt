@@ -12,14 +12,14 @@ import java.io.File
 import java.io.IOException
 import java.security.SecureRandom
 
-/**
- * Unit tests for [EncryptedCacheCoder] — the AES/CTR coder behind Glide's encrypted RESOURCE cache.
- *
- * Pure JVM (javax.crypto), no Android dependencies, so this runs as a plain JUnit test. Covers:
- * round-trip correctness across sizes, ciphertext confidentiality + per-file randomness, and the
- * three documented failure modes (wrong key, foreign file, truncation) that must surface as
- * [IOException] so callers treat them as cache misses.
- */
+
+
+
+
+
+
+
+
 class EncryptedCacheCoderTest {
 
     @get:Rule
@@ -68,7 +68,7 @@ class EncryptedCacheCoderTest {
 
         val out = java.io.ByteArrayOutputStream()
         coder.encryptedInput(file).use { input ->
-            val buf = ByteArray(7) // deliberately awkward size to exercise partial reads
+            val buf = ByteArray(7) 
             while (true) {
                 val n = input.read(buf)
                 if (n == -1) break
@@ -85,7 +85,7 @@ class EncryptedCacheCoderTest {
         encrypt(coder, file, payload)
 
         val raw = file.readBytes()
-        // The marker must not appear anywhere in the on-disk bytes.
+        
         assertFalse(
             "plaintext payload leaked into cache file",
             indexOf(raw, payload) >= 0
@@ -102,12 +102,12 @@ class EncryptedCacheCoderTest {
 
         val bytesA = fileA.readBytes()
         val bytesB = fileB.readBytes()
-        // Random per-file salt ⇒ different derived key ⇒ different ciphertext, even for equal input.
+        
         assertNotEquals(
             "cache files for identical payload should differ (per-file randomness)",
             bytesA.toList(), bytesB.toList()
         )
-        // But both still decrypt back to the same payload.
+        
         assertArrayEquals(payload, decryptAll(coder, fileA))
         assertArrayEquals(payload, decryptAll(coder, fileB))
     }
@@ -124,14 +124,14 @@ class EncryptedCacheCoderTest {
     @Test(expected = IOException::class)
     fun `decrypting a non cache file throws`() {
         val file = newFile()
-        file.writeBytes(ByteArray(128).also { SecureRandom().nextBytes(it) }) // no MAGIC header
+        file.writeBytes(ByteArray(128).also { SecureRandom().nextBytes(it) }) 
         coder.encryptedInput(file).use { it.readBytes() }
     }
 
     @Test(expected = IOException::class)
     fun `decrypting an empty file throws`() {
         val file = newFile()
-        // zero-length file → premature EOF while reading the MAGIC header
+        
         coder.encryptedInput(file).use { it.readBytes() }
     }
 
@@ -139,7 +139,7 @@ class EncryptedCacheCoderTest {
     fun `decrypting a header truncated file throws`() {
         val file = newFile()
         encrypt(coder, file, "payload".toByteArray())
-        // Keep only the first few bytes of MAGIC → premature EOF during header read.
+        
         val truncated = file.readBytes().copyOfRange(0, 4)
         file.writeBytes(truncated)
         coder.encryptedInput(file).use { it.readBytes() }
@@ -147,8 +147,8 @@ class EncryptedCacheCoderTest {
 
     @Test
     fun `handles consumers can detect a foreign file without crashing`() {
-        // Mirrors how EncryptedCacheResourceDecoder.handles() probes ownership: a foreign file
-        // must produce IOException (caught upstream), not silently decode to garbage.
+        
+        
         val file = newFile()
         file.writeBytes("just a normal jpeg-ish blob".toByteArray())
         val isOurs = try {

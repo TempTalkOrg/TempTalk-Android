@@ -25,15 +25,15 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
-/**
- * T40 — [VideoTrimTransform] fast-remux branch.
- *
- * The branch decision now comes from the MediaStore size / duration, so no `MediaMetadataRetriever`
- * may be constructed to reach it. That is both the scoped-storage fix (the bare path may be
- * unreadable) and one main-thread Binder round trip removed.
- *
- * Run: :chat:testDebugUnitTest
- */
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [33])
 class VideoTrimTransformTest {
@@ -50,10 +50,10 @@ class VideoTrimTransformTest {
         unmockkConstructor(MediaMetadataRetriever::class)
     }
 
-    /**
-     * A 1.5 MB / 8 s video is 1.5 Mbps, under the LEVEL_1 target of 1.378 Mbps * 1.2, so neither
-     * trimming nor compression is required and the fast remux path is taken.
-     */
+    
+
+
+
     @Test
     fun `untrimmed video below the bitrate threshold takes fast remux without opening a retriever`() {
         val remuxSource = slot<VideoSource>()
@@ -71,14 +71,72 @@ class VideoTrimTransformTest {
         val result = transform.transform(RuntimeEnvironment.getApplication(), media)
 
         verify(exactly = 1) { VideoRemuxer.remux(any(), any()) }
-        // The remuxed output replaces realPath; path still points at the original source.
+        
         assertTrue(result.realPath, result.realPath.endsWith(".mp4"))
         assertNotEquals("/storage/emulated/0/Movies/v.mp4", result.realPath)
         assertEquals("content://media/external/video/media/999", result.path)
-        // The source is dispatched through VideoSource, so the content URI is what gets read.
+        
         assertEquals("content", remuxSource.captured.scheme)
-        // No retriever anywhere on the branch decision: size and duration came from MediaStore.
+        
         verify(exactly = 0) { anyConstructed<MediaMetadataRetriever>().setDataSource(any<String>()) }
         verify(exactly = 0) { anyConstructed<MediaMetadataRetriever>().extractMetadata(any()) }
+    }
+
+    private fun mkvBelowThreshold(fileName: String = "clip.mkv") = LocalMediaBuilder.gallery(
+        id = 998L,
+        mime = "video/x-matroska",
+        contentUri = "content://media/external/video/media/998",
+        realPath = "/storage/emulated/0/Movies/clip.mkv",
+        size = 1_500_000L,
+        durationMs = 8_000L,
+    ).apply { this.fileName = fileName }
+
+    
+    @Test
+    fun `T8 successful remux relabels the output as mp4`() {
+        every { VideoRemuxer.remux(any(), any()) } returns true
+
+        val result = VideoTrimTransform(VideoTrimData(isDurationEdited = false), SentMediaQuality.STANDARD)
+            .transform(RuntimeEnvironment.getApplication(), mkvBelowThreshold())
+
+        assertEquals("video/mp4", result.mimeType)
+        assertEquals("clip.mp4", result.fileName)
+    }
+
+    
+    @Test
+    fun `T8 successful remux without a file name names the output after path`() {
+        every { VideoRemuxer.remux(any(), any()) } returns true
+
+        val result = VideoTrimTransform(VideoTrimData(isDurationEdited = false), SentMediaQuality.STANDARD)
+            .transform(RuntimeEnvironment.getApplication(), mkvBelowThreshold(fileName = ""))
+
+        assertEquals("video/mp4", result.mimeType)
+        assertEquals("998.mp4", result.fileName)
+    }
+
+    
+    @Test
+    fun `T9 failed remux keeps the original type and name`() {
+        every { VideoRemuxer.remux(any(), any()) } returns false
+
+        val result = VideoTrimTransform(VideoTrimData(isDurationEdited = false), SentMediaQuality.STANDARD)
+            .transform(RuntimeEnvironment.getApplication(), mkvBelowThreshold())
+
+        assertEquals("/storage/emulated/0/Movies/clip.mkv", result.realPath)
+        assertEquals("video/x-matroska", result.mimeType)
+        assertEquals("clip.mkv", result.fileName)
+    }
+
+    @Test
+    fun `relabel keeps a dotless base name and falls back when nothing names the file`() {
+        val noExtension = LocalMediaBuilder.sandbox(realPath = "/data/x/clip", mime = "video/quicktime")
+        VideoTrimTransform.relabelAsMp4(noExtension)
+        assertEquals("clip.mp4", noExtension.fileName)
+
+        val nameless = LocalMediaBuilder.sandbox(realPath = "/data/x/a.mov", mime = "video/quicktime").apply { fileName = "" }
+        VideoTrimTransform.relabelAsMp4(nameless)
+        assertEquals("video.mp4", nameless.fileName)
+        assertEquals("video/mp4", nameless.mimeType)
     }
 }

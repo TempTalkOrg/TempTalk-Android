@@ -5,7 +5,7 @@ import com.difft.android.login.entry.LoginEntryPolicy.Decision as Entry
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/** The two decision tables, pinned case by case against the iOS policies they mirror. */
+
 class LoginEntryPolicyTest {
 
     @Test

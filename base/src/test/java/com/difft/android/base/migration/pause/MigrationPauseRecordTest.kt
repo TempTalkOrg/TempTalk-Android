@@ -16,7 +16,7 @@ import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** Pure transitions of [MigrationPauseRecord] (#1382), the Android twin of iOS `DTMigrationV2MessagePauseRecord`. */
+
 class MigrationPauseRecordTest {
 
     private val owner = "11111111-aaaa-bbbb-cccc-000000000001"
@@ -144,7 +144,7 @@ class MigrationPauseRecordTest {
         assertEquals(scope, MigrationPauseScope.accountScope("prod", " +15550001 "))
         assertNotEquals(scope, MigrationPauseScope.accountScope("test", "+15550001"))
         assertFalse(scope.contains("15550001"))
-        // SHA-256 of "secret", base64.
+        
         assertEquals("K7gNU3sdo+OL0wNhqoVWhr3g6s1xYv72ol/pe/Unols=", MigrationPauseScope.credentialHash("secret"))
     }
 }

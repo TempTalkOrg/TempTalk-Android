@@ -14,10 +14,10 @@ import com.difft.android.chat.R
 import com.difft.android.chat.focus.settings.NotifyFocusSettingsContract.Intent
 import com.difft.android.chat.focus.settings.NotifyFocusSettingsContract.State
 
-/**
- * The "Group Notifications" row of Me > Notifications: [plainRow] normally, a "Paused" row while focus
- * is on. Emitted into the caller's group; the restore value goes below that group ([groupNotificationNote]).
- */
+
+
+
+
 @Composable
 fun NotifyGroupNotificationRow(state: State, onIntent: (Intent) -> Unit, plainRow: @Composable () -> Unit) {
     if (state.groupNotificationPaused) {
@@ -29,17 +29,15 @@ fun NotifyGroupNotificationRow(state: State, onIntent: (Intent) -> Unit, plainRo
     }
 }
 
-/** The note below the group holding [NotifyGroupNotificationRow]: what the level returns to; null when not paused. */
+
 @Composable
 fun groupNotificationNote(state: State): String? =
     if (state.groupNotificationPaused) stringResource(R.string.focus_paused_returns, notificationLevelLabel(state.groupLevel)) else null
 
-/**
- * The "Group Focus" card of Me > Notifications (UI spec 10c8d1c9): the switch, then while focus is on
- * "- Focusing on  {group} >" (or "- Select Focus Group >" when the group is gone), the end time, the
- * still-notify items and folding; the state sentence sits below the card. Nothing when the server
- * feature is off.
- */
+
+
+
+
 @Composable
 fun NotifyFocusCard(state: State, onIntent: (Intent) -> Unit) {
     if (!state.featureEnabled) return
@@ -69,7 +67,7 @@ fun NotifyFocusCard(state: State, onIntent: (Intent) -> Unit) {
             if (state.focusOn) {
                 InsetDivider()
                 if (caption is NotifyFocusCaption.Focusing) {
-                    // Switching the focus group: the picker opens with the current group selected.
+                    
                     FocusSubRow(
                         label = stringResource(R.string.focus_focusing),
                         value = caption.name,

@@ -1,26 +1,26 @@
 package com.difft.android.dualpane
 
 internal enum class PaneRebuildVerdict {
-    /** Rebuild budget available — issue the relaunch. */
+    
     PROCEED,
 
-    /** Budget just ran out — freeze the tree and report once. */
+    
     TRIP,
 
-    /** Breaker already open — stay silent until an agreement re-arms it. */
+    
     SUPPRESSED,
 }
 
-/**
- * Bounds the `recreate()` chain a gate/tree disagreement may cause.
- *
- * A healthy rebuild settles on the first pass of the new instance (gate == tree). If it does
- * not — a `@bool` / `@dimen` resource overlay, or drift between `layout-w673dp-h480dp/` and
- * `values-w673dp-h480dp/` — every reconcile would relaunch again at the throttle rate for the
- * life of the process. The breaker allows [maxRebuilds] for one unchanged disagreement and
- * [maxTotalRebuilds] across ALL disagreements since the last agreement, so an alternating
- * disagreement is bounded too. Only an agreement re-arms it.
- */
+
+
+
+
+
+
+
+
+
+
 internal class PaneRebuildBreaker(
     private val maxRebuilds: Int = DEFAULT_MAX_REBUILDS,
     private val maxTotalRebuilds: Int = maxRebuilds * TOTAL_BUDGET_FACTOR,
@@ -36,10 +36,10 @@ internal class PaneRebuildBreaker(
         totalRebuilds = 0
     }
 
-    /** [staleLayout]: the #1454 override recreate, counted apart from gate/tree disagreements. */
+    
     fun onRebuild(gate: Boolean, tree: Boolean, chromeStale: Boolean, staleLayout: Boolean = false): PaneRebuildVerdict {
-        // Open stays open until an agreement: checked BEFORE the signature compare so that a
-        // signature change cannot re-arm an open breaker (that is what makes the total ceiling bind).
+        
+        
         if (rebuilds > maxRebuilds || totalRebuilds > maxTotalRebuilds) {
             return PaneRebuildVerdict.SUPPRESSED
         }

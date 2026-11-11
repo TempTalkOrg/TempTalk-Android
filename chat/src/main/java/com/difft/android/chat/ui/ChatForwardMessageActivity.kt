@@ -1,5 +1,6 @@
 package com.difft.android.chat.ui
 
+import com.difft.android.base.utils.safeTopInset
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
@@ -7,7 +8,6 @@ import android.view.View
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.viewModels
 import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
 import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.commit
 import androidx.lifecycle.lifecycleScope
@@ -16,7 +16,9 @@ import difft.android.messageserialization.For
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.WindowSizeClassUtil
 import com.difft.android.chat.R
+import com.difft.android.chat.attachment.ConfidentialViewerHost
 import com.difft.android.chat.databinding.ChatActivityForwardMessageBinding
+import com.difft.android.base.widget.floatAsTopBarButton
 import com.difft.android.chat.widget.AudioMessageManager
 import com.difft.android.base.widget.applySharedMaxWidth
 import com.google.android.material.bottomsheet.BottomSheetBehavior
@@ -37,17 +39,17 @@ import org.difft.app.database.wcdb
 import com.difft.android.chat.dependencies.ApplicationDependencies
 
 @AndroidEntryPoint
-class ChatForwardMessageActivity : BaseActivity() {
+class ChatForwardMessageActivity : BaseActivity(), ConfidentialViewerHost {
 
     companion object {
         private const val EXTRA_MESSAGE_ID = "messageId"
         private const val EXTRA_CONFIDENTIAL_MESSAGE_ID = "confidentialMessageId"
         private const val EXTRA_SHOULD_SAVE_TO_PHOTOS = "shouldSaveToPhotos"
 
-        /**
-         * Start activity by message ID - will query ForwardContext asynchronously
-         * @param shouldSaveToPhotos Whether to auto-save images/videos to photos (from conversation setting)
-         */
+        
+
+
+
         fun startActivity(
             activity: Activity,
             messageId: String,
@@ -62,12 +64,12 @@ class ChatForwardMessageActivity : BaseActivity() {
         }
     }
 
-    // ForwardContext stack for Fragment access (avoids serialization); retained across
-    // configuration changes together with the fragment back stack.
+    
+    
     private val viewModel: ChatForwardMessageViewModel by viewModels()
 
-    // Outer combined-forward message context — used by Fragment to emit
-    // copy/forward notices attributing to the OUTER sender, not nested authors.
+    
+    
     fun getOuterSourceConversation(): For? = viewModel.state.value.outerSourceConversation
     fun getOuterSourceAuthorId(): String? = viewModel.state.value.outerSourceAuthorId
 
@@ -77,22 +79,22 @@ class ChatForwardMessageActivity : BaseActivity() {
     private lateinit var bottomSheetCallback: BottomSheetBehavior.BottomSheetCallback
     private lateinit var backPressedCallback: OnBackPressedCallback
 
-    // Store confidential message ID for deletion in onDestroy
+    
     private var confidentialMessageId: String? = null
 
-    // Snapshot of the audio that was already playing when this preview opened (e.g. a
-    // voice message in the underlying chat). On close we only stop playback that the
-    // preview itself started — any pre-existing playback is left alone.
+    
+    
+    
     private var entryPlayingMessageId: String? = null
 
-    // Disable BaseActivity auto padding - this Activity handles insets itself
+    
     override fun shouldApplySystemBarsPadding(): Boolean = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Store confidential message ID for deletion when Activity is finally destroyed. Read on
-        // every create: restored fragments query it in onViewCreated, after this body returns.
+        
+        
         confidentialMessageId = intent.getStringExtra(EXTRA_CONFIDENTIAL_MESSAGE_ID)
 
         entryPlayingMessageId = AudioMessageManager.currentPlayingMessage?.id
@@ -101,10 +103,11 @@ class ChatForwardMessageActivity : BaseActivity() {
         setupBackPressedCallback()
         setupBackStackListener()
 
-        // Set initial title (will be updated after loading)
+        
         mBinding.tvTitle.text = getString(R.string.chat_history)
 
-        // Back button click - same as system back
+        mBinding.ibBack.floatAsTopBarButton(leading = true)
+        
         mBinding.ibBack.setOnClickListener {
             onBackPressedDispatcher.onBackPressed()
         }
@@ -112,10 +115,10 @@ class ChatForwardMessageActivity : BaseActivity() {
         val stack = viewModel.state.value.stack
         when {
             savedInstanceState == null -> loadInitialFragment()
-            // Configuration change: the stack and the fragment back stack survived together.
+            
             stack.isNotEmpty() -> mBinding.tvTitle.text = getForwardTitle(stack.last())
-            // Process death or relaunch during the initial load: restored fragments have no
-            // context, so reload the root from the database (#1440).
+            
+            
             else -> {
                 val backStackCount = supportFragmentManager.backStackEntryCount
                 L.i { "[ForwardViewer] restore without context backStack=$backStackCount" }
@@ -129,50 +132,50 @@ class ChatForwardMessageActivity : BaseActivity() {
         val bottomSheet = mBinding.bottomSheet
         val scrim = mBinding.scrim
 
-        // Get status bar height for expanded offset
-        ViewCompat.setOnApplyWindowInsetsListener(mBinding.root) { _, insets ->
-            val statusBarHeight = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
+        
+        ViewCompat.setOnApplyWindowInsetsListener(mBinding.root) { root, insets ->
+            val statusBarHeight = root.safeTopInset(insets)
             configureBottomSheetBehavior(bottomSheet, scrim, statusBarHeight)
-            // Remove listener after first apply
+            
             ViewCompat.setOnApplyWindowInsetsListener(mBinding.root, null)
             insets
         }
-        // Request insets
+        
         mBinding.root.requestApplyInsets()
     }
 
     private fun configureBottomSheetBehavior(bottomSheet: View, scrim: View, statusBarHeight: Int) {
         val screenHeight = WindowSizeClassUtil.getWindowHeightPx(this)
 
-        // peekHeight: 75% of screen height (collapsed state)
+        
         val peekHeight = (screenHeight * 0.75).toInt()
 
-        // Start scrim transparent, will fade in with bottom sheet slide
+        
         scrim.alpha = 0f
 
-        // Add bottom padding to compensate for expandedOffset
-        // When expanded, bottom sheet top is at expandedOffset, but height is match_parent
-        // This causes content to be pushed below screen. Bottom padding fixes this.
+        
+        
+        
         bottomSheet.setPadding(0, 0, 0, statusBarHeight)
 
-        // Setup BottomSheetBehavior
+        
         bottomSheetBehavior = BottomSheetBehavior.from(bottomSheet)
         bottomSheetBehavior.apply {
             applySharedMaxWidth(resources)
             this.peekHeight = peekHeight
-            this.expandedOffset = statusBarHeight // Full screen stops below status bar
-            isFitToContents = false // Required for half-expanded support
+            this.expandedOffset = statusBarHeight 
+            isFitToContents = false 
             isHideable = true
-            skipCollapsed = false // Allow collapsed (3/4) state
-            state = BottomSheetBehavior.STATE_HIDDEN // Start hidden for animation
+            skipCollapsed = false 
+            state = BottomSheetBehavior.STATE_HIDDEN 
         }
 
-        // Show bottom sheet after layout is complete
+        
         bottomSheet.post {
-            bottomSheetBehavior.state = BottomSheetBehavior.STATE_COLLAPSED // Start at 3/4 height
+            bottomSheetBehavior.state = BottomSheetBehavior.STATE_COLLAPSED 
         }
 
-        // Scrim click: collapse if expanded, hide if collapsed
+        
         scrim.setOnClickListener {
             when (bottomSheetBehavior.state) {
                 BottomSheetBehavior.STATE_EXPANDED -> {
@@ -184,9 +187,9 @@ class ChatForwardMessageActivity : BaseActivity() {
             }
         }
 
-        // Bottom sheet callback
+        
         bottomSheetCallback = object : BottomSheetBehavior.BottomSheetCallback() {
-            private var hasOpened = false  // Track if bottom sheet has finished opening
+            private var hasOpened = false  
             private var isDraggingDown = false
             private var dragStartOffset = 0f
             private var isClosing = false
@@ -194,11 +197,11 @@ class ChatForwardMessageActivity : BaseActivity() {
             override fun onStateChanged(bottomSheet: View, newState: Int) {
                 when (newState) {
                     BottomSheetBehavior.STATE_HALF_EXPANDED -> {
-                        // Skip half-expanded state, go directly to collapsed
+                        
                         bottomSheetBehavior.state = BottomSheetBehavior.STATE_COLLAPSED
                     }
                     BottomSheetBehavior.STATE_COLLAPSED, BottomSheetBehavior.STATE_EXPANDED -> {
-                        // Fade in scrim after bottom sheet is fully visible (first time only)
+                        
                         if (!hasOpened) {
                             hasOpened = true
                             scrim.animate()
@@ -216,7 +219,7 @@ class ChatForwardMessageActivity : BaseActivity() {
                         dragStartOffset = bottomSheet.top.toFloat() / parentHeight
                     }
                     BottomSheetBehavior.STATE_SETTLING -> {
-                        // If user was dragging down, close the sheet directly
+                        
                         if (hasOpened && isDraggingDown) {
                             isClosing = true
                             bottomSheetBehavior.state = BottomSheetBehavior.STATE_HIDDEN
@@ -232,30 +235,30 @@ class ChatForwardMessageActivity : BaseActivity() {
             }
 
             override fun onSlide(bottomSheet: View, slideOffset: Float) {
-                // Ignore slide events until bottom sheet has opened
+                
                 if (!hasOpened) return
 
-                // slideOffset: -1 (hidden) to 1 (expanded), 0 is collapsed (peekHeight)
-                // dragStartOffset: small value (~0.02) when expanded, larger (~0.25) when collapsed
+                
+                
 
-                // Detect downward drag from any state:
-                // - From expanded (dragStartOffset < 0.1): if drops below 0.85, consider dragging down
-                // - From collapsed (dragStartOffset >= 0.1): if drops below -0.1, consider dragging down
+                
+                
+                
                 val threshold = if (dragStartOffset < 0.1f) 0.85f else -0.1f
                 if (slideOffset < threshold) {
                     isDraggingDown = true
                 }
 
-                // Fade scrim when closing (dragging down to hide)
+                
                 if (isClosing || isDraggingDown) {
-                    val alpha = (slideOffset + 1f) / 2f // -1 -> 0, 0 -> 0.5, 1 -> 1
+                    val alpha = (slideOffset + 1f) / 2f 
                     scrim.alpha = alpha.coerceIn(0f, 0.5f)
                 }
 
-                // BottomSheetBehavior STATE_HIDDEN sometimes doesn't fire promptly after a
-                // swipe-fling — it waits for the next touch event. Detect "fully off-screen"
-                // via slideOffset as a backup trigger so audio stops and the activity
-                // finishes immediately on swipe.
+                
+                
+                
+                
                 if (slideOffset <= -0.99f) {
                     dismissNow()
                 }
@@ -268,10 +271,10 @@ class ChatForwardMessageActivity : BaseActivity() {
         if (::bottomSheetBehavior.isInitialized && ::bottomSheetCallback.isInitialized) {
             bottomSheetBehavior.removeBottomSheetCallback(bottomSheetCallback)
         }
-        // Backstop for paths that bypass STATE_HIDDEN (system finish, task removed).
+        
         stopPreviewOwnedAudio()
-        // Delete confidential message when Activity is destroyed (not when Fragment is replaced);
-        // a configuration change keeps the viewer open, so the message stays (#1440).
+        
+        
         if (!isChangingConfigurations) {
             confidentialMessageId?.let {
                 L.i { "[Confidential] Delete forward message, messageId: $it" }
@@ -288,10 +291,10 @@ class ChatForwardMessageActivity : BaseActivity() {
         }
     }
 
-    /**
-     * Idempotent dismiss — safe to call from any close path (STATE_HIDDEN callback or
-     * the slideOffset backup). isFinishing guards re-entry so duplicate triggers are no-ops.
-     */
+    
+
+
+
     private fun dismissNow() {
         if (isFinishing) return
         stopPreviewOwnedAudio()
@@ -318,26 +321,26 @@ class ChatForwardMessageActivity : BaseActivity() {
 
     private fun setupBackStackListener() {
         supportFragmentManager.addOnBackStackChangedListener {
-            // Pop ForwardContext from stack when going back
+            
             val expectedSize = supportFragmentManager.backStackEntryCount + 1
             if (viewModel.state.value.stack.size > expectedSize) {
                 viewModel.dispatch(ChatForwardMessageContract.Intent.TrimTo(expectedSize))
             }
-            // Update title from current ForwardContext
+            
             getCurrentForwardContext()?.let { forwardContext ->
                 mBinding.tvTitle.text = getForwardTitle(forwardContext)
             }
         }
     }
 
-    /**
-     * @param finishIfMissing close the viewer when the message is gone (e.g. burned before a
-     * restore) instead of leaving an empty sheet.
-     */
+    
+
+
+
     private fun loadInitialFragment(finishIfMissing: Boolean = false) {
         val messageId = intent.getStringExtra(EXTRA_MESSAGE_ID) ?: return
 
-        // Query message asynchronously
+        
         lifecycleScope.launch(Dispatchers.IO) {
             val message = wcdb.message.getFirstObject(DBMessageModel.id.eq(messageId))
             val forwardContext = message?.convertToTextMessage()?.forwardContext
@@ -348,22 +351,22 @@ class ChatForwardMessageActivity : BaseActivity() {
                 return@launch
             }
 
-            // Outer message context for copy/forward notice attribution
+            
             val outerAuthorId = message.fromWho
             val outerConversation = if (message.roomType == 1) For.Group(message.roomId ?: "") else For.Account(message.roomId ?: "")
 
-            // Load contactors for author name lookup in title (recursively collect all author IDs)
+            
             val authorIds = collectAllAuthorIds(forwardContext)
             viewModel.contactorCache.loadContactors(authorIds)
 
             withContext(Dispatchers.Main) {
-                // Store ForwardContext and update title
+                
                 viewModel.dispatch(
                     ChatForwardMessageContract.Intent.SetRoot(forwardContext, outerConversation, outerAuthorId)
                 )
                 mBinding.tvTitle.text = getForwardTitle(forwardContext)
 
-                // Load fragment
+                
                 val fragment = ChatForwardMessageFragment.newInstance(
                     title = getForwardTitle(forwardContext),
                     stackIndex = 0
@@ -375,39 +378,46 @@ class ChatForwardMessageActivity : BaseActivity() {
         }
     }
 
-    /**
-     * Get ForwardContext at specified stack index (for Fragment to access)
-     */
+    
+
+
     fun getForwardContext(stackIndex: Int): ForwardContext? {
         return viewModel.state.value.stack.getOrNull(stackIndex)
     }
 
-    /**
-     * Get current (top) ForwardContext
-     */
+    
+    fun replaceForwardContext(stackIndex: Int, forwardContext: ForwardContext) {
+        viewModel.dispatch(ChatForwardMessageContract.Intent.ReplaceAt(stackIndex, forwardContext))
+    }
+
+    
+
+
     fun getCurrentForwardContext(): ForwardContext? {
         return viewModel.state.value.stack.lastOrNull()
     }
 
-    /**
-     * Check if this is a confidential (self-destructing) message
-     * Used by Fragment to determine whether to save attachments to media store
-     */
+    
+
+
+
     fun isConfidentialMessage(): Boolean {
         return confidentialMessageId != null
     }
 
-    /**
-     * Get shouldSaveToPhotos setting from original conversation
-     * Used by Fragment for auto-save logic when downloading attachments
-     */
+    override fun isConfidentialViewer(): Boolean = isConfidentialMessage()
+
+    
+
+
+
     fun getShouldSaveToPhotos(): Boolean {
         return intent.getBooleanExtra(EXTRA_SHOULD_SAVE_TO_PHOTOS, false)
     }
 
-    /**
-     * Recursively collect all author IDs from ForwardContext and its nested forwards
-     */
+    
+
+
     private fun collectAllAuthorIds(forwardContext: ForwardContext): Set<String> {
         val authorIds = mutableSetOf<String>()
         collectAuthorIdsFromForwards(forwardContext.forwards, authorIds)
@@ -417,14 +427,14 @@ class ChatForwardMessageActivity : BaseActivity() {
     private fun collectAuthorIdsFromForwards(forwards: List<Forward>?, authorIds: MutableSet<String>) {
         forwards?.forEach { forward ->
             authorIds.add(forward.author)
-            // Recursively collect from nested forwards
+            
             collectAuthorIdsFromForwards(forward.forwards, authorIds)
         }
     }
 
-    /**
-     * Generate title from ForwardContext
-     */
+    
+
+
     private fun getForwardTitle(forwardContext: ForwardContext): String {
         val forwards = forwardContext.forwards
         return if (forwards?.firstOrNull()?.isFromGroup == true) {
@@ -440,12 +450,12 @@ class ChatForwardMessageActivity : BaseActivity() {
         }
     }
 
-    /**
-     * Navigate to nested forward content (called from Fragment)
-     * This creates a navigation stack within the same bottom sheet
-     */
+    
+
+
+
     fun navigateToNestedForward(title: String, forwardContext: ForwardContext) {
-        // Add to stack and update title
+        
         viewModel.dispatch(ChatForwardMessageContract.Intent.PushNested(forwardContext))
         mBinding.tvTitle.text = title
 

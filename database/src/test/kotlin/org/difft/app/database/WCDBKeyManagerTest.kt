@@ -16,21 +16,21 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.test.fail
 
-/**
- * Behavioral guardrails for [WCDBKeyManager].
- *
- * Pins the contracts the design (§5.3/§5.4/§5.7) calls out as load-bearing:
- *
- *   1. **Truncated/missing-size on-disk file** — short-circuits to
- *      [WCDBKeyUnavailableException] BEFORE any Keystore call (R7 fix: no silent
- *      plaintext fallback).
- *
- * Tests that need real AES key generation (round-trip, atomic write, tampering)
- * are guarded with `@Ignore` because Robolectric does not emulate the
- * AndroidKeystore — same limitation noted in [WCDBJobTableRegistrationTest] for
- * native WCDB libraries. They document the contract for future integration
- * tests on a real device / emulator.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class WCDBKeyManagerTest {
@@ -46,7 +46,7 @@ class WCDBKeyManagerTest {
     @Before
     fun setup() {
         context = ApplicationProvider.getApplicationContext()
-        // Clean slate — Robolectric reuses filesDir across tests in the same process.
+        
         keyFile.delete()
         tempFile.delete()
     }
@@ -57,15 +57,15 @@ class WCDBKeyManagerTest {
         tempFile.delete()
     }
 
-    /**
-     * R7 fix verification — the size-check happens BEFORE the Keystore lookup, so
-     * this exercises real production code on the JVM. A truncated file MUST throw
-     * `WCDBKeyUnavailableException`. Critically, it must NOT silently regenerate
-     * a fresh key (that would be the R7 silent-downgrade behavior we removed).
-     */
+    
+
+
+
+
+
     @Test
     fun `truncated key file throws WCDBKeyUnavailableException without keystore call`() {
-        // Pre-create a malformed (too-small) key file.
+        
         keyFile.writeBytes(ByteArray(10))
 
         try {
@@ -80,13 +80,13 @@ class WCDBKeyManagerTest {
         }
     }
 
-    /**
-     * Empty key file (0 bytes) — should also be rejected with WCDBKeyUnavailableException,
-     * not be silently treated as "no key exists" (because `keyFile.exists()` is true).
-     */
+    
+
+
+
     @Test
     fun `zero-byte key file throws WCDBKeyUnavailableException`() {
-        keyFile.createNewFile() // 0 bytes
+        keyFile.createNewFile() 
 
         try {
             WCDBKeyManager.getOrCreateKey(context)
@@ -96,9 +96,9 @@ class WCDBKeyManagerTest {
         }
     }
 
-    /**
-     * Oversize key file (e.g. corrupted append) — rejected before any decryption call.
-     */
+    
+
+
     @Test
     fun `oversize key file throws WCDBKeyUnavailableException`() {
         keyFile.writeBytes(ByteArray(200))
@@ -111,16 +111,16 @@ class WCDBKeyManagerTest {
         }
     }
 
-    // --------------------------------------------------- cipherKeyForCurrentBuild (build-gated)
+    
 
-    /**
-     * The migration engine mirrors `WCDB.kt`'s encryption policy via [WCDBKeyManager.cipherKeyForCurrentBuild]:
-     * a real key in release, `null` (plaintext) in debug. Unit tests run under the `debug` build type
-     * (`BuildConfig.DEBUG == true`), so this MUST return `null` — and it does so WITHOUT touching the
-     * AndroidKeystore (the `!BuildConfig.DEBUG` short-circuits before `getOrCreateKey`), which is why
-     * this is testable on the host JVM where the release branch is not. This pins the debug-plaintext
-     * half of the on-device fix: snapshot read / staging / promote all open plaintext in debug.
-     */
+    
+
+
+
+
+
+
+
     @Test
     fun `cipherKeyForCurrentBuild returns null in debug build (plaintext, no keystore call)`() {
         assertEquals(
@@ -128,21 +128,21 @@ class WCDBKeyManagerTest {
             WCDBKeyManager.cipherKeyForCurrentBuild(context),
             "debug build must use NO cipher key (plaintext), mirroring WCDB.kt's !BuildConfig.DEBUG gate",
         )
-        // It must not have created wcdb_key.bin as a side effect (no getOrCreateKey in the debug branch).
+        
         assertEquals(
             false, keyFile.exists(),
             "debug cipherKeyForCurrentBuild must not generate/persist a key",
         )
     }
 
-    // --------------------------------------------------------------------- installKey
+    
 
-    /**
-     * `installKey` validates the 48-byte length BEFORE any Keystore call (the `require` runs
-     * first in the method body), so a wrong-length key throws `IllegalArgumentException` on the
-     * host JVM without needing the AndroidKeystore. This pins the A4 promote contract: only a
-     * full-length WCDB cipher key may be installed as `wcdb_key.bin`.
-     */
+    
+
+
+
+
+
     @Test
     fun `installKey rejects a key that is not 48 bytes`() {
         try {
@@ -155,13 +155,13 @@ class WCDBKeyManagerTest {
                 "Error must state the required 48-byte length; was: '${e.message}'"
             )
         }
-        // No file must have been written on a rejected install.
+        
         assertEquals(false, keyFile.exists(), "installKey must not write wcdb_key.bin on length rejection")
     }
 
-    /**
-     * `protectKey` likewise validates length before touching the Keystore.
-     */
+    
+
+
     @Test
     fun `protectKey rejects a key that is not 48 bytes`() {
         try {
@@ -173,10 +173,10 @@ class WCDBKeyManagerTest {
         }
     }
 
-    /**
-     * `unprotectKey` rejects a wrong-size blob before any Keystore call (the size-check is the
-     * first statement, mirroring `readAndDecrypt`). Runs on the host JVM.
-     */
+    
+
+
+
     @Test
     fun `unprotectKey rejects a blob that is not the 76-byte wire size`() {
         try {
@@ -191,16 +191,16 @@ class WCDBKeyManagerTest {
         }
     }
 
-    // --------------------------------------------------------------------- @Ignore'd
-    // The tests below require the AndroidKeystore (AES key generation) which is
-    // not emulated by Robolectric. They document the contract for future
-    // integration / instrumentation tests.
+    
+    
+    
+    
 
-    /**
-     * Promote contract: installing a key then reading it back via `getOrCreateKey` (which decrypts
-     * the same `wcdb_key.bin`) returns the exact bytes installed. Requires the AndroidKeystore for
-     * the AES-GCM round trip, so `@Ignore`'d on the host JVM (same limitation as the tests below).
-     */
+    
+
+
+
+
     @Test
     @Ignore("Requires AndroidKeystore — not available in Robolectric (host JVM)")
     fun `installKey then getOrCreateKey returns the installed bytes`() {
@@ -211,9 +211,9 @@ class WCDBKeyManagerTest {
         assertEquals(76, keyFile.length(), "installKey must produce the 76-byte wire format")
     }
 
-    /**
-     * `protectKey` / `unprotectKey` round-trip returns the original key. Requires the AndroidKeystore.
-     */
+    
+
+
     @Test
     @Ignore("Requires AndroidKeystore — not available in Robolectric (host JVM)")
     fun `protectKey then unprotectKey returns the original key`() {

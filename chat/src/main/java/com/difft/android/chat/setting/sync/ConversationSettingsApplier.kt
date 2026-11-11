@@ -13,21 +13,21 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.max
 
-/**
- * The single place where a server conversation-config snapshot reaches the room table. Every
- * source (full pull, notify type 4, `conversation/set` echo, a [com.difft.android.chat.jobs.SettingSyncJob]
- * finishing) goes through here so the gating lives once:
- *
- * 1. a push the local device itself triggered is skipped;
- * 2. version gate: fields are written only from a snapshot newer than the one last applied
- *    (an authoritative pull may re-apply the same version);
- * 3. managed fields ([SyncField]) are additionally gated while a local operation is pending:
- *    only a push that changed that field, carrying a server timestamp later than the local
- *    operation, wins ("later operation wins"); pulls and echoes leave it alone.
- *
- * Writes and the new version go out in one UPDATE, so a crash cannot leave the version ahead of
- * the fields. All methods take the room's [SettingSyncState.lockFor] lock; callers must not hold it.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 @Singleton
 class ConversationSettingsApplier @Inject constructor(
     private val dbRoomStore: DBRoomStore,
@@ -38,20 +38,20 @@ class ConversationSettingsApplier @Inject constructor(
     private sealed class Mode {
         data class Normal(val source: SnapshotSource) : Mode()
 
-        /** A job's terminal write-back: [minVersion] is the version its accepted SET produced. */
+        
         data class Final(val jobId: String, val jobTs: Long, val minVersion: Int) : Mode()
     }
 
-    /** What one application wrote: the fields that changed (null when nothing was written). */
+    
     private class Applied(val outcome: FinalOutcome?, val update: ConversationSettingUpdate?)
 
-    /**
-     * Applies a snapshot from a pull, push or echo.
-     *
-     * @param announce emit the [ConversationSettingUpdate] for what was written. The bulk sync
-     * passes false: its rows are read on open, and a burst of events would overflow the flow.
-     * @return the fields that changed, so a caller holding its own copy can merge them atomically.
-     */
+    
+
+
+
+
+
+
     suspend fun applyServerSnapshot(
         snapshot: ServerConfigSnapshot,
         source: SnapshotSource,
@@ -62,11 +62,11 @@ class ConversationSettingsApplier @Inject constructor(
         applied.update
     }
 
-    /**
-     * Applies the snapshot a finishing job fetched. The managed field is written only when the
-     * snapshot is at least [minVersion] and the job is still the newest local intent; see
-     * [FinalOutcome].
-     */
+    
+
+
+
+
     suspend fun applyFinal(snapshot: ServerConfigSnapshot, jobId: String, jobTs: Long, minVersion: Int): FinalOutcome =
         syncState.lockFor(snapshot.conversation).withLock {
             val applied = applyLocked(snapshot, Mode.Final(jobId, jobTs, minVersion))
@@ -88,18 +88,18 @@ class ConversationSettingsApplier @Inject constructor(
             L.i { "[SettingSync] applier skipOwnPush room=$roomId v=${snapshot.version}" }
             return Applied(null, null)
         }
-        // Every comparison below is against the version read on entry; the new version is committed last.
-        // A snapshot without a version (0) cannot be ordered: it is applied without the version gate
-        // and never advances the local version.
+        
+        
+        
         val prev = room.conversationConfigVersion
         val versioned = snapshot.version > 0
         val v = if (versioned) snapshot.version else prev
-        // Strictly older snapshots are ignored, pushes included: a push replayed out of order
-        // (V11 after V12) would otherwise re-adjudicate a conflict a newer push already settled.
-        // The price is the cross-platform rule's accepted edge: a change that only ever reaches
-        // this device through a pull (no operation time) lets the local intent win.
+        
+        
+        
+        
         if (mode is Mode.Normal && v < prev) {
-            // A pull behind the local version means the server version went backwards: worth a warning.
+            
             if (source is SnapshotSource.Pull) {
                 L.w { "[SettingSync] applier staleAuthoritative room=$roomId v=$v applied=$prev" }
             } else {
@@ -108,9 +108,9 @@ class ConversationSettingsApplier @Inject constructor(
             return Applied(null, null)
         }
 
-        // Pull and echo come straight from the server for this conversation; a same-version one may
-        // re-apply. A push is only ordered by its version (and its timestamp for the managed field).
-        // A final snapshot below the job's accepted version is a lagging read and is trusted for nothing.
+        
+        
+        
         val authoritative = mode is Mode.Final || source is SnapshotSource.Pull || source is SnapshotSource.Echo || !versioned
         val finalThreshold = (mode as? Mode.Final)?.let { max(prev, it.minVersion) }
         val untrusted = finalThreshold != null && v < finalThreshold
@@ -141,8 +141,8 @@ class ConversationSettingsApplier @Inject constructor(
             }
         }
 
-        // Only columns whose value actually changes are written and announced; a full sync that
-        // brings nothing new must not touch (and refresh) every room.
+        
+        
         val expiry = snapshot.messageExpiry?.takeIf { writeOthers }?.let { normalizeExpiry(roomId, it) }
             ?.takeIf { it != room.messageExpiry }
         val mute = snapshot.muteStatus?.takeIf { writeOthers && it != room.muteStatus }
@@ -185,7 +185,7 @@ class ConversationSettingsApplier @Inject constructor(
         return Applied(outcome, update)
     }
 
-    /** Gating for the managed field from a pull, push or echo while nothing or something is pending. */
+    
     private suspend fun decideManagedNormal(
         roomId: String,
         field: SyncField,
@@ -197,7 +197,7 @@ class ConversationSettingsApplier @Inject constructor(
     ): Int? {
         val value = snapshot.confidentialMode ?: return null
         if (!syncState.isPending(roomId, field)) {
-            // Same-version pull is the recovery path when a local write was never enqueued.
+            
             return value.takeIf { v > prev || (authoritative && v == prev) }
         }
         if (source !is SnapshotSource.Push || source.changeType != field.changeType) return null
@@ -221,7 +221,7 @@ class ConversationSettingsApplier @Inject constructor(
     private fun isOwnPush(push: SnapshotSource.Push): Boolean =
         push.operator != null && push.operator == globalServices.myId && push.operatorDeviceId == DEFAULT_DEVICE_ID
 
-    /** Mirrors `ConversationSettingsManager`: the self conversation has no expiry, negative means default. */
+    
     private fun normalizeExpiry(roomId: String, raw: Long): Long = when {
         roomId == globalServices.myId -> 0L
         raw >= 0 -> raw

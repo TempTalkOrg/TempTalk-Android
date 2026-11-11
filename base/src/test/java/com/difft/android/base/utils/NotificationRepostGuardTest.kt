@@ -19,11 +19,11 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import java.util.concurrent.atomic.AtomicBoolean
 
-/**
- * [NotificationRepostGuard] (#1347). `nm.cancel` is applied asynchronously by the system, so the
- * mocked manager keeps listing a cancelled id as active, which is exactly the window the tombstone
- * has to cover (R1-F3).
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 class NotificationRepostGuardTest {
 
@@ -134,7 +134,7 @@ class NotificationRepostGuardTest {
             guard.cancel(id)
             cancelFinished.set(true)
         }
-        // Start the cancel from inside the repost's active check, i.e. while the guard lock is held.
+        
         every { nm.activeNotifications } answers {
             canceller.start()
             canceller.join(200)
@@ -182,9 +182,9 @@ class NotificationRepostGuardTest {
 
     @Test
     fun `a swipe after a racing repost cancels the restored notification and blocks later reposts`() {
-        assertTrue(guard.repostIfActive(id)) // the late FCM read the alert just before the swipe
+        assertTrue(guard.repostIfActive(id)) 
 
-        guard.cancel(id) // swipe delete intent
+        guard.cancel(id) 
 
         verify(exactly = 1) { nm.cancel(id) }
         assertFalse(guard.repostIfActive(id))
@@ -197,7 +197,7 @@ class NotificationRepostGuardTest {
         every { nm.notify(null as String?, id, capture(posted)) } returns Unit
 
         assertTrue(guard.repostIfActive(id))
-        // The system now shows the reposted notification: reduced timeout, postTime not reliable.
+        
         now += 10_000L
         withTimedNotification(timeoutMs = 40_000L, postTime = now)
         assertTrue(guard.repostIfActive(id))

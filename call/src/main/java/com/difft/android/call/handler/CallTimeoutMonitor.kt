@@ -7,13 +7,13 @@ import com.difft.android.call.data.CallStatus
 import com.difft.android.call.manager.CallTimeoutManager
 import com.difft.android.call.state.OnGoingCallStateManager
 
-/**
- * The call-level timeout state machine: arms the 1v1 ongoing-call and remote-left timeouts and
- * reports a fired one through [onTimeout] while the call is live in the timed room.
- *
- * Named `Monitor` to avoid confusion with the lower-level
- * [CallTimeoutManager] which is the actual execution backend.
- */
+
+
+
+
+
+
+
 class CallTimeoutMonitor(
     private val roomCtl: CallRoomController,
     private val callTimeoutManager: CallTimeoutManager,
@@ -27,7 +27,7 @@ class CallTimeoutMonitor(
 
     private var state: State = State.NONE
 
-    /** Kick off a 1-on-1 call timeout when only the local participant is in the room. */
+    
     fun start1V1Timeout(rid: String) {
         roomCtl.updateCallStatus(
             if (callRole == CallRole.CALLER) CallStatus.CALLING else CallStatus.JOINING
@@ -40,10 +40,10 @@ class CallTimeoutMonitor(
         ) { fireTimeout(rid) }
     }
 
-    /**
-     * Handle a participant disconnection. Only arms a timeout in 1-on-1 calls
-     * while we are still in-calling.
-     */
+    
+
+
+
     fun onParticipantDisconnected(isOneOnOne: Boolean) {
         if (!isOneOnOne) return
         if (!onGoingCallStateManager.isInCalling()) return
@@ -56,7 +56,7 @@ class CallTimeoutMonitor(
         ) { status -> if (status) fireTimeout(rid) }
     }
 
-    /** Cancel any active timeout check. Idempotent. */
+    
     fun cancelIfActive() {
         if (state == State.NONE) return
         roomIdGetter()?.takeIf { it.isNotEmpty() }?.let { callTimeoutManager.cancelCallWithTimeout(it) }

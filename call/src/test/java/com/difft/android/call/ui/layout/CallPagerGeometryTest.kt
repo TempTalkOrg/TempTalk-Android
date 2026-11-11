@@ -3,10 +3,12 @@ package com.difft.android.call.ui.layout
 import com.difft.android.call.layout.Rect
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import kotlin.math.min
+import kotlin.math.sqrt
 
 private const val EPS = 1e-9
 
-/** Guide §5.1 page indicator geometry. */
+
 class CallPagerGeometryTest {
 
     private val area = Rect(x = 16.0, y = 100.0, w = 360.0, h = 600.0)
@@ -61,11 +63,11 @@ class CallPagerGeometryTest {
     fun `the last card's label sits top right of the card, inset 8, and never right of the bar less 6`() {
         val bar = pagerBar(area, pages = 4)
         val farPill = Rect(0.0, 0.0, 0.0, 0.0)
-        // A card ending well left of the bar: inset 8 from its own right edge.
+        
         val narrow = lastTileLabelRect(Rect(16.0, 300.0, 200.0, 100.0), bar, farPill, w = 60.0, h = 20.0)
         assertEquals(16.0 + 200.0 - 8.0, narrow.x + narrow.w, EPS)
         assertEquals(308.0, narrow.y, EPS)
-        // A card reaching the area's right edge: capped at the bar's left edge less 6.
+        
         val wide = lastTileLabelRect(Rect(16.0, 300.0, 360.0, 100.0), bar, farPill, w = 60.0, h = 20.0)
         assertEquals(bar.x - 6.0, wide.x + wide.w, EPS)
     }
@@ -75,13 +77,33 @@ class CallPagerGeometryTest {
         val bar = pagerBar(area, pages = 4)
         val card = Rect(16.0, 300.0, 360.0, 100.0)
         val pill = pagerPillRect(bar, page = 1, w = 24.0, h = 20.0)
-        // A card whose top-right corner is where the pill sits.
+        
         val cardAtPill = card.copy(y = pill.y - 8.0)
         val label = lastTileLabelRect(cardAtPill, bar, pill, w = 60.0, h = 20.0)
         assertEquals("right edge 6 left of the pill", pill.x - 6.0, label.x + label.w, EPS)
-        // Far from the pill: unchanged.
+        
         val away = lastTileLabelRect(card.copy(y = pill.y + 200.0), bar, pill, w = 60.0, h = 20.0)
         assertEquals(bar.x - 6.0, away.x + away.w, EPS)
+    }
+
+    @Test
+    fun `the last card's label moves in along the top when its top right corner rounds to the screen's`() {
+        
+        val bar = pagerBar(Rect(12.0, 8.0, 376.0, 792.0), pages = 2)
+        val farPill = Rect(0.0, 0.0, 0.0, 0.0)
+        val r = 39.6
+        val moved = r - sqrt(r * r - (r - 8) * (r - 8)) + 2
+        val card = Rect(12.0, 8.0, 180.0, 200.0)
+        val label = lastTileLabelRect(card, bar, farPill, w = 60.0, h = 20.0, topRight = r)
+        assertEquals(card.x + card.w - moved, label.x + label.w, EPS)
+        assertEquals("keeps 8 from the top", 16.0, label.y, EPS)
+        
+        val own = lastTileLabelRect(card, bar, farPill, w = 60.0, h = 20.0, topRight = 12.0)
+        assertEquals(card.x + card.w - 8.0, own.x + own.w, EPS)
+        
+        val wide = Rect(12.0, 8.0, 376.0, 200.0)
+        val capped = lastTileLabelRect(wide, bar, farPill, w = 60.0, h = 20.0, topRight = r)
+        assertEquals(min(bar.x - 6.0, wide.x + wide.w - moved), capped.x + capped.w, EPS)
     }
 
     @Test

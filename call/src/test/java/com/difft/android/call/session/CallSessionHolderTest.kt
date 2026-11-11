@@ -31,11 +31,11 @@ import org.junit.Test
 import java.lang.reflect.Modifier
 import java.util.Collections
 
-/**
- * [CallSessionHolder] ownership (one live session; a start while one is live is refused) and
- * [CallSession.end] ordering, and how the session's OnGoingCallStateManager presence relates to it.
- * Rows: T2-01..T2-07, T2-21, T5-08, T5-15 (holder half; the fence half is in OngoingCallProjectionTest).
- */
+
+
+
+
+
 class CallSessionHolderTest {
 
     private val testDispatcher = StandardTestDispatcher()
@@ -69,7 +69,7 @@ class CallSessionHolderTest {
         assertSame(params, session.params)
     }
 
-    // One call at a time: a second start creates nothing and leaves the live session as it was.
+    
     @Test
     fun `T2-02 start while a session is live is refused and leaves the live session untouched`() {
         val warnings = captureLogs(warn = true)
@@ -176,7 +176,7 @@ class CallSessionHolderTest {
 
         assertSame(s2, h.holder.current.value)
         assertTrue(s2.scope.isActive)
-        // The only executor start is S1's own; S2's executor was never started.
+        
         assertEquals(listOf("doExitClear"), h.cleanupStarts.map { it.first })
     }
 
@@ -197,7 +197,7 @@ class CallSessionHolderTest {
         assertEquals(1, infos.count { it.contains("end(noUi) with no current session") })
     }
 
-    // A real VM attaches to the session, so a captured VM or its UI controller would show up.
+    
     @Test
     fun `T2-21 an ended session reaches no ViewModel, Activity, non-Application Context or CallUiController`() {
         LCallViewModelFixture.build(h)
@@ -224,10 +224,10 @@ class CallSessionHolderTest {
         assertTrue("leaking references: $leaks", leaks.isEmpty())
     }
 
-    /** Records the messages of `L.w { }` ([warn]) or `L.i { }` calls; other log calls run unchanged. */
+    
     private fun captureLogs(warn: Boolean): List<String> {
         val messages = Collections.synchronizedList(mutableListOf<String>())
-        // mockkStatic: L's entry points are @JvmStatic, so call sites go through the static bridge.
+        
         mockkStatic(L::class)
         if (warn) {
             every { L.w(any<() -> String>()) } answers { messages += firstArg<() -> String>().invoke() }
@@ -239,7 +239,7 @@ class CallSessionHolderTest {
 
     private fun String.namesId(id: Long) = Regex("\\bid=$id\\b").containsMatchIn(this)
 
-    /** `"field -> class"` for each forbidden value among [root]'s fields and the fields one level below. */
+    
     private fun leakingValues(root: Any): List<String> = fieldValues(root).flatMap { (name, value) ->
         val nested = if (isScannable(value)) fieldValues(value).mapNotNull { (n, v) -> forbidden("$name.$n", v) } else emptyList()
         listOfNotNull(forbidden(name, value)) + nested
@@ -251,7 +251,7 @@ class CallSessionHolderTest {
         return if (leak) "$name -> ${value.javaClass.name}" else null
     }
 
-    /** JDK internals cannot be opened reflectively and never hold app objects. */
+    
     private fun isScannable(value: Any) = !value.javaClass.name.startsWith("java.") && !value.javaClass.isArray
 
     private fun fieldValues(obj: Any): List<Pair<String, Any>> =

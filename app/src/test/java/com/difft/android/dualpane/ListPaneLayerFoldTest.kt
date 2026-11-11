@@ -28,14 +28,14 @@ private class FoldSearchDestination(private val label: String) : DetailDestinati
     override val pageKey: String get() = "fold:$label"
 }
 
-/**
- * Search across fold and unfold (design "global search in the list pane" §4.5, G4/G5) and the
- * uncover re-focus (D1, R1-F4): the layer host and its stack restore into either tree, the
- * conversation layer sits above the search layer in one-pane, Back returns to search and then to
- * the list, and only the layer's visible top page is told when the conversation layer pops. The
- * folded-groups root restores its kind from the host argument and closes itself safely after a
- * restore (folded groups as a layer §3.1, §3.2).
- */
+
+
+
+
+
+
+
+
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [33])
 class ListPaneLayerFoldTest {
@@ -180,7 +180,7 @@ class ListPaneLayerFoldTest {
         assertEquals(1, pushed.uncovers)
         assertEquals("the hidden root is not told", 0, root().uncovers)
 
-        back() // pops the pushed page
+        back() 
         assertEquals(listOf("search"), pages())
         openConversation("d")
         back()
@@ -195,7 +195,7 @@ class ListPaneLayerFoldTest {
         val pushed = layer.host!!.topPage() as StackPageFragment
         assertEquals(0, pushed.covers)
 
-        openConversation("c") // a notification or link opens it: no result tap hid the keyboard
+        openConversation("c") 
         assertEquals(1, pushed.covers)
         assertEquals("the hidden root is not told", 0, root().covers)
         assertEquals(0, pushed.uncovers)
@@ -215,7 +215,7 @@ class ListPaneLayerFoldTest {
         assertEquals(0, root().uncovers)
     }
 
-    // ------------------------------------------------------------------ folded root
+    
 
     private fun openFolded() {
         layer.open(ListPaneLayerRoot.FOLDED_GROUPS)
@@ -248,11 +248,11 @@ class ListPaneLayerFoldTest {
         assertFalse(layer.active)
     }
 
-    /**
-     * R1-F1: a restored folded root is created inside the Activity's `super.onCreate`, before the
-     * layer exists; its self-close collector waits for STARTED, so a focus that ended while the app
-     * was away closes the layer after the start instead of failing during the restore.
-     */
+    
+
+
+
+
     @Test
     fun `a restored folded root whose focus ended closes the layer after the start`() {
         FoldedStandInFragment.folding.value = true

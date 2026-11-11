@@ -24,7 +24,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 
-/** Exercises the real refresh entry point while a GET crosses an account/session change. */
+
 class GroupUtilSessionGuardTest {
     @Test fun `response from ended account is discarded before any local database access`(): Unit = runBlocking {
         assertDiscardedAfterChange("other-account", "fixture-b")
@@ -48,7 +48,7 @@ class GroupUtilSessionGuardTest {
             release.await()
             BaseResponse<GetGroupInfoResp>(1, 0, null, null)
         }
-        val util = GroupUtil(repo, mockk<MessageStore>(), database, userManager, mockk(), memberWriter)
+        val util = GroupUtil(repo, mockk<MessageStore>(), database, userManager, mockk(), memberWriter, GroupExpiryTracker())
         val session = GroupWriteSession("owner", MigrationPauseScope.credentialHash("fixture-a"))
         kotlinx.coroutines.coroutineScope {
             val result = async(Dispatchers.Default) { util.fetchAndSaveSingleGroupInfo("group", true, session) }

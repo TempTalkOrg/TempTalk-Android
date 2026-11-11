@@ -83,9 +83,9 @@ class Data(
         return stringArrays[key]
     }
 
-    /**
-     * Helper method for [getStringArray] that returns the value as a list.
-     */
+    
+
+
     fun getStringArrayAsList(key: String): List<String> {
         throwIfAbsent(stringArrays, key)
         return stringArrays[key]!!.toList()
@@ -235,9 +235,9 @@ class Data(
             return this
         }
 
-        /**
-         * Helper method for [putStringArray] that takes a list.
-         */
+        
+
+
         fun putStringListAsArray(key: String, value: List<String>): Builder {
             stringArrays[key] = value.toTypedArray()
             return this

@@ -9,12 +9,12 @@ import io.mockk.mockk
 import org.junit.Test
 import kotlin.test.assertEquals
 
-/**
- * T1-4/T1-5: [UrlManager.e2eeLearnMoreUrl] resolves per-environment, mirroring the existing
- * [UrlManager.installationGuideUrl] property.
- * Both online and dev protocols intentionally return the same URL — this is
- * pinned here so a future edit to only one protocol's value is caught as a regression.
- */
+
+
+
+
+
+
 class UrlManagerE2eeLearnMoreUrlTest {
 
     private val environmentHelper = mockk<EnvironmentHelper>(relaxed = true)

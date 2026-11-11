@@ -20,7 +20,7 @@ import kotlin.test.assertTrue
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
-/** [MessagingGate]: one admission protocol for tickets, the pause and the idle wait (#1382). */
+
 class MessagingGateTest {
 
     private val owner = "11111111-aaaa-bbbb-cccc-000000000001"
@@ -75,7 +75,7 @@ class MessagingGateTest {
         open()
         val parent = assertNotNull(gate.tryAdmit(AdmissionKind.RECEIVE, "ws"))
         pauseFor()
-        // Retained after the pause: the unit was admitted with the parent.
+        
         val held = assertNotNull(parent.retain("group-notify"))
         assertEquals(AdmissionKind.RECEIVE, held.kind)
         val idle = async { gate.closeAndAwaitIdle(owner, 30.seconds) }
@@ -91,7 +91,7 @@ class MessagingGateTest {
         open()
         pauseFor()
         assertTrue(gate.closeAndAwaitIdle(owner, 30.seconds))
-        // A spent budget (the owner's second wait after its drain) still passes when nothing is out.
+        
         assertTrue(gate.closeAndAwaitIdle(owner, Duration.ZERO))
         val drained = assertNotNull(gate.tryAdmitAsOwner(owner, AdmissionKind.RECEIVE, "drain"))
         assertFalse(gate.closeAndAwaitIdle(owner, Duration.ZERO))
@@ -189,11 +189,11 @@ class MessagingGateTest {
         assertNotNull(gate.tryAdmit(AdmissionKind.SEND, "job")).close()
     }
 
-    /**
-     * T10: threads race [MessagingGate.tryAdmit] against the pause and [MessagingGate.closeAndAwaitIdle].
-     * Every ticket issued before the pause is closed when the wait returns, no call that starts after
-     * the pause took effect gets a ticket, and none is issued after the wait returned.
-     */
+    
+
+
+
+
     @Test
     fun `T10 tryAdmit racing the close never escapes the wait`() = runBlocking {
         repeat(ROUNDS) { round ->
@@ -233,7 +233,7 @@ class MessagingGateTest {
             val idle = gate.closeAndAwaitIdle(owner, 10.seconds)
             val holdingAtIdle = holding.get()
             val issuedAtIdle = issued.get()
-            // Keep racing after the wait returned: a ticket issued now would have escaped it.
+            
             val loopsAtIdle = loops.get()
             while (loops.get() < loopsAtIdle + THREADS * LOOPS_AFTER_IDLE) Thread.yield()
             stop.set(true)
@@ -243,7 +243,7 @@ class MessagingGateTest {
             assertEquals(0, holdingAtIdle, "round $round: a ticket was still working when the wait returned")
             assertEquals(0, issuedAfterPause.get(), "round $round: a ticket was issued after the pause")
             assertEquals(issuedAtIdle, issued.get(), "round $round: a ticket was issued after the wait returned")
-            // The gate itself is balanced: it can close again at once.
+            
             assertTrue(gate.closeAndAwaitIdle(owner, 1.seconds))
         }
     }

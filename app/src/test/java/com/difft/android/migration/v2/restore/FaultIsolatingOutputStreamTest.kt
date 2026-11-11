@@ -10,16 +10,16 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
-/**
- * T31/T32: every single-attachment IO error stays isolated, except running out of space, which
- * aborts the whole import rather than letting a 200 report a migration the receiver did not get.
- */
+
+
+
+
 class FaultIsolatingOutputStreamTest {
 
     @get:Rule
     val tmp = TemporaryFolder()
 
-    /** Fails on the write that carries byte value 9 with [failure], and rejects everything after. */
+    
     private class FlakyOutput(private val failure: String = "input/output error") : OutputStream() {
         val written = ArrayList<Int>()
         var closed = false

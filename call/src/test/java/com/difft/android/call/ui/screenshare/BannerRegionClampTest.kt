@@ -16,11 +16,11 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/**
- * The speaker banner's saved drag offset stays inside its parent region. Entering tabletop shrinks
- * that region to the stage above the fold without resizing the banner, so the offset must be
- * re-clamped when the region changes, not only on a drag or a banner resize.
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [30], qualifiers = "w608dp-h860dp-port-mdpi")
 class BannerRegionClampTest {
@@ -38,10 +38,10 @@ class BannerRegionClampTest {
             bannerWidthPx = 160f,
             bannerHeightPx = 40f,
         )
-        // Max dy = 410 - 40 - 17 = 353.
+        
         assertEquals(0f to 353f, clampBannerDragDelta(0f, 600f, bounds))
         assertEquals(0f to -17f, clampBannerDragDelta(0f, -100f, bounds))
-        // Min dx = -(608 - 160 - 15) = -433, max dx = 15.
+        
         assertEquals(-433f to 0f, clampBannerDragDelta(-1000f, 0f, bounds))
         assertEquals(15f to 0f, clampBannerDragDelta(100f, 0f, bounds))
     }

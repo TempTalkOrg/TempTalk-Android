@@ -7,6 +7,7 @@ import android.view.View
 import androidx.lifecycle.lifecycleScope
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.ui.sidechrome.sideChromeBar
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.chat.contacts.contactsdetail.ContactDetailActivity
 import com.difft.android.chat.contacts.data.FriendSourceType
@@ -39,21 +40,29 @@ class InviteCodeActivity : BaseActivity() {
 
     private val mBinding: ActivityEnterCodeBinding by viewbind()
 
+    override fun participatesInSideChrome(): Boolean = true
+
+    override fun padsRootForSideChrome(): Boolean = true
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        mBinding.ibBack.setOnClickListener { finish() }
-
-        mBinding.ibScanCode.setOnClickListener {
-            ScanActivity.startActivity(this@InviteCodeActivity)
-        }
+        val bar = sideChromeBar()
+        bar.setBack(mBinding.ibBack, { finish() })
+        bar.setAction(
+            id = "scan",
+            view = mBinding.ibScanCode,
+            icon = R.drawable.chat_tabler_scan,
+            description = getString(R.string.chat_option_scan),
+            visible = true,
+            onClick = { ScanActivity.startActivity(this@InviteCodeActivity) },
+        )
 
         mBinding.btnAdd.setOnClickListener {
             mBinding.tvError.text = ""
-            // Empty input no longer fires a pointless network query (previously an empty
-            // Editable still entered the block and called queryByCustomUid("")).
+            
             mBinding.customUid.query.takeIf { it.isNotEmpty() }?.let { textStr ->
-                // 判断text是否为4位数字，如果是则调用queryByInviteCode，否则调用 queryByCustomUid
+                
                 if (textStr.length == 4 && textStr.all { it.isDigit() }) {
                     queryByInviteCode(textStr)
                 } else {

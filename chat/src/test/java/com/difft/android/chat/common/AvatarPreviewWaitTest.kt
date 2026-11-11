@@ -22,10 +22,10 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.io.IOException
 
-/**
- * The avatar download's wait dialog is released on every path: through the hosted page's
- * [PageWait] (so a page closed mid-download does not strand it), or by token otherwise.
- */
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class AvatarPreviewWaitTest {
@@ -72,7 +72,7 @@ class AvatarPreviewWaitTest {
         val download = CompletableDeferred<Unit>()
         var downloads = 0
         var viewers = 0
-        // previewContact's shape: an IO cache check before the wait, then the download behind it.
+        
         val preview: suspend (PageWait) -> Unit = { previewWait ->
             cacheCheck.await()
             AvatarPreviewLauncher.withWait(activity, previewWait) {
@@ -82,8 +82,8 @@ class AvatarPreviewWaitTest {
             viewers++
         }
 
-        // The page's view scope is Main.immediate: from the main thread each step runs inline, and
-        // the looper is not idled while the dialog's spinner animates.
+        
+        
         assertTrue(flight.launch(preview))
         assertFalse("still checking the cache", flight.launch(preview))
         cacheCheck.complete(Unit)

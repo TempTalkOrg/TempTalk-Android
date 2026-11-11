@@ -12,14 +12,14 @@ import retrofit2.http.Path
 @Auth(AuthStyle.BASIC)
 interface MessageApiService {
 
-    /** PUT /v4/messages/{recipientId} */
+    
     @PUT("v4/messages/{recipientId}")
     suspend fun sendMessage(
         @Path("recipientId") recipientId: String,
         @Body message: NewOutgoingPushMessage
     ): Response<ResponseBody>
 
-    /** PUT /v4/messages/group/{groupId} */
+    
     @PUT("v4/messages/group/{groupId}")
     suspend fun sendGroupMessage(
         @Path("groupId") groupId: String,

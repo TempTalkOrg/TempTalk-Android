@@ -14,6 +14,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -28,6 +29,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.unit.dp
+import com.difft.android.base.utils.StatusBarSetting
 import com.difft.android.call.BuildConfig
 import com.difft.android.base.call.CallRole
 import com.difft.android.base.call.CallType
@@ -67,29 +69,31 @@ import com.difft.android.call.layout.postureOf
 import androidx.compose.ui.platform.LocalDensity
 import com.difft.android.call.layout.Size as LayoutSize
 import com.difft.android.call.ui.invite.MeetingInviteScreen
+import com.difft.android.call.ui.layout.LocalCallScreenCorners
+import com.difft.android.call.ui.layout.LocalCallSettledPosture
+import com.difft.android.call.ui.layout.rememberCallScreenCorners
 import com.google.accompanist.systemuicontroller.rememberSystemUiController
 import io.livekit.android.room.Room
 
-/**
- * 通话内容主入口组件
- * 
- * @param room 房间对象
- * @param viewModel 通话 ViewModel
- * @param isUserSharingScreen 用户是否在分享屏幕
- * @param callConfig 通话配置
- * @param callIntent 通话 Intent
- * @param callRole 通话角色
- * @param conversationId 会话 ID
- * @param autoHideTimeout 自动隐藏超时时间
- * @param muteOtherEnabled 是否允许静音其他人
- * @param onScreenClick 屏幕点击回调
- * @param onCallTypeChanged 通话类型变化回调
- * @param onInviteUsersClick 邀请用户点击回调
- * @param onWindowZoomOutClick 窗口缩小点击回调
- * @param onExitClick 退出通话点击回调
- * @param onInviteViewAction 会议邀请视图状态回调
- * @param onBottomCallEndAction 底部通话结束操作回调
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 @Composable
 fun CallContent(
     room: Room? = null,
@@ -127,25 +131,31 @@ fun CallContent(
             )
         }
 
-        // The half-open fold, debounced once here and reported to the layout (design §4.5).
-        val gatedFold = rememberGatedFold(viewModel.callUiController)
+        
+        
+        val foldSettled = remember { mutableStateOf(false) }
+        val gatedFold = rememberGatedFold(viewModel.callUiController, foldSettled)
         val window = rememberCallWindowSizeDp()
         val windowDp = LayoutSize(window.width.toDouble(), window.height.toDouble())
         val navBottomDp = rememberTabletopBottomInsetDp()
         val reportedFold = remember(gatedFold, windowDp, navBottomDp) { gatedFoldDp(gatedFold, windowDp, navBottomDp) }
-        // A flip phone standing half open keeps a share upright above the fold (design decision 38):
-        // the activity owns the share's orientation lock, so it hears the fold the layout gets, held
-        // through the rotation that lock causes.
+        
+        
+        
         val halfOpen = rememberShareHalfOpen(reported = reportedFold != null)
         val callActivity = LocalContext.current.getActivity() as? LCallActivity
         LaunchedEffect(halfOpen, callActivity) { callActivity?.onFoldHalfOpenChanged(halfOpen) }
         val layoutState by viewModel.layout.state.collectAsState()
-        // What tabletop consumers draw around: the plan's fold and dock, null outside the posture.
+        
         val tabletop = planTabletop(layoutState.plan, viewModel.layout.lastInput?.fold, windowDp, LocalDensity.current.density)
-        // One owner of the status bar (design §4.4): hidden with the controls, half open flat (from
-        // the fold being reported, so it does not wait a turn for the plan), and through a share.
+        val settingContext = LocalContext.current
+        remember(settingContext) { StatusBarSetting.isHidden(settingContext) }
+        val settingHidden by StatusBarSetting.hidden.collectAsState()
+        
+        
+        
         val statusBarHidden = isUserSharingScreen || layoutState.controlsHidden ||
-            postureOf(reportedFold) == Posture.TABLETOP
+            postureOf(reportedFold) == Posture.TABLETOP || settingHidden
         CallStatusBarEffect(statusBarHidden)
         CallDialogAnchorEffect(tabletop)
 
@@ -154,6 +164,8 @@ fun CallContent(
             LocalCallFrameSizeSink provides viewModel.layoutInputs,
             LocalCallLayoutReportKey provides remember { CallLayoutReportKey() },
             LocalCallStatusBarHidden provides statusBarHidden,
+            LocalCallSettledPosture provides postureOf(reportedFold).takeIf { foldSettled.value },
+            LocalCallScreenCorners provides rememberCallScreenCorners(),
         ) {
             CallLayoutReporter(
                 controller = viewModel.layout,
@@ -185,9 +197,6 @@ fun CallContent(
     }
 }
 
-/**
- * 通话内容容器
- */
 @Composable
 private fun CallContentContainer(
     room: Room?,
@@ -251,10 +260,10 @@ private fun CallContentContainer(
     }
 }
 
-/**
- * The call page: the layout stage draws every mode, the chrome and sheets sit above it. In picture
- * in picture only the stage and its own overlay show (guide §5.3).
- */
+
+
+
+
 @Composable
 private fun CallStageContent(
     room: Room,
@@ -283,8 +292,8 @@ private fun CallStageContent(
             conversationId = conversationId,
             muteOtherEnabled = muteOtherEnabled,
         )
-        // Kept composed through picture in picture, only not drawn; min constraints pass through as
-        // the surface's own box passes them.
+        
+        
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -298,8 +307,7 @@ private fun CallStageContent(
                 isOneVOneCall = isOneVOneCall,
                 room = room,
             )
-            // 气泡飘动层：通过 WindowManager 挂在独立的 APPLICATION_PANEL 子窗口里，
-            // 主界面任何 recomposition / remeasure 都影响不到它。
+            
             BubbleOverlayWindowHost(viewModel = viewModel)
             CommonCallOverlays(
                 viewModel = viewModel,
@@ -315,7 +323,7 @@ private fun CallStageContent(
                 onExitClick = onExitClick
             )
             if (isUserSharingScreen) {
-                // The banner and its drag range stay clear of the side rail (#1451) and above the tabletop fold.
+                
                 ScreenShareSpeakerBanner(viewModel = viewModel, modifier = Modifier.speakerBannerBounds(viewModel))
             }
             if (!isOneVOneCall) {
@@ -328,7 +336,6 @@ private fun CallStageContent(
                     onClickItem = onBottomCallEndAction
                 )
             }
-            // 会议邀请组件
             MeetingInviteScreen(
                 callViewModel = viewModel,
                 inviteCallHandler = inviteCallHandler,
@@ -338,23 +345,23 @@ private fun CallStageContent(
     }
 }
 
-/**
- * The speaker banner's region: beside the side rail, and above the fold while the plan is in the
- * tabletop posture. The window is edge to edge, so the fold's window dp are the surface's.
- */
+
+
+
+
 @Composable
 private fun Modifier.speakerBannerBounds(viewModel: LCallViewModel): Modifier {
     val state by viewModel.layout.state.collectAsState()
     val foldTop = viewModel.layout.lastInput?.fold?.y?.takeIf { state.plan?.posture == Posture.TABLETOP }
     val bounds = sideRailEndPadding(rememberCallSideRail())
-    // Top-anchored inside a surface that forces its full size: wrapContentHeight frees the height.
+    
     return if (foldTop == null) bounds else bounds.fillMaxSize().wrapContentHeight(Alignment.Top, unbounded = false).height(foldTop.dp)
 }
 
-/**
- * Centres the page's dialogs in the region below the fold while [tabletop] is shown, instead of
- * on the fold; cleared with the posture and when the page leaves.
- */
+
+
+
+
 @Composable
 private fun CallDialogAnchorEffect(tabletop: TabletopGeometry?) {
     val activity = LocalContext.current.getActivity() ?: return
@@ -365,10 +372,10 @@ private fun CallDialogAnchorEffect(tabletop: TabletopGeometry?) {
     }
 }
 
-/**
- * Shows or hides the status bar (swipe brings it back for a moment); the navigation bar stays as
- * the window keeps it, hidden.
- */
+
+
+
+
 @Composable
 private fun CallStatusBarEffect(hidden: Boolean) {
     val activity = LocalContext.current.getActivity() ?: return
@@ -377,16 +384,15 @@ private fun CallStatusBarEffect(hidden: Boolean) {
             systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             if (hidden) hide(WindowInsetsCompat.Type.statusBars()) else show(WindowInsetsCompat.Type.statusBars())
         }
-        // Leaving the call page (or this effect) hands the status bar back shown.
+        
         onDispose {
-            WindowCompat.getInsetsController(activity.window, activity.window.decorView).show(WindowInsetsCompat.Type.statusBars())
+            WindowCompat.getInsetsController(activity.window, activity.window.decorView).apply {
+                if (StatusBarSetting.isHidden(activity)) hide(WindowInsetsCompat.Type.statusBars()) else show(WindowInsetsCompat.Type.statusBars())
+            }
         }
     }
 }
 
-/**
- * 公共的通话 Surface 容器
- */
 @Composable
 internal fun CallSurface(
     modifier: Modifier = Modifier,

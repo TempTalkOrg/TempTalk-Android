@@ -1,9 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="reactions_item_bg_color">@color/transparent_white_20</color>
     <color name="reactions_item_selected_bg_color">@color/transparent_white_20</color>
-    <color name="audio_progress_bg">#1AFFFFFF</color>
-    
-    <!-- Text selection highlight color (30% opacity of t.info.night) -->
-    <color name="selection_highlight">#4D82C1FC</color>
+    <color name="chat_swipe_focus">@color/bg2</color>
+    <color name="chat_swipe_focus_ring">@color/line</color>
+    <color name="chat_wallpaper_base">#000000</color>
+    <color name="chat_wallpaper_ink_purple">#9A86FF</color>
+    <color name="chat_wallpaper_ink_blue">#4C8DFF</color>
+    <color name="chat_wallpaper_ink_teal">#2FD3BD</color>
+    <color name="chat_bubble_gradient_recv">@color/bubble.recv</color>
+    <color name="chat_bubble_gradient_recv_veil">#E6181A20</color>
 </resources>

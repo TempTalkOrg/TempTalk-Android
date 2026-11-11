@@ -58,34 +58,34 @@ abstract class RecentChatAdapter(val activity: Activity, val isForSearch: Boolea
 
     abstract fun onItemLongClicked(view: View, roomViewData: RoomViewData, position: Int, touchX: Int, touchY: Int)
 
-    /**
-     * Whole-row tap target for the list-footer E2EE hint. Deliberately NOT abstract:
-     * the global search page's `RecentChatAdapter` subclass never submits
-     * [ListItem.E2eeFooter] and must not be forced to implement a callback it can never trigger.
-     */
+    
+
+
+
+
     open fun onFooterClicked() = Unit
 
-    /**
-     * Swipe / long-press actions (chat-list gesture design). `open` with no-op defaults for the
-     * same reason as [onFooterClicked]: the search adapter disables swiping and never fires them.
-     */
+    
+
+
+
     open fun onReadToggle(roomViewData: RoomViewData) = Unit
 
     open fun onPinToggle(roomViewData: RoomViewData) = Unit
 
     open fun onDeleteRequested(roomViewData: RoomViewData) = Unit
 
-    /** "Focus" / "End Focus" from a group's swipe actions (group focus, PRD 7.4.4). */
+    
     open fun onFocusToggle(roomViewData: RoomViewData) = Unit
 
-    /** The folded-groups row: a tap opens the folded list; long-press and swipe offer only "End Focus". */
+    
     open fun onFoldedGroupsClicked() = Unit
 
     open fun onFoldedGroupsLongClicked(view: View, touchX: Int, touchY: Int) = Unit
 
     open fun onFoldedGroupsEndFocus() = Unit
 
-    /** At most one row is open at a time; scrolling or opening another row closes it. */
+    
     private var openSwipe: ChatListSwipeLayout? = null
 
     private val swipeCallback = object : ChatListSwipeLayout.Callback {
@@ -104,7 +104,7 @@ abstract class RecentChatAdapter(val activity: Activity, val isForSearch: Boolea
             if (newState == RecyclerView.SCROLL_STATE_DRAGGING) openSwipe?.close()
         }
 
-        // Programmatic scrolls (jump to next unread, scroll to top) never enter DRAGGING.
+        
         override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
             if (dy != 0) openSwipe?.close()
         }
@@ -148,8 +148,8 @@ abstract class RecentChatAdapter(val activity: Activity, val isForSearch: Boolea
 
     @SuppressLint("ClickableViewAccessibility")
     private fun bindChat(chatHolder: RecentChatViewHolder, data: RoomViewData, position: Int) {
-        // The foreground owns the row's clicks, so the press position must be read there
-        // (the swipe root never sees DOWN on a closed row).
+        
+        
         chatHolder.touchTarget.setOnTouchListener { _, event ->
             if (event.action == MotionEvent.ACTION_DOWN) {
                 lastTouchX = event.rawX.toInt()
@@ -162,7 +162,7 @@ abstract class RecentChatAdapter(val activity: Activity, val isForSearch: Boolea
             searchKey,
             data,
             isSelected = selectedId != null && data.roomId == selectedId,
-            onItemClick = { onItemClicked(data, position - 2) }, // Adjust position
+            onItemClick = { onItemClicked(data, position - 2) }, 
             onItemLongClick = {
                 closeOpenSwipe()
                 onItemLongClicked(chatHolder.itemView, data, position - 2, lastTouchX, lastTouchY)
@@ -188,9 +188,7 @@ abstract class RecentChatAdapter(val activity: Activity, val isForSearch: Boolea
             is ListItem.FoldedGroups -> VIEW_TYPE_FOLDED_GROUPS
             is ListItem.E2eeFooter -> VIEW_TYPE_E2EE_FOOTER
         }
-        // No `else` branch: ListItem is sealed and this `when` is an EXPRESSION, so the compiler
-        // enforces exhaustiveness — a future ListItem subtype without a branch is now a COMPILE
-        // error, not the runtime IllegalArgumentException the old `else -> throw` produced.
+        
     }
 
     private var recyclerView: RecyclerView? = null
@@ -203,10 +201,7 @@ abstract class RecentChatAdapter(val activity: Activity, val isForSearch: Boolea
         val layoutManager = rv.layoutManager as? androidx.recyclerview.widget.LinearLayoutManager ?: return
         val first = layoutManager.findFirstVisibleItemPosition()
         val last = layoutManager.findLastVisibleItemPosition()
-        // Both return NO_POSITION before a layout settles — they delegate to the same helper, so
-        // they are never -1 singly. The earlier `?: 0` / `?: (itemCount - 1)` guarded the layout
-        // manager cast, not these ints, leaving -1..-1 to run one iteration at position -1, where
-        // a non-null holder match would reach getItem(-1) and throw.
+        
         if (first == RecyclerView.NO_POSITION || last == RecyclerView.NO_POSITION) return
 
         for (i in first..last) {
@@ -256,7 +251,6 @@ abstract class RecentChatAdapter(val activity: Activity, val isForSearch: Boolea
 
 class SearchInputViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
     fun bind() {
-        // Initialize your search input view here
-        // For example, set up listeners or bind data if needed
+        
     }
 }

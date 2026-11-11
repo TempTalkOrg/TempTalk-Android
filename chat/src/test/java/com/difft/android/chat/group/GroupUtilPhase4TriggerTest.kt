@@ -28,28 +28,13 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/**
- * Phase 4 trigger tests for [GroupUtil.fetchAndSaveSingleGroupInfo] — verify
- * that a successful fetch dispatches an async [GroupCryptoRepo.verifyAllPendingForGroup]
- * call, an invalid status does NOT, and a verify failure does not break the
- * main fetch.
- *
- * `@Ignore`d at the class level — production code in `fetchAndSaveSingleGroupInfo`
- * constructs WCDB [com.tencent.wcdb.winq.Expression] (`DBGroupModel.gid.eq(..)`,
- * etc.) which triggers `CppObject.<clinit>` → `System.loadLibrary("WCDB")` →
- * native methods unavailable in the JVM. Same constraint as
- * [com.difft.android.chat.common.ConversationManagerImplTest]'s ignored case
- * (line 135) and [org.difft.app.database.models.JobModelRoundTripTest].
- *
- * Tests are written end-to-end so they document the trigger contract; promote
- * to the instrumentation source set when a device-backed harness is available.
- *
- * Mocking strategy (intent doc):
- *   - `mockkStatic("com.difft.android.base.utils.ExtensionsKt")` so [appScope]
- *     can be replaced with a [TestScope]; `runTest { ... advanceUntilIdle() }`
- *     ensures the launched verify body completes before assertions.
- *   - All other dependencies are MockK relaxed mocks.
- */
+
+
+
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33])
@@ -70,8 +55,8 @@ class GroupUtilPhase4TriggerTest {
 
     @Before
     fun setUp() {
-        // Replace top-level appScope with the test scope so launched coroutines
-        // execute under runTest's clock.
+        
+        
         mockkStatic("com.difft.android.base.utils.ExtensionsKt")
         every { appScope } returns testScope
 
@@ -89,6 +74,7 @@ class GroupUtilPhase4TriggerTest {
             userManager = userManager,
             groupCryptoRepo = groupCryptoRepo,
             groupMemberWriter = groupMemberWriter,
+            groupExpiryTracker = GroupExpiryTracker(),
         )
     }
 
@@ -139,7 +125,7 @@ class GroupUtilPhase4TriggerTest {
         data = null,
     )
 
-    /** P1: status==0 must fire verifyAllPendingForGroup exactly once. */
+    
     @Test
     fun fetchAndSave_status0_triggers_verifyAllPendingForGroup() = runTest(testDispatcher) {
         val gid = "g1"
@@ -151,7 +137,7 @@ class GroupUtilPhase4TriggerTest {
         coVerify(exactly = 1) { groupCryptoRepo.verifyAllPendingForGroup(gid, groupRepo) }
     }
 
-    /** P2: status!=0 must NOT trigger verify (invalid group cleanup path). */
+    
     @Test
     fun fetchAndSave_status_non0_does_not_trigger_verify() = runTest(testDispatcher) {
         val gid = "g2"
@@ -163,7 +149,7 @@ class GroupUtilPhase4TriggerTest {
         coVerify(exactly = 0) { groupCryptoRepo.verifyAllPendingForGroup(any(), any()) }
     }
 
-    /** P3: A throwing verifyAllPendingForGroup is isolated by runCatching — main fetch returns the group. */
+    
     @Test
     fun verify_failure_does_not_break_main_fetch() = runTest(testDispatcher) {
         val gid = "g3"
@@ -173,7 +159,7 @@ class GroupUtilPhase4TriggerTest {
         val result = groupUtil.fetchAndSaveSingleGroupInfo(gid, sendUpdateEvent = false)
         advanceUntilIdle()
 
-        // Assertion left as documented intent — runs only on instrumentation harness.
+        
         assert(result != null) { "fetchAndSaveSingleGroupInfo must return the group despite verify failure" }
     }
 }

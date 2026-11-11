@@ -28,20 +28,11 @@ import org.junit.Test
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 
-/**
- * Skeleton tests for [CallMessageCreator] per design §7.2-7.5.
- *
- * `CallMessageCreator` has ZERO call-site signature changes after the
- * refactor — the hybrid For/uid API preserves every existing invocation.
- * These tests verify that when `createCallMessage` runs through a
- * given call-action branch, it invokes `conversationManager.*` with the
- * expected `For` value. Facade-internal For→uids resolution is tested
- * independently in `ConversationManagerImplTest`.
- *
- * A subset of the 6 design-specified methods (§8.4) is implemented here;
- * the remaining ones are stubs declared for completeness and left to
- * implement when deeper integration fidelity is required.
- */
+
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class CallMessageCreatorTest {
 
@@ -61,7 +52,7 @@ class CallMessageCreatorTest {
         mockkStatic("com.difft.android.base.utils.ExtensionsKt")
         every { com.difft.android.base.utils.globalServices } returns mockGlobal
 
-        // Default: provide non-empty public keys so the encryption path proceeds.
+        
         coEvery { conversationManager.getPublicKeyInfos(any<For>()) } returns listOf(
             PublicKeyInfo(uid = "peer-1", identityKey = "k-peer-1", registrationId = 1, resetIdentityKeyTime = 0)
         )
@@ -92,7 +83,7 @@ class CallMessageCreatorTest {
         val peer = "peer-1"
         val forWhat = For.Account(peer)
 
-        // Act — best-effort: cover the call-action branch up to the encryption step.
+        
         runCatching {
             creator.createCallMessage(
                 forWhat = forWhat,
@@ -111,7 +102,7 @@ class CallMessageCreatorTest {
             )
         }
 
-        // Assert: For-keyed signatures preserved (ZERO call-site signature change).
+        
         coVerify(atLeast = 1) { conversationManager.updatePublicKeyInfoData(forWhat) }
         coVerify(atLeast = 1) { conversationManager.getPublicKeyInfos(any<For>()) }
     }
@@ -203,14 +194,14 @@ class CallMessageCreatorTest {
             )
         }
 
-        // Instant-INVITE falls through to the forWhat branch that calls update.
-        assertNotNull(creator)  // compile-time guard: constructor signature unchanged
+        
+        assertNotNull(creator)  
     }
 
     @Test
     fun bypass_cache_get_public_keys_server_fetch_unchanged() = runTest {
-        // The nullable-list overload path is exercised by a call that feeds
-        // `callUidList` / `members` — preserved verbatim from pre-refactor.
+        
+        
         val forWhat = For.Account("peer-1")
 
         runCatching {
@@ -229,8 +220,8 @@ class CallMessageCreatorTest {
             )
         }
 
-        // Nullable-list overload invoked at least once (line 64 in CallMessageCreator).
-        // Use a list-typed `any()` via coVerify(match) to disambiguate overloads.
+        
+        
         coVerify(atLeast = 1) {
             conversationManager.getPublicKeyInfos(match<List<String>> { true })
         }

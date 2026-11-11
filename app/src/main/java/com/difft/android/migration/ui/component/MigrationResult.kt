@@ -21,14 +21,14 @@ import androidx.compose.ui.unit.dp
 import com.difft.android.R
 import com.difft.android.base.ui.theme.DifftTheme
 
-/** Result-page semantic, which picks the state mark: in progress, succeeded, failed, or blocked. */
+
 enum class MigrationResultTone { INFO, SUCCESS, ERROR, WARNING }
 
-/**
- * Shared skeleton of the progress, completion and failure pages: state mark, centred title and body
- * held in the middle, action stack pinned at the bottom. No navigation control — these pages are
- * left through their buttons.
- */
+
+
+
+
+
 @Composable
 fun MigrationResultPage(
     tone: MigrationResultTone,
@@ -71,7 +71,7 @@ fun MigrationResultPage(
     }
 }
 
-/** State mark: a bare outline icon in the tone's colour. */
+
 @Composable
 fun MigrationStateMark(tone: MigrationResultTone, modifier: Modifier = Modifier) {
     val (iconRes, color) = when (tone) {
@@ -88,7 +88,7 @@ fun MigrationStateMark(tone: MigrationResultTone, modifier: Modifier = Modifier)
     )
 }
 
-/** One paragraph of body copy under a result title. */
+
 @Composable
 fun MigrationResultBody(text: String, modifier: Modifier = Modifier) {
     Text(
@@ -100,7 +100,7 @@ fun MigrationResultBody(text: String, modifier: Modifier = Modifier) {
     )
 }
 
-/** Failure-page reason card: a small label over the sentence that says what happened. */
+
 @Composable
 fun MigrationReasonCard(label: String, reason: String, modifier: Modifier = Modifier) {
     MigrationCard(modifier = modifier, padded = true) {

@@ -35,7 +35,7 @@ internal abstract class HevcTrack @Throws(IOException::class) constructor(csd: L
         for (nal in csd) {
             val unitHeader = getNalUnitHeader(nal)
             nal.position(0)
-            // collect sps/vps/pps
+            
             when (unitHeader.nalUnitType) {
                 H265NalUnitTypes.NAL_TYPE_PPS_NUT -> pps.add(nal.duplicate())
                 H265NalUnitTypes.NAL_TYPE_VPS_NUT -> vps.add(nal.duplicate())
@@ -45,7 +45,7 @@ internal abstract class HevcTrack @Throws(IOException::class) constructor(csd: L
                     spsStruct = SequenceParameterSetRbsp(CleanInputStream(Channels.newInputStream(ByteBufferByteChannel(nal.slice()))))
                 }
                 H265NalUnitTypes.NAL_TYPE_PREFIX_SEI_NUT -> {
-                    //new SEIMessage(new BitReaderBuffer(nal.slice()));
+                    
                 }
             }
         }
@@ -64,7 +64,7 @@ internal abstract class HevcTrack @Throws(IOException::class) constructor(csd: L
     }
 
     override fun getLanguage(): String {
-        return "\u0060\u0060\u0060" // 0 in Iso639
+        return "\u0060\u0060\u0060" 
     }
 
     override fun getSampleDescriptionBox(): SampleDescriptionBox {
@@ -84,11 +84,11 @@ internal abstract class HevcTrack @Throws(IOException::class) constructor(csd: L
 
         val unitHeader = getNalUnitHeader(nal)
         val isVcl = isVcl(unitHeader)
-        //
-        if (vclNalUnitSeenInAU) { // we need at least 1 VCL per AU
-            // This branch checks if we encountered the start of a samples/AU
+        
+        if (vclNalUnitSeenInAU) { 
+            
             if (isVcl) {
-                if ((nal.get(2).toInt() and -128) != 0) { // this is: first_slice_segment_in_pic_flag  u(1)
+                if ((nal.get(2).toInt() and -128) != 0) { 
                     wrapUp(bufferedNals, presentationTimeUs)
                 }
             } else {
@@ -111,7 +111,7 @@ internal abstract class HevcTrack @Throws(IOException::class) constructor(csd: L
                     H265NalUnitTypes.NAL_TYPE_UNSPEC54,
                     H265NalUnitTypes.NAL_TYPE_UNSPEC55,
 
-                    H265NalUnitTypes.NAL_TYPE_EOB_NUT, // a bit special but also causes a sample to be formed
+                    H265NalUnitTypes.NAL_TYPE_EOB_NUT, 
                     H265NalUnitTypes.NAL_TYPE_EOS_NUT ->
                         wrapUp(bufferedNals, presentationTimeUs)
                 }
@@ -127,7 +127,7 @@ internal abstract class HevcTrack @Throws(IOException::class) constructor(csd: L
             H265NalUnitTypes.NAL_TYPE_EOS_NUT,
             H265NalUnitTypes.NAL_TYPE_AUD_NUT,
             H265NalUnitTypes.NAL_TYPE_FD_NUT -> {
-                // ignore these
+                
             }
             else ->
                 bufferedNals.add(nal)

@@ -17,16 +17,11 @@ import kotlin.test.assertEquals
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
-/**
- * Contract tests for [WCDBKeyManager.getKeystoreEntry]. The old return type `SecretKey?` fused
- * three distinct states into `null`; [KeystoreEntryResult] disambiguates them: alias not present →
- * [KeystoreEntryResult.Absent]; the Keystore op threw → [KeystoreEntryResult.Failed] carrying the
- * real cause (previously swallowed to `null`); a usable entry → [KeystoreEntryResult.Found].
- *
- * The AndroidKeyStore provider isn't emulated by Robolectric, so it's faked via
- * `mockkStatic(KeyStore::class)`. The real end-to-end throw-site mapping needs a real Keystore and
- * is documented as an `@Ignore`-d instrumentation contract below.
- */
+
+
+
+
+
 class KeystoreEntryClassificationTest {
 
     private lateinit var ks: KeyStore
@@ -79,14 +74,14 @@ class KeystoreEntryClassificationTest {
         assertSame(secret, result.key)
     }
 
-    /**
-     * End-to-end throw-site mapping in `getOrCreateKey`: clean-absent (alias deleted, key file
-     * kept) → `WCDBKeyUnavailableException` with `cause == null`; forced read throw → `cause`
-     * preserved. Requires a real AndroidKeyStore; runs via instrumentation.
-     */
+    
+
+
+
+
     @Test
     @Ignore("Requires real AndroidKeyStore — not emulated by Robolectric; run via instrumentation")
     fun `L2-THROWSITE clean-absent has null cause, threw preserves cause`() {
-        // Documented contract only — see integration tier.
+        
     }
 }

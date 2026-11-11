@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Function avatar background (Saved Messages; the folded groups avatar uses the same colours):
-     #474D57 in light and dark alike, so gray_600 (no night override) rather than t.secondary. -->
+
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="oval">
-    <solid android:color="@color/gray_600" />
+    <solid android:color="@color/avsys_bg" />
 </shape>

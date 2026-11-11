@@ -10,11 +10,11 @@ import com.difft.android.imageeditor.core.Bounds
 import com.difft.android.imageeditor.core.Renderer
 import com.difft.android.imageeditor.core.RendererContext
 
-/**
- * Renders the [color] outside of the [Bounds].
- *
- * Hit tests outside of the bounds.
- */
+
+
+
+
+
 @Parcelize
 class InverseFillRenderer(@ColorInt private val color: Int) : Renderer {
 

@@ -21,9 +21,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.addOutline
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.utils.ApplicationHelper
@@ -39,7 +48,7 @@ import dagger.hilt.android.EntryPointAccessors
 import io.livekit.android.room.participant.Participant
 import io.livekit.android.util.flow
 
-/** Speaking outline width (guide §5.1). */
+
 private val SPEAKING_STROKE = 3.dp
 
 private val STATUS_PILL_HEIGHT = 24.dp
@@ -48,15 +57,15 @@ private val STATUS_PILL_INSET_BOTTOM = 4.33.dp
 private val STATUS_PILL_HIT_SLOP_END = 12.dp
 private val BADGE_INSET = 6.dp
 
-/** Full-window avatar column: the 1v1 and incoming-call avatar size, name and mic underneath. */
+
 private val FULL_WINDOW_AVATAR = 96.dp
 private val FULL_WINDOW_AVATAR_GAP = 8.dp
 
-/**
- * The camera-off content of a card that fills the window (solo, 1v1 main): avatar centred with
- * the name and mic status under it, as the 1v1 page always drew it (#1366 for the solo card).
- * Such a card has no decorations: a pill's corner would be the screen's corner.
- */
+
+
+
+
+
 @Composable
 internal fun FullWindowAvatarInfo(
     participant: Participant,
@@ -80,10 +89,10 @@ internal fun FullWindowAvatarInfo(
     }
 }
 
-/** Where a tile's mute menu opened: the name pill (a tap) or the whole card (a long press). */
+
 internal enum class TileMenuAnchor { PILL, CARD }
 
-/** The open mute menu of one tile, if any. */
+
 @Stable
 internal class TileMuteMenuState {
     var anchor: TileMenuAnchor? by mutableStateOf(null)
@@ -91,7 +100,7 @@ internal class TileMuteMenuState {
     var touch: Offset by mutableStateOf(Offset.Zero)
         private set
 
-    /** Idempotent while open: a second finger or a racing tap must not re-anchor the menu. */
+    
     fun open(anchor: TileMenuAnchor, touch: Offset) {
         if (this.anchor != null) return
         this.touch = touch
@@ -103,7 +112,7 @@ internal class TileMuteMenuState {
     }
 }
 
-/** The mute menu anchored at [anchor]; holds the layout scheduler while it shows. */
+
 @Composable
 internal fun TileMuteMenu(
     viewModel: LCallViewModel,
@@ -125,12 +134,16 @@ internal fun TileMuteMenu(
     )
 }
 
-/**
- * A card's decorations (guide §5.1): the name and mic pill bottom left (a tap opens the mute
- * menu), the weak-network badge top right and the speaking outline. A card that fills the window
- * draws none of them. Collects its own speaking state so a change never recomposes the tile's
- * renderer.
- */
+
+
+
+
+
+
+
+
+
+
 @Composable
 internal fun BoxScope.TileDecorations(
     viewModel: LCallViewModel,
@@ -138,19 +151,35 @@ internal fun BoxScope.TileDecorations(
     uid: String,
     displayName: String,
     participantCount: Int,
-    shape: Shape,
+    corners: TileCorners,
     muteOtherEnabled: Boolean,
     menu: TileMuteMenuState?,
 ) {
     val speakingEnabled by viewModel.callUiController.speakingEnabled.collectAsState()
     val isSpeaking by participant::isSpeaking.flow.collectAsState()
     if (isSpeaking && speakingEnabled) {
-        Box(Modifier.matchParentSize().border(SPEAKING_STROKE, DifftTheme.colors.textInfo, shape))
+        val outline = if (corners.concentric) {
+            Modifier.cardOutline(SPEAKING_STROKE, DifftTheme.colors.info, corners::shapeNow)
+        } else {
+            Modifier.border(SPEAKING_STROKE, DifftTheme.colors.info, corners.shape)
+        }
+        Box(Modifier.matchParentSize().then(outline))
     }
+    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
 
     Box(
         modifier = Modifier
             .align(Alignment.BottomStart)
+            .then(
+                if (corners.concentric) {
+                    Modifier.pillInsets(
+                        start = { cornerShift(STATUS_PILL_INSET_START.value.toDouble(), STATUS_PILL_INSET_BOTTOM.value.toDouble(), corners.radii()?.bottomStart(rtl)) },
+                        end = { cornerShift(STATUS_PILL_HIT_SLOP_END.value.toDouble(), STATUS_PILL_INSET_BOTTOM.value.toDouble(), corners.radii()?.bottomEnd(rtl)) },
+                    )
+                } else {
+                    Modifier
+                },
+            )
             .testTag("call_tile_status")
             .then(
                 if (menu == null) {
@@ -169,7 +198,7 @@ internal fun BoxScope.TileDecorations(
             modifier = Modifier
                 .padding(
                     start = STATUS_PILL_INSET_START,
-                    // Tops the pill and its bottom inset up to the minimum touch target.
+                    
                     top = DifftTheme.spacing.minTouchTarget - STATUS_PILL_HEIGHT - STATUS_PILL_INSET_BOTTOM,
                     end = STATUS_PILL_HIT_SLOP_END,
                     bottom = STATUS_PILL_INSET_BOTTOM,
@@ -191,6 +220,28 @@ internal fun BoxScope.TileDecorations(
         localIdentity = remember { globalServices.myId },
         identity = uid,
         participantCount = participantCount,
-        modifier = Modifier.align(Alignment.TopEnd).padding(BADGE_INSET),
+        modifier = Modifier
+            .align(Alignment.TopEnd)
+            .then(
+                if (corners.concentric) {
+                    Modifier.sideInset(end = true) {
+                        cornerShift(BADGE_INSET.value.toDouble(), BADGE_INSET.value.toDouble(), corners.radii()?.topEnd(rtl))
+                    }
+                } else {
+                    Modifier
+                },
+            )
+            .padding(BADGE_INSET),
     )
+}
+
+
+
+
+
+
+private fun Modifier.cardOutline(width: Dp, color: Color, shape: () -> Shape): Modifier = drawWithCache {
+    val path = Path().apply { addOutline(shape().createOutline(size, layoutDirection, this@drawWithCache)) }
+    val stroke = Stroke(width.toPx() * 2)
+    onDrawBehind { clipPath(path) { drawPath(path, color, style = stroke) } }
 }

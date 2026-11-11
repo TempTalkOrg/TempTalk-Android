@@ -5,9 +5,9 @@ import com.difft.android.imageeditor.core.Bounds
 import com.difft.android.imageeditor.core.Renderer
 import com.difft.android.imageeditor.core.RendererContext
 
-/**
- * A rectangle that will be rendered on the blur mask layer. Intended for blurring faces.
- */
+
+
+
 @Parcelize
 class FaceBlurRenderer : Renderer {
 

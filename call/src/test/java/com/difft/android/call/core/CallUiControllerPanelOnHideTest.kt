@@ -4,10 +4,10 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * Hiding the chrome by tap or by the screen-share auto-hide closes the participants panel, in rail and
- * bar mode alike (#1451, as on iOS). Nothing else that touches the chrome or the panel changes.
- */
+
+
+
+
 class CallUiControllerPanelOnHideTest {
 
     private val ui = CallUiController()
@@ -76,7 +76,7 @@ class CallUiControllerPanelOnHideTest {
     @Test
     fun `the group end menu hiding the bar leaves the panel open`() {
         openPanel()
-        // ShowBottomCallEndView writes the bottom flag directly while its sheet shows.
+        
         ui.setShowBottomToolBarViewEnabled(false)
         assertTrue(ui.showUsersEnabled.value)
     }

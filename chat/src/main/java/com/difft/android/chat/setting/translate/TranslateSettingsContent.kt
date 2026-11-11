@@ -34,18 +34,18 @@ import com.difft.android.chat.translate.model.FailureReason
 import com.difft.android.chat.translate.translateValueDescRes
 import com.difft.android.chat.translate.translateValueLabelRes
 
-/** The three auto-translate values, in display order: off, Chinese, English. */
+
 private val TranslateOptions: List<Int> = listOf(0, 1, 2)
 
-/**
- * Stateless body of the conversation auto-translate screen: the three options, the explanation that
- * switches with the selection, and — only while something is wrong — the state of the translation
- * pack the selection needs.
- *
- * Selections are dropped until [State.loaded]: before the stored value is known, the default 0
- * would read as "currently off" and a tap would look like a real change. They are dropped again
- * while [State.pending] so a double tap cannot start two writes.
- */
+
+
+
+
+
+
+
+
+
 @Composable
 fun TranslateSettingsContent(
     state: State,
@@ -79,9 +79,9 @@ fun TranslateSettingsContent(
             }
         }
 
-        // Model status is informational, so it renders as caption text under the options rather
-        // than as settings rows; a ready model says nothing at all. Only the actions the user can
-        // actually take (retry / cancel) are tappable.
+        
+        
+        
         val rows = state.models.filter { it.phase != State.Phase.IDLE && it.phase != State.Phase.READY }
         if (state.selected != 0) {
             if (rows.isNotEmpty()) {
@@ -99,10 +99,10 @@ fun TranslateSettingsContent(
     }
 }
 
-/**
- * One model's status as caption text plus its inline actions. A stuck download may still recover
- * on its own, so retry is offered next to cancel rather than forced.
- */
+
+
+
+
 @Composable
 private fun ModelStatusCaption(
     row: State.ModelRow,
@@ -128,19 +128,19 @@ private fun ModelStatusCaption(
             CaptionActions(listOf(R.string.chat_translate_retry to onRetry))
         }
 
-        // Filtered out by the caller.
+        
         State.Phase.IDLE, State.Phase.READY -> Unit
     }
 }
 
-/** Tappable action words in the accent colour, laid out on one caption line. */
+
 @Composable
 private fun CaptionActions(actions: List<Pair<Int, () -> Unit>>) {
     Row(horizontalArrangement = Arrangement.spacedBy(CaptionActionSpacing)) {
         actions.forEach { (res, onClick) ->
             DifftSettingsCaption(
                 text = stringResource(res),
-                color = DifftTheme.colors.textInfo,
+                color = DifftTheme.colors.primary,
                 modifier = Modifier.clickable(onClick = onClick),
             )
         }
@@ -150,7 +150,7 @@ private fun CaptionActions(actions: List<Pair<Int, () -> Unit>>) {
 private val CaptionLineSpacing = 4.dp
 private val CaptionActionSpacing = 16.dp
 
-/** "12 MB/30 MB" while DownloadManager knows the total; null before it does. */
+
 private fun progressText(context: Context, row: State.ModelRow): String? {
     if (row.totalBytes <= 0) return null
     return context.getString(

@@ -19,7 +19,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** #1354: shared channel specs and the verify-before-use foreground channel rules. */
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class NotificationChannelSpecsTest {
@@ -115,8 +115,8 @@ class NotificationChannelSpecsTest {
         assertNull(NotificationChannelSpecs.serviceForegroundChannel(context, "Test"))
     }
 
-    // Once the preflight verified RUNNING_IN_BACKGROUND, a throwing lookup in the service
-    // uses that id and never the unverified MESSAGE.
+    
+    
     @Test
     fun `a throwing service lookup falls back to the preflight id only`() {
         assertEquals(NotificationChannelIds.RUNNING_IN_BACKGROUND, NotificationChannelSpecs.preflightForegroundChannel(context, "Test"))

@@ -15,7 +15,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CancellationException
 
-/** Validated internal navigation identity, separate from the ordinary scheme/link model. */
+
 data class NotificationTestReturnRoute(val ownerId: String, val runId: String, val kind: NotificationTestKind) {
     fun applyTo(intent: Intent): Intent = intent.addCategory(CATEGORY)
         .putExtra(OWNER, ownerId).putExtra(RUN, runId).putExtra(KIND, kind.name)
@@ -53,7 +53,7 @@ data class NotificationTestReturnRoute(val ownerId: String, val runId: String, v
     }
 }
 
-/** The navigator calls decide again inside its queue, using the then-current Me pages. */
+
 @Singleton
 class NotificationTestReturns @Inject constructor(
     private val poster: NotificationTestPoster,
@@ -68,7 +68,7 @@ class NotificationTestReturns @Inject constructor(
         pages.filterIsInstance<NotificationTestFragment>().firstOrNull { it.matchesReturn(route) }
             ?.let(Decision::Existing) ?: Decision.Idle
 
-    /** Only this obsolete notification/ticket is removed; never cancels another run's kind id. */
+    
     suspend fun discardStale(route: NotificationTestReturnRoute): Boolean = try {
         poster.cancel(route.runId, route.kind)
         if (route.kind == NotificationTestKind.CALL) repository.cancelCall(route.runId)

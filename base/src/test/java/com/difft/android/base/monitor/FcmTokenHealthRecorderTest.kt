@@ -47,7 +47,7 @@ class FcmTokenHealthRecorderTest {
         assertEquals(1_000L, failSince())
         assertEquals("fail", state())
 
-        recorder.recordFailure(recorder.beginAttempt(), nowWall = 9_000L) // run keeps its first start
+        recorder.recordFailure(recorder.beginAttempt(), nowWall = 9_000L) 
         assertEquals(1_000L, failSince())
 
         recorder.recordSuccess(recorder.beginAttempt())
@@ -68,7 +68,7 @@ class FcmTokenHealthRecorderTest {
     @Test
     fun `T5 ordering ignores the wall clock, so a clock set back does not hide a new failure`() = runTest {
         recorder.recordSuccess(recorder.beginAttempt())
-        // Wall clock moved back two weeks: the next attempt's failure is still recorded.
+        
         val fortnight = 14L * 24 * 3_600_000
         recorder.recordFailure(recorder.beginAttempt(), nowWall = 100 * fortnight - fortnight)
         assertEquals(99 * fortnight, failSince())

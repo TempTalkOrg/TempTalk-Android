@@ -9,7 +9,7 @@ open class DefaultFormatter : IFormatter {
 
     override fun formatLine(tree: BaseTree, prefix: String, message: String): String {
         return if (tree is ConsoleTree) {
-            // tag is logged anyways inside the console, so we do NOT add it to the message!
+            
             message
         } else {
             "$prefix: $message"

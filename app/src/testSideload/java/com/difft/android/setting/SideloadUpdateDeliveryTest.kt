@@ -144,7 +144,7 @@ class SideloadUpdateDeliveryTest {
     }
 }
 
-/** The sideload code reads the `application` global, which only a [ScopeApplication] supplies. */
+
 class SideloadTestApplication : ScopeApplication() {
     override val coroutineContext: CoroutineContext = SupervisorJob() + Dispatchers.Unconfined
 

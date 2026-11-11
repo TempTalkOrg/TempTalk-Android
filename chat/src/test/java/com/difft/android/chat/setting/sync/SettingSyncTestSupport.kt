@@ -15,7 +15,7 @@ internal const val MY_ID = "+19999999999"
 
 internal val serializer = JsonDataSerializer()
 
-/** A pending [SettingSyncJob] spec as the queue would hold it; only `ts` matters to readers. */
+
 internal fun pendingSpec(id: String, ts: Long, room: String = ROOM): JobSpec = JobSpec(
     id = id,
     factoryKey = SettingSyncJob.KEY,
@@ -30,7 +30,7 @@ internal fun pendingSpec(id: String, ts: Long, room: String = ROOM): JobSpec = J
     isMemoryOnly = false,
 )
 
-/** Mute/block start at a sentinel so a snapshot's 0 counts as a change; expiry/anchor start null. */
+
 internal fun room(confidential: Int = 0, version: Int = 0, id: String = ROOM): RoomModel = RoomModel().apply {
     roomId = id
     confidentialMode = confidential
@@ -57,7 +57,7 @@ internal fun snapshot(
     messageClearAnchor = anchor,
 )
 
-/** Real [SettingSyncState] over a mocked [JobManager] whose queue content the test controls. */
+
 internal class FakeQueue {
     val jobManager: JobManager = mockk(relaxed = true)
     var elapsed = 0L

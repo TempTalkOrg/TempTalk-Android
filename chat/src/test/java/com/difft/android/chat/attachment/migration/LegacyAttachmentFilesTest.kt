@@ -10,17 +10,17 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
 
-/**
- * The file half of the forward-attachment migration, against a real (temp) filesystem.
- *
- * These are the decisions that can destroy a user's only copy of a file — what gets copied, what
- * counts as a verified counterpart, and which legacy directory may be deleted — so they are pinned
- * here rather than only on a device: the native WCDB library is unavailable on the JVM, which is
- * exactly why [LegacyAttachmentFiles] takes directories instead of rows.
- *
- * Corpus mirrors the shapes a real install holds: plaintext-only, encrypted-at-rest, missing,
- * several rows sharing one legacy directory, already migrated, and an orphan nobody references.
- */
+
+
+
+
+
+
+
+
+
+
+
 class LegacyAttachmentFilesTest {
 
     @get:Rule
@@ -28,7 +28,7 @@ class LegacyAttachmentFilesTest {
 
     private lateinit var legacy: File
 
-    /** `[IV16][one 16-byte block][HMAC32]` — the shape `isStructurallyCompleteCiphertext` accepts. */
+    
     private fun ciphertextBytes(seed: Byte): ByteArray = ByteArray(16 + 16 + 32) { (it + seed).toByte() }
 
     private fun plaintext(directory: File, name: String, content: String): File =
@@ -82,12 +82,12 @@ class LegacyAttachmentFilesTest {
 
     @Test
     fun `a copy that cannot land reports FAILED, never no-source`() {
-        // A readable source WAS found and the transfer still did not complete. Reporting NO_SOURCE
-        // here counts as "skipped", which advances the migration watermark past a row whose bytes
-        // never landed and lets the sweep delete the only copy left.
-        //
-        // The failure is provoked at the final rename: a non-empty DIRECTORY sits at the target
-        // name, so the copy into the temp name succeeds and `renameTo` cannot replace it.
+        
+        
+        
+        
+        
+        
         plaintext(setUpLegacy(), "photo.jpg", "bytes")
         val target = newDirectory("local-1")
         File(target, "photo.jpg").mkdirs()
@@ -178,7 +178,7 @@ class LegacyAttachmentFilesTest {
 
         assertTrue(LegacyAttachmentFiles.isVerified(File(target, "photo.jpg"), expectedSize = 5))
         assertFalse(LegacyAttachmentFiles.isVerified(File(target, "photo.jpg"), expectedSize = 99))
-        // A size the row never recorded cannot contradict the file.
+        
         assertTrue(LegacyAttachmentFiles.isVerified(File(target, "photo.jpg"), expectedSize = 0))
     }
 
@@ -231,8 +231,8 @@ class LegacyAttachmentFilesTest {
 
     @Test
     fun `a sibling whose copy never landed blocks the deletion another sibling would authorize`() {
-        // The defect a per-DIRECTORY proof has: both rows read the same legacy file, one migrated and
-        // one did not, and the file-level check passes on the sibling that did.
+        
+        
         setUpLegacy()
         plaintext(legacy, "shared.jpg", "aaa")
         val landed = newDirectory("local-1").also { plaintext(it, "shared.jpg", "aaa") }
@@ -256,10 +256,10 @@ class LegacyAttachmentFilesTest {
 
     @Test
     fun `a row whose file this directory never held cannot block the deletion`() {
-        // A forward minted after the addressing flip is handed the same authorityId, so it ADDRESSES
-        // this directory — but its bytes were only ever written under its own localId. Counting it as
-        // a claimant lets a never-downloaded (or confidential) re-forward keep a reclaimable
-        // directory alive until the sweep gives up.
+        
+        
+        
+        
         setUpLegacy()
         plaintext(legacy, "a.jpg", "aaa")
         val migrated = newDirectory("local-1").also { plaintext(it, "a.jpg", "aaa") }
@@ -275,8 +275,8 @@ class LegacyAttachmentFilesTest {
 
     @Test
     fun `an emptied directory is not held open by a row that never lived in it`() {
-        // The single-reference move already carried the only file out. A post-flip row addressing the
-        // same authorityId has nothing here to prove, downloaded or not.
+        
+        
         setUpLegacy()
         val postFlip = newDirectory("local-2")
 
@@ -285,9 +285,9 @@ class LegacyAttachmentFilesTest {
 
     @Test
     fun `a post-flip re-forward sharing the file name still keeps the directory`() {
-        // Deliberate: the directory DOES hold that name, so the legacy file is this row's only rescue
-        // source once the server copy expires. Reclaiming the bytes must not cost the user their last
-        // copy — the directory is kept until the row's own copy lands.
+        
+        
+        
         setUpLegacy()
         plaintext(legacy, "shared.jpg", "aaa")
         val migrated = newDirectory("local-1").also { plaintext(it, "shared.jpg", "aaa") }
@@ -311,8 +311,8 @@ class LegacyAttachmentFilesTest {
 
     @Test
     fun `a ciphertext-only legacy file still makes its row a claimant`() {
-        // "Held" is decided on either on-disk shape: a row whose legacy copy exists only as
-        // ciphertext must not be filtered out of the proof.
+        
+        
         setUpLegacy()
         ciphertext(legacy, "photo.jpg")
         val notLanded = newDirectory("local-1")
@@ -393,8 +393,8 @@ class LegacyAttachmentFilesTest {
 
     @Test
     fun `an encrypt temp is left to its own writer`() {
-        // The live sink of an in-flight download: a large file on a slow link legitimately holds it
-        // far past the age filter, and both of its writers drop it at the start of their next run.
+        
+        
         val root = temp.newFolder("attachment")
         val directory = File(root, "local-1")
         val old = System.currentTimeMillis() - LegacyAttachmentFiles.STRAY_TEMP_MIN_AGE_MS - 1_000
@@ -449,8 +449,8 @@ class LegacyAttachmentFilesTest {
 
     @Test
     fun `a movable grant that is not the actual source still copies`() {
-        // The file is found in the owner-message directory; the movable proof covers only the
-        // authorityId directory, so the transfer must fall back to a copy.
+        
+        
         val ownerDirectory = temp.newFolder("1700000000001")
         val source = plaintext(ownerDirectory, "photo.jpg", "bytes")
         val movableButEmpty = setUpLegacy()

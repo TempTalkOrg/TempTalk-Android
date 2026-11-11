@@ -34,12 +34,7 @@ import org.difft.app.database.wcdb
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * 本地消息创建工具类
- *
- * 提供创建和保存本地消息的通用方法
- * 使用 Dagger 注入，内部处理 MessageStore 和消息过期时间获取
- */
+
 @Singleton
 class LocalMessageCreator @Inject constructor(
     @param:ApplicationContext private val context: Context,
@@ -51,14 +46,12 @@ class LocalMessageCreator @Inject constructor(
     companion object {
         private const val TAG = "LocalMessageCreator"
 
-        /**
-         * 生成消息 ID
-         * 格式：timestamp + uid(去除+号) + deviceId
-         *
-         * @param timestamp 消息时间戳
-         * @param uid 用户 ID
-         * @param deviceId 设备 ID，默认为 DEFAULT_DEVICE_ID
-         */
+        
+
+
+
+
+
         fun generateMessageId(timestamp: Long, uid: String, deviceId: Int = DEFAULT_DEVICE_ID): String {
             return StringBuilder().apply {
                 append(timestamp)
@@ -68,10 +61,9 @@ class LocalMessageCreator @Inject constructor(
         }
     }
 
-    /**
-     * 为群消息设置 receiverIds
-     * 只有自己发送的群消息才需要设置 receiverIds
-     */
+    
+
+
     private fun TextMessage.applyGroupReceiverIds(fromWho: For, forWhat: For): TextMessage {
         if (forWhat is For.Group && fromWho.id == globalServices.myId) {
             val receiverIds = wcdb.groupMemberContactor
@@ -87,17 +79,14 @@ class LocalMessageCreator @Inject constructor(
         return this
     }
 
-    /**
-     * 创建并保存 Critical Alert 本地消息
-     *
-     * 此方法会自动获取消息过期时间并在 IO 线程执行数据库操作
-     *
-     * @param systemShowTimestamp 服务器系统时间戳
-     * @param timestamp 消息时间戳（时间戳）
-     * @param fromWho 消息发送者
-     * @param forWhat 消息所属会话
-     * @param sourceDevice 消息所属设备类型
-     */
+    
+
+
+
+
+
+
+
     suspend fun createCriticalAlertMessage(
         systemShowTimestamp: Long,
         timestamp: Long,
@@ -136,15 +125,10 @@ class LocalMessageCreator @Inject constructor(
         }
     }
 
-    /**
-     * 创建非好友限制消息
-     *
-     * TT 服务端增加限频，非好友每天只能发3条消息，
-     * 超出后拒绝，客户端消息发送失败（感叹号），
-     * 系统消息提示："You can only send up to 3 messages per day to a user who is not your friend."
-     *
-     * @param forWhat 消息所属会话
-     */
+    
+
+
+
     suspend fun createNonFriendLimitMessage(forWhat: For) = withContext(Dispatchers.IO) {
         runCatching {
             val expiresInSeconds = messageArchiveManager.getMessageArchiveTime(forWhat, false).toInt()
@@ -178,12 +162,11 @@ class LocalMessageCreator @Inject constructor(
         }
     }
 
-    /**
-     * 构建一条对方离线或者账号禁用的消息，进行展示
-     *
-     * @param forWhat 消息所属会话
-     * @param actionType 动作类型 (NOTIFY_ACTION_TYPE_OFFLINE / NOTIFY_ACTION_TYPE_ACCOUNT_DISABLED / NOTIFY_ACTION_TYPE_ACCOUNT_UNREGISTERED)
-     */
+    
+
+
+
+
     suspend fun createOfflineMessage(forWhat: For, actionType: Int) = withContext(Dispatchers.IO) {
         runCatching {
             val expiresInSeconds = messageArchiveManager.getMessageArchiveTime(forWhat, false).toInt()
@@ -222,14 +205,13 @@ class LocalMessageCreator @Inject constructor(
         }
     }
 
-    /**
-     * 创建一条reset identity key的notify消息
-     *
-     * @param operator 操作者ID
-     * @param forWhat 消息所属会话
-     * @param operateTime 操作时间
-     * @param messageArchiveTime 消息归档时间
-     */
+    
+
+
+
+
+
+
     suspend fun createResetIdentityKeyMessage(
         operator: String,
         forWhat: For,
@@ -265,54 +247,31 @@ class LocalMessageCreator @Inject constructor(
         )
     }
 
-    /**
-     * Create and persist a "forward notice" local system message (the UI representation of
-     * a `ForwardNoticeMessage`).
-     *
-     * **Product invariant — does not count toward unread**: a forward notice is a
-     * "visible but silent" system message.
-     *  - Visible inline in the conversation (system-message style)
-     *  - Does not trigger push notifications (MsgType carries no notification payload)
-     *  - **Does not increment the conversation's unread counter**
-     *
-     * **How the unread-exemption is achieved** (verified in `WCDBExtensions.kt` around
-     * `updateRoomUnreadState`): the unread count query explicitly excludes TYPE_NOTIFY:
-     *  ```
-     *  .and(DBMessageModel.type.notIn(TYPE_NOTIFY, TYPE_CONFIDENTIAL_PLACEHOLDER))
-     *  ```
-     *  Because we persist this as a `NotifyMessage` via `WCDB.putNotifyMessage`, its row has
-     *  `type = 2 (TYPE_NOTIFY)` and is therefore excluded from the unread query "for free" —
-     *  no extra field / parameter / ReadInfoModel change is needed.
-     *
-     * **Contrast with `createCriticalAlertMessage`**: a critical alert is a `TextMessage`
-     * (TYPE_TEXT=0) and **does** count toward unread (that is the point of "critical"). This
-     * method deliberately does not copy that type choice; it keeps the NotifyMessage semantics.
-     * The messageId triple generation still mirrors the `createCriticalAlertMessage` pattern.
-     *
-     * **Cross-path messageId alignment** (see §5.4 of the design): the triple
-     * `generateMessageId(timestamp, operatorId, sourceDevice)` makes the id computed by the
-     * originating device's local insert equivalent to the id computed by receivers (group
-     * members / other devices via SyncMessage loopback), so `putWhenNonExist` deduplicates
-     * reliably across paths.
-     *
-     * @param operatorId Actor (sender uid). On the sender side this is `globalServices.myId`;
-     *                   on the receiver side it is `envelope.source` for the group path and
-     *                   `myId` for the SyncMessage path.
-     * @param forWhat Target conversation (group target / peer in 1:1 / destination-redirected
-     *                conversation for sync messages).
-     * @param noticeData Aggregated payload (scene, sourceAuthorIds, messageCount).
-     * @param systemShowTimestamp In-conversation display timestamp (usually equal to
-     *                            `envelope.systemShowTimestamp` or `timestamp`; determines the
-     *                            row's position in the RecyclerView).
-     * @param timestamp Client-side `envelope.timestamp` (sendTs on the sender,
-     *                  `envelope.timestamp` on the receiver). **Must** match the sender's
-     *                  sendTs and the peer's envelope.timestamp.
-     * @param sourceDevice `envelope.sourceDevice` (the sender uses `DEFAULT_DEVICE_ID = 1`;
-     *                     the receiver uses `content.signalServiceEnvelope.sourceDevice`).
-     * @return The persisted [NotifyMessage]. Mostly for test assertions and debug logging;
-     *         callers do NOT persist again. Persistence uses `messageStore.putWhenNonExist`,
-     *         so repeated calls with the same messageId are idempotent.
-     */
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     suspend fun createForwardNoticeMessage(
         operatorId: String,
         forWhat: For,
@@ -324,11 +283,7 @@ class LocalMessageCreator @Inject constructor(
         val expiresInSeconds = messageArchiveManager.getMessageArchiveTime(forWhat, false).toInt()
         val messageId = generateMessageId(timestamp, operatorId, sourceDevice)
 
-        // Name resolution: batch query via WCDB.getContactorsFromAllTable so the
-        // number of DB round-trips is O(1) instead of O(N) regardless of how many
-        // authors we resolve (contactor table in 1 IN query, with an optional
-        // groupMemberContactor fallback for ids missing from the main table).
-        // Renderer's resolver lambda is synchronous, so we pre-resolve into a map.
+        
         val idsToResolve = buildSet {
             add(operatorId)
             addAll(noticeData.sourceAuthorIds)
@@ -371,9 +326,7 @@ class LocalMessageCreator @Inject constructor(
             gson.toJson(ttNotify)
         )
 
-        // putWhenNonExist is idempotent on messageId collision (cross-path dedup).
-        // `NotifyMessage` → `putNotifyMessage` → `type = 2 (TYPE_NOTIFY)` → excluded from
-        // `updateRoomUnreadState`'s unread query → "does not count toward unread" satisfied.
+        
         messageStore.putWhenNonExist(message)
         L.i {
             "[$TAG] createForwardNoticeMessage success, messageId=$messageId, " +
@@ -383,7 +336,7 @@ class LocalMessageCreator @Inject constructor(
         message
     }
 
-    /** Mirrors [createForwardNoticeMessage] for COPY (and future activity) notices. */
+    
     suspend fun createActivityNoticeMessage(
         operatorId: String,
         forWhat: For,
@@ -446,15 +399,14 @@ class LocalMessageCreator @Inject constructor(
         message
     }
 
-    /**
-     * 创建一条Earlier messages expired的系统消息
-     *
-     * @param messageRoomId 消息房间ID
-     * @param messageRoomType 消息房间类型
-     * @param messageSystemShowTimestamp 系统显示时间戳
-     * @param messageReadTime 消息读取时间
-     * @param messageExpiresInSeconds 消息过期时间
-     */
+    
+
+
+
+
+
+
+
     suspend fun createEarlierMessagesExpiredMessage(
         messageRoomId: String,
         messageRoomType: Int,
@@ -482,24 +434,23 @@ class LocalMessageCreator @Inject constructor(
             expiresInSeconds = messageExpiresInSeconds
             mode = 0
             messageText = gson.toJson(signalNotifyMessage)
-            type = 2 // Notify
+            type = 2 
         }
     }
 
-    /**
-     * 创建通话相关的 TextMessage
-     *
-     * @param callActionType 通话动作类型
-     * @param textContent 消息内容
-     * @param sourceDevice 设备ID
-     * @param timestamp 时间戳
-     * @param systemShowTime 系统显示时间
-     * @param fromWho 发送者
-     * @param forWhat 会话
-     * @param inviteeList 被邀请者列表（用于 INVITE 场景计算时间偏移）
-     * @param saveToLocal 是否保存到本地数据库
-     * @return TextMessage 对象
-     */
+    
+
+
+
+
+
+
+
+
+
+
+
+
     suspend fun createCallTextMessage(
         callActionType: CallActionType,
         textContent: String,

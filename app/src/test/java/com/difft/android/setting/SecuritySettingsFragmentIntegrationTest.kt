@@ -54,7 +54,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 
-/** Real Hilt Fragment/ActivityResult registrations and SavedStateHandle view-model ownership. */
+
 @HiltAndroidTest
 @RunWith(RobolectricTestRunner::class)
 @Config(application = FoldableTestApplication_Application::class, sdk = [34])
@@ -109,7 +109,7 @@ class SecuritySettingsFragmentIntegrationTest {
         show(page)
         val switch = page.requireView().findViewById<com.difft.android.base.widget.DifftSwitchView>(com.difft.android.R.id.switch_can_id_search)
         assertEquals(false, switch.isChecked)
-        // A replaced page's accepted write completes after this page captured its snapshot.
+        
         kotlinx.coroutines.runBlocking {
             com.difft.android.base.utils.pane.PageOperations.track("account-search:test-user-001") { users.update { searchByCustomUid = 1 } }
         }
@@ -121,7 +121,7 @@ class SecuritySettingsFragmentIntegrationTest {
     @Test fun `tapping the account id text itself opens the custom id editor like its row`() {
         val page = AccountFragment()
         show(page)
-        // The long-press-to-copy listener makes the text consume the touch; the tap must still reach the row's action.
+        
         page.requireView().findViewById<android.view.View>(com.difft.android.R.id.tv_id).performClick()
         val started = org.robolectric.Shadows.shadowOf(controller.get()).nextStartedActivity
         assertEquals(SetCustomIdActivity::class.java.name, started?.component?.className)
@@ -203,7 +203,7 @@ class SecuritySettingsFragmentIntegrationTest {
         compose.onNodeWithText(controller.get().getString(com.difft.android.R.string.settings_contact_ID_button_save)).assertIsEnabled()
         assertEquals(false, model.state.value.completed)
         assertEquals("stored_name", users.getUserData()?.customUid)
-        // A fresh retry follows the shared button's uptime-based double-tap guard.
+        
         org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofMillis(
             com.difft.android.base.ui.compose.DifftButtonDefaults.ClickDebounceMillis + 1,
         ))
@@ -225,7 +225,7 @@ class SecuritySettingsFragmentIntegrationTest {
         compose.waitUntil { customIdModel(page).state.value.completed }
         assertEquals("candidate_id", users.getUserData()?.customUid)
         verify(atLeast = 1) { host.detailNavigation.pop(page) }
-        // Accepted/queued pop deliberately does not remove the page: folding may recreate it first.
+        
         controller.recreate()
         val restoredHost = restored() as SecuritySettingsLeafHost
         val restoredPage = requireNotNull(restoredHost.childFragmentManager.findFragmentByTag("leaf"))
@@ -308,7 +308,7 @@ class SecuritySettingsFragmentIntegrationTest {
         show(page)
         val model = ViewModelProvider(page)[PasscodeTimeoutViewModel::class.java]
         val before = model.state.value
-        // The UI emits only TIMEOUT_LIST members; the VM still guards external intents.
+        
         listOf(-1, 1, Int.MAX_VALUE).forEach { seconds ->
             model.dispatch(PasscodeTimeoutContract.Intent.Select(seconds))
             assertEquals(before, model.state.value)
@@ -321,7 +321,7 @@ class SecuritySettingsFragmentIntegrationTest {
         show(page)
         val model = ViewModelProvider(page)[ScreenLockSettingsViewModel::class.java]
         model.dispatch(ScreenLockContract.Intent.Toggle(ScreenLockContract.Kind.Pattern, true))
-        // The visible collector owns the one launch; a recreated Awaiting stage must not relaunch.
+        
         val pending = requireNotNull(model.state.value.pending)
         controller.recreate()
         val after = ViewModelProvider(restored())[ScreenLockSettingsViewModel::class.java]
@@ -345,7 +345,7 @@ class SecuritySettingsFragmentIntegrationTest {
 @AndroidEntryPoint
 class SecuritySettingsTestActivity : FragmentActivity()
 
-/** Keeps accepted pops queued so completion must replay when the real child is recreated. */
+
 class SecuritySettingsLeafHost : Fragment(), DetailStackHost {
     companion object { const val CONTENT_ID = 0x12304567 }
     override val detailNavigation: DetailNavigation = mockk(relaxed = true) {

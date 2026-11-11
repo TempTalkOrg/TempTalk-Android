@@ -14,9 +14,6 @@ import com.difft.android.selector.utils.ActivityCompatHelper
 
 class GlideEngine private constructor() : ImageEngine {
 
-    /**
-     * 加载图片
-     */
     override fun loadImage(context: Context, url: String?, imageView: ImageView) {
         if (!ActivityCompatHelper.assertValidRequest(context)) {
             return
@@ -36,19 +33,11 @@ class GlideEngine private constructor() : ImageEngine {
             .into(imageView)
     }
 
-    /**
-     * 加载相册目录封面
-     */
     override fun loadAlbumCover(context: Context, url: String?, imageView: ImageView) {
         if (!ActivityCompatHelper.assertValidRequest(context)) {
             return
         }
-        // Old path: .asBitmap() decoded animated WebP to its first frame only → static cover.
-        // Fix: drop .asBitmap() (load as Drawable) + route the crop/corner transform through
-        // optionalTransform(WebpDrawable) so the cover animates, mirroring loadGridImage.
-        // The 0.5x sizeMultiplier was also dropped — it's orthogonal to the WebpDrawable path
-        // (decode size only, not static-vs-animated), removed just to match loadGridImage;
-        // covers now decode at the full 180px target (negligible extra memory).
+        
         val transform = MultiTransformation<Bitmap>(CenterCrop(), RoundedCorners(8))
         Glide.with(context)
             .load(url)
@@ -59,16 +48,11 @@ class GlideEngine private constructor() : ImageEngine {
             .into(imageView)
     }
 
-    /**
-     * 加载图片列表图片
-     */
     override fun loadGridImage(context: Context, url: String?, imageView: ImageView) {
         if (!ActivityCompatHelper.assertValidRequest(context)) {
             return
         }
-        // A bare CenterCrop (BitmapTransformation) on an animated-WebP WebpDrawable is
-        // tolerated by Glide 4 but fails the load on Glide 5 → placeholder. Route it through
-        // optionalTransform(WebpDrawable) so animated WebP thumbnails render correctly.
+        
         val centerCrop = CenterCrop()
         Glide.with(context)
             .load(url)

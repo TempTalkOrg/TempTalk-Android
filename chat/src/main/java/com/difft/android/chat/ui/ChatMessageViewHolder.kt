@@ -1,6 +1,9 @@
 package com.difft.android.chat.ui
 
 import android.annotation.SuppressLint
+import android.content.res.ColorStateList
+import android.graphics.drawable.GradientDrawable
+import android.util.LruCache
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -28,6 +31,7 @@ import com.difft.android.base.utils.globalServices
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.base.widget.setRightMargin
+import com.difft.android.chat.widget.fileTypeIcon
 import com.difft.android.chat.R
 import com.difft.android.chat.MessageContactsCacheUtil
 import com.difft.android.chat.common.SendType
@@ -44,7 +48,6 @@ import com.difft.android.chat.message.generateMessageFromForward
 import com.difft.android.chat.message.isAttachmentMessage
 import com.difft.android.chat.message.isConfidential
 import com.difft.android.chat.widget.AudioMessageManager
-import com.difft.android.chat.widget.chatContainerWidthPx
 import com.difft.android.messageserialization.db.store.formatBase58Id
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import difft.android.messageserialization.For
@@ -53,7 +56,9 @@ import difft.android.messageserialization.model.Quote
 import difft.android.messageserialization.model.SpeechToTextStatus
 import difft.android.messageserialization.model.isAudioMessage
 import difft.android.messageserialization.model.isImage
-import difft.android.messageserialization.model.isVideo
+import difft.android.messageserialization.model.isLongText
+import difft.android.messageserialization.model.isPlayableVideo
+import difft.android.messageserialization.model.isWhitelistedVideoType
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -73,18 +78,11 @@ import util.TimeFormatter
 import java.io.File
 import java.util.concurrent.atomic.AtomicLong
 import com.difft.android.base.widget.DifftCheckBoxView
+import kotlin.math.roundToInt
 
-/**
- * 消息交互回调封装
- *
- * 使用密封类为不同类型的消息提供独立的回调集合
- */
+
 sealed class MessageCallbacks {
-    /**
-     * 普通消息的交互回调
-     *
-     * 包含点击、长按、头像、引用、Reaction 等所有交互事件
-     */
+    
     data class MessageInteraction(
         val onItemClick: (rootView: View, message: ChatMessage) -> Unit,
         val onItemLongClick: (rootView: View, message: ChatMessage) -> Unit,
@@ -97,24 +95,16 @@ sealed class MessageCallbacks {
         val onTranslateRetry: (message: TextChatMessage) -> Unit
     ) : MessageCallbacks()
 
-    /**
-     * 通知消息的交互回调
-     *
-     * 预留用于扩展通知消息特有的交互（如接受好友请求等）
-     */
+    
     data class NotifyInteraction(
         val placeholder: Unit = Unit,
         val onE2eeHeaderClick: (() -> Unit)? = null,
     ) : MessageCallbacks()
 }
 
-/**
- * 聊天消息 ViewHolder 基类
- *
- * 提供两种 ViewHolder 实现：
- * - Message: 普通消息（文本、图片、视频、语音等），使用 isMine 参数区分自己/他人
- * - Notify: 通知消息
- */
+
+private const val REACTION_CHIP_RADIUS_DP = 14f
+
 abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
 
     val myID: String by lazy {
@@ -125,15 +115,14 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
         LanguageUtils.getLanguage(application)
     }
 
-    /**
-     * 绑定消息数据到 ViewHolder
-     *
-     * @param message 消息数据
-     * @param callbacks 交互回调（Message 使用 MessageInteraction，Notify 使用 NotifyInteraction）
-     * @param highlightItemIds 需要高亮的消息ID列表
-     * @param contactorCache 联系人缓存实例（页面级）
-     * @param shouldSaveToPhotos 是否应该自动保存到相册（基于会话级/全局设置）
-     */
+    
+
+
+
+
+
+
+
     abstract fun bind(
         message: ChatMessage,
         callbacks: MessageCallbacks,
@@ -142,14 +131,13 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
         shouldSaveToPhotos: Boolean = false
     )
 
-    /**
-     * 普通消息 ViewHolder
-     *
-     * @param isMine 是否为自己发送的消息，用于区分布局和显示逻辑
-     * @param contentLayoutRes 消息内容布局资源 ID
-     * @param contentBinder 消息内容绑定器
-     * @param forWhat 消息用途标识
-     */
+    
+
+
+
+
+
+
     class Message(
         private val parentView: ViewGroup,
         private val isMine: Boolean,
@@ -160,33 +148,36 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
         val context = parentView.context
         val layoutInflater = LayoutInflater.from(context)
 
-        // 根据 isMine 使用不同的布局
         val itemView = if (isMine) {
             val binding = ChatItemChatMessageListTextMineBinding.inflate(layoutInflater, parentView, false)
+            binding.contentContainer.sent = true
             layoutInflater.inflate(contentLayoutRes, binding.contentFrame, true)
             binding.root
         } else {
             val binding = ChatItemChatMessageListTextOthersBinding.inflate(layoutInflater, parentView, false)
+            binding.contentContainer.avatarColumn = forWhat !is For.Account
             layoutInflater.inflate(contentLayoutRes, binding.contentFrame, true)
             binding.root
         }
         itemView
     }) {
 
-        // 根据 isMine 绑定对应的 ViewBinding
         private val mineBinding: ChatItemChatMessageListTextMineBinding? =
             if (isMine) ChatItemChatMessageListTextMineBinding.bind(itemView) else null
 
         private val othersBinding: ChatItemChatMessageListTextOthersBinding? =
             if (!isMine) ChatItemChatMessageListTextOthersBinding.bind(itemView) else null
 
-        // Runnable for highlight effect cleanup (to prevent memory leak on ViewHolder recycle)
+        
         private var highlightRunnable: Runnable? = null
 
-        // ========== 通用 View 引用（兼容 Mine 和 Others） ==========
 
         private val contentFrame: ViewGroup
             get() = if (isMine) mineBinding!!.contentFrame else othersBinding!!.contentFrame
+
+        
+        val bubble: ChatMessageContainerView
+            get() = mineBinding?.contentContainer ?: othersBinding!!.contentContainer
 
         private val contentContainer: View
             get() = if (isMine) mineBinding!!.contentContainer else othersBinding!!.contentContainer
@@ -197,8 +188,6 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
         private val textViewTime: TextView
             get() = if (isMine) mineBinding!!.textViewTime else othersBinding!!.textViewTime
 
-        private val confidentialIcon: View
-            get() = if (isMine) mineBinding!!.ivConfidentialIcon else othersBinding!!.ivConfidentialIcon
 
         private val timeWrapper: View
             get() = if (isMine) mineBinding!!.llTimeWrapper else othersBinding!!.llTimeWrapper
@@ -221,15 +210,15 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
         private val quoteThumbnail: ImageView
             get() = if (isMine) mineBinding!!.quoteThumbnail else othersBinding!!.quoteThumbnail
 
-        // 单条转发消息的信息头（时间+来源）
+        private val quoteBar: View
+            get() = if (isMine) mineBinding!!.quoteBar else othersBinding!!.quoteBar
+
+        
         private val forwardInfoZone: View
             get() = if (isMine) mineBinding!!.forwardInfoZone.root else othersBinding!!.forwardInfoZone.root
 
-        private val tvForwardTime: TextView
-            get() = if (isMine) mineBinding!!.forwardInfoZone.tvForwardTime else othersBinding!!.forwardInfoZone.tvForwardTime
-
-        private val tvForwardAuthor: TextView
-            get() = if (isMine) mineBinding!!.forwardInfoZone.tvForwardAuthor else othersBinding!!.forwardInfoZone.tvForwardAuthor
+        private val tvForwardFrom: TextView
+            get() = if (isMine) mineBinding!!.forwardInfoZone.tvForwardFrom else othersBinding!!.forwardInfoZone.tvForwardFrom
 
         private val reactionsView: FlowLayout
             get() = if (isMine) mineBinding!!.reactionsView else othersBinding!!.reactionsView
@@ -273,11 +262,10 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
         private val checkboxSelectForUnpin: DifftCheckBoxView
             get() = if (isMine) mineBinding!!.checkboxSelectForUnpin else othersBinding!!.checkboxSelectForUnpin
 
-        // Voice speed button
+        
         private val tvVoiceSpeed: AppCompatTextView
             get() = if (isMine) mineBinding!!.tvVoiceSpeed else othersBinding!!.tvVoiceSpeed
 
-        // ========== 核心 bind 方法 ==========
 
         private fun resetViewDefaults() {
             val timeLayoutParams = timeWrapper.layoutParams as? LinearLayout.LayoutParams
@@ -286,23 +274,24 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
                 timeWrapper.layoutParams = it
             }
 
+            
             val textView = contentFrame.findViewById<TextView>(R.id.textView)
-            textView?.setPaddingRelative(8.dp, 8.dp, 8.dp, 8.dp)
+            textView?.setPaddingRelative(12.dp, 10.dp, 12.dp, 10.dp)
 
-            reactionsView.setPaddingRelative(8.dp, 4.dp, 8.dp, 8.dp)
+            reactionsView.setPaddingRelative(12.dp, 4.dp, 12.dp, 8.dp)
 
-            // Reset voice speed button to hidden by default
+            
             tvVoiceSpeed.visibility = View.GONE
         }
 
-        /**
-         * Update voice speed button visibility and text
-         * Called from Fragment when audio playback state changes
-         *
-         * @param visible Whether the button should be visible
-         * @param speed The current playback speed (1.0f, 1.5f, or 2.0f)
-         * @param onSpeedClick Callback when button is clicked
-         */
+        
+
+
+
+
+
+
+
         fun updateVoiceSpeedButton(visible: Boolean, speed: Float, onSpeedClick: (() -> Unit)?) {
             tvVoiceSpeed.visibility = if (visible) View.VISIBLE else View.GONE
             if (visible) {
@@ -323,14 +312,14 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
             }
         }
 
-        /**
-         * Bind voice speed button based on current playback state
-         * Called during view binding to restore speed button visibility when recycled views are rebound
-         */
+        
+
+
+
         private fun bindVoiceSpeedButton(message: TextChatMessage) {
             val currentPlayingMessage = AudioMessageManager.currentPlayingMessage
-            // Show speed button only if this message is currently playing (not paused)
-            // When paused, hide the button to avoid state inconsistency
+            
+            
             val isThisMessagePlaying = currentPlayingMessage?.id == message.id && !AudioMessageManager.isPaused
 
             if (isThisMessagePlaying) {
@@ -339,23 +328,23 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
                     AudioMessageManager.cyclePlaybackSpeed()
                 }
             }
-            // If not playing or paused, the button is already hidden by resetViewDefaults
+            
         }
 
-        /**
-         * Get the container width from parent RecyclerView.
-         * This is used for precise image/video sizing in dual-pane mode.
-         * Note: We use parentView (stored from constructor) instead of itemView.parent
-         * because itemView might not be attached to RecyclerView yet during bind().
-         */
+        
+
+
+
+
+
         private val containerWidth: Int
             get() = parentView.width
 
-        /**
-         * The item this row currently shows. The translate-only partial bind swaps in a new instance
-         * without re-running [bindClickEvents], so the row listeners read this instead of the
-         * instance they captured.
-         */
+        
+
+
+
+
         private var boundMessage: ChatMessage? = null
 
         override fun bind(
@@ -365,7 +354,6 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
             contactorCache: MessageContactsCacheUtil,
             shouldSaveToPhotos: Boolean
         ) {
-            // 强制类型检查
             val cb = callbacks as? MessageCallbacks.MessageInteraction
                 ?: throw IllegalArgumentException("Message ViewHolder requires MessageInteraction callbacks")
 
@@ -374,46 +362,37 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
             boundMessage = message
             if (message !is TextChatMessage) return
 
-            // Check if this message is currently playing audio and show speed button
+            
             bindVoiceSpeedButton(message)
 
-            // ========== 公共逻辑（80%） ==========
 
-            // 点击事件
             bindClickEvents(message, cb.onItemClick, cb.onItemLongClick)
 
-            // 时间相关
             bindTimeViews(message)
 
-            // Quote 引用
             bindQuoteView(message, cb.onQuoteClicked, contactorCache)
 
-            // Forward 转发
             bindForwardView(message, contactorCache, shouldSaveToPhotos)
 
-            // Reaction、Translate、SpeechToText
             bindReactionView(message, cb.onReactionClick, cb.onReactionLongClick, contactorCache)
             bindTranslateView(message, cb.onTranslateRetry)
             bindSpeechToTextView(message)
+            (contentContainer as? ChatMessageContainerView)?.let {
+                maskConfidentialBubble(it, listOf(quoteZone, forwardInfoZone, reactionsView), message.isConfidential())
+            }
 
-            // Checkbox 选择
             bindCheckboxView(message, cb.onSelectPinnedMessage)
 
-            // ========== 差异逻辑（20%） ==========
 
             if (isMine) {
-                // Mine 特有：发送和已读状态
                 bindSendAndReadStatus(message.sendStatus, message.readStatus, message.readContactNumber)
             } else {
-                // Others 特有：头像和昵称
                 bindAvatarAndName(message, cb.onAvatarClicked, cb.onAvatarLongClicked, contactorCache)
 
-                // Others 特有：消息高亮
                 bindHighlightEffect(message, highlightItemIds)
             }
         }
 
-        // ========== 公共逻辑方法（80%） ==========
 
         private fun bindClickEvents(
             message: TextChatMessage,
@@ -431,7 +410,6 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
         }
 
         private fun bindTimeViews(message: TextChatMessage) {
-            // 时间样式
             if (isMine) {
                 setupMessageTimeStyle(
                     message = message,
@@ -448,10 +426,8 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
                 )
             }
 
-            // 新消息分隔线
             llNewMsgDivider.visibility = if (message.showNewMsgDivider) View.VISIBLE else View.GONE
 
-            // 日期分隔
             if (message.showDayTime) {
                 tvDayTime.visibility = View.VISIBLE
                 tvDayTime.text = TimeFormatter.getConversationDateHeaderString(
@@ -461,7 +437,6 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
                 tvDayTime.visibility = View.GONE
             }
 
-            // 时间戳
             if (message.showTime) {
                 if (isMine) {
                     textViewTime.visibility = View.VISIBLE
@@ -481,9 +456,6 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
                     clMessageTime.visibility = View.GONE
                 }
             }
-
-            // 机密消息图标
-            confidentialIcon.visibility = if (message.isConfidential()) View.VISIBLE else View.GONE
         }
 
         private fun bindQuoteView(
@@ -493,32 +465,19 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
         ) {
             if (message.quote != null) {
                 quoteZone.visibility = View.VISIBLE
-                // 如果引用的是自己的消息，显示 "你"；否则从缓存获取作者名称
                 quoteAuthor.text = if (message.quote?.author == globalServices.myId) {
                     itemView.context.getString(R.string.you)
                 } else {
-                    // 从缓存中获取被引用消息作者的名称
                     contactorCache.getContactor(message.quote!!.author)
                         ?.getDisplayNameForUI()
                         ?: message.quote!!.author.formatBase58Id()
                 }
-                // Quote.text bypasses the normal display path, so normalize it here.
+                
                 quoteText.text = message.quote?.text?.normalizeNewlines()
                 quoteZone.setOnClickListener { message.quote?.let { onQuoteClicked(it) } }
+                styleQuoteBlock(quoteZone, quoteBar, quoteAuthor, quoteText, contentContainer.bubblePalette())
 
-                // Cap the wrap_content text column so a long caption ellipsizes instead of pushing
-                // the trailing thumbnail past the bubble's max width. Reserve the thumbnail width
-                // when an attachment preview shows (mirrors iOS measureSize).
-                // Plumbed width first (dual-pane aware at bind time); the fallback walks the
-                // container chain (ContentSize.kt) instead of calling WindowMetrics, which is
-                // wrong in a pane and costly per bind.
-                val bubbleMaxWidth = (containerWidth.takeIf { it > 0 } ?: quoteText.chatContainerWidthPx()) - 70.dp
-                val hasAttachment = message.quote?.attachments?.isNotEmpty() == true
-                // chrome = stripe + margins (+48 for thumbnail and its margin when shown)
-                val textMaxWidth = (bubbleMaxWidth - if (hasAttachment) 75.dp else 27.dp).coerceAtLeast(40.dp)
-                quoteAuthor.maxWidth = textMaxWidth
-                quoteText.maxWidth = textMaxWidth
-
+                
                 bindQuoteThumbnail(quoteThumbnail, message.quote!!, forWhat)
             } else {
                 quoteZone.visibility = View.GONE
@@ -526,7 +485,7 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
             }
         }
 
-        /** Recycle entry point: clears the thumbnail ImageView (delegates to the top-level fn). */
+        
         fun clearQuoteThumbnail() {
             clearQuoteThumbnail(quoteThumbnail)
         }
@@ -534,49 +493,51 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
         private fun bindForwardView(message: TextChatMessage, contactorCache: MessageContactsCacheUtil, shouldSaveToPhotos: Boolean) {
             val forwardsSize = message.forwardContext?.forwards?.size ?: 0
 
-            // 重置 contentFrame 的 margin
             (contentFrame.layoutParams as? LinearLayout.LayoutParams)?.let {
                 it.topMargin = 0
                 contentFrame.layoutParams = it
             }
 
+            
+            bubble.capsWidth = contentBinder !== ImageContentBinder
+            bubble.growsWithWindow = showsOnlyText(contentBinder, message)
             when {
-                // 无转发：普通消息
                 forwardsSize == 0 -> {
                     forwardInfoZone.visibility = View.GONE
                     contentFrame.visibility = View.VISIBLE
                     contentBinder.bind(contentFrame, message, contactorCache, shouldSaveToPhotos, containerWidth)
                 }
 
-                // 单条转发：显示转发信息头 + 复用 contentFrame
+                
                 forwardsSize == 1 -> {
                     val forward = message.forwardContext?.forwards?.firstOrNull()
                     if (forward != null) {
-                        // 显示转发信息头（直接绑定时间和来源）
                         forwardInfoZone.visibility = View.VISIBLE
-                        tvForwardTime.text = util.TimeUtils.millis2String(forward.serverTimestampForUI, "yyyy/MM/dd HH:mm")
                         val author = contactorCache.getContactor(forward.author)
-                        tvForwardAuthor.text = author?.getDisplayNameForUI() ?: forward.author
+                        tvForwardFrom.text = itemView.context.getString(
+                            R.string.chat_forwarded_from,
+                            author?.getDisplayNameForUI() ?: forward.author,
+                        )
+                        tvForwardFrom.setTextColor(contentContainer.bubblePalette().meta)
 
-                        // 将 forward 转换为 TextChatMessage，复用 contentFrame（传递原消息的 mode）
+                        
                         val forwardMessage = generateMessageFromForward(forward, message.mode) as TextChatMessage
                         contentFrame.visibility = View.VISIBLE
 
-                        // 图片/视频内容布局没有 padding，需要动态添加 margin
+                        
                         val attachment = forward.attachments?.firstOrNull()
-                        if (attachment != null && (attachment.isImage() || attachment.isVideo())) {
+                        if (attachment != null && (attachment.isImage() || attachment.isPlayableVideo())) {
                             (contentFrame.layoutParams as? LinearLayout.LayoutParams)?.let {
                                 it.topMargin = 8.dp
                                 contentFrame.layoutParams = it
                             }
                         }
 
-                        // Forward message uses parent message's conversation setting
+                        
                         contentBinder.bind(contentFrame, forwardMessage, contactorCache, shouldSaveToPhotos, containerWidth)
                     }
                 }
 
-                // 合并转发：由 MultiForwardContentBinder 处理
                 else -> {
                     forwardInfoZone.visibility = View.GONE
                     contentFrame.visibility = View.VISIBLE
@@ -598,11 +559,17 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
             bindTranslateBlock(translateViews, message, onTranslateRetry)
         }
 
-        /** Update the translate block only — `ChatMessageAdapter.PAYLOAD_TRANSLATE`. */
+        
         fun bindTranslateOnly(message: ChatMessage, onTranslateRetry: (TextChatMessage) -> Unit) {
             if (message !is TextChatMessage) return
             boundMessage = message
             bindTranslateBlock(translateViews, message, onTranslateRetry)
+        }
+
+        
+        fun bindWidthOnly(message: ChatMessage, contactorCache: MessageContactsCacheUtil, shouldSaveToPhotos: Boolean) {
+            if (message !is TextChatMessage) return
+            contentBinder.rebindForWidth(contentFrame, contentOf(message), contactorCache, shouldSaveToPhotos, containerWidth)
         }
 
         private fun bindSpeechToTextView(message: TextChatMessage) {
@@ -625,10 +592,10 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
             }
         }
 
-        /**
-         * A programmatic `isChecked` on [DifftCheckBoxView] never fires the listener, so no
-         * detach / re-attach is needed around it; only a user toggle reaches the callback.
-         */
+        
+
+
+
         private fun bindSelectionCheckbox(
             message: TextChatMessage,
             onSelectPinnedMessage: ((messageId: String, selected: Boolean) -> Unit)?
@@ -655,13 +622,13 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
                 else View.GONE
         }
 
-        // ========== Payload partial refresh methods ==========
+        
 
-        /**
-         * Update selection UI only, without refreshing other content
-         *
-         * Used for Payload partial refresh, only updates checkbox state
-         */
+        
+
+
+
+
         fun bindSelectionOnly(
             message: ChatMessage,
             onSelectPinnedMessage: ((messageId: String, selected: Boolean) -> Unit)?
@@ -671,16 +638,16 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
             bindSelectionCheckbox(message, onSelectPinnedMessage)
         }
 
-        /**
-         * Update highlight effect only, without refreshing other content
-         *
-         * Used for Payload partial refresh, only updates background highlight
-         */
+        
+
+
+
+
         fun bindHighlightOnly(message: ChatMessage, highlightItemIds: ArrayList<Long>?) {
             if (message !is TextChatMessage) return
-            if (isMine) return  // Highlight effect only applies to others' messages
+            if (isMine) return  
 
-            // Clear any pending highlight runnable to prevent memory leak
+            
             clearHighlight()
 
             highlightItemIds?.let {
@@ -697,9 +664,9 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
             }
         }
 
-        /**
-         * Clear pending highlight runnable to prevent memory leak when ViewHolder is recycled
-         */
+        
+
+
         fun clearHighlight() {
             highlightRunnable?.let {
                 itemView.removeCallbacks(it)
@@ -707,7 +674,6 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
             highlightRunnable = null
         }
 
-        // ========== 差异逻辑方法（20%） ==========
 
         private fun bindAvatarAndName(
             message: TextChatMessage,
@@ -715,25 +681,38 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
             avatarLongClicked: (contactor: ContactorModel) -> Unit,
             contactorCache: MessageContactsCacheUtil
         ) {
-            if (message.showName) {
-                othersBinding?.clName?.visibility = View.VISIBLE
-                // 从缓存中获取联系人信息
-                val contactor = contactorCache.getContactor(message.authorId)
-                if (contactor != null) {
-                    othersBinding?.imageviewAvatar?.setAvatar(contactor, letterTextSizeDp = 16)
-                    othersBinding?.imageviewAvatar?.setOnClickListener { avatarClicked(contactor) }
-                    othersBinding?.imageviewAvatar?.setOnLongClickListener {
-                        avatarLongClicked(contactor)
-                        true
-                    }
-                    // 使用从缓存获取的联系人显示名称
-                    othersBinding?.textviewNickname?.text = contactor.getDisplayNameForUI()
-                } else {
-                    // 缓存miss时，使用 authorId 作为后备显示
-                    othersBinding?.textviewNickname?.text = message.authorId
+            val binding = othersBinding ?: return
+            
+            
+            val senderColumn = binding.contentContainer.avatarColumn
+            placeBubbleAfterAvatarColumn(binding.contentContainer, senderColumn)
+            if (!senderColumn) {
+                binding.imageviewAvatar.visibility = View.GONE
+                binding.clName.visibility = View.GONE
+                return
+            }
+            if (!message.showName) {
+                binding.imageviewAvatar.visibility = View.INVISIBLE
+                binding.clName.visibility = View.GONE
+                return
+            }
+            binding.imageviewAvatar.visibility = View.VISIBLE
+            binding.clName.visibility = View.VISIBLE
+            val contactor = contactorCache.getContactor(message.authorId)
+            if (contactor != null) {
+                binding.imageviewAvatar.setAvatar(contactor, letterTextSizeDp = 12)
+                binding.imageviewAvatar.setOnClickListener { avatarClicked(contactor) }
+                binding.imageviewAvatar.setOnLongClickListener {
+                    avatarLongClicked(contactor)
+                    true
                 }
+                binding.textviewNickname.text = contactor.getDisplayNameForUI()
             } else {
-                othersBinding?.clName?.visibility = View.GONE
+                
+                binding.imageviewAvatar.setAvatar(null, null, message.authorId.firstOrNull()?.toString(), message.authorId, letterTextSizeDp = 12)
+                binding.imageviewAvatar.setOnClickListener(null)
+                binding.imageviewAvatar.setOnLongClickListener(null)
+                binding.textviewNickname.text = message.authorId
             }
         }
 
@@ -741,7 +720,7 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
             message: TextChatMessage,
             highlightItemIds: ArrayList<Long>?
         ) {
-            // Clear any pending highlight runnable to prevent memory leak
+            
             clearHighlight()
 
             highlightItemIds?.let {
@@ -758,7 +737,7 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
             }
         }
 
-        // Numeric-only display (read-recipient count); no English text to translate.
+        
         @SuppressLint("SetTextI18n")
         private fun bindSendAndReadStatus(
             sendStatus: Int?,
@@ -771,9 +750,9 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
             ivSendStatus.visibility = View.GONE
             ivReadNumber.visibility = View.GONE
 
-            // Failed state renders OUTSIDE the bubble (status row below it); the in-bubble
-            // indicators only ever express sending / sent / read. Called unconditionally so every
-            // rebind resets the row.
+            
+            
+            
             bindSendFailStatusRow(mineBinding.llSendFailStatus, sendStatus) {
                 contentContainer.performClick()
             }
@@ -799,7 +778,7 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
                     }
                 }
 
-                // Rendered by the status row above.
+                
                 SendType.SentFailed.rawValue -> Unit
 
                 else -> {
@@ -810,9 +789,6 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
         }
     }
 
-    /**
-     * 通知消息 ViewHolder（保持不变）
-     */
     class Notify(
         private val parentView: ViewGroup,
         contentLayoutRes: Int,
@@ -837,7 +813,6 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
             contactorCache: MessageContactsCacheUtil,
             shouldSaveToPhotos: Boolean
         ) {
-            // Notify 使用 NotifyInteraction（目前为空，未来可扩展）
             val cb = callbacks as? MessageCallbacks.NotifyInteraction
                 ?: throw IllegalArgumentException("Notify ViewHolder requires NotifyInteraction callbacks")
 
@@ -856,29 +831,28 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
                 binding.tvDayTime.visibility = View.GONE
             }
 
-            // 使用 ContentBinder 绑定内容（Notify消息不需要saveToPhotos，使用默认值false）
+            
             contentBinder.bind(binding.contentFrame, message, contactorCache, shouldSaveToPhotos, containerWidth)
 
             if (message is EncryptionHeaderChatMessage) {
-                binding.root.minimumHeight = 48.dp // accessibility touch target
+                binding.root.minimumHeight = 48.dp 
                 binding.root.isClickable = true
                 binding.root.setOnClickListener { cb.onE2eeHeaderClick?.invoke() }
             } else {
-                // Defensive: RecyclerView pools ViewHolders per viewType, not across viewTypes — a
-                // VIEW_TYPE_E2EE_HEADER instance is never recycled into the NOTIFY/SCREENSHOT/
-                // CONFIDENTIAL_PLACEHOLDER pools or vice versa. This else branch exists because
-                // Notify.bind() is the single shared function body all 4 viewTypes' ViewHolders
-                // call — it keeps the other 3 viewTypes' rows non-clickable/listener-free on
-                // every bind, regardless of the if-branch above.
+                
+                
+                
+                
+                
+                
                 binding.root.setOnClickListener(null)
                 binding.root.isClickable = false
             }
         }
     }
 
-    // ============== 公共辅助方法（从旧代码复制） ==============
 
-    // Reaction count branch uses numeric-only display; no English text to translate.
+    
     @SuppressLint("SetTextI18n")
     fun initReactionView(
         root: View,
@@ -891,6 +865,7 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
         if (message.reactions != null && !message.reactions.isNullOrEmpty()) {
             reactionsView.visibility = View.VISIBLE
             reactionsView.removeAllViews()
+            val palette = reactionsView.bubblePalette()
 
             val emojis = message.reactions?.groupBy { it.emoji }
 
@@ -901,7 +876,6 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
                 val reactions = reaction.value.distinctBy { it.uid }
                 if (reactions.size == 1) {
                     val id = reactions[0].uid
-                    // 从缓存中获取联系人信息
                     val contact = contactorCache.getContactor(id)
                     var text: String = contact?.getDisplayNameForUI() ?: id.formatBase58Id()
                     if (text.length > 10) {
@@ -912,6 +886,7 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
                     reactionItem.findViewById<AppCompatTextView>(R.id.tv_count).text = reactions.size.toString()
                 }
                 reactionItem.isSelected = reactions.find { it.uid == myID } != null
+                styleReactionChip(reactionItem, palette)
 
                 reactionItem.setOnClickListener {
                     onReactionClick(
@@ -931,11 +906,26 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
         }
     }
 
-    /**
-     * Renders the translate block. Lives here rather than in [TranslateBlockBinder] only because
-     * [showContent] — the long-press copy + copy-notice behaviour shared with speech-to-text — is
-     * private to this class.
-     */
+    
+
+
+
+    private fun styleReactionChip(chip: View, palette: BubblePalette) {
+        val density = chip.resources.displayMetrics.density
+        chip.background = GradientDrawable().apply {
+            cornerRadius = REACTION_CHIP_RADIUS_DP * density
+            setColor(palette.blockFill)
+            if (chip.isSelected) setStroke(density.roundToInt().coerceAtLeast(1), palette.text)
+        }
+        chip.findViewById<TextView>(R.id.tv_emoji).setTextColor(palette.text)
+        chip.findViewById<TextView>(R.id.tv_count).setTextColor(palette.text)
+    }
+
+    
+
+
+
+
     internal fun bindTranslateBlock(
         views: TranslateBlockBinder.Views,
         message: TextChatMessage,
@@ -985,7 +975,7 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
         }
     }
 
-    /** Bind derived-content (inline translate / speech-to-text) with long-press copy + notice (PRD §4). */
+    
     private fun showContent(
         textView: AppCompatTextView,
         content: String,
@@ -995,15 +985,12 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
         textView.setOnLongClickListener {
             Util.copyToClipboard(textView.context, content)
             val conv = sourceMessage.forWhat
-            // PRD v2.0 §改动2: derived text (translate / STT) is real content; trace only if it
-            // belongs to someone else, judged by the ORIGINAL author (single-forward → inner author),
-            // consistent with the main copy paths.
+            
             val myId = globalServices.myId
             if (conv != null && sourceMessage.authorId.isNotEmpty() &&
                 NoticeAggregator.copyCarriesForeignContent(listOf(sourceMessage), myId)
             ) {
-                // PRD §5.1: derived-content copy (translate / STT) is NOT visible inside CF detail
-                // per spec → mode is always UNKNOWN. Pass explicitly to keep reviewer awareness.
+                
                 ApplicationDependencies.getActivityNoticeDispatcher()
                     .dispatchCopyNotice(
                         sourceConversation = conv,
@@ -1027,7 +1014,7 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
         val shouldShowShadow = shouldShowMessageTimeShadow(message)
 
         val whiteColor = ContextCompat.getColor(timeContainer.context, com.difft.android.base.R.color.t_white)
-        val thirdColor = ContextCompat.getColor(timeContainer.context, com.difft.android.base.R.color.t_third)
+        val thirdColor = timeContainer.bubblePalette().meta
 
         if (shouldShowShadow) {
             timeContainer.setBackgroundResource(R.drawable.chat_message_item_time_bg)
@@ -1048,10 +1035,7 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
             timeContainer.background = null
             timeTextView.setTextColor(thirdColor)
 
-            sendStatusImageView?.imageTintList = ContextCompat.getColorStateList(
-                timeContainer.context,
-                com.difft.android.base.R.color.t_third
-            )
+            sendStatusImageView?.imageTintList = ColorStateList.valueOf(thirdColor)
 
             readNumberTextView?.apply {
                 background = ResUtils.getDrawable(R.drawable.chat_read_number_bg)
@@ -1063,18 +1047,18 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
     }
 
     private fun shouldShowMessageTimeShadow(message: TextChatMessage): Boolean {
-        // Confidential messages: time needs background to stay readable over cover/blur
+        
         if (message.isConfidential()) return true
 
         if (!message.reactions.isNullOrEmpty()) return false
 
-        // Image/video messages (including single-forwarded image/video)
-        if (message.isAttachmentMessage() && message.attachment?.let { it.isImage() || it.isVideo() } == true) {
+        
+        if (message.isAttachmentMessage() && message.attachment?.let { it.isImage() || it.isPlayableVideo() } == true) {
             return true
         }
         if (message.forwardContext?.forwards?.size == 1) {
             val forward = message.forwardContext?.forwards?.firstOrNull()
-            if (forward?.attachments?.any { it.isImage() || it.isVideo() } == true) {
+            if (forward?.attachments?.any { it.isImage() || it.isPlayableVideo() } == true) {
                 return true
             }
         }
@@ -1083,35 +1067,30 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
     }
 }
 
-// ============================================================================
-// Quote thumbnail rendering (⑤) — TOP-LEVEL package functions.
-// Deliberately NOT instance methods of the Message ViewHolder: top-level placement means they
-// capture neither `this` nor any ViewHolder field. The Message class exposes only the thin
-// `quoteThumbnail` accessor + a `clearQuoteThumbnail()` recycle entry that delegates here.
-// ============================================================================
 
-/**
- * Monotonic per-bind recycle token source. A per-bind unique token (instead of `quote.id`, the
- * original timestamp) prevents two quotes of the SAME original — visible and recycled together —
- * from colliding on the same tag value and cross-applying each other's async thumbnail.
- */
+
+
+
+
+
+
 private val quoteThumbnailTokenSeq = AtomicLong()
 
-/**
- * Binds the first [Quote] attachment to [imageView] using a tiered source priority:
- *   1. voice (`flags==1` or [MediaUtil.isAudioType]) → mic icon (CENTER)
- *   2. image/video:
- *        a. inline thumbnail bytes (difft-android senders) → rounded Glide load (CENTER_CROP)
- *        b. else → async reverse-lookup of the LOCAL original message (iOS/Mac/TT senders carry no
- *           bytes); found on disk → rounded Glide load, else → hide the thumbnail (text-only).
- *   3. genuine file (pdf/doc/zip/etc.) → `ic_file` icon (CENTER, NEVER center-crop)
- *
- * Image-loading is gated behind [MediaUtil.isImageOrVideoType] so a real file never goes through
- * the center-crop path (which would render a stretched/oversized icon).
- *
- * @param forWhat the conversation scope, used to scope the reverse-lookup to this room. Derived
- *   from the ViewHolder's injected `forWhat` field (TextChatMessage has no roomId/roomType).
- */
+
+
+
+
+
+private val quoteThumbnailPaths = LruCache<String, String>(QUOTE_THUMBNAIL_PATHS)
+private const val QUOTE_THUMBNAIL_PATHS = 200
+
+
+
+
+
+
+
+
 internal fun bindQuoteThumbnail(imageView: ImageView, quote: Quote, forWhat: For?) {
     val qa = quote.attachments?.firstOrNull()
     if (qa == null) {
@@ -1120,81 +1099,98 @@ internal fun bindQuoteThumbnail(imageView: ImageView, quote: Quote, forWhat: For
     }
 
     val isVoice = qa.flags == 1 || MediaUtil.isAudioType(qa.contentType)
-    // Per-bind unique recycle token (not quote.id) — see [quoteThumbnailTokenSeq].
+    
     val token = quoteThumbnailTokenSeq.incrementAndGet()
     imageView.setTag(R.id.quote_thumbnail_job, token)
     when {
         isVoice -> {
             imageView.visibility = View.VISIBLE
-            QuoteThumbnailBinder.setTypeIcon(imageView, R.drawable.chat_ic_quote_mic)
+            QuoteThumbnailBinder.setTypeIcon(imageView, R.drawable.chat_ic_quote_mic, imageView.bubblePalette().icon)
         }
-        MediaUtil.isImageOrVideoType(qa.contentType) -> {
+        
+        MediaUtil.isImageType(qa.contentType) || isWhitelistedVideoType(qa.contentType) -> {
             val thumbBytes = qa.thumbnail?.thumbnail?.takeIf { it.isNotEmpty() }
             if (thumbBytes != null) {
-                // difft-android inline-bytes path.
+                
                 imageView.visibility = View.VISIBLE
-                QuoteThumbnailBinder.loadRoundedThumbnail(imageView, thumbBytes)
+                QuoteThumbnailBinder.loadRoundedThumbnail(imageView, thumbBytes, rounded = false)
             } else {
-                // iOS / Mac / TempTalk: no bytes on the wire → reverse-look-up the local original.
-                // Stay GONE until/unless the lookup finds a file (avoids a flash of misleading icon).
-                // clearQuoteThumbnail nulls the recycle tag, so re-set it after the clear.
-                clearQuoteThumbnail(imageView)
-                imageView.setTag(R.id.quote_thumbnail_job, token)
-                resolveOriginalThumbnailAsync(imageView, quote.id, forWhat?.id, forWhat?.typeValue ?: 0, token)
+                
+                
+                
+                val roomType = forWhat?.typeValue ?: 0
+                val known = forWhat?.id?.let { quoteThumbnailPaths.get(quoteThumbnailKey(it, roomType, quote.id)) }
+                if (known != null) {
+                    imageView.visibility = View.VISIBLE
+                    QuoteThumbnailBinder.loadRoundedThumbnail(imageView, EncryptedAttachmentAccess.imageGlideModel(known), rounded = false)
+                } else {
+                    clearQuoteThumbnail(imageView)
+                    imageView.setTag(R.id.quote_thumbnail_job, token)
+                }
+                resolveOriginalThumbnailAsync(imageView, quote.id, forWhat?.id, roomType, token, shown = known)
             }
         }
         else -> {
-            // Genuine file (pdf/doc/zip/etc.) → file icon, CENTER (never center-crop).
+            
             imageView.visibility = View.VISIBLE
-            QuoteThumbnailBinder.setTypeIcon(imageView, R.drawable.ic_file)
+            QuoteThumbnailBinder.setTypeIcon(imageView, fileTypeIcon(qa.fileName), imageView.bubblePalette().icon)
         }
     }
 }
 
-/**
- * Reverse-looks-up the local original message (by timestamp + room) on [Dispatchers.IO] and, if a
- * local image/video file is found, loads it as the quote thumbnail. Runs on the host Activity's
- * lifecycle scope (resolved via [getLifecycleOwner] at bind time — NOT the fragment-view scope), so
- * the launch is NOT auto-cancelled on item detach / recycle; staleness is instead guarded by
- * re-checking the recycle [token] (the `quote_thumbnail_job` tag) and [isHostActivityAlive] before
- * touching the view. No-ops (leaves text-only) when no original is found locally.
- */
+
+
+
+
+
+
+
+
+
 private fun resolveOriginalThumbnailAsync(
     imageView: ImageView,
     originalTimestamp: Long,
     roomId: String?,
     roomType: Int,
     token: Long,
+    shown: String?,
 ) {
     if (roomId.isNullOrEmpty()) return
-    // getLifecycleOwner() resolves via view-tree first, then the context chain (Activity) — needed
-    // because findViewTreeLifecycleOwner() alone is null during onBindViewHolder (item not yet
-    // attached), which would otherwise make the image reverse-lookup never run.
+    
+    
+    
     val owner = imageView.getLifecycleOwner() ?: return
     owner.lifecycleScope.launch {
         val path = withContext(Dispatchers.IO) {
             findOriginalAttachmentPath(originalTimestamp, roomId, roomType)
-        } ?: return@launch
-        // Back on Main: only apply if this view still represents the same quote and host is alive.
-        if (imageView.getTag(R.id.quote_thumbnail_job) == token && imageView.isHostActivityAlive()) {
+        }
+        val key = quoteThumbnailKey(roomId, roomType, originalTimestamp)
+        if (path == null) quoteThumbnailPaths.remove(key) else quoteThumbnailPaths.put(key, path)
+        
+        if (path == shown || imageView.getTag(R.id.quote_thumbnail_job) != token || !imageView.isHostActivityAlive()) return@launch
+        if (path == null) {
+            clearQuoteThumbnail(imageView)
+        } else {
             imageView.visibility = View.VISIBLE
-            // Encrypted-at-rest images resolve to a decrypting content uri; legacy plaintext stays a File.
-            QuoteThumbnailBinder.loadRoundedThumbnail(imageView, EncryptedAttachmentAccess.imageGlideModel(path))
+            
+            QuoteThumbnailBinder.loadRoundedThumbnail(imageView, EncryptedAttachmentAccess.imageGlideModel(path), rounded = false)
         }
     }
 }
 
-/**
- * Finds the on-disk path of the original quoted message's image/video attachment, forward-aware:
- * a single-forward original's media is addressed as a forward copy, anything else as the message's
- * own attachment (see AttachmentPathResolver).
- * Returns the path only if the file exists AND the attachment is image/video; else null (text-only).
- *
- * Blocking IO — every caller must already be on [Dispatchers.IO], which is what licenses the
- * MIGRATING read below. A quote thumbnail is not a download gate: a miss renders text-only and
- * enqueues nothing, so unlike a bubble's bind this path cannot rely on the download job to bring a
- * pre-per-copy file across, and would show blank until the background migration reached the row.
- */
+private fun quoteThumbnailKey(roomId: String, roomType: Int, timestamp: Long) = "$roomType:$roomId:$timestamp"
+
+
+
+
+
+
+
+
+
+
+
+
 internal fun findOriginalAttachmentPath(timestamp: Long, roomId: String, roomType: Int): String? = runCatching {
     val original = wcdb.message.getFirstObject(
         DBMessageModel.roomId.eq(roomId)
@@ -1202,20 +1198,20 @@ internal fun findOriginalAttachmentPath(timestamp: Long, roomId: String, roomTyp
             .and(DBMessageModel.timeStamp.eq(timestamp))
     ) ?: return null
 
-    // Single-forward original → the forwarded attachment, addressed as its own copy.
+    
     val forward = original.forwardContext()?.forwards?.takeIf { it.size == 1 }?.firstOrNull()
     if (forward != null) {
         val att = forward.attachments?.firstOrNull() ?: return null
-        if (!MediaUtil.isImageOrVideoType(att.contentType)) return null
+        if (!MediaUtil.isImageType(att.contentType) && !att.isPlayableVideo()) return null
         att.fileName ?: return null
         val path = AttachmentPathResolver.materializedFileFor(att, original.id)
-        // isReadable (not File.exists): encrypted-at-rest media has only the .encrypt on disk; the
-        // loader resolves it to a decrypting content uri via imageGlideModel.
+        
+        
         return path.takeIf { EncryptedAttachmentAccess.isReadable(it) }
     }
 
-    // Normal attachment original → its own per-copy directory, same rule as the forward branch.
-    val att = original.attachment()?.takeIf { MediaUtil.isImageOrVideoType(it.contentType) } ?: return null
+    
+    val att = original.attachment()?.takeIf { MediaUtil.isImageType(it.contentType) || it.isPlayableVideo() } ?: return null
     att.fileName ?: return null
     val path = AttachmentPathResolver.materializedFileFor(att, original.id)
     path.takeIf { EncryptedAttachmentAccess.isReadable(it) }
@@ -1223,10 +1219,23 @@ internal fun findOriginalAttachmentPath(timestamp: Long, roomId: String, roomTyp
     L.w { "[QuoteThumb] findOriginalAttachmentPath failed ts=$timestamp: ${it.stackTraceToString()}" }
 }.getOrNull()
 
-/** Clears the thumbnail [imageView]: invalidates any in-flight lookup, clears Glide and hides it. */
+
 internal fun clearQuoteThumbnail(imageView: ImageView) {
     imageView.setTag(R.id.quote_thumbnail_job, null)
     if (imageView.isHostActivityAlive()) Glide.with(imageView).clear(imageView)
     imageView.setImageDrawable(null)
     imageView.visibility = View.GONE
+}
+
+
+private fun showsOnlyText(binder: ContentBinder, message: TextChatMessage): Boolean = when (binder) {
+    TextContentBinder -> true
+    AttachContentBinder -> contentOf(message).attachment?.isLongText() == true
+    else -> false
+}
+
+
+private fun contentOf(message: TextChatMessage): TextChatMessage {
+    val forwards = message.forwardContext?.forwards
+    return if (forwards?.size == 1) generateMessageFromForward(forwards.first(), message.mode) as TextChatMessage else message
 }

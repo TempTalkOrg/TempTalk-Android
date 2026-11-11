@@ -14,6 +14,8 @@ import com.difft.android.chat.common.MAX_TEXT_FILE_SIZE
 import com.difft.android.chat.databinding.ChatFragmentInputBinding
 import com.difft.android.chat.messages.TestScopeApplication
 import com.difft.android.chat.widget.UnifiedInputTouchHandler
+import com.difft.android.chat.setting.viewmodel.ChatSettingViewModel
+import com.difft.android.network.responses.ConversationSetResponseBody
 import com.difft.android.chat.widget.VoiceRecorderView
 import difft.android.messageserialization.For
 import difft.android.messageserialization.model.Mention
@@ -38,7 +40,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import java.util.concurrent.TimeUnit
 
-/** Exercises the real composer layout and initView listeners, with persistence isolated. */
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [33])
 class ChatInputMentionDeletionTest {
@@ -278,7 +280,8 @@ class ChatInputMentionDeletionTest {
 
         verify { host.setVoiceRecordOverlayVisible(true) }
         verify { recorder.beginHold(binding.clInputContent) }
-        assertEquals(0.4f, binding.clLeftActions.alpha)
+        assertEquals(View.INVISIBLE, binding.clLeftButtons.visibility)
+        assertEquals(View.INVISIBLE, binding.clRightButtons.visibility)
 
         touch(MotionEvent.ACTION_MOVE, y = -300f)
         touch(MotionEvent.ACTION_UP, y = -300f)
@@ -288,14 +291,44 @@ class ChatInputMentionDeletionTest {
     }
 
     @Test
-    fun `a rejected hold hides the overlay and leaves the actions undimmed`() {
+    fun `a rejected hold hides the overlay and leaves the buttons shown`() {
         val (host, _) = installRecorderHost(beginResult = false)
 
         touch(MotionEvent.ACTION_DOWN)
         idle(UnifiedInputTouchHandler.LONG_PRESS_TIMEOUT_MS)
 
         verify { host.setVoiceRecordOverlayVisible(false) }
-        assertEquals(1f, binding.clLeftActions.alpha)
+        assertEquals(View.VISIBLE, binding.clLeftButtons.visibility)
+    }
+
+    @Test
+    fun `a hold with a draft records and keeps the draft`() {
+        binding.edittextInput.setText("draft")
+        val (_, recorder) = installRecorderHost(beginResult = true)
+
+        touch(MotionEvent.ACTION_DOWN)
+        idle(UnifiedInputTouchHandler.LONG_PRESS_TIMEOUT_MS)
+        touch(MotionEvent.ACTION_UP)
+
+        verify { recorder.beginHold(binding.clInputContent) }
+        verify { recorder.endHold() }
+        assertEquals("draft", binding.edittextInput.text.toString())
+    }
+
+    @Test
+    fun `confidential mode shows its own hint without the microphone`() {
+        every { fragment.view } returns binding.root
+        val settings = mockk<ChatSettingViewModel>(relaxed = true)
+        every { settings.currentConversationSet } returns ConversationSetResponseBody(conversation = "test-group", confidentialMode = 1)
+        setField("chatSettingViewModel\$delegate", lazy { settings })
+        setField("shouldHideConfidential", false)
+
+        invokePrivate("refreshInputHint")
+
+        assertEquals(
+            binding.root.context.getString(R.string.chat_message_input_hint_confidential),
+            binding.edittextInput.hint.toString(),
+        )
     }
 
     @Test

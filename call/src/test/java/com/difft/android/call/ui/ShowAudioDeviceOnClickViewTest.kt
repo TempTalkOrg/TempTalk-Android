@@ -25,12 +25,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.util.Locale
 
-/**
- * Rendering behaviour of the audio-device picker (design inventory rows #77–#81).
- *
- * Behaviour assertions (node text / tag / existence), not pixel baselines: this project adds no
- * screenshot baselines, so the status slot — the user-visible half of this fix — is pinned here.
- */
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [33])
@@ -66,7 +61,6 @@ class ShowAudioDeviceOnClickViewTest {
     private fun statusText(index: Int) =
         composeTestRule.onNodeWithTag("call_audio_picker_item_status_$index", useUnmergedTree = true)
 
-    // ── #77 ─────────────────────────────────────────────────────────────────────
     @Test
     fun `each row renders its own status label`() {
         setPicker(
@@ -82,13 +76,12 @@ class ShowAudioDeviceOnClickViewTest {
         statusText(2).assertTextEquals("Failed")
     }
 
-    // ── #78 ─────────────────────────────────────────────────────────────────────
     @Test
     fun `a long bluetooth name cannot swallow the status`() {
         setPicker(
             listOf(
                 rowOf(
-                    btDevice("Nate's AirPods Pro 2nd generation headset"),
+                    btDevice("Alice's AirPods Pro 2nd generation headset"),
                     AudioDeviceKind.BLUETOOTH_HEADSET,
                     AudioRouteRowStatus.ACTIVE,
                 ),
@@ -99,7 +92,6 @@ class ShowAudioDeviceOnClickViewTest {
         statusText(0).assertTextEquals("✓")
     }
 
-    // ── #79 ─────────────────────────────────────────────────────────────────────
     @Test
     fun `clicking a row reports that row's device`() {
         val bt = btDevice()
@@ -118,7 +110,6 @@ class ShowAudioDeviceOnClickViewTest {
         assertSame(spk, clicked)
     }
 
-    // ── #80 ─────────────────────────────────────────────────────────────────────
     @Test
     fun `a collapsed picker composes nothing`() {
         setPicker(
@@ -132,7 +123,6 @@ class ShowAudioDeviceOnClickViewTest {
         composeTestRule.onNodeWithTag("call_audio_picker", useUnmergedTree = true).assertDoesNotExist()
     }
 
-    // ── #81 ─────────────────────────────────────────────────────────────────────
     @Test
     fun `a disappearing device does not leave its state on the surviving row`() {
         val bt = btDevice()
@@ -157,8 +147,8 @@ class ShowAudioDeviceOnClickViewTest {
         }
 
         statusText(0).assertTextEquals("Connecting…")
-        // Dropping the Bluetooth row shifts the speaker up to index 0; without a per-kind key the
-        // old row's remembered content would follow the position instead of the device.
+        
+        
         composeTestRule.onNodeWithTag("call_audio_picker_item_0", useUnmergedTree = true).performClick()
         composeTestRule.waitForIdle()
 

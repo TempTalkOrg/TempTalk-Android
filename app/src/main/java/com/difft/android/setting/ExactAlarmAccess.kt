@@ -13,14 +13,14 @@ import com.difft.android.base.log.lumberjack.L
 
 enum class ExactAlarmState { NotApplicable, Granted, NotGranted }
 
-/**
- * Exact-alarm access for the background-connection settings row. Whether the row applies is read
- * from this build's merged manifest, so a channel that strips SCHEDULE_EXACT_ALARM (Google Play)
- * hides it without any channel-specific code.
- */
+
+
+
+
+
 object ExactAlarmAccess {
 
-    /** NotApplicable below API 31 or when this build does not declare SCHEDULE_EXACT_ALARM. */
+    
     fun state(context: Context): ExactAlarmState {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || !isDeclared(context)) {
             return ExactAlarmState.NotApplicable

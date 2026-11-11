@@ -64,7 +64,7 @@
     <string name="call_toolbar_bottom_invite_text">邀请</string>
     <string name="call_toolbar_bottom_switch_text">翻转</string>
     <string name="call_toolbar_bottom_critical_alert_text">紧急联络</string>
-    <!-- Action bar labels (two-row layout + More sheet quick actions) -->
+    
     <string name="call_action_mute">静音</string>
     <string name="call_action_unmute">取消静音</string>
     <string name="call_mute_participant_menu_item">将 %1$s 静音</string>

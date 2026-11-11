@@ -1,14 +1,21 @@
 package com.difft.android.chat.ui
 
 import android.content.Context
+import android.graphics.drawable.Drawable
 import android.util.AttributeSet
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.annotation.VisibleForTesting
+import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
 import com.difft.android.chat.R
+import com.difft.android.chat.ui.theme.AnchoredGradientBubbleDrawable
+import com.difft.android.chat.ui.theme.ChatBubbleGradient
+import com.difft.android.chat.ui.theme.ChatTheme
 import com.difft.android.chat.widget.chatContainerWidthPx
 
 class ChatMessageContainerView @JvmOverloads constructor(
@@ -17,40 +24,118 @@ class ChatMessageContainerView @JvmOverloads constructor(
     defStyleAttr: Int = 0
 ) : LinearLayout(context, attrs, defStyleAttr) {
 
-    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
-        // Reset paddings to default before measuring to ensure clean state for RecyclerView reuse
+    
+    var sent = false
+
+    
+    var chatTheme = ChatTheme.CLASSIC
+        private set
+
+    private var classicBackground: Drawable? = null
+    private var themedBackground: Drawable? = null
+    private var themedBackgroundKey: Any? = null
+
+    
+
+
+
+
+    fun applyChatTheme(theme: ChatTheme, gradient: ChatBubbleGradient?) {
+        if (classicBackground == null) classicBackground = background
+        chatTheme = theme
+        if (theme == ChatTheme.CLASSIC) {
+            background = classicBackground
+            return
+        }
+        val key = gradient ?: theme
+        if (themedBackground == null || themedBackgroundKey !== key) {
+            themedBackground = if (gradient != null) {
+                AnchoredGradientBubbleDrawable(gradient, this, sent)
+            } else {
+                bubbleFillDrawable(context, sent, theme)
+            }
+            themedBackgroundKey = key
+        }
+        background = themedBackground
+    }
+
+    
+
+
+
+    var avatarColumn = false
+
+    
+
+
+
+    var growsWithWindow = false
+        set(value) {
+            if (field == value) return
+            field = value
+            requestLayout()
+        }
+
+    
+    var capsWidth = true
+        set(value) {
+            if (field == value) return
+            field = value
+            requestLayout()
+        }
+
+    
+
+
+
+
+    var masked = false
+
+    override fun onInterceptTouchEvent(ev: MotionEvent): Boolean = masked || super.onInterceptTouchEvent(ev)
+
+    override fun onMeasure(rawWidthMeasureSpec: Int, heightMeasureSpec: Int) {
+        val widthMeasureSpec = cappedWidthSpec(rawWidthMeasureSpec)
+        fitCardToBubble(MeasureSpec.getSize(widthMeasureSpec))
+        fitQuoteToBubble(MeasureSpec.getSize(widthMeasureSpec))
+        
         resetAllPaddingsToDefault()
 
-        // First measure to get initial sizes
+        
         super.onMeasure(widthMeasureSpec, heightMeasureSpec)
 
-        // Time wrapper holds icon + cl_message_time; used for margin adjustments.
-        // Guarded (not early-return) so the quote trailing-align below always runs.
+        
+        
         val timeWrapper = findViewById<View>(R.id.ll_time_wrapper)
         if (timeWrapper != null && timeWrapper.visibility == VISIBLE) {
             val clMessageTime = findViewById<View>(R.id.cl_message_time)
-            val icon = findViewById<View>(R.id.iv_confidential_icon)
-            var timeViewWidth = if (clMessageTime != null && clMessageTime.isVisible) clMessageTime.measuredWidth else 0
-            // Confidential icon visible: fixed offset covers icon(22) + gap(3) + margin(8) + buffer(7)
-            if (icon != null && icon.isVisible) {
-                timeViewWidth += 40.dp
+            val timeViewWidth = if (clMessageTime != null && clMessageTime.isVisible) clMessageTime.measuredWidth else 0
+            
+            val wrapperParams = timeWrapper.layoutParams as? MarginLayoutParams
+            if (timeViewWidth == 0 && wrapperParams != null && wrapperParams.bottomMargin != 0) {
+                wrapperParams.bottomMargin = 0
+                super.onMeasure(widthMeasureSpec, heightMeasureSpec)
             }
 
             if (timeViewWidth > 0) {
-                // Calculate the maximum possible width for content
+                
                 val effectiveMaxWidth = calculateEffectiveMaxWidth()
 
-                // Determine if we need time view below based on the last visible content view
+                
                 var needsExtraBottomSpace = false
                 var needsRemeasure = false
+                var belowCard = false
 
-                // Check reactions view if visible
+                
                 val reactionsView = findViewById<View>(R.id.reactions_view)
                 if (reactionsView?.visibility == VISIBLE && reactionsView is FlowLayout) {
                     needsExtraBottomSpace = shouldPlaceTimeBelowReactions(reactionsView, timeViewWidth, effectiveMaxWidth)
                     needsRemeasure = adjustReactionsPadding(reactionsView, needsExtraBottomSpace, timeViewWidth)
+                } else if (findViewWithTag<View>(TIME_BELOW_TAG) != null) {
+                    
+                    needsExtraBottomSpace = true
+                    belowCard = true
                 } else {
-                    // Check text view if no reactions
+                    
                     val contentFrame = findViewById<View>(R.id.contentFrame)
                     if (contentFrame?.visibility == VISIBLE) {
                         val textView = contentFrame.findViewById<TextView>(R.id.textView)
@@ -61,41 +146,45 @@ class ChatMessageContainerView @JvmOverloads constructor(
                     }
                 }
 
-                // Adjust time wrapper margin based on needsExtraBottomSpace
+                
                 val timeParams = timeWrapper.layoutParams as? MarginLayoutParams
                 timeParams?.let { params ->
                     val newMarginTop = if (needsExtraBottomSpace) 0 else (-26).dp
-                    if (params.topMargin != newMarginTop) {
+                    
+                    
+                    val newMarginBottom = if (belowCard) CARD_TIME_BOTTOM_DP.dp else 0
+                    if (params.topMargin != newMarginTop || params.bottomMargin != newMarginBottom) {
                         params.topMargin = newMarginTop
-                        // Don't call setLayoutParams() — params is already the same reference,
-                        // and setLayoutParams() triggers requestLayout() which can cause
-                        // re-entrant layout issues on Android 16.
+                        params.bottomMargin = newMarginBottom
+                        
+                        
+                        
                         needsRemeasure = true
                     }
                 }
 
-                // Re-measure if we made any changes
+                
                 if (needsRemeasure) {
                     super.onMeasure(widthMeasureSpec, heightMeasureSpec)
                 }
             }
         }
 
-        // After all measure passes: stretch the quote row to the bubble's content width so its
-        // trailing weighted spacer right-aligns the thumbnail (matches desktop). The quote row keeps
-        // wrap_content layout params, so its intrinsic width still grew the bubble above; here we only
-        // widen it to the already-decided width (never beyond), so the bubble never grows from this.
+        
+        
+        
+        
         alignQuoteThumbnailToTrailing()
     }
 
-    /**
-     * Right-aligns the quote thumbnail to the bubble's content width. After the bubble width is
-     * settled, the quote row is wrap_content and left-packed; re-measuring it at the full content
-     * width lets its weighted spacer push the thumbnail to the trailing edge. Re-runs on every
-     * measure pass, so an async-loaded thumbnail (reverse-lookup) is handled without stale state:
-     * the load flips the thumbnail GONE->VISIBLE, which itself requests a layout, so the next pass
-     * runs the stretch. Text-only quotes (thumbnail GONE) have nothing to align, so skip the work.
-     */
+    
+
+
+
+
+
+
+
     private fun alignQuoteThumbnailToTrailing() {
         val quoteThumbnail = findViewById<View>(R.id.quoteThumbnail) ?: return
         if (quoteThumbnail.visibility != VISIBLE) return
@@ -111,23 +200,75 @@ class ChatMessageContainerView @JvmOverloads constructor(
         }
     }
 
+    
+    private var cardLayoutWidth = 0
+
+    
+
+
+
+    private fun fitCardToBubble(width: Int) {
+        val card = findViewWithTag<View>(TIME_BELOW_TAG) ?: return
+        val params = card.layoutParams ?: return
+        
+        if (cardLayoutWidth == 0 && params.width > 0) cardLayoutWidth = params.width
+        val cardWidth = if (cardLayoutWidth > 0) minOf(width, cardLayoutWidth) else width
+        
+        if (cardWidth > 0 && params.width != cardWidth) params.width = cardWidth
+    }
+
+    
+
+
+
+
+    private fun fitQuoteToBubble(bubbleWidth: Int) {
+        val zone = findViewById<View>(R.id.quoteZone) ?: return
+        if (zone.visibility != VISIBLE || bubbleWidth <= 0) return
+        val thumbnail = findViewById<View>(R.id.quoteThumbnail)
+        
+        
+        val chromeDp = if (thumbnail?.visibility == VISIBLE) QUOTE_CHROME_WITH_THUMBNAIL_DP else QUOTE_CHROME_DP
+        
+        val maxWidth = (minOf(bubbleWidth, maxBubblePx()) - chromeDp.dp).coerceAtLeast(QUOTE_TEXT_MIN_DP.dp)
+        findViewById<TextView>(R.id.quoteAuthor)?.let { if (it.maxWidth != maxWidth) it.maxWidth = maxWidth }
+        findViewById<TextView>(R.id.quoteText)?.let { if (it.maxWidth != maxWidth) it.maxWidth = maxWidth }
+    }
+
+    
+    private fun maxBubblePx(): Int =
+        if (growsWithWindow) BubbleWidth.maxBubblePx(bubbleColumnPx(), resources.displayMetrics.density) else BubbleWidth.MIN_DP.dp
+
+    private fun cappedWidthSpec(spec: Int): Int {
+        if (!capsWidth) return spec
+        val cap = maxBubblePx()
+        return when (MeasureSpec.getMode(spec)) {
+            MeasureSpec.UNSPECIFIED -> MeasureSpec.makeMeasureSpec(cap, MeasureSpec.AT_MOST)
+            else -> if (MeasureSpec.getSize(spec) > cap) MeasureSpec.makeMeasureSpec(cap, MeasureSpec.AT_MOST) else spec
+        }
+    }
+
     private fun shouldPlaceTimeBelowReactions(reactionsView: FlowLayout, timeViewWidth: Int, effectiveMaxWidth: Int): Boolean {
         val lastLineWidth = reactionsView.getLastLineWidth()
-
-        // For both single and multi-line reactions, check if time can fit on the last line
         val totalWidth = lastLineWidth + timeViewWidth
+        
+        
+        if (reactionsView.getLineCount() > 1) {
+            val rowsWidth = reactionsView.measuredWidth - reactionsView.paddingStart - reactionsView.paddingEnd
+            return totalWidth > minOf(rowsWidth, effectiveMaxWidth)
+        }
         return totalWidth > effectiveMaxWidth
     }
 
     private fun shouldPlaceTimeBelowText(textView: TextView, timeViewWidth: Int, effectiveMaxWidth: Int): Boolean {
         textView.layout?.let { layout ->
             if (layout.lineCount > 0) {
-                // Get the last line width (works for both single and multi-line)
+                
                 val lastLineIndex = layout.lineCount - 1
                 val lastLineWidth = layout.getLineRight(lastLineIndex) - layout.getLineLeft(lastLineIndex)
 
-                // Check if time can fit on the last line
-                // Include TextView's paddingStart since it takes up space
+                
+                
                 val totalWidth = textView.paddingStart + lastLineWidth + timeViewWidth
                 val result = totalWidth > effectiveMaxWidth
 
@@ -138,9 +279,9 @@ class ChatMessageContainerView @JvmOverloads constructor(
     }
 
     private fun adjustReactionsPadding(reactionsView: FlowLayout, needsExtraBottomSpace: Boolean, timeViewWidth: Int): Boolean {
-        // Only add padding for single-line reactions when time is inline
+        
         return if (!needsExtraBottomSpace && reactionsView.getLineCount() == 1) {
-            // Single line with inline time - add padding for time view
+            
             val neededPadding = timeViewWidth + 3.dp
             if (reactionsView.paddingEnd != neededPadding) {
                 reactionsView.setPaddingRelative(
@@ -152,8 +293,8 @@ class ChatMessageContainerView @JvmOverloads constructor(
                 true
             } else false
         } else {
-            // Multi-line or time below - use default padding
-            val defaultPadding = 8.dp
+            
+            val defaultPadding = REACTIONS_SIDE_PADDING_DP.dp
             if (reactionsView.paddingEnd != defaultPadding) {
                 reactionsView.setPaddingRelative(
                     reactionsView.paddingStart,
@@ -168,23 +309,23 @@ class ChatMessageContainerView @JvmOverloads constructor(
 
     private fun adjustTextPadding(textView: TextView, needsExtraBottomSpace: Boolean, timeViewWidth: Int): Boolean {
         return if (!needsExtraBottomSpace) {
-            // Time is inline - calculate dynamic padding based on actual line widths
+            
             textView.layout?.let { layout ->
                 if (layout.lineCount > 0) {
-                    // Get last line width
+                    
                     val lastLineIndex = layout.lineCount - 1
                     val lastLineWidth = layout.getLineRight(lastLineIndex) - layout.getLineLeft(lastLineIndex)
 
-                    // Find max line width
+                    
                     var maxLineWidth = 0f
                     for (i in 0 until layout.lineCount) {
                         val lineWidth = layout.getLineRight(i) - layout.getLineLeft(i)
                         maxLineWidth = maxOf(maxLineWidth, lineWidth)
                     }
 
-                    // Calculate needed padding using formula: lastLine + timeView - maxLine
+                    
                     val neededPadding = ((lastLineWidth + timeViewWidth) - maxLineWidth).toInt()
-                    val finalPadding = maxOf(12.dp, neededPadding) // Ensure minimum padding
+                    val finalPadding = maxOf(12.dp, neededPadding) 
 
                     if (textView.paddingEnd != finalPadding) {
                         textView.setPaddingRelative(
@@ -200,7 +341,7 @@ class ChatMessageContainerView @JvmOverloads constructor(
                 } else false
             } ?: false
         } else {
-            // Time is below - use default padding
+            
             val defaultPadding = 12.dp
             if (textView.paddingEnd != defaultPadding) {
                 textView.setPaddingRelative(
@@ -214,68 +355,78 @@ class ChatMessageContainerView @JvmOverloads constructor(
         }
     }
 
-    /**
-     * Calculate the maximum possible width for content.
-     * This is NOT the same as measuredWidth - we need to know "how wide CAN this be"
-     * not "how wide IS it currently". Short messages have small measuredWidth but
-     * could still fit the time view on the same line.
-     */
-    private fun calculateEffectiveMaxWidth(): Int {
-        // Try to get the parent ChatMessageItemView for more accurate calculations
+    
+
+
+
+
+
+    @VisibleForTesting
+    internal fun calculateEffectiveMaxWidth(): Int {
+        
         val parentView = parent as? ViewGroup
 
         if (parentView != null) {
-            // Calculate space taken by other views in the same horizontal space
+            
             var horizontalSpaceUsed = 0
+            
+            
+            var goneMarginReplacesStart = false
 
-            // Check for checkbox (usually on the left side)
+            
             val checkbox = parentView.findViewById<View>(R.id.checkbox_select_for_unpin)
             if (checkbox != null) {
                 if (checkbox.isVisible) {
                     horizontalSpaceUsed += checkbox.measuredWidth
-                    // Add checkbox margin
+                    
                     val checkboxParams = checkbox.layoutParams as? MarginLayoutParams
                     checkboxParams?.let {
                         horizontalSpaceUsed += it.marginStart + it.marginEnd
                     }
                 } else if (checkbox.isGone) {
-                    // When checkbox is GONE, account for layout_goneMarginStart="26dp"
-                    horizontalSpaceUsed += 26.dp
+                    
+                    
+                    
+                    val goneStart = (layoutParams as? ConstraintLayout.LayoutParams)?.goneStartMargin ?: 0
+                    goneMarginReplacesStart = !sent && goneStart > 0
+                    if (goneMarginReplacesStart) horizontalSpaceUsed += goneStart
                 }
             }
 
-            // Conversation viewport width from the message RecyclerView ancestor (ContentSize.kt):
-            // correct in the dual-pane detail pane, tracks a pane-divider drag on the next
-            // measure pass, and is allocation-free — this runs per measure, where
-            // WindowMetricsCalculator (reflection on API 26-29) is not affordable. Deliberately
-            // UNCAPPED: this asks "how much room does the bubble actually have", and a
-            // wrap_content text bubble can occupy the full container.
+            
+            
+            
+            
+            
+            
             val availableWidth = chatContainerWidthPx()
 
-            // Get our own margins
+            
             val ourParams = layoutParams as? MarginLayoutParams
             val ourMargins = ourParams?.let {
-                it.marginStart + it.marginEnd
+                (if (goneMarginReplacesStart) 0 else it.marginStart) + it.marginEnd
             } ?: 0
 
-            // Calculate effective max width
-            val effectiveWidth = availableWidth - horizontalSpaceUsed - ourMargins - paddingLeft - paddingRight
+            
+            val effectiveWidth = capped(availableWidth - horizontalSpaceUsed - ourMargins) - paddingLeft - paddingRight
 
-            // Ensure we have a reasonable minimum width
+            
             if (effectiveWidth > 100.dp) {
                 return effectiveWidth
             }
         }
 
-        // Fallback calculation if parent info is not available
+        
         val screenWidth = chatContainerWidthPx()
-        // Account for typical margins: 40dp on one side + 8-12dp on the other
+        
         val marginsDp = 60
         val marginsPixels = (marginsDp * resources.displayMetrics.density).toInt()
-        val maxBubbleWidth = screenWidth - marginsPixels
+        val maxBubbleWidth = capped(screenWidth - marginsPixels)
 
         return maxBubbleWidth - paddingLeft - paddingRight
     }
+
+    private fun capped(bubbleWidth: Int): Int = if (capsWidth) minOf(bubbleWidth, maxBubblePx()) else bubbleWidth
 
     private val Int.dp: Int
         get() = (this * resources.displayMetrics.density).toInt()
@@ -283,7 +434,7 @@ class ChatMessageContainerView @JvmOverloads constructor(
     private fun resetAllPaddingsToDefault(): Boolean {
         var paddingChanged = false
 
-        // Reset text view padding to default
+        
         val contentFrame = findViewById<View>(R.id.contentFrame)
         if (contentFrame?.visibility == VISIBLE) {
             val textView = contentFrame.findViewById<TextView>(R.id.textView)
@@ -301,10 +452,10 @@ class ChatMessageContainerView @JvmOverloads constructor(
             }
         }
 
-        // Reset reactions view padding to default
+        
         val reactionsView = findViewById<View>(R.id.reactions_view)
         if (reactionsView?.visibility == VISIBLE && reactionsView is FlowLayout) {
-            val defaultPadding = 8.dp
+            val defaultPadding = REACTIONS_SIDE_PADDING_DP.dp
             if (reactionsView.paddingEnd != defaultPadding) {
                 reactionsView.setPaddingRelative(
                     reactionsView.paddingStart,
@@ -317,5 +468,21 @@ class ChatMessageContainerView @JvmOverloads constructor(
         }
 
         return paddingChanged
+    }
+
+    internal companion object {
+        private const val QUOTE_CHROME_DP = 47
+        private const val QUOTE_CHROME_WITH_THUMBNAIL_DP = 97
+        private const val QUOTE_TEXT_MIN_DP = 40
+
+        
+        const val AVATAR_COLUMN_EXTRA_DP = 20
+
+        
+        private const val TIME_BELOW_TAG = "time_below"
+        private const val CARD_TIME_BOTTOM_DP = 3
+
+        
+        private const val REACTIONS_SIDE_PADDING_DP = 12
     }
 }

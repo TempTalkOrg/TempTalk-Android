@@ -8,7 +8,7 @@ import java.io.OutputStream
 
 object PictureContentResolver {
 
-    /** ContentResolver openInputStream */
+    
     @JvmStatic
     fun openInputStream(context: Context, uri: Uri): InputStream? {
         try {
@@ -19,7 +19,7 @@ object PictureContentResolver {
         return null
     }
 
-    /** ContentResolver OutputStream */
+    
     @JvmStatic
     fun openOutputStream(context: Context, uri: Uri): OutputStream? {
         try {

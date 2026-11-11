@@ -14,7 +14,7 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 internal object CallSessionModule {
 
-    /** `main` is `Main.immediate`: the exact dispatcher `viewModelScope` gave every session collaborator. */
+    
     @Provides
     @Singleton
     fun provideDispatchers(): CallSessionDispatchers =

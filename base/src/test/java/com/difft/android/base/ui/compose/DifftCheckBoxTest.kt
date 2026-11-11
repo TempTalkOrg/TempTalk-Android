@@ -30,11 +30,11 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/**
- * [DifftCheckBox] contract (issues #1203, #1237): the non-interactive form is exactly the library's
- * 20dp box, the interactive form exposes checkbox semantics with a 48dp touch target and toggles on
- * click, and the labelled row toggles as a whole while keeping the help icon's clicks to itself.
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34])
@@ -140,7 +140,7 @@ class DifftCheckBoxTest {
         }
         val node = composeTestRule.onNodeWithTag(TAG)
 
-        // The help icon is the trailing element of the row, so the right edge is inside it.
+        
         node.performTouchInput { click(Offset(width - 1f, height / 2f)) }
 
         assertEquals(1, helpClicks)

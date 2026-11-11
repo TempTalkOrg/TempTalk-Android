@@ -5,9 +5,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <!-- List content: the tab pager plus the floating home tab capsule over its bottom edge.
-         The same list_content / home_tab_bar ids as the two-pane layout keep IndexActivity's
-         width-freeze and coverage logic layout-agnostic. -->
+    
     <FrameLayout
         android:id="@+id/list_content"
         android:layout_width="0dp"
@@ -17,19 +15,14 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent">
 
-        <!-- Keep distinct from :chat's @id/viewpager — ids merge by name, and ContactsFragment
-             nests its own pager here, so a shared id collides in the window view-state map.
-             Extends to the window bottom: the pages scroll underneath the capsule and pad
-             themselves by DualPaneHost.homeTabBarObstructionPx. -->
+        
         <androidx.viewpager2.widget.ViewPager2
             android:id="@+id/index_viewpager"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:nestedScrollingEnabled="true" />
 
-        <!-- Floating home tab capsule + search circle (HomeTabCapsule). Bottom padding = the
-             28dp gap iOS keeps, raised above a 3-button navigation bar by IndexActivity;
-             clipToPadding off so the shadow draws into that gap. -->
+        
         <FrameLayout
             android:id="@+id/home_tab_bar"
             android:layout_width="match_parent"
@@ -47,10 +40,7 @@
         </FrameLayout>
     </FrameLayout>
 
-    <!-- Full-window list-pane layer (search, folded groups) over the list and the tab capsule;
-         the detail layer below stays on top of it. ListPaneLayer shows it while the layer is up;
-         the same id as the two-pane layout lets a fold/unfold recreation restore the layer host
-         into either tree. Clickable so touches never reach the covered list. -->
+    
     <androidx.fragment.app.FragmentContainerView
         android:id="@+id/list_layer"
         android:layout_width="0dp"
@@ -65,11 +55,7 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
-    <!-- Full-window detail layer over the list and the tab bar (declared last, drawn on top).
-         PaneNavigator shows it while the current tab's detail stack is non-empty. The same
-         fragment_container_detail id as the two-pane layout lets a fold/unfold recreation
-         restore the per-tab stacks into either tree. Clickable so touches never reach the
-         covered list; not itself an accessibility node (its pages are). -->
+    
     <FrameLayout
         android:id="@+id/detail_pane"
         android:layout_width="0dp"

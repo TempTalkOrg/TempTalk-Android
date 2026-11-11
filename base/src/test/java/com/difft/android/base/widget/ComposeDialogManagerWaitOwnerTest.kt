@@ -13,12 +13,12 @@ import kotlin.test.assertFalse
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
-/**
- * The wait-dialog slot is global, so [ComposeDialogManager.dismissWait] with an owner has to key
- * off who showed the dialog: a screen must release its own dialog even once it is finishing, and
- * must never close one another screen showed afterwards. Within one screen the claims share that
- * dialog, reference counted, so it closes only once the last of them is released.
- */
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class ComposeDialogManagerWaitOwnerTest {
@@ -63,12 +63,12 @@ class ComposeDialogManagerWaitOwnerTest {
         otherController.destroy()
     }
 
-    /**
-     * The boundary of the "a wait dialog guards its own screen" invariant (issue #1208): the slot
-     * is global, so a second screen's `showWait` evicts the first screen's dialog while its request
-     * is still in flight. Pinned here because that is the one way a screen can lose its modal
-     * without its own code releasing it, and it is why `showWait` logs the eviction.
-     */
+    
+
+
+
+
+
     @Test
     fun `a second screen showing a wait dialog evicts the first screen's`() {
         val firstController = Robolectric.buildActivity(ComponentActivity::class.java).setup()
@@ -86,7 +86,7 @@ class ComposeDialogManagerWaitOwnerTest {
         assertEquals(firstBaseline, firstRoot.childCount, "the first screen's dialog is evicted")
         assertEquals(secondBaseline + 1, secondRoot.childCount, "the second screen now owns the slot")
 
-        // And the first screen releasing afterwards must not take the second screen's dialog down.
+        
         ComposeDialogManager.dismissWait(first)
         assertEquals(secondBaseline + 1, secondRoot.childCount)
 
@@ -94,11 +94,11 @@ class ComposeDialogManagerWaitOwnerTest {
         secondController.destroy()
     }
 
-    /**
-     * Token granularity, which is finer than the owner: one screen runs several flows through the
-     * one global slot, so its claims share the window — reference counted, so the dialog stands
-     * until the last one is released and neither flow can pull it out from under the other.
-     */
+    
+
+
+
+
     @Test
     fun `same-screen claims share the dialog until the last release`() {
         val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup()
@@ -123,7 +123,7 @@ class ComposeDialogManagerWaitOwnerTest {
         controller.destroy()
     }
 
-    /** A claim whose dialog another screen evicted releases nothing. */
+    
     @Test
     fun `a claim evicted by another screen releases nothing`() {
         val firstController = Robolectric.buildActivity(ComponentActivity::class.java).setup()
@@ -144,7 +144,7 @@ class ComposeDialogManagerWaitOwnerTest {
         secondController.destroy()
     }
 
-    /** The blanket release closes the window and drops every claim on it. */
+    
     @Test
     fun `a blanket release drops every claim on the window`() {
         val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup()
@@ -163,12 +163,12 @@ class ComposeDialogManagerWaitOwnerTest {
         controller.destroy()
     }
 
-    /**
-     * A same-screen re-show joins the live window instead of rebuilding it, so the modal cannot
-     * blink between two flows on one screen. The first claim's message and flags therefore stay —
-     * the slot takes no view on who asked, and re-mounting for a later caller's text would flash
-     * the live modal off and on.
-     */
+    
+
+
+
+
+
     @Test
     fun `a same-screen re-show keeps the live window`() {
         val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup()
@@ -185,10 +185,10 @@ class ComposeDialogManagerWaitOwnerTest {
         controller.destroy()
     }
 
-    /**
-     * The owner's destruction clears the slot, so a screen that never released its non-cancelable
-     * modal cannot leave a closure over a dead Activity in a process-lifetime object.
-     */
+    
+
+
+
     @Test
     fun `a destroyed owner clears the slot`() {
         val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup()
@@ -202,7 +202,7 @@ class ComposeDialogManagerWaitOwnerTest {
         assertFalse(ComposeDialogManager.isWaitShowing(token), "the slot must not outlive its owner")
     }
 
-    /** And a screen destroyed after another one took the slot over must not close that dialog. */
+    
     @Test
     fun `a destroyed owner leaves the dialog another screen now owns alone`() {
         val firstController = Robolectric.buildActivity(ComponentActivity::class.java).setup()

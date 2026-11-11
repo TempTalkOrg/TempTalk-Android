@@ -6,11 +6,11 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
-/**
- * The statistics room ids are owned by one call session at a time: a session's start claims them
- * empty, and only the owner's cleanup clears them, so the late cleanup of an ended call never
- * clears the ids of the call that started after it.
- */
+
+
+
+
+
 class CallStatisticsLogManagerRoomOwnerTest {
 
     private val manager = CallStatisticsLogManager(OnGoingCallStateManager(), mockk(relaxed = true))

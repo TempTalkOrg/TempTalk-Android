@@ -7,7 +7,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlin.coroutines.CoroutineContext
 
-/** Real application contract for production dimensions and page-owned work in Hilt tests. */
+
 open class ScopeTestApplication : ScopeApplication() {
     override val coroutineContext: CoroutineContext = SupervisorJob() + Dispatchers.Main
     override fun onCreate() {

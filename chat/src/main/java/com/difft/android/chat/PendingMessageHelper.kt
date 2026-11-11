@@ -41,7 +41,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import javax.inject.Inject
 
-// All wcdb calls in this class run on Dispatchers.IO.
+
 @Suppress("BlockingWcdbInSuspend")
 class PendingMessageHelper @Inject constructor(
     @param:ChativeHttpClientModule.Chat
@@ -52,13 +52,12 @@ class PendingMessageHelper @Inject constructor(
     private val messagingGate: MessagingGate,
 ) {
 
-    /** What asked for the pull; only [FCM] pulls feed the push-health counters (#1328). */
+    
     enum class PullTrigger { FCM, OTHER }
 
     suspend fun obtainPendingMessageAndSave(): Boolean = withContext(Dispatchers.IO) {
         try {
-            // 添加超时控制，防止事务卡死
-            return@withContext withTimeout(10000L) { // 10秒超时
+            return@withContext withTimeout(10000L) {
                 processPendingMessages()
             }
         } catch (e: Exception) {
@@ -67,25 +66,22 @@ class PendingMessageHelper @Inject constructor(
         }
     }
 
-    /**
-     * 主动拉取和处理消息
-     * - 依赖 WebSocket 实时同步作为主要消息通道，FCM 拉取作为补充
-     * - 使用 AtomicBoolean 互斥锁防止并发执行
-     * - [PullTrigger.FCM] 触发的拉取结果计入 pull_ok / pull_fail；因防重入跳过的调用不计
-     * - While the migration message pause keeps messaging closed (#1382) the pull is deferred
-     *   instead: [runDeferredPull] runs it once when messaging opens.
-     */
+    
+
+
+
+
+
     fun schedulePendingMessageWork(trigger: PullTrigger = PullTrigger.OTHER, scope: CoroutineScope = appScope) {
         startPull(trigger, scope)
     }
 
-    /** @return false only when another pull holds the reentry lock and this request was skipped. */
+    
     private fun startPull(trigger: PullTrigger, scope: CoroutineScope): Boolean {
         if (!messagingGate.isOpen) {
             deferPull(trigger, scope)
             return true
         }
-        // 使用 compareAndSet 原子操作获取锁，避免并发执行
         if (!isProcessing.compareAndSet(false, true)) {
             L.i { "[Message][PendingMessageHelper] Already processing pending messages, skipping duplicate request" }
             return false
@@ -98,7 +94,7 @@ class PendingMessageHelper @Inject constructor(
                 L.i { "[Message][PendingMessageHelper] Starting direct processing" }
 
                 val success = obtainPendingMessageAndSave()
-                // obtainPendingMessageAndSave turns scope cancellation into `false`; that is not a pull failure.
+                
                 ensureActive()
                 counted = recordFcmPull(trigger, success)
 
@@ -114,58 +110,54 @@ class PendingMessageHelper @Inject constructor(
                 if (!counted) recordFcmPull(trigger, false)
                 L.e { "[Message][PendingMessageHelper] Direct processing failed: ${e.stackTraceToString()}" }
             } finally {
-                // 确保无论成功失败都释放锁
                 isProcessing.set(false)
-                // A pull deferred while this one held the lock (#1382) runs now that messaging is open.
+                
                 if (scope.isActive && messagingGate.isOpen && deferredPull.get() != null) runDeferredPull(scope)
             }
         }
         return true
     }
 
-    /** Runs the pull deferred while messaging was closed, once; called when messaging opens. */
+    
     fun runDeferredPull(scope: CoroutineScope = appScope) {
         while (true) {
             val trigger = deferredPull.getAndSet(null) ?: return
             L.i { "[MigrationPause] event=deferred_pull_run trigger=$trigger" }
             if (startPull(trigger, scope)) return
-            // A pull still holds the lock: put the request back for that pull's `finally`, unless it already released.
+            
             deferredPull.getAndUpdate { if (it == PullTrigger.FCM) it else trigger }
             if (isProcessing.get()) return
         }
     }
 
-    /** [scope] is null inside a running pull, which still holds the reentry lock and cannot start another. */
+    
     private fun deferPull(trigger: PullTrigger, scope: CoroutineScope?) {
-        // An FCM request wins so the run still feeds the push-health counters.
+        
         val previous = deferredPull.getAndUpdate { if (it == PullTrigger.FCM) it else trigger }
         if (previous == null) L.i { "[MigrationPause] event=pull_deferred trigger=$trigger" }
-        // Messaging may have opened after the check above and run the deferred pull before this one was recorded.
+        
         if (scope != null && messagingGate.isOpen) runDeferredPull(scope)
     }
 
     private fun recordFcmPull(trigger: PullTrigger, success: Boolean): Boolean {
         if (trigger != PullTrigger.FCM) return false
-        // Telemetry must never fail the pull.
+        
         runCatching { healthCounters.onPullResult(success) }
         return true
     }
 
     companion object {
-        /**
-         * 防止并发执行的标志位
-         */
         private val isProcessing = AtomicBoolean(false)
 
-        /** A pull requested while messaging was closed (#1382), run once when it opens. */
+        
         private val deferredPull = AtomicReference<PullTrigger?>(null)
     }
 
-    /**
-     * Pulls page by page. Each page holds its own receive ticket (#1382) from the GET through its
-     * processing and its server DELETE, so a page that started before a pause finishes and the
-     * next one is never fetched.
-     */
+    
+
+
+
+
     private suspend fun processPendingMessages(): Boolean {
         var more = true
         while (more) {
@@ -180,7 +172,7 @@ class PendingMessageHelper @Inject constructor(
         return true
     }
 
-    /** One GET page, processed and deleted under [admission]; @return `more`, or null when the GET failed. */
+    
     private suspend fun processPage(admission: MessagingTicket): Boolean? {
         val pendingMessageResponse = try {
             httpClient.httpService.getPendingMessage()
@@ -193,7 +185,7 @@ class PendingMessageHelper @Inject constructor(
 
         val messages = pendingMessageResponse.messages ?: emptyList()
 
-        // Sort messages by systemShowTimestamp to ensure chronological order
+        
         val sortedMessages = messages.sortedBy { it.systemShowTimestamp }
         val failedEnvelopes = mutableListOf<SignalServiceProtos.Envelope>()
         val refused = mutableSetOf<PendingMessage>()
@@ -202,7 +194,7 @@ class PendingMessageHelper @Inject constructor(
             val envelope = buildEnvelope(msg) ?: return@forEach
             when (val processRes = envelopToMessageProcessor.process(envelope, "PendingMessageHelper", admission)) {
                 is EnvelopeProcessResult.Success -> {
-                    // G-3: dedup if this ts is still sitting in the retry queue.
+                    
                     runCatching {
                         wcdb.failedMessage.deleteObjects(
                             DBFailedMessageModel.timestamp.eq(envelope.timestamp)
@@ -222,7 +214,7 @@ class PendingMessageHelper @Inject constructor(
                 is EnvelopeProcessResult.TransientFailure -> {
                     failedEnvelopes.add(envelope)
                 }
-                // Nothing was stored, so the message must stay on the server.
+                
                 EnvelopeProcessResult.Paused -> refused.add(msg)
             }
         }
@@ -230,18 +222,18 @@ class PendingMessageHelper @Inject constructor(
         if (failedEnvelopes.isNotEmpty()) {
             L.w { "[Message][PendingMessageHelper] ${failedEnvelopes.size} messages failed transient, saving for retry" }
             failedMessageProcessor.saveTransient(failedEnvelopes)
-            // Kick the retry tick so this batch doesn't have to wait for the
-            // next WebSocket message before being retried (FCM/pull path
-            // has no other trigger source).
+            
+            
+            
             failedMessageProcessor.triggerProcess()
         }
 
         WCDBUpdateService.updatingRooms()
-        // Delete all messages from server (successful, permanent-drop, and
-        // transient-enqueued ones — same eager-ACK rationale as
-        // IncomingEnvelopMessageProcessor. Transient retries are now owned
-        // by the local FailedMessageProcessor. Messages refused by the
-        // migration pause (#1382) stay on the server.
+        
+        
+        
+        
+        
         deletePendingMessages(messages.filterNot { it in refused })
         return more
     }
@@ -249,7 +241,6 @@ class PendingMessageHelper @Inject constructor(
     private suspend fun deletePendingMessages(messages: List<PendingMessage>) = coroutineScope {
         val batches = messages.chunked(10)
         batches.forEachIndexed { index, batch ->
-            // 批内并发执行，提高效率
             batch.map { msg ->
                 async(Dispatchers.IO) {
                     try {
@@ -267,13 +258,12 @@ class PendingMessageHelper @Inject constructor(
                         L.e { "[Message][PendingMessageHelper] remove pending message ${msg.timestamp} failed -> ${e.message}" }
                     }
                 }
-            }.awaitAll()  // 等待本批全部完成
+            }.awaitAll()
 
-            // 批间延迟
             if (index < batches.size - 1) {
-                delay(50)  // 批间小延迟
+                delay(50)
             } else {
-                // 最后一批：延迟更长时间，避免重复拉取
+                
                 delay(1500)
                 L.i { "[Message][PendingMessageHelper] Deleted all messages, waiting 1.5s for server sync" }
             }
@@ -302,8 +292,8 @@ class PendingMessageHelper @Inject constructor(
                         if (conversation.contains(":")) {
                             number = conversation.replace(globalServices.myId, "").replace(":", "")
                         } else {
-                            // Match C2's copyWithMsgExtraConversationId encoder (byte-identical
-                            // no-op for plain-ASCII ids) so both round-trip identically.
+                            
+                            
                             groupId = ByteString.copyFrom(conversation.transformGroupIdFromLocalToServer())
                         }
                     }
@@ -316,14 +306,14 @@ class PendingMessageHelper @Inject constructor(
             }
             return envelope
         } catch (e: Exception) {
-            // buildEnvelope can fail several distinct ways: `Base64.decode`
-            // throws IOException on malformed input; protobuf builder /
-            // null fields can throw NPE or IllegalArgumentException. Same
-            // bytes will fail the same way on retry — record a permanent
-            // drop. Distinguish IOException (the Base64 path) from other
-            // failures so Crashlytics aggregates them as separate issues
-            // and keeps the diagnostic signal intact. ACK still happens
-            // upstream (deletePendingMessages runs unconditionally).
+            
+            
+            
+            
+            
+            
+            
+            
             val reason = if (e is java.io.IOException) {
                 DropReason.BASE64_DECODE_FAILED
             } else {

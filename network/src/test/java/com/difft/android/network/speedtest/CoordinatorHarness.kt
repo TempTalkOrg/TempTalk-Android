@@ -11,15 +11,15 @@ import com.difft.android.network.proxy.ProxyConfigProvider
 import io.mockk.every
 import io.mockk.mockk
 
-/**
- * A [DomainSpeedTestCoordinator] over a mocked config, with the clock, the network state and the
- * probe launcher faked ([nowMs], [online], [probeLaunches]) so the throttles, the offline gate and
- * the "probe requested" decisions are deterministic (#1396).
- *
- * Uses a local in-memory UserManager rather than `FakeUserManager` from `:base` testFixtures
- * because the testFixtures Kotlin source set is not compiled for downstream consumers (see
- * base/build.gradle.kts workaround comment).
- */
+
+
+
+
+
+
+
+
+
 internal class CoordinatorHarness {
 
     private class InMemoryUserManager(private var data: UserData? = UserData()) : UserManager {
@@ -42,7 +42,7 @@ internal class CoordinatorHarness {
     val coordinator: DomainSpeedTestCoordinator
 
     init {
-        // Default: proxy disabled — exercises the normal speed-test path.
+        
         every { proxy.isEnabled } returns false
         every { globalConfigs.getProxyTunnelChatDomains() } returns emptyList()
         setPool(A, B, C)
@@ -82,7 +82,7 @@ internal class CoordinatorHarness {
         every { globalConfigs.getProxyTunnelChatDomains() } returns tunnelHosts.toList()
     }
 
-    /** Publishes a probe that started before anything was marked: the ranking as of "now". */
+    
     fun probe(vararg results: Pair<String, Boolean>) {
         coordinator.publishProbeResults(
             results.mapIndexed { i, (host, isUp) -> if (isUp) up(host, (i + 1) * 100L) else down(host) },

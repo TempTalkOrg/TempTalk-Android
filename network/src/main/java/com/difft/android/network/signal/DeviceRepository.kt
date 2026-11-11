@@ -34,22 +34,22 @@ import javax.inject.Singleton
 class DeviceRepository @Inject constructor(
     @param:ChativeHttpClientModule.SignalApi
     private val httpClient: ChativeHttpClient,
-    // Lazy breaks the Dagger cycle: the sink implementation itself injects this repository to
-    // confirm a rejection. Same shape as ProxyConfigProvider's Lazy<IConnectionRefresher>.
+    
+    
     private val authFailureSink: dagger.Lazy<AuthFailureSink>,
 ) {
     private val deviceApiService: DeviceApiService =
         httpClient.getService(DeviceApiService::class.java)
 
-    // Self-owned Gson for the device-list body. Coexists with JsonUtil/Jackson, which parses the
-    // SocketResponse error body — different bodies, do not unify.
+    
+    
     private val gson = Gson()
 
-    /**
-     * Shared HTTP skeleton for the device endpoints: wraps [IOException] as [PushNetworkException],
-     * treats 200/204 as success (handled by [onSuccess]), and routes every other code through
-     * [validateDeviceResponse] (which always throws). [logTag] carries per-call context.
-     */
+    
+
+
+
+
     private suspend fun <T> executeDeviceCall(
         logTag: String,
         apiCall: suspend () -> Response<ResponseBody>,
@@ -67,21 +67,21 @@ class DeviceRepository @Inject constructor(
             return onSuccess(response)
         }
         L.w { "$logTag: error code=$code" }
-        validateDeviceResponse(code, response, reportAuthFailure) // throws
+        validateDeviceResponse(code, response, reportAuthFailure) 
     }
 
-    /**
-     * Get a new device verification code for linking.
-     * Replaces: SignalServiceAccountManager.getNewDeviceVerificationCode()
-     */
+    
+
+
+
     suspend fun getNewDeviceVerificationCode(): String {
         return deviceApiService.getDeviceVerificationCode().verificationCode
     }
 
-    /**
-     * Link a new device by sending provisioning message.
-     * Replaces: SignalServiceAccountManager.addDevice()
-     */
+    
+
+
+
     suspend fun addDevice(
         deviceIdentifier: String,
         deviceKey: ECPublicKey,
@@ -103,18 +103,18 @@ class DeviceRepository @Inject constructor(
         deviceApiService.sendProvisioningMessage(deviceIdentifier, body)
     }
 
-    /**
-     * Auth probe against the devices endpoint. This is the tie-breaker `SessionAuthGuard.confirm()`
-     * uses to decide whether a reported 401/403 is a real kick-out: only an
-     * [AuthorizationFailedException] here means the credential is gone; a 2xx is a false alarm and
-     * any other failure is inconclusive.
-     *
-     * @throws AuthorizationFailedException on 401/403
-     * @throws AccountOfflineException on 404 with status 10105/10110
-     * @throws NotFoundException on other 404
-     * @throws PushNetworkException on network failure
-     * @param logSuccess false for a periodic caller that logs only failures.
-     */
+    
+
+
+
+
+
+
+
+
+
+
+
     suspend fun checkDeviceAuth(logSuccess: Boolean = true) {
         executeDeviceCall(
             logTag = "[DeviceRepository] checkDeviceAuth",
@@ -126,15 +126,15 @@ class DeviceRepository @Inject constructor(
         )
     }
 
-    /**
-     * [checkDeviceAuth] bound to one credential: the request carries exactly [basicAuth], so the
-     * answer is about that login even if the stored credential changes meanwhile (#1382 A09).
-     *
-     * @param reportAuthFailure false for the migration pause's own probe, whose 403 must not reach
-     *   [AuthFailureSink]; the global 401/403 policy is otherwise unchanged.
-     * @throws AuthorizationFailedException on 401/403
-     * @throws PushNetworkException on network failure
-     */
+    
+
+
+
+
+
+
+
+
     suspend fun checkDeviceAuthAs(basicAuth: String, reportAuthFailure: Boolean, logSuccess: Boolean = true) {
         executeDeviceCall(
             logTag = "[DeviceRepository] checkDeviceAuthAs",
@@ -147,15 +147,15 @@ class DeviceRepository @Inject constructor(
         )
     }
 
-    /**
-     * Fetches only SECONDARY devices (the primary id==1 is filtered here, single owner). Callers
-     * must not re-filter or assume the primary is present.
-     *
-     * @throws AuthorizationFailedException on 401/403 (caller logs out)
-     * @throws AccountOfflineException / NotFoundException on 404
-     * @throws MalformedResponseException on a 200 with an unparseable body
-     * @throws PushNetworkException on network failure
-     */
+    
+
+
+
+
+
+
+
+
     suspend fun getDevices(): List<DeviceInfo> = executeDeviceCall(
         logTag = "[LinkedDevices] getDevices",
         apiCall = { deviceApiService.getDevices() },
@@ -168,15 +168,15 @@ class DeviceRepository @Inject constructor(
         },
     )
 
-    /**
-     * Unlink a secondary device. Server contract unverified; 404 is treated as failure until the
-     * backend confirms.
-     *
-     * @throws IllegalArgumentException if deviceId is the primary (never reachable via UI)
-     * @throws AuthorizationFailedException on 401/403 (caller logs out)
-     * @throws NotFoundException / AccountOfflineException on 404
-     * @throws PushNetworkException on network failure
-     */
+    
+
+
+
+
+
+
+
+
     suspend fun removeDevice(deviceId: Int) {
         require(deviceId != DEFAULT_DEVICE_ID) {
             "[LinkedDevices] refusing to remove primary device id=$deviceId"
@@ -191,7 +191,7 @@ class DeviceRepository @Inject constructor(
         )
     }
 
-    /** Parse {"devices":[...]}. Blank → empty; malformed → MalformedResponseException. */
+    
     private fun parseDevices(body: String): List<DeviceInfo> {
         if (body.isBlank()) return emptyList()
         return try {
@@ -202,11 +202,11 @@ class DeviceRepository @Inject constructor(
         }
     }
 
-    /**
-     * Maps HTTP error codes to domain exceptions for device endpoints.
-     * Directly mirrors the subset of PushServiceSocket.validateResponse()
-     * relevant to device endpoints.
-     */
+    
+
+
+
+
     private fun validateDeviceResponse(
         code: Int,
         response: Response<ResponseBody>,
@@ -216,8 +216,8 @@ class DeviceRepository @Inject constructor(
             401, 403 -> {
                 L.w { "[DeviceRepository] validateDeviceResponse: auth failed ($code)" }
                 response.errorBody()?.close()
-                // Signal only: the sink confirms against /v1/devices/ before any logout, so a
-                // transient edge rejection here costs one extra probe, never a session.
+                
+                
                 if (reportAuthFailure) authFailureSink.get().onAuthRejected(AuthFailureSource.DEVICE_API)
                 throw AuthorizationFailedException(code, "Authorization failed!")
             }

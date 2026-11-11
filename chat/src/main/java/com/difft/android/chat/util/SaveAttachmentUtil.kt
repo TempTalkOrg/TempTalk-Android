@@ -42,7 +42,12 @@ object SaveAttachmentUtil {
         val date: Long,
         val fileName: String? = null,
         val shouldDeleteOriginalFile: Boolean = false,
-        val shouldShowToast: Boolean = true
+        val shouldShowToast: Boolean = true,
+        
+
+
+
+        val saveAsFile: Boolean = false
     )
 
     sealed class SaveResult {
@@ -98,10 +103,10 @@ object SaveAttachmentUtil {
             }
         }
 
-    /**
-     * Saves behind the wait dialog. A page in the home screen's detail stack passes its [wait], so
-     * the dialog goes with the page; otherwise only this save's own claim is released.
-     */
+    
+
+
+
     suspend fun saveWithUI(context: Context, attachment: Attachment, wait: PageWait? = null) {
         withTaskWait(context, wait) {
             val result = saveAttachment(context, attachment)
@@ -146,6 +151,8 @@ object SaveAttachmentUtil {
                 val attachment = result.attachment
                 if (attachment != null && attachment.shouldShowToast) {
                     when {
+                        attachment.saveAsFile ->
+                            ToastUtil.show(R.string.SaveAttachmentTask_saved_to_downloads)
                         attachment.contentType.startsWith("video/") ||
                             attachment.contentType.startsWith("image/") ->
                             ToastUtil.show(R.string.SaveAttachmentTask_saved_to_album)
@@ -164,7 +171,7 @@ object SaveAttachmentUtil {
         }
     }
 
-    // ---- Internal save logic (migrated from SaveAttachmentTask) ----
+    
 
     private fun saveAttachmentInternal(
         context: Context,
@@ -175,7 +182,8 @@ object SaveAttachmentUtil {
         var fileName = attachment.fileName ?: generateOutputFileName(contentType, attachment.date)
         fileName = sanitizeOutputFileName(fileName)
 
-        val result = createMediaUri(context, getMediaStoreContentUriForType(contentType), contentType, fileName, nameCache)
+        val outputUri = if (attachment.saveAsFile) getDownloadUri() else getMediaStoreContentUriForType(contentType)
+        val result = createMediaUri(context, outputUri, contentType, fileName, nameCache)
         val updateValues = ContentValues()
         val mediaUri = result.mediaUri ?: return null
 
@@ -275,7 +283,10 @@ object SaveAttachmentUtil {
             contentValues.put(MediaStore.MediaColumns.IS_PENDING, 1)
             putInCache(nameCache, outputUri, displayName)
         } else if (outputUri.scheme == ContentResolver.SCHEME_FILE) {
-            val outputDirectory = File(outputUri.path!!)
+            
+            
+            val outputDirectory = ensureExternalPath(File(outputUri.path!!))
+                ?: throw IOException("Output directory for $contentType is not available")
             var outputFile = File(outputDirectory, "$base.$extension")
             var i = 0
             while (pathInCache(nameCache, outputUri, outputFile.path) || outputFile.exists()) {

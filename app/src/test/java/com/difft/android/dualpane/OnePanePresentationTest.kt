@@ -22,11 +22,11 @@ import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import java.util.concurrent.TimeUnit
 
-/**
- * One-pane presents only the stack of the tab in front at the fold and of tabs the user opens
- * something in while in one-pane; other stacks restored from two-pane are kept hidden and shown
- * again on unfold. Also: the one-pane layer paints the navigation-bar strip like ChatActivity.
- */
+
+
+
+
+
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [33])
 class OnePanePresentationTest {
@@ -59,7 +59,7 @@ class OnePanePresentationTest {
         settle()
     }
 
-    /** Two-pane with a conversation in Chats and in Contacts, Chats in front, then folded. */
+    
     private fun foldWithTwoStacks() {
         RuntimeEnvironment.setQualifiers("w840dp-h900dp")
         controller = Robolectric.buildActivity(PaneNavigatorTestHost::class.java).setup()
@@ -155,7 +155,7 @@ class OnePanePresentationTest {
     fun `a one-pane recreation keeps which stacks are presented`() {
         foldWithTwoStacks()
 
-        recreate("w400dp-h800dp") // e.g. a theme change while folded
+        recreate("w400dp-h800dp") 
 
         assertEquals(1, nav.depth(TAB_CHATS))
         assertEquals(0, nav.depth(TAB_CONTACTS))
@@ -168,7 +168,7 @@ class OnePanePresentationTest {
         settle()
         open("a")
 
-        // TestPages: 2 = layer variant (strip painted), 0 = plain pane variant.
+        
         assertEquals(2, (layer.background as ColorDrawable).color)
     }
 
@@ -181,7 +181,7 @@ class OnePanePresentationTest {
         val bg1 = androidx.core.content.ContextCompat.getColor(host, com.difft.android.base.R.color.bg1)
 
         nav.openConversation(ConversationTarget(ConversationTarget.Kind.ONE_ON_ONE, "a"), PaneNavigator.Origin.Tab(TAB_CHATS))
-        shadowOf(Looper.getMainLooper()).idle() // the layer is still sliding in over the list
+        shadowOf(Looper.getMainLooper()).idle() 
 
         assertEquals("the status-bar strip ChatActivity paints, never the pattern", bg1, (root.background as ColorDrawable).color)
     }
@@ -193,7 +193,7 @@ class OnePanePresentationTest {
         settle()
         open("a")
 
-        // The two-pane detail column reaches the window bottom too, so it uses the layer variant.
+        
         assertEquals(2, (layer.background as ColorDrawable).color)
     }
 }

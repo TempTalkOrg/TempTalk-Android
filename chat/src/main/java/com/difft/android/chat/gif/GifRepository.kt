@@ -9,7 +9,7 @@ import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** One page of GIF results plus the cursors needed to fetch the next page. */
+
 data class GifPage(
     val items: List<GifData>,
     val hasMore: Boolean,
@@ -17,15 +17,13 @@ data class GifPage(
     val pageCount: Int
 )
 
-/** Thrown when the GIF trending/search endpoint returns a non-success envelope. */
+
 class GifException(message: String?) : RuntimeException(message)
 
-/**
- * GIF network + pagination layer. Ports difft-android's GifViewModel network logic
- * (RxJava Single -> suspend) and keeps the dual-cursor (offset + next) hasMore algorithm.
- * The `/gifs/` routes use token auth, declared by `@Auth` on the endpoints themselves.
- * Endpoints take a full URL built from [UrlManager.gifs] so requests ride the `/gifs/` proxy.
- */
+
+
+
+
 @Singleton
 class GifRepository @Inject constructor(
     @param:ChativeHttpClientModule.Chat private val httpClient: ChativeHttpClient,
@@ -35,10 +33,7 @@ class GifRepository @Inject constructor(
         const val PAGE_LIMIT = 20
     }
 
-    /**
-     * Fetch one page. Empty/null [query] -> trending, otherwise search.
-     * Filters out entries missing a usable preview or original gif (matches difft).
-     */
+    
     suspend fun fetch(query: String?, limit: Int, offset: Int, next: String?): GifPage =
         withContext(Dispatchers.IO) {
             val base = urlManager.gifs

@@ -14,20 +14,20 @@ import javax.inject.Inject
 import javax.inject.Provider
 import javax.inject.Singleton
 
-/**
- * Applies the migration message pause (#1382) to the receive side, so later work only changes
- * the [MessagingGate] state: closing messaging pauses the socket; opening it resumes the socket,
- * runs a pull that was deferred while closed and, after a pause, re-triggers the local drains
- * whose ticks were skipped.
- *
- * Started once at process start. The gate starts closed (loading) and the socket starts paused,
- * so the first transition acted on is the first opening.
- */
+
+
+
+
+
+
+
+
+
 @Singleton
 class MessagingPauseReceiveCoordinator @Inject constructor(
     private val messagingGate: MessagingGate,
     @param:AppCoroutineScope private val scope: CoroutineScope,
-    // Providers keep the receive graph unbuilt until the gate first changes.
+    
     private val webSocketManager: Provider<WebSocketManager>,
     private val pendingMessageHelper: Provider<PendingMessageHelper>,
     private val pendingMessageProcessor: Provider<PendingMessageProcessor>,
@@ -69,7 +69,7 @@ class MessagingPauseReceiveCoordinator @Inject constructor(
         safely("pause_socket") { webSocketManager.get().pause() }
     }
 
-    /** One failing step must not end the collector, or the socket would never follow the gate again. */
+    
     private inline fun safely(step: String, block: () -> Unit) {
         try {
             block()

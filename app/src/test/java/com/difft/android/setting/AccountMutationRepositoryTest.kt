@@ -42,7 +42,7 @@ class AccountMutationRepositoryTest {
         every { logout.doLogout() } answers { events += "logout"; ended.complete(Unit); Unit }
         val repository = AccountMutationRepository(settings, users, client, logout, backgroundScope)
         val caller = async { repository.deleteAccount { events += "dismiss-original" } }
-        // The running key is a busy record, never a UI event or a server success assertion.
+        
         while (!com.difft.android.base.utils.pane.PageOperations.running("delete-account:test-user-001").value) kotlinx.coroutines.yield()
         caller.cancelAndJoin()
         gate.complete(success())

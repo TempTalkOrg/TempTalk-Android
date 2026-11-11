@@ -25,14 +25,8 @@ import java.io.InputStream
 import java.net.URLConnection
 import java.util.Locale
 
-/**
- * 资源处理工具类
- */
 object MediaUtils {
 
-    /**
-     * get uri
-     */
     @JvmStatic
     fun getRealPathUri(id: Long, mimeType: String?): String {
         val contentUri = when {
@@ -44,9 +38,6 @@ object MediaUtils {
         return ContentUris.withAppendedId(contentUri, id).toString()
     }
 
-    /**
-     * 获取mimeType
-     */
     @JvmStatic
     fun getMimeTypeFromMediaUrl(path: String): String {
         val fileExtension = MimeTypeMap.getFileExtensionFromUrl(path)
@@ -59,9 +50,6 @@ object MediaUtils {
         return if (TextUtils.isEmpty(mimeType)) PictureMimeType.MIME_TYPE_JPEG else mimeType!!
     }
 
-    /**
-     * 获取mimeType
-     */
     @JvmStatic
     fun getMimeTypeFromMediaHttpUrl(url: String?): String? {
         if (TextUtils.isEmpty(url)) {
@@ -83,17 +71,11 @@ object MediaUtils {
         }
     }
 
-    /**
-     * 获取mimeType
-     */
     private fun getMimeType(file: File): String? {
         val fileNameMap = URLConnection.getFileNameMap()
         return fileNameMap.getContentTypeFor(file.name)
     }
 
-    /**
-     * 是否是长图
-     */
     @JvmStatic
     fun isLongImage(width: Int, height: Int): Boolean {
         if (width <= 0 || height <= 0) {
@@ -102,18 +84,12 @@ object MediaUtils {
         return height > width * 3
     }
 
-    /**
-     * 创建目录名
-     */
     @JvmStatic
     fun generateCameraFolderName(absolutePath: String): String {
         val cameraFile = File(absolutePath)
         return cameraFile.parentFile?.name ?: PictureMimeType.CAMERA
     }
 
-    /**
-     * get Local image width or height
-     */
     @JvmStatic
     fun getImageSize(context: Context, url: String): MediaExtraInfo {
         val mediaExtraInfo = MediaExtraInfo()
@@ -140,9 +116,6 @@ object MediaUtils {
         return mediaExtraInfo
     }
 
-    /**
-     * get Local image width or height
-     */
     @JvmStatic
     fun getImageSize(context: Context, url: String, call: OnCallbackListener<MediaExtraInfo>?) {
         PictureThreadUtils.executeByIo(object : SimpleTask<MediaExtraInfo>() {
@@ -155,9 +128,6 @@ object MediaUtils {
         })
     }
 
-    /**
-     * get Local video width or height
-     */
     @JvmStatic
     fun getVideoSize(context: Context, url: String, call: OnCallbackListener<MediaExtraInfo>?) {
         PictureThreadUtils.executeByIo(object : SimpleTask<MediaExtraInfo>() {
@@ -170,9 +140,6 @@ object MediaUtils {
         })
     }
 
-    /**
-     * get Local video width or height
-     */
     @JvmStatic
     fun getVideoSize(context: Context, url: String): MediaExtraInfo {
         val mediaExtraInfo = MediaExtraInfo()
@@ -212,9 +179,6 @@ object MediaUtils {
         return mediaExtraInfo
     }
 
-    /**
-     * get Local audio duration
-     */
     @JvmStatic
     fun getAudioSize(context: Context, url: String): MediaExtraInfo {
         val mediaExtraInfo = MediaExtraInfo()
@@ -241,9 +205,7 @@ object MediaUtils {
         return mediaExtraInfo
     }
 
-    /**
-     * 删除部分手机 拍照在DCIM也生成一张的问题
-     */
+    
     @JvmStatic
     fun removeMedia(context: Context, id: Int) {
         try {
@@ -256,16 +218,11 @@ object MediaUtils {
         }
     }
 
-    /**
-     * 获取DCIM文件下最新一条拍照记录
-     */
     @JvmStatic
     fun getDCIMLastImageId(context: Context, absoluteDir: String): Int {
         var data: Cursor? = null
         return try {
-            //selection: 指定查询条件
             val selection = MediaStore.Images.Media.DATA + " like ?"
-            //定义selectionArgs：
             val selectionArgs = arrayOf("%$absoluteDir%")
             data = if (SdkVersionUtils.isR()) {
                 val queryArgs = createQueryArgsBundle(selection, selectionArgs, 1, 0, MediaStore.Files.FileColumns._ID + " DESC")
@@ -278,7 +235,7 @@ object MediaUtils {
                 val id = data.getInt(data.getColumnIndex(MediaStore.Images.Media._ID))
                 val date = data.getLong(data.getColumnIndex(MediaStore.Images.Media.DATE_ADDED))
                 val duration = DateUtils.dateDiffer(date)
-                // 最近时间1s以内的图片，可以判定是最新生成的重复照片
+                
                 if (duration <= 1) id else -1
             } else {
                 -1
@@ -291,17 +248,12 @@ object MediaUtils {
         }
     }
 
-    /**
-     * getPathMediaBucketId
-     */
     @JvmStatic
     fun getPathMediaBucketId(context: Context, absolutePath: String): Array<Long> {
         val mediaBucketId = arrayOf(0L, 0L)
         var data: Cursor? = null
         try {
-            //selection: 指定查询条件
             val selection = MediaStore.Files.FileColumns.DATA + " like ?"
-            //定义selectionArgs：
             val selectionArgs = arrayOf("%$absolutePath%")
             data = if (SdkVersionUtils.isR()) {
                 val queryArgs = createQueryArgsBundle(selection, selectionArgs, 1, 0, MediaStore.Files.FileColumns._ID + " DESC")
@@ -322,9 +274,6 @@ object MediaUtils {
         return mediaBucketId
     }
 
-    /**
-     * R  createQueryArgsBundle
-     */
     @JvmStatic
     fun createQueryArgsBundle(selection: String, selectionArgs: Array<String>, limitCount: Int, offset: Int, orderBy: String): Bundle {
         val queryArgs = Bundle()
@@ -337,9 +286,6 @@ object MediaUtils {
         return queryArgs
     }
 
-    /**
-     * delete camera PATH
-     */
     @JvmStatic
     fun deleteUri(context: Context, path: String?) {
         try {

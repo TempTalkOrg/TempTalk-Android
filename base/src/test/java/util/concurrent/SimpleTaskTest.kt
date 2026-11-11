@@ -17,22 +17,22 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/**
- * Tests for the decoupled [SimpleTask] utility after migration off TTExecutors/ThreadUtil.
- *
- * These tests verify the lifecycle-aware execution contract that callers
- * (notably `ImageEditorFragment`) depend on:
- *  - foregroundTask never runs if lifecycle is destroyed before dispatch
- *  - foregroundTask is dispatched to the main thread
- *  - plain two-arg overload runs background + foreground with no lifecycle guard
- */
+
+
+
+
+
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 class SimpleTaskTest {
 
     private val mainLooper get() = shadowOf(Looper.getMainLooper())
 
-    /** Minimal LifecycleOwner for tests — avoids the lifecycle-runtime-testing dependency. */
+    
     private class FakeLifecycleOwner(initial: Lifecycle.State) : LifecycleOwner {
         private val registry = LifecycleRegistry(this).apply { currentState = initial }
         override val lifecycle: Lifecycle get() = registry
@@ -55,8 +55,8 @@ class SimpleTaskTest {
             }
         )
 
-        // Wait for background task (runs on AppExecutors.Default which is Dispatchers.Default).
-        // Pump the main looper so the posted foreground callback can execute.
+        
+        
         val started = System.nanoTime()
         while (!fgLatch.await(0, TimeUnit.MILLISECONDS) &&
                (System.nanoTime() - started) < TimeUnit.SECONDS.toNanos(2)
@@ -83,7 +83,7 @@ class SimpleTaskTest {
             { fgRan.incrementAndGet() }
         )
 
-        // Let any posted tasks try to run.
+        
         mainLooper.idle()
         Thread.sleep(100)
         mainLooper.idle()

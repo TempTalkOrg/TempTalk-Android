@@ -47,9 +47,9 @@ class CallMessageCreator @Inject constructor(
         callType: CallType,
         callRole: CallRole?,
         callActionType: CallActionType?,
-        conversationId: String?, //临时会议时为null
-        members: List<String>?, //临时会议时的成员
-        roomId: List<String>?, //reject场景下可能会同时reject多个
+        conversationId: String?, 
+        members: List<String>?, 
+        roomId: List<String>?, 
         roomName: String?,
         caller: String,
         mKey: ByteArray?,
@@ -66,7 +66,7 @@ class CallMessageCreator @Inject constructor(
                 conversationManager.updatePublicKeyInfoData(forWhat)
                 publicKeyInfos =
                     if (callType.isGroup()) {
-                        // 当前群成员的PublicKeyInfo和当前参会人的PublicKeyInfo取合集
+                        
                         var groupCallUserPublicKeyInfos = conversationManager.getPublicKeyInfos(forWhat)
                         val callUserPublicKeyInfos = conversationManager.getPublicKeyInfos(callUidList)
                         callUserPublicKeyInfos?.let {
@@ -90,7 +90,7 @@ class CallMessageCreator @Inject constructor(
             }
         } else if (callType.isInstant()) {
             publicKeyInfos = if (callActionType?.isHangUp() == true) {
-                // 挂断始终同步给自己另一端：即使远端参会者已全部离开(callUidList 为空)，也要发给 myUid
+                
                 conversationManager.getPublicKeyInfos(callUidList + listOf(myUid))
             } else if (!members.isNullOrEmpty() || callUidList.isNotEmpty()) {
                 conversationManager.getPublicKeyInfos(members?.let { members + listOf(myUid) })
@@ -107,7 +107,7 @@ class CallMessageCreator @Inject constructor(
             return CallEncryptOutcome.Failed("publicKeyInfos is null or empty")
         }
 
-        // Filter out PublicKeyInfo with empty identityKey to prevent rust encryption exception
+        
         publicKeyInfos = publicKeyInfos.filter { info ->
             val isValid = info.identityKey.isNotBlank()
             if (!isValid) {

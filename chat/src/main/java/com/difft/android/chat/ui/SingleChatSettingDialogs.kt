@@ -11,14 +11,14 @@ import com.difft.android.base.widget.ComposeDialog
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.chat.R
 
-/** The 1:1 chat settings page as a detail destination (home detail stack, or its shell Activity). */
+
 class SingleChatSettingDestination(private val contactId: String) : DetailDestination {
     override fun newFragment(): Fragment = SingleChatSettingFragment.newInstance(contactId)
     override fun shellIntent(context: Context): Intent = SingleChatSettingActivity.intent(context, contactId)
     override val subjectId: String get() = contactId
 }
 
-/** Confirmation dialogs of [SingleChatSettingFragment], closed with the page's view. */
+
 internal object SingleChatSettingDialogs {
 
     fun confirmRemove(page: Fragment, onConfirm: () -> Unit) {
@@ -39,7 +39,7 @@ internal object SingleChatSettingDialogs {
         dialog = page.dismissWithView(ComposeDialogManager.showBottomDialog(
             activity = activity,
             layoutId = R.layout.layout_block_dialog,
-            onDismiss = { /* Dialog dismissed */ },
+            onDismiss = {  },
             onViewCreated = { v ->
                 v.findViewById<AppCompatTextView>(R.id.tv_block_tips).text =
                     activity.getString(R.string.contact_block_users_tips, PackageUtil.getAppName())

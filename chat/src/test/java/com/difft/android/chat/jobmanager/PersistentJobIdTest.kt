@@ -5,11 +5,11 @@ import org.junit.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
 
-/**
- * Pins [persistentJobId], the single derivation both sides of the persisted wake-up depend on:
- * the scheduler registers a job under it, and `JobController.pendingWakeUpIds` re-derives it from a
- * spec's stored constraints to decide which wake-up owns that spec. The two must never drift.
- */
+
+
+
+
+
 class PersistentJobIdTest {
 
     @Test
@@ -41,7 +41,7 @@ class PersistentJobIdTest {
     }
 }
 
-/** A second key part, so the sort in the derivation has something to reorder. */
+
 private class KeyedTestConstraint : Constraint {
     override fun isMet(): Boolean = true
 
@@ -54,7 +54,7 @@ private class KeyedTestConstraint : Constraint {
     override fun getJobSchedulerKeyPart(): String = "CHARGING"
 }
 
-/** Applies nothing to the JobInfo, so it must not split a group off on its own. */
+
 private class KeylessTestConstraint : Constraint {
     override fun isMet(): Boolean = true
 

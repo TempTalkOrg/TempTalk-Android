@@ -33,7 +33,7 @@ import java.util.concurrent.atomic.AtomicReference
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Readiness of one translation model, as rendered by the translate settings screen. */
+
 sealed interface ModelState {
     data object NotStarted : ModelState
     data class Downloading(val bytesSoFar: Long, val totalBytes: Long, val stuck: Boolean) : ModelState
@@ -43,7 +43,7 @@ sealed interface ModelState {
 
 enum class FailureReason { NO_NETWORK, SDK_ERROR, NO_SPACE, DM_DISABLED, STUCK_NO_PROGRESS }
 
-/** Why a download was requested. Decides whether the backoff window is honoured or cleared. */
+
 enum class DownloadTrigger {
     SETTINGS_RETRY,
     SETTINGS_SELECT,
@@ -54,16 +54,16 @@ enum class DownloadTrigger {
     MANUAL_TRANSLATE,
 }
 
-/**
- * Owns everything about having the translation models on the device: readiness, download
- * orchestration, progress, backoff and cleanup. Nothing else in the app calls
- * [TranslateBackend.downloadModel] — in particular the translation engine never downloads, it only
- * asks [isReady].
- *
- * App-start cost is zero when no conversation has auto-translate on: [syncOnStart] resolves the
- * required-model set from one SQL query and returns before touching the backend if that set is
- * empty. It is also zero on a build whose backend reports [TranslateBackend.isSupported] false.
- */
+
+
+
+
+
+
+
+
+
+
 @Singleton
 class TranslateModelStore @Inject constructor(
     @param:ApplicationContext private val context: Context,
@@ -77,25 +77,25 @@ class TranslateModelStore @Inject constructor(
 
     private val _state = MutableStateFlow<Map<ModelId, ModelState>>(emptyMap())
 
-    /** Per-MODEL readiness. The settings screen renders one status row per required model. */
+    
     val state: StateFlow<Map<ModelId, ModelState>> = _state.asStateFlow()
 
-    /**
-     * Mirrors the Ready entries of [state]. Exists so [isReady] — which sits on the per-message
-     * translation path — is a set lookup with no IO and no suspension.
-     */
+    
+
+
+
     @Volatile
     private var readyCache: Set<ModelId> = emptySet()
 
-    /**
-     * Models the conversations currently need, as of the last [syncOnStart] / [ensureDownloaded].
-     *
-     * Additions go through `updateAndGet` because several triggers add concurrently (a conversation
-     * opening, the settings screen, the network watcher) and a plain read-modify-write would lose
-     * one of them. The two `set` calls are deliberate overwrites, not lost updates: [syncOnStart]
-     * recomputes the whole set from the room table and [clearOnLogout] empties it, so both are
-     * authoritative and anything added in the meantime is by definition stale.
-     */
+    
+
+
+
+
+
+
+
+
     private val requiredCache = AtomicReference<Set<ModelId>>(emptySet())
 
     @Volatile
@@ -103,7 +103,7 @@ class TranslateModelStore @Inject constructor(
 
     private val downloadLock = Mutex()
 
-    /** Written only under [downloadLock]; volatile so the watchdog and foreground hooks can read it. */
+    
     @Volatile
     private var inFlight: ModelId? = null
 
@@ -120,31 +120,26 @@ class TranslateModelStore @Inject constructor(
         }
     }
 
-    /**
-     * The models a given target needs on the device.
-     *
-     * Today both targets resolve to {zh}: the backend pivots every pair through English and the
-     * English model is always available, so a zh<->en pair needs the Chinese model only. This is the
-     * SINGLE place that mapping lives — if a device is ever observed to need the English model too,
-     * add it here and every caller follows.
-     *
-     * ASSUMPTION (not verified against backend internals): `isModelDownloaded(ModelId("en"))` may
-     * report false even though en<->zh translates fine. Reconciliation therefore always runs against
-     * the set this function returns, never against "every language a setting mentions".
-     */
+    
+
+
+
+
+
+
     fun requiredModels(@Suppress("UNUSED_PARAMETER") target: TranslateLang): Set<ModelId> =
         setOf(ModelId(TranslateLang.ZH.code))
 
-    /** Non-suspending gate used on the per-message path. */
+    
     fun isReady(target: TranslateLang): Boolean = requiredModels(target).all { it in readyCache }
 
     fun isReady(model: ModelId): Boolean = model in readyCache
 
-    /**
-     * Reconciles memory, the device and DownloadManager. Idempotent: cold start and the first
-     * foreground callback both call it, and the single-in-flight slot plus the backoff window make
-     * the second one a no-op.
-     */
+    
+
+
+
+
     fun syncOnStart() {
         if (!backend.isSupported) return
         appScope.launch {
@@ -162,18 +157,18 @@ class TranslateModelStore @Inject constructor(
         appScope.launch { dispatchDownload(model, trigger, ignoreBackoff = false) }
     }
 
-    /** [awaitReady] over the models [target] needs. */
+    
     suspend fun awaitReady(target: TranslateLang): Boolean = awaitReady(requiredModels(target))
 
-    /**
-     * Makes [models] available and suspends until they are, for an explicit user action that must
-     * not fail just because a pack is still downloading. The device is asked directly rather than
-     * trusting [readyCache], which is empty after a cold start with no auto-translate room even when
-     * the pack is installed. An in-flight download is joined, not duplicated, until it completes,
-     * fails or is flagged stuck (no wall-clock cap: progress, not elapsed time, decides); one that
-     * is already stuck is restarted first, so a retry waits again rather than failing at once. It
-     * runs on [appScope], so it outlives us. Returns whether every model is ready afterwards.
-     */
+    
+
+
+
+
+
+
+
+
     suspend fun awaitReady(models: Set<ModelId>): Boolean {
         if (!backend.isSupported) return false
         requiredCache.updateAndGet { it + models }
@@ -191,8 +186,8 @@ class TranslateModelStore @Inject constructor(
             while (true) {
                 val job = downloadLock.withLock { inFlightJob.takeIf { inFlight == model } } ?: break
                 waited = awaitDownload(job, model, state)
-                // A replaced attempt (stuck restart) joins as completed without the pack arriving;
-                // follow whichever attempt now holds the slot instead of reporting a failure.
+                
+                
                 if (waited != DownloadWaitOutcome.COMPLETED || !job.isCancelled) break
             }
             if (waited != DownloadWaitOutcome.COMPLETED) {
@@ -206,11 +201,7 @@ class TranslateModelStore @Inject constructor(
         return ready
     }
 
-    /**
-     * Settings-screen retry. Clears the backoff and, when the current attempt is wedged, tears the
-     * wedged attempt down first — otherwise the button would be a no-op exactly when the user needs
-     * it most.
-     */
+    
     fun retryNow(target: TranslateLang) {
         requiredCache.updateAndGet { it + requiredModels(target) }
         requiredModels(target).forEach { model ->
@@ -218,7 +209,7 @@ class TranslateModelStore @Inject constructor(
         }
     }
 
-    /** User-initiated cancel from the settings screen. */
+    
     fun cancel(model: ModelId) {
         appScope.launch {
             withContext(NonCancellable) {
@@ -232,7 +223,7 @@ class TranslateModelStore @Inject constructor(
         }
     }
 
-    /** Drops the in-flight attempt and its DownloadManager row. Caller holds [downloadLock]. */
+    
     private fun tearDownInFlight() {
         probe.snapshot()?.let { probe.remove(it.downloadId) }
         inFlightJob?.cancel()
@@ -253,10 +244,10 @@ class TranslateModelStore @Inject constructor(
         networkWatcher.unregister()
     }
 
-    /**
-     * Active logout. Downloaded models are deliberately kept: they are a device-level resource with
-     * no account affinity, and deleting them would cost the next account another 30 MB.
-     */
+    
+
+
+
     fun clearOnLogout() {
         L.i { "[TranslateModel] cleared on logout" }
         networkWatcher.unregister()
@@ -299,10 +290,10 @@ class TranslateModelStore @Inject constructor(
                 setState(model, ModelState.Ready)
                 continue
             }
-            // A row already in DownloadManager means a previous process left a download running.
-            // Re-issuing the download attaches to it (the backend no-ops on "already downloading"),
-            // so the call still resolves — but it must not consume a backoff step, hence
-            // ignoreBackoff.
+            
+            
+            
+            
             val running = probe.snapshot()?.takeIf { it.status != DownloadManager.STATUS_FAILED }
             if (running != null) adopted++
             dispatchDownload(model, DownloadTrigger.FOREGROUND, ignoreBackoff = running != null)
@@ -320,15 +311,13 @@ class TranslateModelStore @Inject constructor(
         failureState.ensureLoaded()
         downloadLock.withLock {
             if (inFlight != null) {
-                // A user retry on a stuck attempt starts over with a fresh no-progress window
-                // instead of failing at once. The stalled system download row is dropped too;
-                // stuck means it moved no bytes for a minute, so nothing of value is discarded.
+                
                 val stuckBypass = trigger in STUCK_RESTART_TRIGGERS &&
                     (_state.value[model] as? ModelState.Downloading)?.stuck == true
                 if (!stuckBypass) return
                 tearDownInFlight()
-                // Published now, not when the cancelled job unwinds, so a wait started right after
-                // cannot mistake the old stuck state for the new attempt's outcome.
+                
+                
                 setState(model, ModelState.NotStarted)
             }
             if (isModelOnDevice(model)) {
@@ -351,8 +340,8 @@ class TranslateModelStore @Inject constructor(
                     return
                 }
             }
-            // Admission (check) and claim (assignment) happen inside the same critical section, so
-            // two triggers racing cannot both start a download.
+            
+            
             inFlight = model
             inFlightJob = appScope.launch { runDownload(model, trigger) }
         }
@@ -364,8 +353,8 @@ class TranslateModelStore @Inject constructor(
                 "failCount=${failureState.failCount(model)}"
         }
         failureState.onAttempt(model)
-        // A stuck-restart replaces this attempt with a new one for the same model; the replaced job
-        // unwinds afterwards and must not clear the slot, the state or the watchdog it no longer owns.
+        
+        
         val me = coroutineContext[Job]
         val owns = { inFlightJob === me }
         var released = false
@@ -378,7 +367,7 @@ class TranslateModelStore @Inject constructor(
                 setState(model, ModelState.Ready)
                 L.i { "[TranslateModel] download done model=${model.code} ok=true reason=null nextRetryInMs=0" }
             } else {
-                // The new attempt finds the pack on the device and reports Ready itself.
+                
                 L.i { "[TranslateModel] replaced attempt ended model=${model.code} ok=true" }
             }
         } catch (e: CancellationException) {
@@ -387,8 +376,8 @@ class TranslateModelStore @Inject constructor(
         } catch (e: Exception) {
             val reason = classifyFailure(e)
             if (!owns()) {
-                // The backend may surface the dropped download row as an error; it is not this
-                // model's failure and must not overwrite the new attempt or bump its backoff.
+                
+                
                 L.i { "[TranslateModel] replaced attempt ended model=${model.code} reason=$reason" }
             } else {
                 val nextRetryAtMs = failureState.onFailure(model, reason)
@@ -408,20 +397,20 @@ class TranslateModelStore @Inject constructor(
         }
         if (!released) return
         updateNetworkWatcher()
-        // Only reachable when this model finished (success or failure, not cancellation). With more
-        // than one required model the slot is free now, so pick the next unmet one up immediately
-        // instead of waiting for the next external trigger.
+        
+        
+        
         requiredCache.get().firstOrNull { it != model && it !in readyCache }
             ?.let { dispatchDownload(it, trigger, ignoreBackoff = false) }
     }
 
-    /**
-     * Polls DownloadManager for byte progress while a download is in flight, and flags it stuck
-     * after [STUCK_NO_PROGRESS_MS] without a single new byte (which also covers the
-     * PAUSED_WAITING_TO_RETRY / PAUSED_WAITING_FOR_NETWORK cases, since a paused row transfers
-     * nothing). A stuck download is NOT cancelled on its own — it may still recover; only an
-     * explicit user retry (settings screen, or a manual translate) restarts it.
-     */
+    
+
+
+
+
+
+
     private fun startWatchdog(model: ModelId) {
         stopWatchdog()
         watchdogJob = appScope.launch {
@@ -432,8 +421,8 @@ class TranslateModelStore @Inject constructor(
                 delay(WATCHDOG_POLL_MS)
                 val snapshot = probe.snapshot() ?: continue
                 if (snapshot.status == DownloadManager.STATUS_FAILED) {
-                    // Drop the dead row so the next snapshot does not adopt it as in-flight. The
-                    // backend call fails on its own and drives the state change.
+                    
+                    
                     probe.remove(snapshot.downloadId)
                     continue
                 }
@@ -464,10 +453,10 @@ class TranslateModelStore @Inject constructor(
         watchdogJob = null
     }
 
-    /**
-     * The watcher only exists to un-stick a download, so it is registered exactly while one is
-     * outstanding and the app is in the foreground. A user with auto-translate off never pays for it.
-     */
+    
+
+
+
     private fun updateNetworkWatcher() {
         val needed = foreground && requiredCache.get().any { it !in readyCache }
         if (needed) networkWatcher.register() else networkWatcher.unregister()
@@ -489,10 +478,10 @@ class TranslateModelStore @Inject constructor(
         }
     }
 
-    /**
-     * Progress ticks arrive every second; logging the raw state would flood the log file, so
-     * transitions are keyed on a coarse label that only changes when something meaningful does.
-     */
+    
+
+
+
     private fun stateLabel(state: ModelState?): String = when (state) {
         null -> "none"
         ModelState.NotStarted -> "NotStarted"
@@ -501,11 +490,11 @@ class TranslateModelStore @Inject constructor(
         is ModelState.Failed -> "Failed(${state.reason})"
     }
 
-    /**
-     * Turns the backend's engine-independent reason into the retry policy this store applies. A
-     * throwable that is not a [TranslateBackendException] came from somewhere else entirely, so it
-     * gets the same treatment as an unclassified engine error.
-     */
+    
+
+
+
+
     private fun classifyFailure(e: Throwable): FailureReason =
         when ((e as? TranslateBackendException)?.kind) {
             TranslateBackendException.Kind.NETWORK -> FailureReason.NO_NETWORK

@@ -22,14 +22,14 @@ import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 
-/**
- * Contains a reference to the root [EditorElement], maintains undo and redo stacks and has a
- * reference to the [EditorElementHierarchy].
- *
- * As such it is the entry point for all operations that change the image.
- *
- * 1:1 Kotlin port; size preserved verbatim. #1093
- */
+
+
+
+
+
+
+
+
 @Suppress("LargeClass")
 class EditorModel private constructor(
     private val editingPurpose: EditingPurpose,
@@ -99,7 +99,7 @@ class EditorModel private constructor(
             .persist()
     }
 
-    /** Keeps the image within the crop bounds as it rotates */
+    
     fun setMainImageEditorMatrixRotation(angle: Float, minScaleDown: Float) {
         setEditorMatrixToRotationMatrixAboutParentsOrigin(editorElementHierarchy.getMainImage()!!, angle)
         scaleMainImageEditorMatrixToFitInsideCropBounds(minScaleDown, 2f)
@@ -122,40 +122,40 @@ class EditorModel private constructor(
 
         val invertLocal = Matrix()
         if (newLocal != null && combinedLocal.invert(invertLocal)) {
-            invertLocal.preConcat(newLocal) // L^-1 (L * Scale) -> Scale
-            mainImageEditorBackup.preConcat(invertLocal) // add the scale to editor matrix to keep this image within crop
+            invertLocal.preConcat(newLocal) 
+            mainImageEditorBackup.preConcat(invertLocal) 
         }
         mainImage.localMatrix.set(mainImageLocalBackup)
         mainImage.editorMatrix.set(mainImageEditorBackup)
     }
 
-    /**
-     * Sets the editor matrix for the element to a rotation of the degrees but does so that we are rotating around the
-     * parents elements origin.
-     */
+    
+
+
+
     private fun setEditorMatrixToRotationMatrixAboutParentsOrigin(element: EditorElement, degrees: Float) {
         val localMatrix = element.localMatrix
         val editorMatrix = element.editorMatrix
         localMatrix.invert(editorMatrix)
         editorMatrix.preRotate(degrees)
         editorMatrix.preConcat(localMatrix)
-        // Editor Matrix is then: Local^-1 * Rotate(degrees) * Local
-        // So you end up with this overall for the element: Local * Local^-1 * Rotate(degrees) * Local
-        // Meaning the rotate applies after existing effects of the local matrix
-        // Where as simply setting the editor matrix rotate gives this: Local * Rotate(degrees)
-        // which rotates around local origin first
+        
+        
+        
+        
+        
     }
 
-    /**
-     * Renders tree with the following matrix:
-     *
-     * viewModelMatrix * matrix * editorMatrix
-     *
-     * Child nodes are supplied with a viewModelMatrix' = viewModelMatrix * matrix * editorMatrix
-     *
-     * @param rendererContext Canvas to draw on to.
-     * @param renderOnTop     This element will appear on top of the overlay.
-     */
+    
+
+
+
+
+
+
+
+
+
     fun draw(rendererContext: RendererContext, renderOnTop: EditorElement?) {
         val root = editorElementHierarchy.root
         if (renderOnTop != null) {
@@ -164,15 +164,15 @@ class EditorModel private constructor(
             renderOnTop.flags.setVisible(false)
         }
 
-        // pass 1
+        
         root.draw(rendererContext)
 
         if (renderOnTop != null) {
-            // hide all
+            
             try {
                 root.forAllInTree { element -> element.flags.setVisible(renderOnTop === element) }
 
-                // pass 2
+                
                 root.draw(rendererContext)
             } finally {
                 root.forAllInTree { element -> element.flags.restore() }
@@ -286,14 +286,14 @@ class EditorModel private constructor(
             restoreStateWithAnimations(oldRootElement, editorElementHierarchy.root, invalidate, keepEditorState)
             invalidate.run()
 
-            // re-zoom image root as the view port might be different now
+            
             editorElementHierarchy.updateViewToCrop(visibleViewPort, invalidate)
 
             inBoundsMemory.push(editorElementHierarchy.getMainImage(), editorElementHierarchy.getCropEditorElement())
         }
     }
 
-    /** Replaces the hierarchy, maintaining any selection if possible */
+    
     private fun setEditorElementHierarchy(hierarchy: EditorElementHierarchy) {
         val selectedElement = editorElementHierarchy.selectedElement
         editorElementHierarchy = hierarchy
@@ -353,10 +353,10 @@ class EditorModel private constructor(
         updateUndoRedoAvailableState(getActiveUndoRedoStacks(cropping))
     }
 
-    /**
-     * @param cropping Set to true if cropping is underway.
-     * @return The correct stack for the mode of operation.
-     */
+    
+
+
+
     private fun getActiveUndoRedoStacks(cropping: Boolean): UndoRedoStacks =
         if (cropping) cropUndoRedoStacks else undoRedoStacks
 
@@ -384,15 +384,15 @@ class EditorModel private constructor(
         editorElementHierarchy.dragDropRelease(visibleViewPort, invalidate)
     }
 
-    /**
-     * Attempts to scale the supplied element such that [cropIsWithinMainImageBounds] is true.
-     *
-     * Does not respect minimum scale, so does need a further check to [currentCropIsAcceptable] afterwards.
-     *
-     * @param element     The element to be scaled. If successful, it will be animated to the correct position.
-     * @param scaleAtMost The amount of scale to apply at most. Use < 1 for the crop, and > 1 for the image.
-     * @return true if successfully scaled the element. false if the element was left unchanged.
-     */
+    
+
+
+
+
+
+
+
+
     private fun tryToScaleToFit(element: EditorElement, scaleAtMost: Float): Boolean =
         Bisect.bisectToTest(
             element,
@@ -403,15 +403,15 @@ class EditorModel private constructor(
             invalidate
         )
 
-    /**
-     * Attempts to translate the supplied element such that [cropIsWithinMainImageBounds] is true.
-     * If you supply both x and y, it will attempt to find a fit on the diagonal with vector x, y.
-     *
-     * @param element          The element to be translated. If successful, it will be animated to the correct position.
-     * @param translateXAtMost The maximum translation to apply in the x axis.
-     * @param translateYAtMost The maximum translation to apply in the y axis.
-     * @return a matrix if successfully translated the element. null if the element unable to be translated to fit.
-     */
+    
+
+
+
+
+
+
+
+
     private fun tryToTranslateToFit(element: EditorElement, translateXAtMost: Float, translateYAtMost: Float): Matrix? =
         Bisect.bisectToTest(
             element,
@@ -421,13 +421,13 @@ class EditorModel private constructor(
             { matrix, factor -> matrix.postTranslate(factor * translateXAtMost, factor * translateYAtMost) }
         )
 
-    /**
-     * Tries to fix an element that is out of bounds by adjusting it's translation.
-     *
-     * @param element               Element to move.
-     * @param lastKnownGoodPosition Last known good position of element.
-     * @return true iff fixed the element.
-     */
+    
+
+
+
+
+
+
     private fun tryToFixTranslationOutOfBounds(element: EditorElement, lastKnownGoodPosition: Matrix): Boolean {
         val elementMatrix = element.localMatrix
         val original = Matrix(elementMatrix)
@@ -451,21 +451,21 @@ class EditorModel private constructor(
         val pass2X: Float
         val pass2Y: Float
 
-        // try the fix by the smallest user translation first
+        
         if (abs(xTranslate) < abs(yTranslate)) {
-            // try to bisect along x
+            
             pass1X = -xTranslate
             pass1Y = 0f
 
-            // then y
+            
             pass2X = 0f
             pass2Y = -yTranslate
         } else {
-            // try to bisect along y
+            
             pass1X = 0f
             pass1Y = -yTranslate
 
-            // then x
+            
             pass2X = -xTranslate
             pass2Y = 0f
         }
@@ -482,7 +482,7 @@ class EditorModel private constructor(
             return true
         }
 
-        // apply pass 1 fully
+        
         elementMatrix.postTranslate(pass1X, pass1Y)
 
         matrix = tryToTranslateToFit(element, pass2X, pass2Y)
@@ -500,10 +500,10 @@ class EditorModel private constructor(
         editorElementHierarchy.dragDropRelease(visibleViewPort, invalidate)
     }
 
-    /**
-     * Pixel count must be no smaller than [MINIMUM_CROP_PIXEL_COUNT] (unless its original size was less than that)
-     * and all points must be within the bounds.
-     */
+    
+
+
+
     private fun currentCropIsAcceptable(): Boolean {
         val outputSize = getOutputSize()
         val outputPixelCount = outputSize.x * outputSize.y
@@ -512,7 +512,7 @@ class EditorModel private constructor(
         var thinnestRatio = MINIMUM_RATIO
 
         if (compareRatios(size, thinnestRatio) < 0) {
-            // original is narrower than the thinnestRatio
+            
             thinnestRatio = size
         }
 
@@ -521,15 +521,15 @@ class EditorModel private constructor(
             cropIsWithinMainImageBounds()
     }
 
-    /**
-     * @return true if and only if the current crop rect is fully in the bounds.
-     */
+    
+
+
     private fun cropIsWithinMainImageBounds(): Boolean =
         Bounds.boundsRemainInBounds(editorElementHierarchy.imageMatrixRelativeToCrop())
 
-    /**
-     * Called as edits are underway.
-     */
+    
+
+
     fun moving(editorElement: EditorElement) {
         if (!isCropping()) {
             updateSelectionThumbsIfSelected(editorElement)
@@ -563,16 +563,16 @@ class EditorModel private constructor(
         dest.writeParcelable(cropUndoRedoStacks, flags)
     }
 
-    /**
-     * Blocking render of the model.
-     */
+    
+
+
     @WorkerThread
     fun render(context: Context, typefaceProvider: RendererContext.TypefaceProvider): Bitmap =
         render(context, null, typefaceProvider)
 
-    /**
-     * Blocking render of the model.
-     */
+    
+
+
     @WorkerThread
     fun render(context: Context, size: Point?, typefaceProvider: RendererContext.TypefaceProvider): Bitmap {
         val image = editorElementHierarchy.getFlipRotate()
@@ -670,12 +670,12 @@ class EditorModel private constructor(
         return mainImageRenderer === renderer
     }
 
-    /**
-     * Add a new [EditorElement] centered in the current visible crop area.
-     *
-     * @param element New element to add.
-     * @param scale   Initial scale for new element.
-     */
+    
+
+
+
+
+
     fun addElementCentered(element: EditorElement, scale: Float) {
         val localMatrix = element.localMatrix
 
@@ -685,11 +685,11 @@ class EditorModel private constructor(
         addElement(element)
     }
 
-    /**
-     * Add an element to the main image, or if there is no main image, make the new element the main image.
-     *
-     * @param element New element to add.
-     */
+    
+
+
+
+
     fun addElement(element: EditorElement) {
         pushUndoPoint()
         addElementWithoutPushUndo(element)
@@ -755,9 +755,9 @@ class EditorModel private constructor(
         return dst
     }
 
-    /**
-     * Returns a matrix that maps points in the [from] element in to points in the [to] element.
-     */
+    
+
+
     fun findRelativeMatrix(from: EditorElement, to: EditorElement): Matrix? {
         val matrix = findElementInverseMatrix(to, Matrix())
         val outOf = findElementMatrix(from, Matrix())
@@ -796,13 +796,13 @@ class EditorModel private constructor(
 
     fun findById(uuid: UUID): EditorElement? = getRoot().findElementWithId(uuid)
 
-    /**
-     * Changes the temporary view so that the text element is centered in it.
-     *
-     * @param entity       Entity to center on.
-     * @param textRenderer The text renderer, which can make additional adjustments to the zoom matrix
-     *                     to leave space for the keyboard for example.
-     */
+    
+
+
+
+
+
+
     fun zoomToTextElement(entity: EditorElement, textRenderer: MultiLineTextRenderer) {
         val elementInverseMatrix = findElementInverseMatrix(entity, Matrix())
         if (elementInverseMatrix != null) {
@@ -827,9 +827,9 @@ class EditorModel private constructor(
     fun isCropping(): Boolean =
         editorElementHierarchy.getCropEditorElement().flags.isVisible()
 
-    /**
-     * Returns a matrix that maps bounds to the crop area.
-     */
+    
+
+
     fun getInverseCropPosition(): Matrix {
         val matrix = Matrix()
         matrix.set(findRelativeMatrix(editorElementHierarchy.getMainImage()!!, editorElementHierarchy.getCropEditorElement()))
@@ -902,7 +902,7 @@ class EditorModel private constructor(
                         toElement.flags.set(fromElement.flags)
                     }
                 } else {
-                    // element is removed
+                    
                     val parentFrom = fromRootElement.parentOf(fromElement)
                     if (parentFrom != null) {
                         val toParent = toMap[parentFrom.id]
@@ -915,7 +915,7 @@ class EditorModel private constructor(
 
             for (toElement in toMap.values) {
                 if (!fromMap.containsKey(toElement.id)) {
-                    // new item
+                    
                     toElement.animateFadeIn(onInvalidate)
                 }
             }
@@ -927,11 +927,11 @@ class EditorModel private constructor(
             return result
         }
 
-        /**
-         * -1 iff a is a narrower ratio than b.
-         * +1 iff a is a squarer ratio than b.
-         * 0 if the ratios are the same.
-         */
+        
+
+
+
+
         private fun compareRatios(a: Point, b: Point): Int {
             val smallA = min(a.x, a.y)
             val largeA = max(a.x, a.y)

@@ -23,15 +23,15 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** A group's current name as the group layer reports it (gid to name); only an active group with a name is reported. */
+
 typealias GroupNameUpdate = Pair<String, String>
 
-/**
- * Remembers the focus group's display name while the focus is valid, because a dismissed or removed group
- * is deleted locally before its dialog can be shown. Persisted (app_state DataStore, stamped with the
- * account, see [FocusOwnedMark]) for one gid; refreshed when the focus changes and when the focus group is
- * renamed, kept through the invalid state, cleared when focus ends. The name is never logged.
- */
+
+
+
+
+
+
 @Singleton
 class FocusGroupNameCache internal constructor(
     private val dataStore: DataStore<Preferences>,
@@ -65,13 +65,13 @@ class FocusGroupNameCache internal constructor(
 
     private var started = false
 
-    /** Starts following the effective focus and the focus group's name once, from application startup. */
+    
     @Synchronized
     fun start() {
         if (started) return
         started = true
         scope.launch {
-            // Judge only the loaded focus: before the cache loads, `effective` is INACTIVE and would clear the name.
+            
             repository.ensureLoaded()
             repository.effective.collect { focus ->
                 when {
@@ -89,7 +89,7 @@ class FocusGroupNameCache internal constructor(
         }
     }
 
-    /** The cached name of [gid], or null when none is cached for that group (or it was cached by another account). */
+    
     suspend fun nameFor(gid: String): String? = try {
         val prefs = dataStore.data.first()
         val cachedGid = FocusOwnedMark.decode(prefs[AppStateKeys.FOCUS_GROUP_NAME_GID], selfId())
@@ -103,7 +103,7 @@ class FocusGroupNameCache internal constructor(
 
     private suspend fun remember(gid: String, rawName: String?) {
         val name = rawName?.takeIf { it.isNotBlank() } ?: return
-        // Without a known account there is nothing to stamp.
+        
         val owner = selfId() ?: return
         val stampedGid = FocusOwnedMark.encode(owner, gid)
         write { prefs ->
@@ -114,7 +114,7 @@ class FocusGroupNameCache internal constructor(
         }
     }
 
-    /** Clears only a name this account cached; another account's mark is left for its owner. */
+    
     private suspend fun clear() = write { prefs ->
         val stamped = prefs[AppStateKeys.FOCUS_GROUP_NAME_GID] ?: return@write
         if (FocusOwnedMark.decode(stamped, selfId()) == null) return@write

@@ -17,12 +17,12 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
-/**
- * The call page's finish collector ([launchFinishRequestCollector]) on a real Activity lifecycle and
- * main Looper: it is not gated on STARTED (a backgrounded page, only CREATED, still finishes on a
- * remote end), and it runs one main-looper pass after the request is set, never inline in the
- * code that set it. Rows: T4-14, T4-15.
- */
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [33])
 class CallFinishEffectIntegrationTest {

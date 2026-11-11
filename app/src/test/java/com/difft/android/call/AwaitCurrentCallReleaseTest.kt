@@ -16,15 +16,15 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/**
- * Accepting an incoming call during a call ([awaitCurrentCallRelease]): the current call is hung up
- * through the session (`INCOMING_ACCEPT`) and the accept waits until that session has ended
- * ([CallSessionHolder.current] cleared), giving up after 15 s. With no published room id there is
- * nothing to hang up; with no live session there is nothing to wait for. Row T4-27.
- *
- * The holder and the state manager are real. Their writers are owned by the `:call` session, so
- * this module drives the fields it reads through their private backing flows ([backing]).
- */
+
+
+
+
+
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class AwaitCurrentCallReleaseTest {
 

@@ -9,6 +9,8 @@ import org.difft.app.database.wcdb
 import com.difft.android.chat.fileshare.DownloadReq
 import com.difft.android.chat.fileshare.FileShareRepo
 import difft.android.messageserialization.model.AttachmentStatus
+import difft.android.messageserialization.model.VideoProbeState
+import com.tencent.wcdb.base.Value
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
@@ -39,18 +41,18 @@ import java.io.FileOutputStream
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
-/**
- * Downloads one attachment COPY.
- *
- * Identity is [localId] — the attachment row's own local id, which is also the progress-map key the
- * rendering bubble collects on (`TextChatMessage.getAttachmentIdForProgress`). The server-side
- * attachment id is shared by every forwarded copy of the same file, so it can only ever be a lookup
- * hint, never the thing a status write or a file path is derived from.
- *
- * The serialized file path is an INPUT HINT, not the destination: `onRun` re-resolves the target
- * from the attachment row on every attempt, so a job that outlives an upgrade or a migration writes
- * to the file's current address instead of a frozen one.
- */
+
+
+
+
+
+
+
+
+
+
+
+
 class DownloadAttachmentJob private constructor(
     parameters: Parameters,
     localId: String,
@@ -71,23 +73,23 @@ class DownloadAttachmentJob private constructor(
         val authTokenProvider: AuthTokenProvider
     }
 
-    /**
-     * Row identity + progress key. Null only for a job persisted before this key existed; `onRun`
-     * recovers it from the row and fills it in, so every later status write and progress emit of
-     * that job is keyed exactly like a new one.
-     */
+    
+
+
+
+
     @Volatile
     private var localId: String? = localId.takeIf { it.isNotEmpty() }
 
-    /**
-     * The resolved row's per-copy key and its rowid, cached by [onRun] from the ONE lookup
-     * [resolveTarget] already performs — no emission may cost a database read.
-     *
-     * Both stay null until a row is resolved. They exist because the serialized identifiers alone are
-     * not enough for a job persisted before [KEY_LOCAL_ID]: such a job would emit progress under its
-     * message id while the bubble collects under the row's (possibly synthesized) local id, and would
-     * address a status write by an id+messageId pair that a forward-owned row cannot match.
-     */
+    
+
+
+
+
+
+
+
+
     @Volatile
     private var resolvedProgressKey: String? = null
 
@@ -126,7 +128,7 @@ class DownloadAttachmentJob private constructor(
     }
 
     override fun onAdded() {
-        updateAttachmentStatus(AttachmentStatus.LOADING.code)
+        updateAttachmentStatus(AttachmentStatus.LOADING.code, resetVideoProbe = true)
         FileUtil.emitProgressUpdate(progressKey(), 0)
     }
 
@@ -136,27 +138,22 @@ class DownloadAttachmentJob private constructor(
         FileUtil.emitProgressUpdate(progressKey(), -1)
     }
 
-    /**
-     * Progress-map key — the resolved row's own per-copy key, which is exactly what the rendering
-     * bubble derives through `getAttachmentIdForProgress`, and the same key the file is written under.
-     *
-     * The pre-localId key survives only while no row has been resolved, i.e. in [onAdded]. That is
-     * safe rather than a second instance of this bug: [onAdded] fires once, at first submit, so it
-     * only ever runs for a job THIS build enqueued — one that carries its copy's localId. A job
-     * persisted before [KEY_LOCAL_ID] is restored, never re-added, and by the time it emits anything
-     * [onRun] has filled [resolvedProgressKey] in.
-     */
+    
+
+
+
+
     private fun progressKey(): String = resolvedProgressKey ?: localId ?: messageId
 
-    /**
-     * Located by the resolved row's rowid once [onRun] has one: the legacy id+messageId locator cannot
-     * reach a forward-owned row at all — such a row's `messageId` column is NULL, the owning message
-     * id lives on its ForwardModel — so a job persisted before [KEY_LOCAL_ID] would silently write no
-     * status for a forwarded copy, and an id-only locator would reach every sibling copy instead.
-     * Before resolution only the serialized identifiers exist, which for a job this build enqueued is
-     * the copy's own localId.
-     */
-    private fun updateAttachmentStatus(status: Int) {
+    
+
+
+
+
+
+
+
+    private fun updateAttachmentStatus(status: Int, resetVideoProbe: Boolean = false) {
         val condition = resolvedDatabaseId?.let { DBAttachmentModel.databaseId.eq(it) }
             ?: when (val target = attachmentRowTarget(localId, attachmentId, messageId)) {
                 is AttachmentRowTarget.ByLocalId -> DBAttachmentModel.localId.eq(target.localId)
@@ -165,24 +162,34 @@ class DownloadAttachmentJob private constructor(
 
                 is AttachmentRowTarget.ById -> DBAttachmentModel.id.eq(target.attachmentId)
             }
-        wcdb.attachment.updateValue(status, DBAttachmentModel.status, condition)
+        if (resetVideoProbe) {
+            
+            
+            wcdb.attachment.updateRow(
+                arrayOf(Value(status), Value(VideoProbeState.NONE)),
+                arrayOf(DBAttachmentModel.status, DBAttachmentModel.videoProbeState),
+                condition
+            )
+        } else {
+            wcdb.attachment.updateValue(status, DBAttachmentModel.status, condition)
+        }
     }
 
-    /**
-     * Where this attempt writes: recomputed from the attachment row, never from the serialized path.
-     * Null means the row is gone (message deleted) or unidentifiable — the job then gives up.
-     */
+    
+
+
+
     private fun resolveTarget(): Target? {
         val row = findAttachmentRow() ?: return null
-        // A row that cannot name a directory yet (localId not backfilled, and this job could not
-        // safely adopt one) is addressed by the key the bubble that asked for the download used —
-        // still a per-copy address, never the shared legacy one. A job persisted before the localId
-        // key existed carries none, and its row's synthesized id is exactly the address every reader
-        // of that row already derives (and the one the backfill will persist), so it is the fallback
-        // rather than giving up: with no key at all this job would fail permanently for a row the
-        // background pass has simply not reached yet.
+        
+        
+        
+        
+        
+        
+        
         val rowKey = attachmentRowKey(row.localId, localId, row.synthesizedLocalId())
-        // A row with no file name keeps the caller's "bare directory" shape (trailing separator).
+        
         val fileName = row.fileName?.takeIf { it.isNotEmpty() } ?: serializedFilePath.substringAfterLast(File.separatorChar, "")
         return Target(
             localId = row.localId?.takeIf { it.isNotEmpty() },
@@ -197,21 +204,21 @@ class DownloadAttachmentJob private constructor(
         if (key != null) {
             wcdb.attachment.getFirstObject(DBAttachmentModel.localId.eq(key))?.let { return it }
         }
-        // Either a job persisted before KEY_LOCAL_ID, or a row written before the localId column —
-        // the latter names no id and readers synthesize a fresh transient one per read, so the key
-        // this job carries matches nothing. Both fall back to the identifiers such a row does have.
-        // The server-side id can match several copies; the single legacy key — an owner message id,
-        // or the authority id for a single-forward bubble — is the only disambiguator left.
-        // Jobs enqueued since the id stopped being seeded carry no id at all: for those the localId
-        // lookup above was the only chance, and an `id.eq("")` scan would name arbitrary rows.
+        
+        
+        
+        
+        
+        
+        
         if (attachmentId.isEmpty()) return null
         val candidates = wcdb.attachment.getAllObjects(DBAttachmentModel.id.eq(attachmentId))
         if (candidates.size > 1) {
             L.w { "[DownloadAttachmentJob] legacy lookup matched ${candidates.size} rows, attachmentId=$attachmentId, messageId=$messageId" }
         }
         val recovered = pickLegacyAttachmentRow(candidates, messageId, { it.messageId }, { it.authorityId }) ?: return null
-        // Adopt this job's key only when the row is unambiguously the right one: writing it into a
-        // sibling copy would hand that copy an identity it was never rendered under.
+        
+        
         if (key != null && candidates.size == 1 && recovered.localId.isNullOrEmpty()) {
             wcdb.attachment.updateValue(key, DBAttachmentModel.localId, DBAttachmentModel.databaseId.eq(recovered.databaseId))
             recovered.localId = key
@@ -220,39 +227,39 @@ class DownloadAttachmentJob private constructor(
         return recovered
     }
 
-    /** [progressKey] is the row key [filePath] was built from — the two may never diverge. */
+    
     private data class Target(val localId: String?, val progressKey: String, val filePath: String, val row: AttachmentModel)
 
     override suspend fun onRun() {
         val target = resolveTarget()
         if (target == null) {
-            // Nothing to write to and nothing to update: give up permanently rather than retry into
-            // a deleted message (and never fall back to the frozen serialized path).
+            
+            
             L.w { "[DownloadAttachmentJob] give up, attachment row not found attachmentId=$attachmentId messageId=$messageId" }
             throw IllegalStateException("[DownloadAttachmentJob] attachment row not found, attachmentId=$attachmentId")
         }
-        // Adopt the row's identity BEFORE any status write or progress emit, so a legacy job behaves
-        // exactly like a new one for the rest of its life. The key and the rowid come from the lookup
-        // resolveTarget just did, so no later emission or status write re-reads the database.
+        
+        
+        
         target.localId?.let { localId = it }
         resolvedProgressKey = target.progressKey
         resolvedDatabaseId = target.row.databaseId
         val filePath = target.filePath
 
-        // Last chance to find this attachment's file at the address it had before per-copy
-        // addressing: the remote file may already have expired, in which case the legacy copy on
-        // disk is the only one left and downloading would lose it for good. Only a copy made HERE
-        // ends the job — an unusable file already at the current address must still be re-fetched.
-        // This is also the funnel every main-thread read miss lands in, which is why no bind or tap
-        // path needs a migration call of its own.
+        
+        
+        
+        
+        
+        
         val migration = EntryPointAccessors.fromApplication<EntryPoint>(context).forwardAttachmentMigration
-        // The row's EFFECTIVE key, never its localId column: a row the backfill has not reached names
-        // no id, and the rescue must still look under its legacy address — that is precisely the row
-        // whose file is still there. It is also the key `filePath` was built from, so the lock the
-        // migration takes is the same one the placement below takes.
+        
+        
+        
+        
         if (migration.materializeFromLegacyAddress(target.row, target.progressKey, filePath)) {
             L.i { "[DownloadAttachmentJob] served from legacy address, rowKey=${target.progressKey}" }
-            updateAttachmentStatus(AttachmentStatus.SUCCESS.code)
+            updateAttachmentStatus(AttachmentStatus.SUCCESS.code, resetVideoProbe = true)
             FileUtil.emitProgressUpdate(progressKey(), 100)
             return
         }
@@ -262,10 +269,10 @@ class DownloadAttachmentJob private constructor(
         val buffer = ByteArray(8192)
 
         val encryptFile = File("$filePath.encrypt")
-        // Stream into a transient name and rename into place only after the byte-count and MAC checks
-        // pass. A partial ciphertext must never be visible under the real name: the structural read
-        // check accepts any 16-aligned length, so a rebind mid-download (or after a process death)
-        // would treat the truncated file as downloaded and persist SUCCESS for it.
+        
+        
+        
+        
         val downloadTempFile = File("$filePath.encrypt.tmp")
         downloadTempFile.parentFile?.mkdirs()
         downloadTempFile.delete()
@@ -273,7 +280,7 @@ class DownloadAttachmentJob private constructor(
         try {
             val entryPoint = EntryPointAccessors.fromApplication<EntryPoint>(context)
             val fileShareRepo = entryPoint.fileShareRepo
-            // Own IO dispatcher: Call.execute() blocks. A token rejected after the retry throws InvalidTokenException.
+            
             val envelope = withContext(Dispatchers.IO) {
                 entryPoint.authTokenProvider.withInvalidTokenRetry("attachmentDownload") { token ->
                     val resp = fileShareRepo.download(DownloadReq(token, authorizedId, fileHash, "")).execute()
@@ -285,22 +292,22 @@ class DownloadAttachmentJob private constructor(
                 }
             }
 
-            // Check response status code
+            
             when (val responseStatus = envelope.status) {
                 0 -> {
-                    // OK, continue with download
+                    
                 }
                 in EXPIRED_STATUS_CODES -> {
-                    // Terminal: the server no longer serves this file (authorization expired after 30
-                    // days, or the storage object was purged after 35 days). Retrying cannot help, so
-                    // this is an EXPIRED outcome rather than a job failure.
+                    
+                    
+                    
                     L.w { "[DownloadAttachmentJob] file has expired (status code: $responseStatus) messageId=$messageId" }
                     updateAttachmentStatus(AttachmentStatus.EXPIRED.code)
                     FileUtil.emitProgressUpdate(progressKey(), -2)
                     return
                 }
                 else -> {
-                    // Handle other error status codes
+                    
                     val errorMessage = when (responseStatus) {
                         1 -> "INVALID_PARAMETER"
                         9 -> "NO_SUCH_FILE"
@@ -311,7 +318,7 @@ class DownloadAttachmentJob private constructor(
                 }
             }
 
-            // 获取URL列表，优先使用urls数组，回退到单个url
+            
             val downloadData = envelope.data
             val urlsToTry = downloadData?.urls?.takeIf { it.isNotEmpty() } ?: listOfNotNull(downloadData?.url)
             L.i { "[DownloadAttachmentJob] API response: using ${if (downloadData?.urls?.isNotEmpty() == true) "urls array" else "fallback url"}, total URLs: ${urlsToTry.size}, messageId: $messageId" }
@@ -357,7 +364,7 @@ class DownloadAttachmentJob private constructor(
                                 totalBytesRead += bytesRead
                                 val progress = (100.0 * totalBytesRead / contentLength).toInt().coerceAtMost(99)
                                 val currentTime = System.currentTimeMillis()
-                                // Update every 50ms or when progress changes by >=5%
+                                
                                 if ((currentTime - lastEmitTime >= 50) || (progress - lastEmitProgress >= 5)) {
                                     L.d { "[DownloadAttachmentJob] download progress: $totalBytesRead/$contentLength = $progress%" }
                                     FileUtil.emitProgressUpdate(progressKey(), progress)
@@ -372,9 +379,9 @@ class DownloadAttachmentJob private constructor(
                         }
                     }
 
-                    // Guard against a silently-truncated stream (early EOF on a dropped connection):
-                    // an incomplete .encrypt would later decrypt to garbage. Treat it as a failure so
-                    // we fall through to the next URL / retry instead of persisting a corrupt file.
+                    
+                    
+                    
                     if (contentLength > 0 && totalBytesRead != contentLength) {
                         throw IOException("[DownloadAttachmentJob] incomplete download: $totalBytesRead/$contentLength bytes, messageId: $messageId")
                     }
@@ -386,7 +393,7 @@ class DownloadAttachmentJob private constructor(
                 } catch (e: Exception) {
                     L.e { "[DownloadAttachmentJob] Download exception ${e::class.simpleName} ${index + 1}/${urlsToTry.size} messageId=$messageId url=${url.sanitizeUrl()}\n${e.stackTraceToString().sanitizeUrl()}" }
                     lastDownloadException = e
-                    // Discard the partial transfer before the next URL attempt.
+                    
                     downloadTempFile.delete()
                 }
             }
@@ -395,16 +402,16 @@ class DownloadAttachmentJob private constructor(
                 throw lastDownloadException ?: Exception("All download URLs failed")
             }
 
-            // The migration may be moving this same copy's legacy directory onto the address below,
-            // so the placement runs under the copy's row lock — the one the migration itself takes.
-            // Keyed by the row key `filePath` was built from, not by `localId`, which is null for a
-            // row the backfill has not reached and would silently take no lock at all.
-            // Blocking IO only: no suspension point may enter this block, or the lock would be
-            // released on a different thread than it was taken on.
+            
+            
+            
+            
+            
+            
             migration.withAttachmentRowLock(target.progressKey) {
-                // Every type is encrypted at rest (see EncryptedAttachmentAccess): keep the ciphertext
-                // on disk and decrypt on demand. Verify integrity ONCE now so consumers can read later
-                // without re-verifying, then promote the verified bytes to the final name.
+                
+                
+                
                 if (fileKey.size >= 64 && !FileDecryptionUtil.verifyMac(downloadTempFile, fileKey)) {
                     downloadTempFile.delete()
                     throw SecurityException("[DownloadAttachmentJob] MAC verification failed, messageId: $messageId")
@@ -416,24 +423,24 @@ class DownloadAttachmentJob private constructor(
                 }
             }
 
-            // Auto save to photos if enabled
-            // Note: autoSave decision is made at call site considering:
-            // 1. Attachment type (image/video only)
-            // 2. Confidential mode
-            // 3. Conversation-level saveToPhotos setting
-            // 4. Global saveToPhotos setting
+            
+            
+            
+            
+            
+            
             if (autoSave) {
                 L.i { "[DownloadAttachmentJob] auto save to photos: $filePath" }
                 if (FileUtil.canWriteToMediaStore()) {
                     val plainExists = File(filePath).exists()
                     val encryptedExists = EncryptedAttachmentAccess.hasEncrypted(filePath)
                     if (plainExists || encryptedExists) {
-                        // Prefer the durable ciphertext (content uri) when present; only fall back to
-                        // the plaintext file for legacy plaintext-only data. Reading the .encrypt on
-                        // demand avoids racing with any concurrent plaintext deletion.
+                        
+                        
+                        
                         val fileUri = if (encryptedExists) {
-                            // Segment comes from the path we just wrote, so a sibling copy sharing
-                            // the server-side id can never be the one that gets exported.
+                            
+                            
                             EncryptedAttachmentAccess.contentUriFromBasePath(filePath)
                         } else {
                             File(filePath).toUri()
@@ -452,13 +459,13 @@ class DownloadAttachmentJob private constructor(
                 }
             }
 
-            updateAttachmentStatus(AttachmentStatus.SUCCESS.code)
+            updateAttachmentStatus(AttachmentStatus.SUCCESS.code, resetVideoProbe = true)
             FileUtil.emitProgressUpdate(progressKey(), 100)
         } catch (e: Exception) {
             L.w { "[DownloadAttachmentJob] download attachment fail: ${e.stackTraceToString()}" }
             downloadTempFile.delete()
-            // Don't mark FAILED here — let onFailure() handle it after all retries exhausted.
-            // Marking FAILED during retry would briefly show retry button to user.
+            
+            
             throw e
         }
     }
@@ -467,7 +474,7 @@ class DownloadAttachmentJob private constructor(
 
     class Factory : Job.Factory<DownloadAttachmentJob> {
         override fun create(parameters: Parameters, data: Data): DownloadAttachmentJob {
-            // Absent for a job persisted before this key existed; onRun recovers it from the row.
+            
             val localId = data.getStringOrDefault(KEY_LOCAL_ID, "").orEmpty()
             val messageId = data.getString(KEY_MESSAGE_ID)!!
             val attachmentId = data.getString(KEY_ATTACHMENT_ID)!!
@@ -491,14 +498,10 @@ class DownloadAttachmentJob private constructor(
     companion object {
         const val KEY = "DownloadAttachmentJob"
 
-        /**
-         * `/v1/file/download` business statuses that mean the file is gone for good:
-         * 2 = NO_PERMISSION (download authorization expired, 30 days),
-         * 12 = storage object already purged (35 days).
-         * Neither code is in the published STATUS enum of server-docs; both were confirmed by the
-         * file-share server team (2026-09-17) as the two expiry outcomes. See
-         * [com.difft.android.chat.fileshare.FileShareService].
-         */
+        
+
+
+
         val EXPIRED_STATUS_CODES: Set<Int> = setOf(2, 12)
         private const val KEY_LOCAL_ID = "local_id"
         private const val KEY_MESSAGE_ID = "message_id"

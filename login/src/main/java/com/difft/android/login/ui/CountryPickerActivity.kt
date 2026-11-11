@@ -1,6 +1,7 @@
 package com.difft.android.login.ui
 
 import android.app.Activity
+import com.difft.android.base.widget.floatAsTopBarButton
 import android.content.Intent
 import android.os.Bundle
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -36,6 +37,7 @@ class CountryPickerActivity : BaseActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        mBinding.ibBack.floatAsTopBarButton(leading = true)
         mBinding.ibBack.setOnClickListener { finish() }
 
         mBinding.searchInput.onQueryChanged = { updateResult() }

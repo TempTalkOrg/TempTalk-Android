@@ -10,12 +10,8 @@ import com.difft.android.base.widget.ToastUtil
 import com.difft.android.chat.R
 import kotlinx.coroutines.launch
 
-/**
- * Collect [FavoriteViewModel] effects on this fragment's view lifecycle: a toast, or the confirm-first
- * cap dialog ("Replace oldest" evicts + re-favorites; the secondary button just dismisses). Shared by
- * every favorite entry point (GIF panel, GIF search dialog, forward detail) so the cap-dialog wiring
- * lives in ONE place instead of being copied per fragment.
- */
+
+
 fun Fragment.collectFavoriteEffects(favoriteViewModel: FavoriteViewModel) {
     viewLifecycleOwner.lifecycleScope.launch {
         viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -24,8 +20,8 @@ fun Fragment.collectFavoriteEffects(favoriteViewModel: FavoriteViewModel) {
                     is FavoriteContract.Effect.ShowToast ->
                         ToastUtil.show(getString(effect.messageRes))
                     is FavoriteContract.Effect.ShowCapDialog ->
-                        // Confirm-first cap dialog: "Replace oldest" evicts + adds; the secondary
-                        // button ("Cancel") just dismisses; the current GIF is not added.
+                        
+                        
                         dismissWithView(ComposeDialogManager.showMessageDialog(
                             context = requireActivity(),
                             title = getString(R.string.gif_favorites_cap_title),

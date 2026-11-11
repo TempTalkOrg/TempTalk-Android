@@ -36,7 +36,7 @@ internal fun testRowTag(kind: NotificationTestKind) = "notification_test_row_${k
 internal fun testButtonTag(kind: NotificationTestKind) = "notification_test_button_${kind.logName}"
 internal fun testStatusTag(kind: NotificationTestKind) = "notification_test_status_${kind.logName}"
 
-/** The notification test page (#1350): one row per test with its last valid result and a start button. */
+
 @Composable
 internal fun NotificationTestContent(
     state: State,
@@ -110,7 +110,7 @@ internal fun kindLabel(kind: NotificationTestKind): Int = when (kind) {
     NotificationTestKind.CALL -> ChatR.string.notification_call_popup
 }
 
-/** "Not tested", or the outcome with its date: confirmed / not seen for messages, passed / did not pop up for calls. */
+
 internal fun resultLabel(context: Context, kind: NotificationTestKind, result: NotificationTestResult?): String {
     if (result == null) return context.getString(ChatR.string.notification_test_untested)
     val ok = result.outcome == NotificationTestOutcome.OK

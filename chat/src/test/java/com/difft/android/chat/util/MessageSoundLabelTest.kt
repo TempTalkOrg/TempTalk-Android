@@ -9,7 +9,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
 
-/** The sound row's value: a title when the system can name the sound, otherwise None or Custom sound. */
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class MessageSoundLabelTest {
@@ -72,7 +72,7 @@ class MessageSoundLabelTest {
     fun `the conversation label reads the per-chat channel when present and MESSAGE otherwise`() {
         val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
         val nm = context.getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
-        // MESSAGE plays no sound; the per-chat channel keeps the default sound (blank title -> Custom sound).
+        
         nm.createNotificationChannel(
             android.app.NotificationChannel("MESSAGE", "Messages", android.app.NotificationManager.IMPORTANCE_HIGH).apply { setSound(null, null) }
         )

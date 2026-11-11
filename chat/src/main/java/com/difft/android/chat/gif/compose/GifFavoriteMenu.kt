@@ -25,24 +25,9 @@ import com.difft.android.base.ui.compose.menu.DifftDropdownMenuPanel
 import kotlin.math.roundToInt
 import com.difft.android.chat.ui.messageaction.MessageActionMenuColors
 
-/**
- * Single-row floating menu shown on long-press of a GIF cell (Issue 4): a rounded elevated surface
- * with one row = leading icon + label. It pops up at the finger, like the conversation-list
- * long-press menu.
- *
- * Rendered as an IN-COMPOSITION overlay (a child of the grid's root [Box]), NOT a system
- * [androidx.compose.material3.DropdownMenu]/`Popup`. A Popup lives in its own window, and inside a
- * BottomSheetDialog (the GIF search sheet) with an IME-resized window its anchor coordinates no
- * longer map to screen coordinates, so the menu drifts far from the finger. An in-composition
- * overlay shares the grid's window, so it lands at the finger in both the inline panel and the
- * search sheet.
- *
- * [position] is the press point in the ROOT box's local pixels; [rootSize] is that box's size, used
- * to clamp the menu inside the visible area (so an edge press doesn't push it off-screen). The caller
- * converts the cell-local touch to root-local via window coordinates and owns open/dismiss/action.
- *
- * Browse grids pass the add-to-favorite icon/label; the favorites grid passes the remove icon/label.
- */
+
+
+
 @Composable
 fun BoxScope.GifFavoriteMenu(
     visible: Boolean,
@@ -55,8 +40,8 @@ fun BoxScope.GifFavoriteMenu(
 ) {
     if (!visible) return
 
-    // Transparent scrim over the whole grid: a tap outside the menu dismisses it (mirrors a
-    // DropdownMenu's outside-tap behaviour) and blocks stray taps on cells beneath.
+    
+    
     Box(
         modifier = Modifier
             .matchParentSize()
@@ -64,15 +49,13 @@ fun BoxScope.GifFavoriteMenu(
     )
 
     var menuSize by remember { mutableStateOf(IntSize.Zero) }
-    // Panel and content stay on the forced-dark message-action palette: this menu belongs to the
-    // chat panel family, which renders dark under both themes.
     DifftDropdownMenuPanel(
         color = MessageActionMenuColors.panel,
         modifier = Modifier
             .align(Alignment.TopStart)
             .onSizeChanged { menuSize = it }
             .offset {
-                // Clamp so the menu stays fully inside the grid even for edge/bottom presses.
+                
                 val maxX = (rootSize.width - menuSize.width).coerceAtLeast(0)
                 val maxY = (rootSize.height - menuSize.height).coerceAtLeast(0)
                 IntOffset(

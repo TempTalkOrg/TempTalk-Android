@@ -7,7 +7,7 @@
     android:layout_height="match_parent"
     android:background="@android:color/transparent">
 
-    <!-- Scrim (dimmed background overlay) - starts transparent, fades in with animation -->
+    
     <View
         android:id="@+id/scrim"
         android:layout_width="match_parent"
@@ -15,7 +15,7 @@
         android:alpha="0"
         android:background="@color/transparent_black_32" />
 
-    <!-- Bottom Sheet Container -->
+    
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/bottom_sheet"
         android:layout_width="match_parent"
@@ -29,7 +29,7 @@
         app:behavior_hideable="true"
         app:layout_behavior="com.google.android.material.bottomsheet.BottomSheetBehavior">
 
-        <!-- Drag Handle indicator -->
+        
         <View
             android:id="@+id/drag_handle"
             android:layout_width="36dp"
@@ -40,7 +40,7 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
 
-        <!-- Chat header (with popup-specific layout) -->
+        
         <androidx.fragment.app.FragmentContainerView
             android:id="@+id/fragment_container_view_header"
             android:name="com.difft.android.chat.ui.ChatPopupHeaderFragment"
@@ -51,7 +51,7 @@
             app:layout_constraintTop_toBottomOf="@id/drag_handle"
             tools:layout="@layout/chat_fragment_header_popup" />
 
-        <!-- Message list -->
+        
         <androidx.fragment.app.FragmentContainerView
             android:id="@+id/fragment_container_view_contents"
             android:name="com.difft.android.chat.ui.ChatMessageListFragment"
@@ -65,7 +65,7 @@
             app:layout_constraintTop_toBottomOf="@+id/fragment_container_view_header"
             tools:layout="@layout/chat_fragment_message_list" />
 
-        <!-- Input area -->
+        
         <androidx.fragment.app.FragmentContainerView
             android:id="@+id/fragment_container_view_input"
             android:name="com.difft.android.chat.ui.ChatMessageInputFragment"
@@ -79,7 +79,7 @@
             app:layout_constraintStart_toStartOf="parent"
             tools:layout="@layout/chat_fragment_input" />
 
-        <!-- Voice recording overlay -->
+        
         <androidx.constraintlayout.widget.ConstraintLayout
             android:id="@+id/cl_voice_record"
             android:layout_width="match_parent"

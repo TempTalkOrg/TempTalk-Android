@@ -7,21 +7,21 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.Response
 
-/**
- * The one owner of "a non-2xx pairing response becomes a typed reason token".
- *
- * Every pairing request this device makes — `prepare-upload`, `link-precheck`, `link-intent`,
- * `reverse-pair` — is answered by the same peer implementations with the same body shapes, so they
- * must read them identically: a 403 carries the receiver's gate-reject token as plain text, while
- * 401 / 409 / 400 carry a JSON `{"error": "<token>"}`. One owner is what keeps a stale PIN, a busy
- * peer and a malformed request from collapsing into "network error" on one caller but not another.
- */
+
+
+
+
+
+
+
+
+
 internal object PrepareRejection {
 
-    /**
-     * Maps a non-2xx `[endpoint]` response to a [PrepareUploadRejectedException] carrying the wire
-     * reason token. Throws a plain [IllegalStateException] when the status carries no typed reason.
-     */
+    
+
+
+
     fun throwRejection(endpoint: String, resp: Response): Nothing {
         val body = runCatching { resp.body.string() }.getOrNull().orEmpty()
         val reason = when (resp.code) {
@@ -38,7 +38,7 @@ internal object PrepareRejection {
         error("$endpoint failed ${resp.code}")
     }
 
-    /** The `error` token of a JSON `{"error": "..."}` body, or null when the body is not that shape. */
+    
     @VisibleForTesting
     internal fun errorToken(body: String): String? = runCatching {
         P2pJson.parseToJsonElement(body).jsonObject["error"]?.jsonPrimitive?.content

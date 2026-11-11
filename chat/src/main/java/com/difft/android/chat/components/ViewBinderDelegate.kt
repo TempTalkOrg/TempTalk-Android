@@ -8,10 +8,10 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.viewbinding.ViewBinding
 import kotlin.reflect.KProperty
 
-/**
- * ViewBinderDelegate which enforces the "best practices" for maintaining a reference to a view binding given by
- * Android official documentation.
- */
+
+
+
+
 open class ViewBinderDelegate<T : ViewBinding>(
   private val bindingFactory: (View) -> T,
   private val onBindingWillBeDestroyed: (T) -> Unit = {}

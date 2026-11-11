@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- D5 / D5b: the focus group is gone (forced dialog) -->
+    
     <string name="focus_invalid_disbanded_title">专注的群已解散</string>
     <string name="focus_invalid_removed_title">已被移出专注的群</string>
     <string name="focus_invalid_disbanded_message">「%1$s」已解散，所有群仍保持免打扰。可以重新选择专注的群，或结束专注。</string>
@@ -9,12 +9,12 @@
     <string name="focus_invalid_removed_message_generic">你已被移出专注的群，所有群仍保持免打扰。可以重新选择专注的群，或结束专注。</string>
     <string name="focus_invalid_reselect">重新选择</string>
 
-    <!-- Home status strip while no focus group is selected -->
+    
     <string name="focus_strip_title">未选择专注的群</string>
     <string name="focus_strip_subtitle">· 所有群仍保持免打扰</string>
     <string name="focus_strip_action">去设置</string>
     <string name="focus_strip_close">关闭</string>
 
-    <!-- D4: leave confirm body for the group being focused -->
+    
     <string name="focus_leave_focused_notice">此群是正在专注的群。退出后，其他群仍保持免打扰，需重新选择专注的群。</string>
 </resources>

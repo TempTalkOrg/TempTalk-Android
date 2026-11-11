@@ -32,9 +32,9 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import org.difft.app.database.WCDBUpdateService
 
-/**
- * Background WebSocket connection foreground service.
- */
+
+
+
 class MessageForegroundService : Service() {
 
     companion object {
@@ -59,7 +59,7 @@ class MessageForegroundService : Service() {
         fun keepAliveHealthCounters(): KeepAliveHealthCounters
     }
 
-    // #1328 health counter: one start-foreground refusal per service instance.
+    
     private var refusalRecorded = false
 
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob() + CoroutineName("MessageForegroundService") + dbKeyFailSoftExceptionHandler)
@@ -71,17 +71,17 @@ class MessageForegroundService : Service() {
     override fun onCreate() {
         super.onCreate()
         L.i { "[MessageForegroundService] onCreate()" }
-        // Without a channel the service has stopped itself: neither running nor counted as started.
+        
         if (postForegroundNotification()) {
             isRunning = true
             if (!refusalRecorded) runCatching { healthCounters().onServiceStarted() }
-            // A vendor that kills the process on a recents swipe (HyperOS SwipeUpClean) recreates this
-            // service without delivering onStartCommand, so the connection must not wait for it. A refused
-            // promotion means the service is already stopping, so nothing is started then.
+            
+            
+            
             if (!refusalRecorded) startConnection()
         }
 
-        // Bare call (NOT serviceScope.launch): collector anchors to WCDBUpdateService's process scope and must outlive this Service. Idempotent.
+        
         WCDBUpdateService.updatingRooms()
     }
 
@@ -97,19 +97,19 @@ class MessageForegroundService : Service() {
         return START_STICKY
     }
 
-    /** Starts the WebSocket off the main thread; [WebSocketManager.start] is idempotent, so both entry points may call it. */
+    
     private fun startConnection() {
         serviceScope.launch {
-            // F-H1 safety: if the caller's foreground promotion was refused (FGSNAE), the
-            // helper already called stopSelf(). onDestroy() will run and trigger
-            // serviceScope.cancel() at some point, but until then this launch body
-            // may proceed to invoke the @Synchronized non-suspend
-            // WebSocketManager.start() (which does NOT consult coroutine isActive,
-            // runs synchronously to completion on Dispatchers.IO, sets
-            // isStarted=true). To avoid starting WebSocket on a Service that is
-            // already on its way to onDestroy, check isActive first.
-            //
-            // This is the FIRST line of the launch body.
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
             if (!isActive) {
                 L.w { "[MessageForegroundService] launch body skipped — service already stopping" }
                 return@launch
@@ -118,9 +118,9 @@ class MessageForegroundService : Service() {
                 val entryPoint = EntryPointAccessors.fromApplication(
                     applicationContext, ServiceEntryPoint::class.java
                 )
-                // Instantiate the manager so alarm-chain self-healing is active even on a
-                // START_STICKY revival where no other component touches it. Isolated so a
-                // manager-graph construction failure cannot block the WebSocket start below.
+                
+                
+                
                 runCatching { entryPoint.messageServiceManager() }
                     .onFailure { L.e { "[MessageForegroundService] Failed to init MessageServiceManager: ${it.stackTraceToString()}" } }
                 entryPoint.webSocketManager().start()
@@ -142,11 +142,11 @@ class MessageForegroundService : Service() {
     private fun healthCounters(): KeepAliveHealthCounters =
         EntryPointAccessors.fromApplication(applicationContext, ServiceEntryPoint::class.java).keepAliveHealthCounters()
 
-    /**
-     * Promotes on a verified channel only (#1354). With none, stops without `startForeground` and
-     * returns false; a sticky restart reaches here with no pending foreground requirement, so the
-     * stop is safe. A refused promotion is handled by the helper and still returns true.
-     */
+    
+
+
+
+
     private fun postForegroundNotification(): Boolean {
         val channelId = NotificationChannelSpecs.serviceForegroundChannel(this, SERVICE_TAG)
         if (channelId == null) {
@@ -154,7 +154,7 @@ class MessageForegroundService : Service() {
             return false
         }
         val started = ForegroundServiceStarter.startForegroundSafely(this, FOREGROUND_ID, createNotification(channelId))
-        // onCreate and onStartCommand both land here; count a refusal once.
+        
         if (!started && !refusalRecorded) {
             refusalRecorded = true
             runCatching {

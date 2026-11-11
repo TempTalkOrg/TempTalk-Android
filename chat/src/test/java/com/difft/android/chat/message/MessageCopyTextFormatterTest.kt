@@ -16,16 +16,11 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.util.Locale
 
-/**
- * Unit tests for [MessageCopyTextFormatter] (PRD §3).
- *
- * Robolectric provides Context for `getString` lookups. The formatter is otherwise pure:
- * nameResolver is injected, time formatting is deterministic (UTC-independent because we
- * assert against expected strings produced by SimpleDateFormat in the JVM's default tz).
- *
- * Locale is forced to en per test for deterministic placeholder text. A separate test
- * pins zh to verify locale-aware time + Chinese placeholders.
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28])
 class MessageCopyTextFormatterTest {
@@ -45,10 +40,8 @@ class MessageCopyTextFormatterTest {
         }
     }
 
-    // 2026-05-08 14:30 UTC for assertion deterministic; pattern uses local tz so the
-    // exact string varies by host tz. We assert structure (sender+content) and let
-    // time format come from TimeFormatter — separate tests pin the time format.
-    private val ts1 = 1_762_590_600_000L // arbitrary "May 2026" timestamp
+    
+    private val ts1 = 1_762_590_600_000L
     private val ts2 = ts1 + 60_000L
 
     @Before
@@ -64,7 +57,7 @@ class MessageCopyTextFormatterTest {
         context.resources.updateConfiguration(config, context.resources.displayMetrics)
     }
 
-    // ----- 类型分支测试 -----
+    
 
     @Test
     fun `text message uses raw text`() {
@@ -108,8 +101,8 @@ class MessageCopyTextFormatterTest {
 
     @Test
     fun `voice attachment defensively renders Message fallback`() {
-        // Voice is excluded from multi-select at the entry layer, but the formatter
-        // must still degrade gracefully if a voice somehow makes it in.
+        
+        
         val msg = textMsg(sender = alice, attachment = attachment(contentType = "audio/m4a", flags = 1))
         val out = format(listOf(msg))
         assertEquals(
@@ -195,8 +188,8 @@ class MessageCopyTextFormatterTest {
 
     @Test
     fun `forwardContext takes precedence over text`() {
-        // Even if text is non-empty, presence of forwardContext means this is a
-        // combined-forward bubble and should render as [Chat History].
+        
+        
         val msg = textMsg(
             sender = alice,
             text = "should be ignored",
@@ -223,7 +216,7 @@ class MessageCopyTextFormatterTest {
         )
     }
 
-    // ----- 顺序与分隔 -----
+    
 
     @Test
     fun `multiple messages from same sender are not merged — each gets its own header`() {
@@ -247,7 +240,7 @@ class MessageCopyTextFormatterTest {
         assertEquals(expected, out)
     }
 
-    // ----- 名称卫生化(PRD §3.3) -----
+    
 
     @Test
     fun `sender name with newline is sanitized to space`() {
@@ -259,7 +252,7 @@ class MessageCopyTextFormatterTest {
             context = context,
             language = "en",
         )
-        // First line should not contain a literal \n inside the sender portion
+        
         val firstLine = out.lineSequence().first()
         assertEquals(true, firstLine.startsWith("Bad Name,"))
     }
@@ -271,14 +264,14 @@ class MessageCopyTextFormatterTest {
             sharedContactName = "Multi\nLine\tName",
         )
         val out = format(listOf(msg))
-        // The content line should be on a single line — no literal newline inside it
+        
         val lines = out.lines()
-        // expected: 2 lines (header + content), not more
+        
         assertEquals(2, lines.size)
         assertEquals("[Contact Card] Multi Line Name", lines[1])
     }
 
-    // ----- locale 测试 -----
+    
 
     @Test
     fun `chinese locale uses Chinese time format and Chinese placeholders`() {
@@ -291,14 +284,12 @@ class MessageCopyTextFormatterTest {
             language = "zh",
         )
         val lines = out.lines()
-        // 中文 placeholder
+        
         assertEquals("[图片]", lines[1])
-        // 中文时间格式应含"年""月""日"
+        
         val header = lines[0]
         assertEquals(true, header.contains("年") && header.contains("月") && header.contains("日"))
     }
-
-    // ----- helpers -----
 
     private fun format(messages: List<TextMessage>): String =
         MessageCopyTextFormatter.format(
@@ -308,11 +299,11 @@ class MessageCopyTextFormatterTest {
             language = "en",
         )
 
-    /**
-     * Builds the expected formatted output for one message, using the same
-     * TimeFormatter call the formatter uses — so the test does not pin a specific
-     * timezone or string, only the structural contract.
-     */
+    
+
+
+
+
     private fun buildExpected(sender: String, ts: Long, content: String): String {
         val time = util.TimeFormatter.formatCopyHeaderTime("en", ts)
         return "$sender, [$time]\n$content"
@@ -384,7 +375,7 @@ class MessageCopyTextFormatterTest {
     )
 
     companion object {
-        // Sentinel so tests can distinguish "no shared contact" from "shared contact with null name"
+        
         private const val NO_CONTACT = " NO_CONTACT_SENTINEL "
     }
 }

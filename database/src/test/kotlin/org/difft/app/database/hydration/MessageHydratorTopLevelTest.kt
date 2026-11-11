@@ -22,27 +22,27 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * Top-level (L1) grouping contract of [MessageHydrator] plus the two fixed-depth second-level
- * fan-outs that hang off it (quote attachments, shared-contact phones).
- *
- * Every case seeds `databaseId` values OUT of insertion order: the batch path groups rows itself,
- * so "the loader returned them sorted" must be visible in the output, not assumed.
- *
- * Test rows #18..#24 of the design inventory.
- */
+
+
+
+
+
+
+
+
+
 class MessageHydratorTopLevelTest {
 
-    /**
-     * `runBlocking`, not `runTest`: `hydrate` has no delays and no virtual time (it is CPU work
-     * behind a `withContext(IO)`), and `runTest`'s `TestResult` is `Unit` on the JVM so it cannot
-     * hand the result back to the assertions.
-     */
+    
+
+
+
+
     private fun hydrate(corpus: ChildRowCorpus) = runBlocking {
         MessageHydrator(FakeMessageChildRowLoader(corpus)).hydrate(corpus.messages)
     }
 
-    /** #18 — one attachment per message: the lowest `databaseId` in the group wins, like `.firstOrNull()`. */
+    
     @Test
     fun `attachment picks the first row by databaseId and is null when the message has none`() {
         val expectedRow = buildAttachmentModel(databaseId = 3, messageId = "A")
@@ -60,7 +60,7 @@ class MessageHydratorTopLevelTest {
         assertNull(hydration["B"].attachment)
     }
 
-    /** #19 — mentions keep `databaseId ASC` order; the list takes part in ChatMessage.equals. */
+    
     @Test
     fun `mentions are ordered by databaseId ascending`() {
         val rows = listOf(
@@ -79,7 +79,7 @@ class MessageHydratorTopLevelTest {
         assertEquals(listOf(4, 6, 9), rows.sortedBy { it.databaseId }.map { it.databaseId })
     }
 
-    /** #20 — reactions ordered ascending; a message with none gets an empty list, never null. */
+    
     @Test
     fun `reactions are ordered ascending and degrade to an empty list`() {
         val rows = listOf(
@@ -97,7 +97,7 @@ class MessageHydratorTopLevelTest {
         assertEquals(emptyList<Any>(), hydration["B"].reactions)
     }
 
-    /** #21 — shared contacts plus their L2 phone fan-out; the four unused SharedContact slots stay null. */
+    
     @Test
     fun `shared contacts carry their phones in databaseId order and null out the unused slots`() {
         val corpus = ChildRowCorpus(
@@ -128,7 +128,7 @@ class MessageHydratorTopLevelTest {
         }
     }
 
-    /** #22 — translate / speech-to-text rows map field for field; absent rows stay null. */
+    
     @Test
     fun `translate and speech to text map field for field`() {
         val translateRow = buildTranslateModel(databaseId = 5, messageId = "A")
@@ -147,10 +147,10 @@ class MessageHydratorTopLevelTest {
         assertNull(hydration["B"].speechToTextData)
     }
 
-    /**
-     * #23 — quote plus its L2 attachments. The quoted attachment mapper is deliberately NOT
-     * `toAttachment()`: an empty thumbnail byte array normalises to null here.
-     */
+    
+
+
+
     @Test
     fun `quote attachments use the quoted mapper and normalise an empty thumbnail to null`() {
         val corpus = ChildRowCorpus(
@@ -175,12 +175,12 @@ class MessageHydratorTopLevelTest {
         assertEquals(listOf("att-101", "att-102"), attachments.map { it.thumbnail?.id })
         assertNull("empty byte array must normalise to null", attachments[0].thumbnail?.thumbnail)
         assertTrue(attachments[1].thumbnail?.thumbnail?.isNotEmpty() == true)
-        // Quoted attachments carry neither totalTime nor amplitudes, unlike toAttachment().
+        
         assertEquals(0L, attachments[0].thumbnail?.totalTime)
         assertNull(attachments[0].thumbnail?.amplitudes)
     }
 
-    /** #24 — a quote with no attachment rows reports `null`, not an empty list (`ifEmpty { null }`). */
+    
     @Test
     fun `quote without attachments reports null attachments`() {
         val corpus = ChildRowCorpus(

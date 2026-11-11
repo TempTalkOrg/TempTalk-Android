@@ -31,10 +31,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
-/**
- * 管理通话相关的对话框
- * 负责显示和关闭各种对话框，简化状态管理
- */
 class CallDialogManager(
     private val activity: android.app.Activity,
     private val lifecycleScope: LifecycleCoroutineScope,
@@ -46,25 +42,18 @@ class CallDialogManager(
     private val onExitCall: (CallExitParams) -> Unit,
     private val onEndCall: () -> Unit
 ) {
-    // 通话结束提醒对话框
     private var callEndReminderDialog: ComposeDialog? = null
     private var callEndReminderMessageView: TextView? = null
     private var isShowCallingEndReminder: Boolean = false
     private var countdownJob: Job? = null
 
-    // PIP 权限对话框
     private var pipPermissionDialog: ComposeDialog? = null
 
-    // End Call for all 提醒对话框
     private var endCallForAllDialog: ComposeDialog? = null
 
-    /**
-     * 显示通话结束提醒对话框
-     * @param secondsToLeaveMeeting 剩余秒数，默认 180 秒
-     */
     @SuppressLint("AutoDispose")
     fun showCallingEndReminder(secondsToLeaveMeeting: Long = 180L) {
-        // 如果对话框已存在，只更新倒计时
+        
         if (callEndReminderDialog != null) {
             val remainingSeconds = secondsToLeaveMeeting - 1
             callEndReminderMessageView?.text = activity.getString(R.string.call_ending_seconds_left, remainingSeconds)
@@ -74,10 +63,9 @@ class CallDialogManager(
             return
         }
 
-        // 创建新对话框
         isShowCallingEndReminder = true
-        // Use the participants StateFlow (local + remotes) instead of the fail-loud room
-        // getter: this dialog can be shown during teardown, where room is already released.
+        
+        
         val hasRemote = viewModel.participants.value.any { it is RemoteParticipant }
         val title = if (!hasRemote) {
             activity.getString(R.string.call_single_person_timeout_reminder)
@@ -130,7 +118,6 @@ class CallDialogManager(
             }
         )
 
-        // 如果在 PIP 模式，返回通话界面
         if (viewModel.callUiController.isInPipMode.value) {
             val intent = CallIntent.Builder(activity, LCallActivity::class.java)
                 .withAction(CallIntent.Action.BACK_TO_CALL)
@@ -139,13 +126,9 @@ class CallDialogManager(
             activity.startActivity(intent)
         }
 
-        // 启动倒计时
         startCountdown(secondsToLeaveMeeting)
     }
 
-    /**
-     * 关闭通话结束提醒对话框
-     */
     fun dismissCallingEndReminder() {
         callEndReminderDialog?.dismiss()
         isShowCallingEndReminder = false
@@ -155,11 +138,6 @@ class CallDialogManager(
         countdownJob = null
     }
 
-    /**
-     * 显示 PIP 权限对话框
-     * @param tag 调用标签，用于日志记录
-     * @param enterPipModeIfPossible 如果可以进入 PIP 模式的回调
-     */
     fun showPipPermissionDialog(
         tag: String?,
         enterPipModeIfPossible: (String?) -> Unit
@@ -192,7 +170,7 @@ class CallDialogManager(
                     }
                 },
                 onCancel = {
-                    // 用户选择"暂不开启" → 记录当前版本，避免重复弹窗
+                    
                     lifecycleScope.launch(Dispatchers.IO) {
                         userManager.update {
                             floatingWindowPermissionTipsShowedVersion = PackageUtil.getAppVersionName()
@@ -210,9 +188,6 @@ class CallDialogManager(
         }
     }
 
-    /**
-     * 关闭所有对话框
-     */
     fun dismissAll() {
         dismissCallingEndReminder()
         pipPermissionDialog?.dismiss()
@@ -221,20 +196,15 @@ class CallDialogManager(
         endCallForAllDialog = null
     }
 
-    /**
-     * 启动倒计时
-     */
     private fun startCountdown(secondsToLeaveMeeting: Long) {
         countdownJob?.cancel()
 
         countdownJob = lifecycleScope.launch {
             try {
                 for (remainingSeconds in secondsToLeaveMeeting downTo 0) {
-                    // 检查 Activity 是否还存在
                     if (!isActive || activity.isFinishing || activity.isDestroyed) {
                         return@launch
                     }
-                    // 更新倒计时显示
                     callEndReminderMessageView?.text = activity.getString(R.string.call_ending_seconds_left, remainingSeconds)
                     if (remainingSeconds <= 0) {
                         onEndCall()
@@ -252,19 +222,10 @@ class CallDialogManager(
         }
     }
 
-    /**
-     * 检查是否正在显示通话结束提醒
-     */
     fun isShowingCallingEndReminder(): Boolean = isShowCallingEndReminder
 
-    /**
-     * 显示“结束所有人通话”的确认对话框，并处理用户操作。
-     * 如果对话框已存在，则先关闭现有对话框再重新创建（避免重复显示）。
-     *
-     * @param onAction 回调函数，当用户点击确认或取消按钮时触发，返回操作类型 [DialogActionType]。
-     * - [DialogActionType.ON_CONFIRM] 用户点击确认按钮
-     * - [DialogActionType.ON_CANCEL] 用户点击取消按钮
-     */
+    
+
     fun showEndCallForAllDialog(onAction: (DialogActionType) -> Unit) {
         if (endCallForAllDialog == null) {
             endCallForAllDialog = ComposeDialogManager.showMessageDialog(
@@ -291,9 +252,6 @@ class CallDialogManager(
         }
     }
 
-    /**
-     * 主动关闭并清理“结束所有人通话”对话框资源。
-     */
     fun dismissEndCallForAllDialog() {
         endCallForAllDialog?.dismiss()
         endCallForAllDialog = null

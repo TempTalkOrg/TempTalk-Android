@@ -20,6 +20,7 @@ import androidx.compose.ui.geometry.Rect as ComposeRect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalDensity
@@ -28,17 +29,18 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.fragment.app.FragmentActivity
+import com.difft.android.base.ui.compose.floatingMenuEntrance
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.chat.message.TextChatMessage
 import com.difft.android.base.utils.dp as dpToPx
 
-/**
- * Popup for failed message actions (resend/delete)
- * Uses same style as MessageActionPopup
- * 
- * Note: Uses full-screen overlay with Box+offset instead of Compose Popup
- * to avoid affecting the window background drawable
- */
+
+
+
+
+
+
+
 class FailedMessageActionPopup(
     private val activity: FragmentActivity
 ) {
@@ -54,21 +56,21 @@ class FailedMessageActionPopup(
     private var callbacks: Callbacks? = null
     private var _isShowing = false
     
-    /**
-     * Show the failed message action popup
-     * 
-     * @param anchorView The view to anchor the popup to (usually the message bubble)
-     * @param message The failed message
-     * @param containerView Optional container view to determine available bounds (e.g., RecyclerView)
-     * @param callbacks Callbacks for user interactions
-     */
+    
+
+
+
+
+
+
+
     fun show(
         anchorView: View,
         message: TextChatMessage,
         containerView: View? = null,
         callbacks: Callbacks
     ) {
-        // Dismiss any existing popup
+        
         dismissInternal(notifyCallback = false)
         
         this.currentMessage = message
@@ -79,8 +81,8 @@ class FailedMessageActionPopup(
         
         val rootBounds = Rect().also { rootView.getGlobalVisibleRect(it) }
         val relativeAnchorBounds = Rect().also { anchorView.getGlobalVisibleRect(it) }.toRootRelative(rootBounds)
-        // Actual visible content area from the container, falling back to rootView
-        val relativeContentBounds = Rect().also { (containerView ?: rootView).getGlobalVisibleRect(it) }
+        
+        val relativeContentBounds = Rect().also { ChatContentBand.onScreen(containerView ?: rootView, it) }
             .toRootRelative(rootBounds)
         
         composeView = ComposeView(activity).apply {
@@ -90,7 +92,7 @@ class FailedMessageActionPopup(
                 DifftTheme(applyWindowBackground = false) {
                     var showPopup by remember { mutableStateOf(true) }
                     
-                    // Handle back press
+                    
                     BackHandler(enabled = showPopup) {
                         showPopup = false
                         notifyDismiss(callbacks)
@@ -120,7 +122,7 @@ class FailedMessageActionPopup(
             }
         }
         
-        // Full-screen overlay
+        
         rootView.addView(composeView, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
     }
     
@@ -167,11 +169,11 @@ class FailedMessageActionPopup(
     }
 }
 
-/**
- * Full-screen overlay that positions the popup content using Box + offset.
- * Renders the shared [MessageActionContent] with the failed-state action set (resend / delete),
- * no reaction bar, and always right-aligned positioning (INV-5).
- */
+
+
+
+
+
 @Composable
 private fun FailedMessagePopupOverlay(
     anchorBounds: PopupRect,
@@ -185,36 +187,36 @@ private fun FailedMessagePopupOverlay(
     var popupHeight by remember { mutableIntStateOf(0) }
     val isMeasured = popupWidth > 0 && popupHeight > 0
     val metrics = remember { PopupMetrics(edgePaddingPx = 8.dpToPx, arrowGapPx = 2.dpToPx, arrowMinInsetPx = 16.dpToPx) }
-    // Laid-out popup bounds (root == overlay space); null until the first placement.
+    
     var menuRect by remember { mutableStateOf<ComposeRect?>(null) }
 
-    // Panel width guard (decision #11) — same value for measure and display phases (INV-1)
+    
     val maxPanelWidth = remember(contentBounds) {
         computeMaxPanelWidth(contentBounds.width, metrics.edgePaddingPx, density)
     }
 
-    // Failed-state action set (Master Order B5): Resend -> Delete(red)
+    
     val failedActions = remember { buildFailedActions() }
 
-    // Unified type dispatcher for the shared content
+    
     val onActionClick: (MessageAction) -> Unit = { action ->
         failedActionDispatch(action.type, onResendClick, onDeleteClick)
     }
 
-    // Full screen transparent overlay to catch outside clicks
+    
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Transparent)
             .pointerInput(Unit) {
-                // Reads menuRect through its State delegate, so the hit-test always sees the
-                // current laid-out bounds; a tap before the first placement dismisses (#1294).
+                
+                
                 detectTapGestures { offset ->
                     if (menuRect?.contains(offset) != true) onOutsideClick()
                 }
             }
     ) {
-        // Measure phase: invisible content to get dimensions
+        
         if (!isMeasured) {
             Box(
                 modifier = Modifier
@@ -232,14 +234,13 @@ private fun FailedMessagePopupOverlay(
                     reactions = emptyList(),
                     selectedEmojis = emptySet(),
                     maxPanelWidth = maxPanelWidth,
-                    arrowConfig = ArrowConfig(isBelow = true, arrowOffsetX = 60.dp),
                     onReactionClick = { _, _ -> },
                     onMoreEmojiClick = { },
                     onActionClick = { }
                 )
             }
         } else {
-            // Display phase: anchored to the bubble only; failed messages are always outgoing, so right-aligned.
+            
             val placement = remember(anchorBounds, contentBounds, popupWidth, popupHeight) {
                 MessageActionPopupPositioner.place(
                     SelectionAnchorInput(anchorBounds), contentBounds, popupWidth, popupHeight, isOutgoing = true, metrics
@@ -250,6 +251,13 @@ private fun FailedMessagePopupOverlay(
                     .offset { IntOffset(placement.x, placement.y) }
                     .onGloballyPositioned { menuRect = it.boundsInRoot() }
                     .testTag(FAILED_POPUP_MENU_TAG)
+                    
+                    .floatingMenuEntrance(
+                        TransformOrigin(
+                            pivotFractionX = (placement.arrowOffsetXPx.toFloat() / popupWidth).coerceIn(0f, 1f),
+                            pivotFractionY = if (placement.isBelow) 0f else 1f,
+                        )
+                    )
             ) {
                 MessageActionContent(
                     actions = failedActions,
@@ -257,10 +265,6 @@ private fun FailedMessagePopupOverlay(
                     reactions = emptyList(),
                     selectedEmojis = emptySet(),
                     maxPanelWidth = maxPanelWidth,
-                    arrowConfig = ArrowConfig(
-                        isBelow = placement.isBelow,
-                        arrowOffsetX = with(density) { placement.arrowOffsetXPx.toDp() },
-                    ),
                     onReactionClick = { _, _ -> },
                     onMoreEmojiClick = { },
                     onActionClick = onActionClick
@@ -270,20 +274,20 @@ private fun FailedMessagePopupOverlay(
     }
 }
 
-/** Test tag on the laid-out failed-message popup (#1294). */
+
 internal const val FAILED_POPUP_MENU_TAG = "failed_popup_menu"
 
-/** Failed-state action set (Master Order B5): Resend -> Delete(red). */
+
 internal fun buildFailedActions(): List<MessageAction> =
     listOf(MessageAction.resend(), MessageAction.delete())
 
-/**
- * Maps a failed-state action type to its callback; unknown types are ignored (else-safe).
- *
- * `MORE_INFO` is intentionally NOT dispatched here: a failed message has not reached anyone, so the
- * delivery/read detail page carries no information for it. The regular (non-failed) message menu
- * keeps its Info entry — only this failed-state set is narrowed.
- */
+
+
+
+
+
+
+
 internal fun failedActionDispatch(
     type: MessageAction.Type,
     onResend: () -> Unit,

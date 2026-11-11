@@ -17,20 +17,20 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * Cases #5..#8 — the four window-building entry points, exercised end to end through the
- * `ChatMessageWindowSource` seam.
- *
- * Each case pins the boundary operator its path depends on (`gt` / `le` / `ge` / `lt` / plain
- * descending), because a single wrong boundary is invisible in review and produces a window that
- * is off by exactly one row.
- */
+
+
+
+
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class ChatNormalPaginationControllerEntryPointsTest : PaginationTestBase() {
 
-    // #5 — first screen from readPosition, mixed branch: fewer unread than a page, so the load
-    // back-fills already-read rows through the `le` boundary and lands the scroll on the first
-    // unread row's index INSIDE the page.
+    
+    
+    
     @Test
     fun `first screen from read position back-fills read rows and scrolls to the first unread`() = runTest {
         val messages = buildMessageSequence(40)
@@ -41,19 +41,19 @@ class ChatNormalPaginationControllerEntryPointsTest : PaginationTestBase() {
         controller.initLoadMessage(null)
 
         val behavior = controller.behavior()
-        // m35..m39 are unread (5 rows); the loader back-fills m20..m34 plus one before-anchor.
+        
         assertEquals((20..39).map { "m$it" }, controller.windowIds())
         assertEquals(ScrollAction.ToPosition(15), behavior.scrollAction)
         assertEquals("m19", behavior.anchorMessageBefore?.id)
         assertNull(behavior.anchorMessageAfter)
         assertEquals(35_000L, behavior.readPosition)
-        // The `le` back-fill really ran — the branch is not reachable by the `gt` query alone.
+        
         assertEquals(1, source.callCount("atOrOlderThan"))
     }
 
-    // #6 — #1103 first-screen anchoring at the earliest failed outgoing message. The window is
-    // keyed on systemShowTimestamp but the scroll command carries `timeStamp`; the two disagree on
-    // a failed row and swapping them desyncs the scroll from the window.
+    
+    
+    
     @Test
     fun `first screen anchors at the earliest failed outgoing message and scrolls by timeStamp`() = runTest {
         val failed = buildMessageModel(
@@ -75,11 +75,11 @@ class ChatNormalPaginationControllerEntryPointsTest : PaginationTestBase() {
         assertEquals("failed", controller.windowIds().first())
     }
 
-    // #7 — jumpToMessage on a mid-conversation target.
-    //
-    // Only the after-anchor can be non-null here: the forward query alone overflows the page, so
-    // splitMessageWindow takes the "no before-anchor" branch by construction. A window with BOTH
-    // anchors is unreachable from this entry point — the over-fetch is one row, not two.
+    
+    
+    
+    
+    
     @Test
     fun `jumpToMessage centres the window on the target and keeps an after-anchor`() = runTest {
         val messages = buildMessageSequence(100)
@@ -98,7 +98,7 @@ class ChatNormalPaginationControllerEntryPointsTest : PaginationTestBase() {
         assertWindowIsContiguousSliceOf(messages, controller.window())
     }
 
-    // #7 (miss variant) — an unknown timestamp must leave the window untouched.
+    
     @Test
     fun `jumpToMessage on an unknown timestamp returns false and leaves the window untouched`() = runTest {
         source.seed(buildMessageSequence(100))
@@ -112,7 +112,7 @@ class ChatNormalPaginationControllerEntryPointsTest : PaginationTestBase() {
         assertEquals(before, controller.windowIds())
     }
 
-    // #8 — jumpToBottom ends the window on the newest row, so there is nothing to anchor after it.
+    
     @Test
     fun `jumpToBottom loads the newest page with a before-anchor and no after-anchor`() = runTest {
         val messages = buildMessageSequence(100)

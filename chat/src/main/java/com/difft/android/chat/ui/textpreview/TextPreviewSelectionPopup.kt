@@ -17,27 +17,28 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import com.difft.android.base.ui.compose.floatingMenuEntrance
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.utils.WindowSizeClassUtil
-import com.difft.android.chat.ui.messageaction.ArrowConfig
 import com.difft.android.chat.ui.messageaction.MessageAction
 import com.difft.android.chat.ui.messageaction.MessageActionContent
 import com.difft.android.chat.ui.messageaction.computeMaxPanelWidth
 
-/**
- * Selection popup for TextPreviewActivity.
- * Shows copy, forward, translate, and optionally select all actions.
- * Positions itself to avoid covering the selected text.
- */
+
+
+
+
+
 class TextPreviewSelectionPopup(
     private val activity: Activity,
-    /** False on a build that ships no translate backend; the translate action is then omitted. */
+    
     private val translateSupported: Boolean,
 ) {
     
@@ -58,16 +59,16 @@ class TextPreviewSelectionPopup(
     val isShowing: Boolean
         get() = _isShowing
     
-    /** Get popup bounds for hit testing */
+    
     fun getPopupBounds(): Rect? = popupBounds
     
-    /**
-     * Show selection popup.
-     * 
-     * @param selectionBounds The bounds of the selected text in screen coordinates
-     * @param isFullSelection Whether all text is selected (hides SelectAll option)
-     * @param callbacks Interaction callbacks
-     */
+    
+
+
+
+
+
+
     @SuppressLint("ClickableViewAccessibility")
     fun show(
         selectionBounds: Rect,
@@ -85,7 +86,7 @@ class TextPreviewSelectionPopup(
         val rootBounds = Rect()
         rootView.getGlobalVisibleRect(rootBounds)
         
-        // Convert selection bounds to be relative to rootView
+        
         val relativeSelectionBounds = Rect(
             selectionBounds.left - rootBounds.left,
             selectionBounds.top - rootBounds.top,
@@ -96,7 +97,7 @@ class TextPreviewSelectionPopup(
         val screenWidth = WindowSizeClassUtil.getWindowWidthPx(activity)
         val screenHeight = WindowSizeClassUtil.getWindowHeightPx(activity)
         
-        // Build actions
+        
         val actions = buildList {
             add(MessageAction.copy())
             add(MessageAction.forward())
@@ -106,7 +107,7 @@ class TextPreviewSelectionPopup(
             }
         }
         
-        // Create ComposeView
+        
         composeView = ComposeView(activity).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
             
@@ -133,7 +134,7 @@ class TextPreviewSelectionPopup(
                                 }
                                 MessageAction.Type.SELECT_ALL -> {
                                     callbacks.onSelectAll()
-                                    // Don't dismiss - will be repositioned after selection changes
+                                    
                                 }
                                 else -> {}
                             }
@@ -146,7 +147,7 @@ class TextPreviewSelectionPopup(
             }
         }
         
-        // Create overlay container
+        
         overlayContainer = object : FrameLayout(activity) {
             private var waitingForNewTouchSequence = true
             
@@ -154,7 +155,7 @@ class TextPreviewSelectionPopup(
                 val x = ev.x.toInt()
                 val y = ev.y.toInt()
                 
-                // Wait for first ACTION_DOWN to start accepting events
+                
                 if (waitingForNewTouchSequence) {
                     if (ev.action == MotionEvent.ACTION_DOWN) {
                         waitingForNewTouchSequence = false
@@ -163,18 +164,18 @@ class TextPreviewSelectionPopup(
                     }
                 }
                 
-                // Check if touch is inside popup bounds
+                
                 val pBounds = popupBounds
                 if (pBounds != null && pBounds.contains(x, y)) {
                     return super.dispatchTouchEvent(ev)
                 }
                 
-                // Touch outside popup - dismiss on ACTION_UP
+                
                 if (ev.action == MotionEvent.ACTION_UP) {
                     dismiss()
                 }
                 
-                // Let touch pass through to underlying views (for handle dragging)
+                
                 return false
             }
         }.apply {
@@ -184,13 +185,13 @@ class TextPreviewSelectionPopup(
         rootView.addView(overlayContainer, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
     }
     
-    /**
-     * Update popup position when selection changes.
-     */
+    
+
+
     fun updatePosition(selectionBounds: Rect, isFullSelection: Boolean) {
         if (!_isShowing) return
         
-        // Dismiss and re-show with new position
+        
         val currentCallbacks = callbacks ?: return
         dismiss()
         show(selectionBounds, isFullSelection, currentCallbacks)
@@ -234,13 +235,13 @@ private fun TextPreviewSelectionOverlay(
     val edgePaddingPx = with(density) { 16.dp.toPx().toInt() }
     val gapPx = with(density) { 8.dp.toPx().toInt() }
 
-    // Panel width guard (decision #11) — screen-width based; same value for measure and display (INV-1)
+    
     val maxPanelWidth = remember(screenWidth, edgePaddingPx) {
         computeMaxPanelWidth(screenWidth, edgePaddingPx, density)
     }
     
     Box(modifier = Modifier.fillMaxSize()) {
-        // Measure phase
+        
         if (!isMeasured) {
             Box(
                 modifier = Modifier
@@ -261,32 +262,28 @@ private fun TextPreviewSelectionOverlay(
                     maxPanelWidth = maxPanelWidth,
                     onReactionClick = { _, _ -> },
                     onMoreEmojiClick = { },
-                    onActionClick = {} // INV-6: measure phase must not fire real actions
+                    onActionClick = {} 
                 )
             }
         }
 
-        // Position phase
+        
         if (isMeasured && popupWidth > 0 && popupHeight > 0) {
-            // Calculate X position - centered horizontally
+            
             val x = ((screenWidth - popupWidth) / 2).coerceIn(edgePaddingPx, screenWidth - popupWidth - edgePaddingPx)
             
-            // Calculate selection height
+            
             val selectionHeight = selectionBounds.bottom - selectionBounds.top
             val selectionCenterY = (selectionBounds.top + selectionBounds.bottom) / 2
             
-            // Position strategy:
-            // 1. If selection is very tall (> 50% screen), center popup vertically
-            // 2. Otherwise, try above selection, then below, then wherever fits
+            
+            
+            
             val y: Int
-            val showArrow: Boolean
-            val arrowPointsUp: Boolean
             
             if (selectionHeight > screenHeight * 0.5) {
-                // Large selection - center popup on screen
+                
                 y = (screenHeight - popupHeight) / 2
-                showArrow = false
-                arrowPointsUp = false
             } else {
                 val spaceAbove = selectionBounds.top - edgePaddingPx
                 val spaceBelow = screenHeight - selectionBounds.bottom - edgePaddingPx
@@ -299,51 +296,37 @@ private fun TextPreviewSelectionOverlay(
                 
                 when {
                     canFitAbove -> {
-                        // Prefer above
+                        
                         y = idealYAbove.coerceAtLeast(edgePaddingPx)
-                        showArrow = true
-                        arrowPointsUp = false  // Arrow points down (popup above selection)
                     }
                     canFitBelow -> {
-                        // Fall back to below
+                        
                         y = idealYBelow.coerceAtMost(screenHeight - popupHeight - edgePaddingPx)
-                        showArrow = true
-                        arrowPointsUp = true  // Arrow points up (popup below selection)
                     }
                     else -> {
-                        // Neither fits well - use the side with more space
+                        
                         if (spaceAbove >= spaceBelow) {
                             y = edgePaddingPx
-                            showArrow = false
-                            arrowPointsUp = false
                         } else {
                             y = screenHeight - popupHeight - edgePaddingPx
-                            showArrow = false
-                            arrowPointsUp = true
                         }
                     }
                 }
             }
             
-            // Report bounds for touch handling
+            
             onPopupPositioned(Rect(x, y, x + popupWidth, y + popupHeight))
             
-            // Calculate arrow offset (point to selection center)
-            val arrowConfig = if (showArrow) {
-                val selectionCenterX = (selectionBounds.left + selectionBounds.right) / 2
-                val minArrowOffsetPx = with(density) { 16.dp.toPx() }
-                val maxArrowOffsetPx = (popupWidth - minArrowOffsetPx).coerceAtLeast(minArrowOffsetPx)
-                val arrowOffsetXPx = (selectionCenterX - x).toFloat().coerceIn(minArrowOffsetPx, maxArrowOffsetPx)
-                ArrowConfig(
-                    isBelow = arrowPointsUp,
-                    arrowOffsetX = with(density) { arrowOffsetXPx.toDp() }
-                )
-            } else {
-                null
-            }
             
+            val originY = when {
+                y + popupHeight <= selectionBounds.top -> 1f
+                y >= selectionBounds.bottom -> 0f
+                else -> 0.5f
+            }
             Box(
-                modifier = Modifier.offset { IntOffset(x, y) }
+                modifier = Modifier
+                    .offset { IntOffset(x, y) }
+                    .floatingMenuEntrance(TransformOrigin(0.5f, originY))
             ) {
                 MessageActionContent(
                     actions = actions,
@@ -353,8 +336,7 @@ private fun TextPreviewSelectionOverlay(
                     maxPanelWidth = maxPanelWidth,
                     onReactionClick = { _, _ -> },
                     onMoreEmojiClick = { },
-                    onActionClick = onActionClick,
-                    arrowConfig = arrowConfig
+                    onActionClick = onActionClick
                 )
             }
         }

@@ -15,19 +15,19 @@ import org.junit.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/**
- * Regression tests for the in-socket auth hook in [NewMessagingService.innerSend] (issue #1230).
- *
- * Why this hook exists: `AuthorizationFailedException` extends `IOException`, so the caller
- * (`NewSignalServiceMessageSender`) swallows it and falls back to HTTP. If that fallback then fails
- * with a plain network error the rejection would never be reported, so it is reported here — before
- * the fallback can mask it.
- */
+
+
+
+
+
+
+
+
 class NewMessagingServiceAuthHookTest {
 
     private val appWebSocketHelper: AppWebSocketHelper = mockk()
 
-    /** Records the source tags; the sink is fire-and-forget so there is nothing to stub. */
+    
     private class RecordingSink : AuthFailureSink {
         val sources = mutableListOf<String>()
         override fun onAuthRejected(source: String) {

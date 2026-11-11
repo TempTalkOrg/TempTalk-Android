@@ -29,7 +29,7 @@ import javax.inject.Inject
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
-/** The Calls page under notification settings; re-reads every status on resume. */
+
 @AndroidEntryPoint
 class CallNotificationSettingsFragment : Fragment(), SettingsIdiomPage {
 

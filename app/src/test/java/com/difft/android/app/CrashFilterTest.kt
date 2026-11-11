@@ -4,11 +4,11 @@ import org.junit.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/**
- * Signature matchers in [CrashFilter]; the GMS-client stacks mirror Crashlytics issue 8d782ca9, a
- * SecurityException parcelled back from GMS and re-thrown inside play-services' own Handler, with
- * no app frame anywhere on the stack.
- */
+
+
+
+
+
 class CrashFilterTest {
 
     @Test
@@ -51,7 +51,7 @@ class CrashFilterTest {
         assertFalse(CrashFilter.isGmsClientSecurityException(e))
     }
 
-    // ---- missing native library on a base-only install (Crashlytics issue 71770801) ----
+    
 
     @Test
     fun `matches UnsatisfiedLinkError for a missing library on a base-only install`() {
@@ -88,7 +88,7 @@ class CrashFilterTest {
         assertFalse(CrashFilter.isMissingNativeLibraryCrash(e, baseOnlyInstall = true))
     }
 
-    // ---- framework API missing on a ROM that misreports its SDK level (Crashlytics 41c8b4ad / 85d9ee38) ----
+    
 
     @Test
     fun `matches a listed framework member missing on a device that reports its API level`() {
@@ -115,7 +115,7 @@ class CrashFilterTest {
 
     @Test
     fun `does not match on a device below the member's API level`() {
-        // An unguarded call on a genuine older device misses the same member and must keep reporting.
+        
         val e = NoSuchMethodError(FULL_SCREEN_INTENT_MISSING).withStack(LIBRARY_OUTLINE_FRAME, APP_FRAME)
 
         assertFalse(CrashFilter.isSpoofedSdkFrameworkMiss(e, sdkInt = API_34 - 1))

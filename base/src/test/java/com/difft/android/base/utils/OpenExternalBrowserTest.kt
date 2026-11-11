@@ -19,11 +19,11 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
 
-/**
- * [Context.openExternalBrowser] must not crash on a device with no browser app, must toast
- * [R.string.base_link_open_failed] on failure only, and must not regress the success path (still
- * fires the same ACTION_VIEW intent, no toast).
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class OpenExternalBrowserTest {
@@ -45,7 +45,7 @@ class OpenExternalBrowserTest {
     fun `P0-1 startActivity throws ActivityNotFoundException does not propagate and shows toast`() {
         every { context.startActivity(any()) } throws ActivityNotFoundException()
 
-        // No exception should propagate out of the extension.
+        
         context.openExternalBrowser("https://yelling.pro/security")
 
         verify(exactly = 1) { ToastUtil.show(R.string.base_link_open_failed) }

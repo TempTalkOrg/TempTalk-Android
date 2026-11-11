@@ -60,14 +60,14 @@ import kotlin.coroutines.cancellation.CancellationException
 import com.difft.android.chat.focus.invalid.FocusLeaveNotice
 import com.difft.android.chat.focus.GroupFocusRepository
 
-/**
- * Groups shared with a contact, with leave / disband / remove-the-contact actions. A page of the
- * home detail stack or of its shell [GroupInCommonActivity].
- *
- * The group writes outlive the page (a fold recreates it) under [operationKey]: a restored page
- * shows the wait while one runs; the list refreshes from the group updates it causes. A group tap
- * opens that group as a conversation (hosted: the tab's root is replaced).
- */
+
+
+
+
+
+
+
+
 @AndroidEntryPoint
 class GroupInCommonFragment : Fragment() {
 
@@ -129,10 +129,10 @@ class GroupInCommonFragment : Fragment() {
         }
         setupBackButton(binding.ibBack)
         applyDetailPageInsets(binding.root, ime = true)
-        // The search field: no keyboard on open, hidden when the page is covered, resize lease < 30.
+        
         detailKeyboard(showOnFirstOpen = false, focus = {}, savedInstanceState = savedInstanceState)
         waitWhileVisibleTop(PageOperations.running(operationKey), writeWait)
-        // The action popup sits on the window; it must not stay over the page shown next.
+        
         dismissWhenLeavingVisibleTop { popupWindow?.dismiss() }
 
         binding.recyclerviewGroup.apply {
@@ -143,8 +143,8 @@ class GroupInCommonFragment : Fragment() {
 
         binding.searchInput.onQueryChanged = { restartDebouncedSearch() }
 
-        // Cancel the pending debounce, search at once, scroll the old list to top. The text itself
-        // is already cleared by the component before this callback runs.
+        
+        
         binding.searchInput.onClear = {
             searchJob?.cancel()
             searchGroups()
@@ -153,8 +153,8 @@ class GroupInCommonFragment : Fragment() {
 
         groupUtil.singleGroupsUpdate
             .onEach {
-                // The external setter is silent (no callback), so the refresh is explicit. Not
-                // clear(): that is the user-tap semantics (scroll to top, un-debounced search).
+                
+                
                 binding.searchInput.query = ""
                 restartDebouncedSearch()
             }
@@ -179,7 +179,7 @@ class GroupInCommonFragment : Fragment() {
             try {
                 val searchQuery = binding.searchInput.query.trim()
                 val commonGroups = withContext(Dispatchers.IO) {
-                    // Groups where both users are members.
+                    
                     val contactGroups = wcdb.groupMemberContactor.getAllObjects(
                         DBGroupMemberContactorModel.id.eq(contactId)
                     ).map { it.gid }.distinct()
@@ -248,7 +248,7 @@ class GroupInCommonFragment : Fragment() {
         }
     }
 
-    /** One membership write at a time, completed even if a fold recreates the page meanwhile. */
+    
     private fun runMembershipWrite(action: String, call: suspend () -> BaseResponse<Any>) {
         if (PageOperations.running(operationKey).value) return
         val key = operationKey
@@ -257,7 +257,7 @@ class GroupInCommonFragment : Fragment() {
             PageOperations.track(key) {
                 try {
                     val response = withContext(Dispatchers.IO) { call() }
-                    // Leaving or disbanding may invalidate the focus group: reconcile at once.
+                    
                     if (action != "removeMember") focus.onLocalGroupExit(response)
                     if (!response.isSuccess()) {
                         onPage { ToastUtil.show(response.reason ?: it.getString(R.string.operation_failed)) }
@@ -333,7 +333,7 @@ class GroupInCommonFragment : Fragment() {
     }
 }
 
-/** Groups in common with a contact as a detail destination (home stack, or its shell Activity). */
+
 class GroupInCommonDestination(private val contactId: String) : DetailDestination {
     override fun newFragment(): Fragment = GroupInCommonFragment.newInstance(contactId)
     override fun shellIntent(context: Context): Intent = GroupInCommonActivity.intent(context, contactId)

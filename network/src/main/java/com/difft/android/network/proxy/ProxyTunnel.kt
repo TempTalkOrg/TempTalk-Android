@@ -21,13 +21,10 @@ import javax.net.ssl.SSLSocket
 import javax.net.ssl.SSLSocketFactory
 import javax.net.ssl.X509TrustManager
 
-/**
- * Outer-hop trust manager for Mode B: validates ONLY that the proxy's leaf
- * certificate public key matches the pinned SPKI fingerprint. It deliberately
- * does NOT build a CA chain (the cert is self-signed), and it is used solely for
- * the client⟷proxy hop — the inner TLS to TempTalk keeps its own chative-CA
- * trust manager.
- */
+
+
+
+
 internal class ProxyPinTrustManager(spkiPinBase64: String) : X509TrustManager {
     private val expectedPin = spkiPinBase64.trim()
 
@@ -44,58 +41,42 @@ internal class ProxyPinTrustManager(spkiPinBase64: String) : X509TrustManager {
     override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
 }
 
-/**
- * A [Socket] that decides at [connect] time between two modes, based on the IP
- * that [ProxyTunnelDns] resolved for the origin host:
- *
- * - **Tunnel** (origin is on the relay whitelist → DNS returned the proxy IP):
- *   ignores the requested endpoint, dials the proxy, performs the OUTER TLS
- *   handshake (pinned by [ProxyPinTrustManager]), and exposes that as the raw
- *   byte stream. OkHttp then wraps it with the INNER TLS whose ClientHello SNI
- *   carries the real origin host, which the relay reads via `ssl_preread`.
- *
- * - **Direct** (bypassed host → DNS returned the real origin IP): connects
- *   straight to the requested endpoint with no outer TLS, so OkHttp layers its
- *   normal (system / chative-CA) TLS on top — byte-for-byte the pre-proxy path.
- *   Used for third-party CDN bootstrap traffic (global config, version check,
- *   APK download, avatar/attachment objects) that must not enter the tunnel.
- */
+
+
+
+
+
+
+
+
+
 internal class TlsTunnelSocket(
     private val config: ProxyConfig,
     private val provider: ProxyConfigProvider,
 ) : Socket() {
     private var delegate: Socket? = null
 
-    // Set the moment close() is invoked so isClosed() reflects the intent even while
-    // the actual SSLSocket close runs on a background thread (main-thread cancel path).
+    
     @Volatile
     private var closed = false
 
     override fun connect(endpoint: SocketAddress?) = connect(endpoint, 0)
 
     override fun connect(endpoint: SocketAddress?, timeout: Int) {
-        // Match against the union of proxy IPs ProxyTunnelDns.lookup() has resolved
-        // (published on the provider) rather than re-resolving config.host here. A
-        // second resolution could disagree (DNS round-robin / TTL) and flip a tunneled
-        // destination to the direct branch — a fail-open that leaks the inner SNI
-        // without the outer pinned TLS. The set is a union, not an overwrite, so a
-        // concurrent lookup for another origin cannot evict the IP THIS route was
-        // built from before we read it here. If proxy-host resolution had failed,
-        // lookup() already threw UnknownHostException (fail-closed) before connect().
+        
+        
+        
         val proxyAddresses = provider.resolvedProxyAddresses
         val targetAddress = (endpoint as? InetSocketAddress)?.address
         val viaProxy = targetAddress != null && proxyAddresses.contains(targetAddress)
 
         if (!viaProxy) {
-            // Bypassed host: DNS already returned the real origin IP. Connect
-            // directly; OkHttp adds its own TLS, identical to the non-proxy path.
+            
             val direct = Socket()
             try {
                 direct.connect(endpoint, timeout)
             } catch (e: Exception) {
-                // Close on failure so we don't leak the FD: delegate stays null
-                // otherwise and close() falls through to super.close() on the
-                // empty wrapper (same guard as the tunnel handshake path below).
+                
                 runCatching { direct.close() }
                 throw e
             }
@@ -103,11 +84,8 @@ internal class TlsTunnelSocket(
             return
         }
 
-        // Tunnel path: dial the proxy, wrap in the OUTER pinned TLS, handshake.
-        // One guard closes `raw` on ANY failure (connect / createSocket / handshake)
-        // — closing the underlying socket releases the FD whether or not the SSL
-        // wrapper was created. Without it, `delegate` stays null and close() no-ops
-        // on the empty wrapper, leaking an FD per reconnect attempt.
+        
+        
         val raw = Socket()
         val ssl: SSLSocket = try {
             raw.connect(InetSocketAddress(config.host, config.port), timeout)
@@ -122,12 +100,12 @@ internal class TlsTunnelSocket(
                 .takeIf { it.isNotEmpty() }
                 ?.let { socket.enabledProtocols = it }
 
-            // Non-empty decoy SNI (camouflage + required for the server's 443 SNI demux).
+            
             runCatching {
                 socket.sslParameters = socket.sslParameters.apply { serverNames = listOf(SNIHostName(sni)) }
             }
 
-            socket.startHandshake() // triggers the pin check
+            socket.startHandshake() 
             socket
         } catch (e: Exception) {
             runCatching { raw.close() }
@@ -142,10 +120,7 @@ internal class TlsTunnelSocket(
     override fun getInputStream(): InputStream = active().inputStream
     override fun getOutputStream(): OutputStream = active().outputStream
     override fun isConnected(): Boolean = delegate?.isConnected ?: false
-    // close() may complete asynchronously on the main-thread cancel path, so reflect
-    // the close *intent* immediately — otherwise callers polling between close() and
-    // the background close completing (e.g. OkHttp connection health checks) would see
-    // a stale `false` and treat a being-cancelled connection as reusable.
+    
     override fun isClosed(): Boolean = closed || (delegate?.isClosed ?: super.isClosed())
     override fun isInputShutdown(): Boolean = delegate?.isInputShutdown ?: false
     override fun isOutputShutdown(): Boolean = delegate?.isOutputShutdown ?: false
@@ -160,16 +135,9 @@ internal class TlsTunnelSocket(
     override fun close() {
         closed = true
         val socket = delegate ?: return super.close()
-        // The outer-tunnel delegate is a Conscrypt SSLSocket whose close() drains
-        // the outgoing queue (writes a TLS close_notify alert) — a BLOCKING network
-        // write. OkHttp's ConnectPlan.cancel() closes this socket via closeQuietly()
-        // inline on whichever thread cancels the call; when a lifecycle-scoped
-        // coroutine (repeatOnLifecycle / lifecycleScope) is cancelled during
-        // onStop/onDestroyView, that thread is the MAIN thread — so a synchronous
-        // close here throws NetworkOnMainThreadException (a plain TCP socket's close
-        // never did network I/O, which is why this only breaks the proxy path).
-        // Offload to a background thread when called on the main looper; keep the
-        // synchronous (graceful) close everywhere else.
+        
+        
+        
         if (Looper.myLooper() == Looper.getMainLooper()) {
             CLOSE_EXECUTOR.execute {
                 runCatching { socket.close() }
@@ -181,23 +149,17 @@ internal class TlsTunnelSocket(
     }
 
     private companion object {
-        // Shared across all tunnel connections — SecureRandom is thread-safe and
-        // seeding from /dev/urandom per connection is avoidable.
+        
+        
         private val RNG = SecureRandom()
 
-        // Off-main-thread closer for the tunnel SSLSocket (see close()). Cached pool
-        // with daemon threads: closes are short-lived and rare (only the main-thread
-        // cancel path lands here), so idle threads are reclaimed after the keep-alive
-        // and never keep the process alive.
+        
         private val CLOSE_EXECUTOR: Executor = Executors.newCachedThreadPool { r ->
             Thread(r, "proxy-tunnel-close").apply { isDaemon = true }
         }
 
-        // Cache the pinned factory: in steady state the SPKI pin is constant, so
-        // rebuilding SSLContext + TrustManager on every tunnel connection is wasted
-        // work. Re-init only when the pin changes (a new proxy config). The race on
-        // first use is benign — two threads may each build a factory; the last write
-        // wins and both are equivalent for the same pin. @Volatile gives visibility.
+        
+        
         @Volatile
         private var cachedFactory: Pair<String, SSLSocketFactory>? = null
 
@@ -210,18 +172,14 @@ internal class TlsTunnelSocket(
     }
 }
 
-/**
- * OkHttp [SocketFactory] that returns a [TlsTunnelSocket] when the proxy is
- * enabled, and a plain socket otherwise — so disabling the proxy restores the
- * exact default behavior. OkHttp only uses the no-arg [createSocket]; the
- * remaining overloads delegate to the platform default.
- *
- * @param forCall when true, the active config is read from
- *   [ProxyConfigProvider.currentForCall] (gated by "Protect IP address in calls")
- *   instead of [ProxyConfigProvider.current]. The call signaling client passes
- *   `true` so calls connect DIRECT when the protection toggle is off, while the
- *   IM plane (forCall=false) keeps tunneling.
- */
+
+
+
+
+
+
+
+
 class ProxyTunnelSocketFactory(
     private val provider: ProxyConfigProvider,
     private val forCall: Boolean = false,
@@ -240,20 +198,14 @@ class ProxyTunnelSocketFactory(
         default.createSocket(address, port, localAddress, localPort)
 }
 
-/**
- * When the proxy is enabled, resolves a *tunneled* origin host to the proxy
- * address so OkHttp builds a route toward it ([TlsTunnelSocket] then dials the
- * proxy and the origin host rides in the inner-TLS SNI for `ssl_preread`).
- *
- * A *bypassed* host (see [ProxyConfigProvider.shouldTunnel]) keeps system DNS
- * and its real IP, which makes [TlsTunnelSocket] connect to it directly —
- * third-party CDN bootstrap traffic never enters the tunnel and never hits the
- * relay deny. When the proxy is disabled, everything falls back to system DNS.
- *
- * If proxy-host resolution fails for a tunneled origin, this method throws — it
- * deliberately does NOT fall back to system DNS on the original hostname, which
- * would defeat the tunnel's privacy invariant.
- */
+
+
+
+
+
+
+
+
 class ProxyTunnelDns(
     private val provider: ProxyConfigProvider,
     private val forCall: Boolean = false,
@@ -264,9 +216,7 @@ class ProxyTunnelDns(
         if (!provider.shouldTunnel(hostname)) return Dns.SYSTEM.lookup(hostname)
         return runCatching { InetAddress.getAllByName(config.host).toList() }
             .onSuccess {
-                // Publish this resolution so TlsTunnelSocket reuses it instead of
-                // re-resolving config.host at connect time (avoids a DNS-inconsistency
-                // fail-open that would leak the inner SNI without the outer pinned TLS).
+                
                 provider.publishResolvedProxyAddresses(it.toSet())
             }
             .getOrElse {

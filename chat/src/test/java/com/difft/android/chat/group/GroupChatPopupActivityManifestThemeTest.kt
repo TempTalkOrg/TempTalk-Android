@@ -11,14 +11,14 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import kotlin.test.assertTrue
 
-/**
- * M14 (issue #1127, family J): manifest fact underpinning `GifInlinePanelWindowBackgroundTest`
- * (M12) -- pins that `AndroidManifest.xml` really does declare
- * `android:theme="@style/Theme.TT.TransparentActivity"` for [GroupChatPopupActivity], and that
- * this style resolves to a translucent, transparent window background. Does not construct
- * `GroupChatPopupActivity` itself: it is `@AndroidEntryPoint`, and this repo has no
- * Hilt-Robolectric harness for constructing Hilt activities directly in unit tests.
- */
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 class GroupChatPopupActivityManifestThemeTest {
 

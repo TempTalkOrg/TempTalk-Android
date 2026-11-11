@@ -24,17 +24,17 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 
-/** What a "focus this group" request must do given the current focus state. */
+
 internal sealed interface FocusRequestPlan {
     data object None : FocusRequestPlan
 
-    /** Not focusing: pick an end time, then start. */
+    
     data object DurationSheet : FocusRequestPlan
 
-    /** Focusing another valid group: confirm (D2), then switch. */
+    
     data class ConfirmSwitch(val currentGid: String) : FocusRequestPlan
 
-    /** Focus is in the invalid state: reselect without asking. */
+    
     data object SwitchDirect : FocusRequestPlan
 }
 
@@ -46,23 +46,23 @@ internal fun planFocusRequest(focus: EffectiveFocus, gid: String): FocusRequestP
     else -> ConfirmSwitch(focus.focusGid.orEmpty())
 }
 
-/**
- * Runs a focus write that selects [gid] as the focus group ([gid] null for the others). A local explicit
- * selection restores a deleted focus row, so the group's deleted-row record goes once the write succeeded;
- * a failed write changes nothing.
- */
+
+
+
+
+
 internal suspend fun runSelectingWrite(gid: String?, deletedRows: FocusDeletedRowStore, call: suspend () -> FocusResult): FocusResult {
     val result = call()
     if (gid != null && result is FocusResult.Success) deletedRows.clear(gid)
     return result
 }
 
-/**
- * The focus actions every entry point shares (group settings, Me > Notifications, later the chat
- * list): start with the duration sheet, switch with D2, end, change the end time. Writes run on the
- * app scope so a finishing screen does not cancel a request in flight; failures show the generic
- * error toast. Success is silent (no toast): the cached state flow updates every consumer.
- */
+
+
+
+
+
+
 @Singleton
 class FocusActionLauncher @Inject constructor(
     private val repository: GroupFocusRepository,
@@ -72,7 +72,7 @@ class FocusActionLauncher @Inject constructor(
     @param:AppCoroutineScope private val scope: CoroutineScope,
 ) {
 
-    /** Focus [gid] from a "focus this group" entry (settings switch, list menu). */
+    
     fun requestFocus(activity: ComponentActivity, gid: String, groupName: String) {
         when (val plan = planFocusRequest(repository.effectiveNow(), gid)) {
             None -> Unit
@@ -87,26 +87,33 @@ class FocusActionLauncher @Inject constructor(
         }
     }
 
-    /**
-     * A group chosen in the picker (Me > Notifications): while focusing, or in the invalid state, the
-     * choice is the new focus group at once (no D2); otherwise the end time is asked first.
-     */
-    fun applyPickedGroup(activity: ComponentActivity, gid: String) {
-        if (!repository.featureEnabled) return
+    
+
+
+
+
+
+    fun applyPickedGroup(activity: ComponentActivity, gid: String, onDone: (Boolean) -> Unit = {}) {
+        if (!repository.featureEnabled) {
+            onDone(true)
+            return
+        }
         if (repository.effectiveNow().active) {
-            write(activity, "pick-switch", gid) { repository.switchGroup(gid) }
+            write(activity, "pick-switch", gid, onDone = { onDone(true) }) { repository.switchGroup(gid) }
         } else {
             activity.lifecycleScope.launch {
                 val name = groups.name(gid).orEmpty()
-                showDurationSheet(activity, name) { duration -> write(activity, "pick-start", gid) { repository.start(gid, duration.seconds) } }
+                showDurationSheet(activity, name, onCancel = { onDone(false) }) { duration ->
+                    write(activity, "pick-start", gid, onDone = { onDone(true) }) { repository.start(gid, duration.seconds) }
+                }
             }
         }
     }
 
-    /**
-     * Reselect after an invalid focus, from the picker that is about to finish: the switch and its
-     * error toast run on the app scope, so closing the picker loses neither.
-     */
+    
+
+
+
     fun applyReselectedGroup(gid: String) {
         if (!repository.featureEnabled || !repository.effectiveNow().invalid) {
             endReselect()
@@ -128,11 +135,11 @@ class FocusActionLauncher @Inject constructor(
 
     private val _reselectInFlight = MutableStateFlow(false)
 
-    /**
-     * True from the "Reselect" tap until the picker's answer has landed (a pick's switch finished, or
-     * the cancel was recorded): the invalid dialog stays away for the whole span, so "End Focus" can
-     * neither race the switch nor reappear behind the picker.
-     */
+    
+
+
+
+
     val reselectInFlight: StateFlow<Boolean> = _reselectInFlight.asStateFlow()
 
     fun beginReselect() {
@@ -143,12 +150,12 @@ class FocusActionLauncher @Inject constructor(
         _reselectInFlight.value = false
     }
 
-    /** Ends focus at once, without a confirmation. */
+    
     fun endFocus(activity: ComponentActivity) {
         write(activity, "end") { repository.end() }
     }
 
-    /** Reopens the duration sheet for the running focus. */
+    
     fun changeEndTime(activity: ComponentActivity) {
         val focus = repository.effectiveNow()
         val gid = focus.focusGid ?: return
@@ -158,20 +165,27 @@ class FocusActionLauncher @Inject constructor(
         }
     }
 
-    /** Opens Me > Notifications, where the focus settings of the other groups live. */
+    
     fun openNotificationSettings(activity: ComponentActivity) {
         val target = activityProvider.getActivityClass(ActivityType.NOTIFICATION_SETTINGS)
         activity.startActivity(Intent(activity, target))
     }
 
-    private fun showDurationSheet(activity: ComponentActivity, groupName: String, onSelect: (FocusDuration) -> Unit) {
+    private fun showDurationSheet(
+        activity: ComponentActivity,
+        groupName: String,
+        onCancel: () -> Unit = {},
+        onSelect: (FocusDuration) -> Unit,
+    ) {
         val focus = repository.effectiveNow()
+        val outcome = DurationSheetOutcome(onCancel)
         var dialog: ComposeDialog? = null
-        dialog = ComposeDialogManager.showBottomDialog(activity) {
+        dialog = ComposeDialogManager.showBottomDialog(activity, onDismiss = outcome::onDismissed) {
             FocusDurationSheet(
                 groupName = groupName,
                 description = focusSheetDescription(focus),
                 onSelect = { duration ->
+                    outcome.markChosen()
                     dialog?.dismiss()
                     onSelect(duration)
                 },
@@ -180,7 +194,13 @@ class FocusActionLauncher @Inject constructor(
         }
     }
 
-    private fun write(activity: ComponentActivity, op: String, selectedGid: String? = null, call: suspend () -> FocusResult) {
+    private fun write(
+        activity: ComponentActivity,
+        op: String,
+        selectedGid: String? = null,
+        onDone: () -> Unit = {},
+        call: suspend () -> FocusResult,
+    ) {
         activity.lifecycleScope.launch {
             val token = ComposeDialogManager.showWait(activity, "")
             try {
@@ -192,9 +212,29 @@ class FocusActionLauncher @Inject constructor(
             } finally {
                 ComposeDialogManager.dismissWait(token)
             }
+            onDone()
         }
     }
 }
 
-/** The existing generic failure toast; every focus write failure (network or business) uses it. */
+
+
+
+
+internal class DurationSheetOutcome(private val onCancel: () -> Unit) {
+    private var settled = false
+
+    
+    fun markChosen() {
+        settled = true
+    }
+
+    fun onDismissed() {
+        if (settled) return
+        settled = true
+        onCancel()
+    }
+}
+
+
 fun showFocusError() = ToastUtil.show(R.string.operation_failed)

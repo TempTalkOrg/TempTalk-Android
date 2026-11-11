@@ -21,8 +21,8 @@ import com.difft.android.network.proxy.ProxyConfigProvider
 import com.difft.android.websocket.api.util.INewMessageContentEncryptor
 import javax.inject.Inject
 
-/** The process-wide collaborators a [CallSession] needs; one field per injected singleton. */
-@Suppress("LongParameterList") // DI bundle: the call graph's constructor params
+
+@Suppress("LongParameterList") 
 class CallSessionDeps @Inject constructor(
     val application: Application,
     val callToChatController: LCallToChatController,

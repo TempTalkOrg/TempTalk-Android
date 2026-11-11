@@ -15,64 +15,44 @@ import com.difft.android.base.log.lumberjack.L
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicReference
 
-/**
- * Permanent SharedPreferences carve-out for `SP_KEY_LANGUAGE`.
- *
- * Why a dedicated SP file (not DataStore):
- *   - `LanguageUtils.getLanguage(...)` is invoked from `TempTalkApplication.attachBaseContext()`,
- *     which runs **before** `Application.onCreate()`, **before** Hilt, **before** any
- *     AppStartup task. DataStore exposes only a suspending read API at that code position,
- *     so it is not usable here.
- *   - This carve-out is **permanent**: there is no v(N+3) phase that migrates
- *     `language_prefs.xml` to DataStore — the underlying ordering constraint is permanent.
- *
- * File layout:
- *   `context.dataDir/shared_prefs/language_prefs.xml` — ONE key, `"language"`, value is a
- *   BCP-47 language tag (e.g. `"en-US"`, `"zh-CN"`) OR the empty string `""` (sentinel for
- *   "fresh install, no migration needed → use system locale").
- *
- * Migration:
- *   On first read, if the new file does not contain `KEY_LANGUAGE`, we read the legacy
- *   value from `sp_chative_account` (via ["SP_KEY_LANGUAGE"]) and copy it
- *   over. Empty-string sentinel is written on fresh install so the migration check
- *   short-circuits on every subsequent cold start.
- */
+
+
+
+
+
+
 object LanguageUtils {
 
     private const val PREF_NAME = "language_prefs"
     private const val KEY_LANGUAGE = "language"
 
-    // The user's explicit choice; null while following the system language. Only meaningful once
-    // [resolved] is true (set after the first SP read / migration, or by [saveLanguage]).
+    
+    
     private val explicitCache = AtomicReference<Locale?>()
 
     @Volatile
     private var resolved = false
     private val cacheLock = Any()
 
-    /**
-     * The tags this APK ships resources for (`localeFilters` in app/build.gradle.kts and the
-     * `values-zh` directories; default `values` is English). Following the system language
-     * resolves to the system list's first match against these, like the platform does (#1395).
-     */
+    
+
+
+
+
     private val SUPPORTED_LOCALE_TAGS = arrayOf("en", "zh-CN")
 
-    /**
-     * The system language list, read from the system Resources: unlike an app Context's, they are
-     * never pinned by an override configuration, so they follow a system language change in a
-     * live process. Swappable for unit tests.
-     */
+    
+
+
+
+
     @VisibleForTesting
     internal var systemLocalesProvider: () -> LocaleList = { Resources.getSystem().configuration.locales }
 
     @Volatile
     private var cachedPrefs: SharedPreferences? = null
 
-    /**
-     * Provider for the legacy SP — swappable for unit tests. The legacy file is
-     * `sp_chative_account` (the file that used to back the deleted `SharedPrefsUtil`).
-     * Reads only — one-shot during the language-prefs carve-out migration.
-     */
+    
     @VisibleForTesting
     internal var legacyPrefsProvider: (Context) -> SharedPreferences = { ctx ->
         ctx.getSharedPreferences(LEGACY_SP_CHATIVE_ACCOUNT, Context.MODE_PRIVATE)
@@ -80,10 +60,10 @@ object LanguageUtils {
 
     private const val LEGACY_SP_CHATIVE_ACCOUNT = "sp_chative_account"
 
-    /**
-     * Eagerly opens the `language_prefs` SP under double-checked locking so subsequent
-     * reads on the same JVM instance do no disk I/O. Safe to call from `attachBaseContext`.
-     */
+    
+
+
+
     fun warmUpPreferences(context: Context) {
         if (cachedPrefs != null) return
         synchronized(cacheLock) {
@@ -92,23 +72,23 @@ object LanguageUtils {
         }
     }
 
-    /**
-     * Returns the user-selected locale, or — when following the system — the system language list's
-     * best match for this APK, read on every call so a system language change in a live process is
-     * picked up (#1395).
-     *
-     * Side effects (first call only):
-     *   - Opens the `language_prefs` SP (warms `cachedPrefs`).
-     *   - Runs one-shot migration from the legacy SP (`sp_chative_account` /
-     *     ["SP_KEY_LANGUAGE"]). Migration is idempotent — presence of
-     *     `KEY_LANGUAGE` in the new file short-circuits all subsequent runs.
-     *
-     * Migration failures (any [Throwable]) fall back to the system locale and are logged
-     * at WARN level. Migration is never allowed to crash the application.
-     */
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
     fun getLanguage(context: Context): Locale = explicitLanguage(context) ?: systemLocale()
 
-    /** The user's explicit choice, resolving the stored preference on first use; null when following the system. */
+    
     private fun explicitLanguage(context: Context): Locale? {
         if (resolved) return explicitCache.get()
         synchronized(cacheLock) {
@@ -131,14 +111,14 @@ object LanguageUtils {
         }
     }
 
-    /**
-     * Persists the user's locale choice. Updates the in-memory cache so subsequent
-     * `getLanguage(...)` calls return the new value without re-reading disk.
-     *
-     * Uses `commit = true` because the typical caller (`LanguageFragment.onLanguageSelected`)
-     * immediately restarts the activity / process to apply the change — we cannot lose
-     * the write to an async flush.
-     */
+    
+
+
+
+
+
+
+
     @SuppressLint("ApplySharedPref")
     fun saveLanguage(context: Context, locale: Locale) {
         val prefs = cachedPrefs
@@ -151,25 +131,25 @@ object LanguageUtils {
         resolved = true
     }
 
-    /**
-     * The app language [locale] renders as. The APK ships English and Simplified Chinese only, so a
-     * Chinese locale whose script is (or is likely) Hans reads as [Locale.CHINA]; Hant variants such
-     * as zh-TW / zh-HK fall back to English resources and therefore read as [Locale.US], like every
-     * other language. Used only by [isCurrentChoice]; the checkmark, the Me-page summary and every
-     * other feature keep branching on the raw `getLanguage(...)` language code.
-     */
+    
+
+
+
+
+
+
     fun appLocaleFor(locale: Locale): Locale {
         if (locale.language != Locale.CHINA.language) return Locale.US
         val script = locale.script.ifEmpty { ULocale.addLikelySubtags(ULocale.forLocale(locale)).script }
         return if (script == "Hans") Locale.CHINA else Locale.US
     }
 
-    /**
-     * Whether tapping [locale] on the language page would change nothing: the row is the checked one
-     * (same language code as the stored/system locale) AND the app already renders in it. A
-     * zh-Hans-CN system locale needs no restart for zh-CN; zh-TW shows zh-CN checked but renders in
-     * English, so that tap still offers the restart that switches the UI to Simplified Chinese.
-     */
+    
+
+
+
+
+
     fun isCurrentChoice(context: Context, locale: Locale): Boolean {
         val current = getLanguage(context)
         return current.language == locale.language && appLocaleFor(current) == locale
@@ -198,51 +178,42 @@ object LanguageUtils {
         }
     }
 
-    /**
-     * Used by `TempTalkApplication.attachBaseContext` and `BaseActivity.attachBaseContext`.
-     *
-     * Returns a [Context] whose [Configuration] overrides only the user's explicit locale (none when
-     * following the system, so the Context keeps following a later system language change, #1395)
-     * and pins font-scale to 1.0 (we don't honor system font scaling — see existing UX contract
-     * preserved from the prior implementation). Night mode is left to
-     * [androidx.appcompat.app.AppCompatDelegate]; density and screen size follow the system.
-     *
-     * From `Application.attachBaseContext` (the cold-start case), the locale cache is
-     * empty and we cannot do disk I/O safely here — so we resolve via [getLanguage],
-     * which is single-disk-read and bounded. `BaseActivity.attachBaseContext` runs after
-     * Application.onCreate, where the `apply user locale` AppStartup step has already
-     * populated the cache, so [getLanguage] is a cache hit.
-     */
-    fun createConfiguredContext(context: Context): Context {
+    
+
+
+
+
+
+    fun createConfiguredContext(context: Context, densityDpi: Int = Configuration.DENSITY_DPI_UNDEFINED): Context {
         warmUpPreferences(context)
-        // Only the overridden fields may be set: every set field of an override configuration is
-        // re-applied over each later system configuration, so copying the full current one froze
-        // the Application's density and screen size at process start (and an Activity's at
-        // attach whenever AppCompat added no overlay of its own).
+        
         val override = Configuration()
         explicitLanguage(context)?.let { override.setLocale(it) }
         override.fontScale = 1.0f
+        
+        
+        if (densityDpi != Configuration.DENSITY_DPI_UNDEFINED) override.densityDpi = densityDpi
         return context.createConfigurationContext(override)
     }
 
-    /**
-     * Non-blocking, cache-only locale read for code that must not touch disk
-     * (e.g. `attachBaseContext` on a slow device).
-     *
-     * Returns the cached explicit choice if [getLanguage] has already run, otherwise the
-     * system language list's best match. Designed for the "two-step setup" where
-     * `attachBaseContext` uses this, then `onCreate` runs [getLanguage] + [reapplyLocaleToAppResources]
-     * to refresh the Application's resources once the user-selected locale is loaded.
-     */
+    
+
+
+
+
+
+
+
+
     fun getLanguageNonBlocking(): Locale = explicitCache.get() ?: systemLocale()
 
-    /**
-     * Refreshes the [Application]'s [Configuration] with the cached explicit locale. Used as the
-     * `onCreate` half of the two-step setup — see [getLanguageNonBlocking].
-     *
-     * A no-op while following the system (or before the preference is resolved): pinning the
-     * system language here would freeze it for the process lifetime (#1395).
-     */
+    
+
+
+
+
+
+
     @Suppress("DEPRECATION")
     fun reapplyLocaleToAppResources(app: Application) {
         val locale = explicitCache.get() ?: return
@@ -254,29 +225,29 @@ object LanguageUtils {
         L.i { "[LanguageUtils] reapplied locale: ${locale.toLanguageTag()}" }
     }
 
-    // ----------------------------------------------------------------- migration
+    
 
-    /**
-     * One-shot migration from the legacy `sp_chative_account` SP into `language_prefs`.
-     *
-     * Idempotency: presence-as-marker. `newPrefs.contains(KEY_LANGUAGE)` is the migration
-     * marker — once any value (including the empty-string sentinel) is committed to the
-     * new file, this method short-circuits forever.
-     *
-     * Process-kill safety: we commit to the new file FIRST and only remove from legacy
-     * AFTER the new-file commit succeeds. A kill in between leaves the legacy value
-     * orphaned but causes no data loss (subsequent boot sees the new-file value).
-     */
+    
+
+
+
+
+
+
+
+
+
+
     @SuppressLint("ApplySharedPref")
     private fun migrateFromLegacyIfNeeded(context: Context, newPrefs: SharedPreferences) {
-        if (newPrefs.contains(KEY_LANGUAGE)) return  // presence-as-marker
+        if (newPrefs.contains(KEY_LANGUAGE)) return  
 
         val legacyPrefs = legacyPrefsProvider(context)
         val legacyValue = legacyPrefs.getString("SP_KEY_LANGUAGE", null)
 
         if (legacyValue == null) {
             newPrefs.edit(commit = true) {
-                putString(KEY_LANGUAGE, "")  // empty-string sentinel
+                putString(KEY_LANGUAGE, "")  
             }
             L.i { "[LanguageUtils] migration: no legacy value; wrote empty sentinel" }
             return
@@ -291,13 +262,13 @@ object LanguageUtils {
         L.i { "[LanguageUtils] migration: moved language from sp_chative_account to language_prefs" }
     }
 
-    // ----------------------------------------------------------- system fallback
+    
 
-    /**
-     * The system language list's first match for this APK (single-entry list: that entry; no
-     * match: the first entry), the same pick the platform makes for the app's resources. Hant
-     * Chinese does not match zh-CN. Falls back to [Locale.getDefault] when the list is unavailable.
-     */
+    
+
+
+
+
     private fun systemLocale(): Locale = try {
         systemLocalesProvider().getFirstMatch(SUPPORTED_LOCALE_TAGS) ?: Locale.getDefault()
     } catch (t: Throwable) {
@@ -305,11 +276,11 @@ object LanguageUtils {
         Locale.getDefault()
     }
 
-    // ----------------------------------------------------------------- test-only
+    
 
-    /**
-     * Resets all in-memory caches. Test-only — never call from production code.
-     */
+    
+
+
     @VisibleForTesting
     internal fun resetForTest() {
         synchronized(cacheLock) {

@@ -24,13 +24,13 @@ import com.difft.android.R
 import com.difft.android.base.ui.compose.DifftSwitch
 import com.difft.android.base.ui.theme.DifftTheme
 
-/** The hairline between two cells of a card. */
+
 @Composable
 fun MigrationCardDivider() {
-    HorizontalDivider(color = DifftTheme.colors.divider)
+    HorizontalDivider(thickness = DifftTheme.hairline, color = DifftTheme.colors.divider)
 }
 
-/** One cell of a grouped card. [tall] is the 72dp variant that carries an icon tile or avatar. */
+
 @Composable
 fun MigrationRow(
     modifier: Modifier = Modifier,
@@ -49,7 +49,7 @@ fun MigrationRow(
     )
 }
 
-/** Neutral leading tile of a cell: an outline icon on the tertiary surface. */
+
 @Composable
 fun MigrationIconTile(iconRes: Int, modifier: Modifier = Modifier) {
     Box(
@@ -67,7 +67,7 @@ fun MigrationIconTile(iconRes: Int, modifier: Modifier = Modifier) {
     }
 }
 
-/** A choice that is a whole cell: icon tile, name, chevron. Tapping it commits, with no confirm step. */
+
 @Composable
 fun MigrationOptionRow(title: String, iconRes: Int, onClick: () -> Unit) {
     MigrationRow(tall = true, onClick = onClick) {
@@ -87,7 +87,7 @@ fun MigrationOptionRow(title: String, iconRes: Int, onClick: () -> Unit) {
     }
 }
 
-/** Leading content (an avatar, an icon tile) next to a name and a quieter line under it. */
+
 @Composable
 fun MigrationIdentityRow(
     title: String,
@@ -106,7 +106,7 @@ fun MigrationIdentityRow(
     }
 }
 
-/** A label with its figure on the right. */
+
 @Composable
 fun MigrationValueRow(label: String, value: String, modifier: Modifier = Modifier) {
     MigrationRow(modifier = modifier) {
@@ -120,7 +120,7 @@ fun MigrationValueRow(label: String, value: String, modifier: Modifier = Modifie
     }
 }
 
-/** A switch cell; [subtitle] states a consequence rather than repeating the label. */
+
 @Composable
 fun MigrationSwitchRow(
     title: String,
@@ -141,7 +141,7 @@ fun MigrationSwitchRow(
     }
 }
 
-/** Small print under a card, aligned with the cells' inset. */
+
 @Composable
 fun MigrationCaption(text: String, modifier: Modifier = Modifier) {
     Text(
@@ -154,7 +154,7 @@ fun MigrationCaption(text: String, modifier: Modifier = Modifier) {
     )
 }
 
-/** Body copy directly on the page ground. */
+
 @Composable
 fun MigrationBodyText(text: String, modifier: Modifier = Modifier) {
     Text(

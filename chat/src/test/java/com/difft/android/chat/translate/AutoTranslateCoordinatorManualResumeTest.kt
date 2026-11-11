@@ -11,13 +11,13 @@ import org.junit.Before
 import org.junit.Test
 import java.util.concurrent.ConcurrentLinkedQueue
 
-/**
- * [AutoTranslateCoordinator] re-running a manual translation whose pack wait gave up, once the pack
- * turns ready while the page is still open. Fixture in [AutoTranslateCoordinatorTestBase].
- */
+
+
+
+
 class AutoTranslateCoordinatorManualResumeTest : AutoTranslateCoordinatorTestBase() {
 
-    /** First wait gives up (failed / stuck); any later one finds the pack ready. */
+    
     private val waits = ConcurrentLinkedQueue(listOf(false))
 
     @Before
@@ -49,7 +49,7 @@ class AutoTranslateCoordinatorManualResumeTest : AutoTranslateCoordinatorTestBas
         awaitOverlay("the resumed translation") { it["m0"]?.translateStatus == TranslateStatus.ShowCN }
         assertEquals("m0#ZH#manual", submissions.single().key)
 
-        // The entry was consumed: a later state change does not submit the row again.
+        
         packTurnsReady(ModelId("en") to ModelState.Ready)
         delay(SETTLE_MS)
         assertEquals(1, submissions.size)

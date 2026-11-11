@@ -15,14 +15,14 @@ import io.mockk.spyk
 import kotlinx.coroutines.CoroutineScope
 import java.io.File
 
-/**
- * A mocked [NotificationManager] over an in-memory channel map, served by a spied application
- * context, so both [NotificationChannelManager] and `NotificationChannelSpecs` see the same state.
- */
+
+
+
+
 class FakeChannelNotificationManager {
     val channels = linkedMapOf<String, NotificationChannel>()
 
-    /** Channel ids of the notifications currently shown. */
+    
     val activeChannelIds = mutableListOf<String>()
     val nm: NotificationManager = mockk(relaxed = true)
     val context: Context = spyk(ApplicationProvider.getApplicationContext<Context>())

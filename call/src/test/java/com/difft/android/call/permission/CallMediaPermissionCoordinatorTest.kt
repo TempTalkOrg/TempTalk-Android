@@ -18,13 +18,13 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
-/**
- * State mapping + tap routing + request-history persistence for
- * [CallMediaPermissionCoordinator] (spec: "Android 权限状态映射" / "Android 行为").
- */
+
+
+
+
 class CallMediaPermissionCoordinatorTest {
 
-    /** In-memory UserManager: persistence assertions read the held [UserData] back. */
+    
     private class FakeUserManager(var data: UserData = UserData()) : UserManager {
         var lastCommit: Boolean? = null
 
@@ -42,10 +42,10 @@ class CallMediaPermissionCoordinatorTest {
 
     @Before
     fun setUp() {
-        // Once per test — re-invoking mockkStatic would wipe earlier permission stubs.
+        
         mockkStatic(ContextCompat::class)
         mockkStatic(ActivityCompat::class)
-        // Default: everything denied, no rationale (fresh install).
+        
         every { ContextCompat.checkSelfPermission(activity, any()) } returns PackageManager.PERMISSION_DENIED
         every { ActivityCompat.shouldShowRequestPermissionRationale(activity, any()) } returns false
     }
@@ -59,9 +59,9 @@ class CallMediaPermissionCoordinatorTest {
         every { ActivityCompat.shouldShowRequestPermissionRationale(activity, permission) } returns rationale
     }
 
-    // ------------------------------------------------------------------
-    // Pure state mapping
-    // ------------------------------------------------------------------
+    
+    
+    
 
     @Test
     fun `granted maps to Granted regardless of other inputs`() {
@@ -81,7 +81,7 @@ class CallMediaPermissionCoordinatorTest {
             MediaPermissionState.Denied,
             CallMediaPermissionCoordinator.resolveState(granted = false, rationale = true, requestedBefore = true)
         )
-        // rationale=true even without a persisted request flag is still Denied
+        
         assertEquals(
             MediaPermissionState.Denied,
             CallMediaPermissionCoordinator.resolveState(granted = false, rationale = true, requestedBefore = false)
@@ -104,10 +104,9 @@ class CallMediaPermissionCoordinatorTest {
         )
     }
 
-    // ------------------------------------------------------------------
-    // Tap routing (spec: NotDetermined/Denied → system request;
-    // PermanentlyDenied → settings guide; Granted → proceed)
-    // ------------------------------------------------------------------
+    
+    
+    
 
     @Test
     fun `tap on granted permission proceeds`() {
@@ -147,17 +146,17 @@ class CallMediaPermissionCoordinatorTest {
         )
     }
 
-    // ------------------------------------------------------------------
-    // Request-history persistence
-    // ------------------------------------------------------------------
+    
+    
+    
 
     @Test
     fun `launching the system request persists the per-permission flag durably`() {
         coordinator.onSystemRequestLaunched(CallMediaPermission.Microphone)
         assertTrue(userManager.data.callMicPermissionRequested)
         assertFalse(userManager.data.callCameraPermissionRequested)
-        // commit=true — the KDoc promises the flag survives a process death while the
-        // system dialog is up; the default fire-and-forget write does not provide that.
+        
+        
         assertEquals(true, userManager.lastCommit)
 
         coordinator.onSystemRequestLaunched(CallMediaPermission.Camera)
@@ -165,9 +164,9 @@ class CallMediaPermissionCoordinatorTest {
         assertEquals(true, userManager.lastCommit)
     }
 
-    // ------------------------------------------------------------------
-    // refresh() → StateFlow (drives the badge)
-    // ------------------------------------------------------------------
+    
+    
+    
 
     @Test
     fun `refresh publishes per-permission states to the flows`() {
@@ -194,10 +193,9 @@ class CallMediaPermissionCoordinatorTest {
         assertEquals(MediaPermissionState.Granted, coordinator.micState.value)
     }
 
-    // ------------------------------------------------------------------
-    // Badge mapping (mic badge on Denied/PermanentlyDenied; spec: camera has no badge API —
-    // nothing in the coordinator exposes a camera badge, this is the only badge predicate)
-    // ------------------------------------------------------------------
+    
+    
+    
 
     @Test
     fun `badge shows only for Denied and PermanentlyDenied`() {

@@ -15,14 +15,14 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.max
 
-/**
- * Local-first entry for the confidential-mode switch: the room row and the UI change at once,
- * and a [SettingSyncJob] carries the value to the server whenever the network allows.
- *
- * Order inside the room lock is fixed: write the row (abort on failure), record the intent, emit,
- * enqueue. The row goes first so a failed write leaves no intent and no event behind; the enqueue
- * goes last and is asynchronous, which is why [SettingSyncState.recordIntent] bridges the gap.
- */
+
+
+
+
+
+
+
+
 @Singleton
 class ConfidentialModeSyncCoordinator @Inject constructor(
     private val dbRoomStore: DBRoomStore,
@@ -30,13 +30,13 @@ class ConfidentialModeSyncCoordinator @Inject constructor(
     private val settingsManager: ConversationSettingsManager,
     private val jobFactory: SettingSyncJobFactory,
 ) {
-    /** Creates the room row when the conversation has none yet (a chat opened before any message). */
+    
     suspend fun setConfidentialMode(forWhat: For, target: Int): Boolean = toggle(forWhat.id, target, createAs = forWhat)
 
-    /** For callers that only hold the id: a missing row is created as the kind the id resolves to. */
+    
     suspend fun setConfidentialMode(roomId: String, target: Int): Boolean = toggle(roomId, target, createAs = null)
 
-    /** @return false when the local row could not be written; nothing else happened then. */
+    
     private suspend fun toggle(roomId: String, target: Int, createAs: For?): Boolean = withContext(Dispatchers.IO) {
         val field = SyncField.CONFIDENTIAL_MODE
         syncState.lockFor(roomId).withLock {

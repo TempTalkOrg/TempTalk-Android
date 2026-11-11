@@ -34,14 +34,14 @@ import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import java.util.concurrent.atomic.AtomicBoolean
 
-/**
- * A translation arriving refreshes the row through `PAYLOAD_TRANSLATE`, which re-renders only the
- * translate block. The row's click and long-press must still deliver the item the row now shows,
- * otherwise the long-press menu decides "translate" vs "off" from the pre-translation instance.
- *
- * Runs the real [ChatMessageAdapter] / [ChatMessageViewHolder.Message] so the DiffUtil payload,
- * the partial bind and the listener wiring are all production code.
- */
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [33])
 class ChatMessageViewHolderTranslateRebindTest {

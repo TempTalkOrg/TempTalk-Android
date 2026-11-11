@@ -53,12 +53,12 @@ import java.util.LinkedList
 import java.util.Queue
 import java.util.concurrent.ConcurrentHashMap
 
-/**
- * Creates an MP4 file with ftyp, mdat+, moov order.
- * A very special property of this variant is that it written sequentially. You can start transferring the
- * data while the `sink` receives it. (in contrast to typical implementations which need random
- * access to write length fields at the beginning of the file)
- */
+
+
+
+
+
+
 internal class Mp4Writer @Throws(IOException::class) constructor(
     source: List<StreamingTrack>,
     private val sink: WritableByteChannel
@@ -68,30 +68,30 @@ internal class Mp4Writer @Throws(IOException::class) constructor(
     private val creationTime = Date()
 
 
-    /**
-     * Contains the start time of the next segment in line that will be created.
-     */
+    
+
+
     private val nextChunkCreateStartTime: MutableMap<StreamingTrack, Long> = ConcurrentHashMap()
 
-    /**
-     * Contains the start time of the next segment in line that will be written.
-     */
+    
+
+
     private val nextChunkWriteStartTime: MutableMap<StreamingTrack, Long> = ConcurrentHashMap()
 
-    /**
-     * Contains the next sample's start time.
-     */
+    
+
+
     private val nextSampleStartTime: MutableMap<StreamingTrack, Long> = HashMap()
 
-    /**
-     * Buffers the samples per track until there are enough samples to form a Segment.
-     */
+    
+
+
     private val sampleBuffers: MutableMap<StreamingTrack, MutableList<StreamingSample>> = HashMap()
     private val trackBoxes: MutableMap<StreamingTrack, TrackBox> = HashMap()
 
-    /**
-     * Buffers segments until it's time for a segment to be written.
-     */
+    
+
+
     private val chunkBuffers: MutableMap<StreamingTrack, Queue<ChunkContainer>> = ConcurrentHashMap()
     private val chunkNumbers: MutableMap<StreamingTrack, Long> = HashMap()
     private val sampleNumbers: MutableMap<StreamingTrack, Long> = HashMap()
@@ -149,7 +149,7 @@ internal class Mp4Writer @Throws(IOException::class) constructor(
         val mvhd = createMvhd()
         movieBox.addBox(mvhd)
 
-        // update durations
+        
         for (streamingTrack in source) {
             val tb = trackBoxes[streamingTrack]
             val mdhd = Path.getPath<MediaHeaderBox>(tb, "mdia[0]/mdhd[0]")
@@ -175,13 +175,13 @@ internal class Mp4Writer @Throws(IOException::class) constructor(
             tkhd.setDuration(trackHeaderDuration)
         }
 
-        // metadata here
+        
         return movieBox
     }
 
     private fun sortTracks() {
         Collections.sort(source) { o1, o2 ->
-            // compare times and account for timestamps!
+            
             val a = nextChunkWriteStartTime[o1]!! * o2.getTimescale()
             val b = nextChunkWriteStartTime[o2]!! * o1.getTimescale()
             Math.signum((a - b).toDouble()).toInt()
@@ -207,7 +207,7 @@ internal class Mp4Writer @Throws(IOException::class) constructor(
 
         mvhd.setTimescale(Mp4Math.lcm(timescales))
         mvhd.setDuration((Mp4Math.lcm(timescales) * duration).toLong())
-        // find the next available trackId
+        
         mvhd.setNextTrackId(maxTrackId + 1)
         return mvhd
     }
@@ -220,22 +220,22 @@ internal class Mp4Writer @Throws(IOException::class) constructor(
         }
     }
 
-    /**
-     * Tests if the currently received samples for a given track
-     * are already a 'chunk' as we want to have it. The next
-     * sample will not be part of the chunk
-     * will be added to the fragment buffer later.
-     *
-     * @param streamingTrack track to test
-     * @param next           the lastest samples
-     * @return true if a chunk is to b e created.
-     */
+    
+
+
+
+
+
+
+
+
+
     private fun isChunkReady(streamingTrack: StreamingTrack, next: StreamingSample): Boolean {
         val ts = nextSampleStartTime[streamingTrack]!!
         val cfst = nextChunkCreateStartTime[streamingTrack]!!
 
         return ts >= cfst + 2 * streamingTrack.getTimescale()
-        // chunk interleave of 2 seconds
+        
     }
 
     @Throws(IOException::class)
@@ -263,14 +263,13 @@ internal class Mp4Writer @Throws(IOException::class) constructor(
         if (isChunkReady(streamingTrack, streamingSample)) {
 
             val chunkContainer = createChunkContainer(streamingTrack)
-            //System.err.println("Creating fragment for " + streamingTrack);
             sampleBuffers[streamingTrack]!!.clear()
             nextChunkCreateStartTime[streamingTrack] = nextChunkCreateStartTime[streamingTrack]!! + chunkContainer.duration
             val chunkQueue = chunkBuffers[streamingTrack]!!
             chunkQueue.add(chunkContainer)
             if (source[0] === streamingTrack) {
 
-                // This will write AT LEAST the currently created fragment and possibly a few more
+                
                 while (true) {
                     val currentStreamingTrack = this.source[0]
                     val tracksFragmentQueue = chunkBuffers[currentStreamingTrack]!!
@@ -376,7 +375,7 @@ internal class Mp4Writer @Throws(IOException::class) constructor(
         val mdhd = MediaHeaderBox()
         mdhd.setCreationTime(creationTime)
         mdhd.setModificationTime(creationTime)
-        //mdhd.setDuration(nextSampleStartTime.get(streamingTrack)); will update at the end, in createMoov
+        
         mdhd.setTimescale(streamingTrack.getTimescale())
         mdhd.setLanguage(streamingTrack.getLanguage())
         return mdhd
@@ -418,7 +417,7 @@ internal class Mp4Writer @Throws(IOException::class) constructor(
                         ((size and 0xff0000L) shr 16).toByte(),
                         ((size and 0xff00L) shr 8).toByte(),
                         (size and 0xffL).toByte(),
-                        109, 100, 97, 116, // mdat
+                        109, 100, 97, 116, 
 
                     )
                 )

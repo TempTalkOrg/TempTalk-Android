@@ -12,11 +12,11 @@ import org.robolectric.annotation.Config
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/**
- * [CrashFilter.isBaseOnlyInstall] reads two PackageManager facts: the bundletool-injected
- * `com.android.vending.splits.required` meta-data and the installed split APK list. Only the
- * combination "splits required, none installed" may gate crash suppression.
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class)
 class CrashFilterBaseOnlyInstallTest {
@@ -36,8 +36,8 @@ class CrashFilterBaseOnlyInstallTest {
         assertTrue(CrashFilter.isBaseOnlyInstall(context))
     }
 
-    // Both PackageManager overloads: the deprecated int-flags path below API 33 and the
-    // ApplicationInfoFlags path from API 33 on (the module default SDK covers the latter too).
+    
+    
     @Test
     @Config(sdk = [31])
     fun `legacy int-flags overload detects a base-only install on API 31`() {

@@ -11,16 +11,16 @@ import com.google.zxing.RGBLuminanceSource
 import com.google.zxing.common.GlobalHistogramBinarizer
 import com.google.zxing.common.HybridBinarizer
 
-/**
- * Decodes a single QR from any ZXing [LuminanceSource] (camera frame OR bitmap).
- *
- * NOT thread-safe — [MultiFormatReader] keeps per-decode state, so confine ONE instance to ONE
- * thread (the live analyzer pins one to its single analysis executor; the gallery path uses a
- * fresh throwaway instance on Dispatchers.IO). Never logs decoded contents at any level.
- */
+
+
+
+
+
+
+
 class QrDecoder {
 
-    // Reused across frames (hot loop). Confined to the owning thread.
+    
     private val reader = MultiFormatReader().apply {
         setHints(
             mapOf(
@@ -30,15 +30,15 @@ class QrDecoder {
         )
     }
 
-    /** Core entry point. Returns decoded text, or null if no QR found (no throw on NotFound). */
+    
     fun decode(source: LuminanceSource): String? {
-        // runCatching also absorbs the rarer Format/ChecksumException a borderline frame can throw
-        // from the hybrid pass, so the GlobalHistogramBinarizer fallback always gets a chance to run.
-        runCatching { decodeWith(source, hybrid = true) }.getOrNull()?.let { return it } // best for uneven light
-        return runCatching { decodeWith(source, hybrid = false) }.getOrNull()            // fallback: clean, evenly-lit
+        
+        
+        runCatching { decodeWith(source, hybrid = true) }.getOrNull()?.let { return it } 
+        return runCatching { decodeWith(source, hybrid = false) }.getOrNull()            
     }
 
-    /** Convenience for the gallery / picked-image path. Off-main-thread safe. */
+    
     fun decodeBitmap(bitmap: Bitmap): String? {
         val w = bitmap.width
         val h = bitmap.height
@@ -52,9 +52,9 @@ class QrDecoder {
         return try {
             reader.decodeWithState(BinaryBitmap(binarizer)).text
         } catch (e: NotFoundException) {
-            null                       // normal per-frame "no QR" — never logged (would spam)
+            null                       
         } finally {
-            reader.reset()             // clear per-decode state before reuse
+            reader.reset()             
         }
     }
 }

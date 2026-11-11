@@ -6,12 +6,12 @@
     android:layout_width="wrap_content"
     android:layout_height="wrap_content"
     android:minWidth="180dp"
-    app:cardBackgroundColor="@color/bg_modal"
-    app:cardCornerRadius="8dp"
-    app:cardElevation="4dp"
+    app:cardBackgroundColor="@android:color/transparent"
+    app:cardCornerRadius="@dimen/radius_floating"
+    app:cardElevation="0dp"
     tools:ignore="ResourceName">
 
-    <!-- 4dp vertical padding = the library's panel caps. -->
+    
     <LinearLayout
         android:orientation="vertical"
         android:layout_width="wrap_content"

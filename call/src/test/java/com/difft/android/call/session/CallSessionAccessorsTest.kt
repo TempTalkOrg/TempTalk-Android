@@ -33,7 +33,7 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 
-/** Release-safe read accessors of [CallSession], plus the mute-other failure toast. Rows: T2-15, T2-16, T2-18, T3-22, T5-30. */
+
 class CallSessionAccessorsTest {
 
     private val testDispatcher = StandardTestDispatcher()
@@ -57,7 +57,7 @@ class CallSessionAccessorsTest {
         unmockkAll()
     }
 
-    // A control-button tap racing teardown must not crash.
+    
     @Test
     fun `T2-15 isControlButtonClickEnabled in 1v1 reads roomStateOrNull and is false after release`() {
         h.components.callType.value = CallType.ONE_ON_ONE.type

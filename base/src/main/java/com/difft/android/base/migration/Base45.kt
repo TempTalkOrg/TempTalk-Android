@@ -1,13 +1,13 @@
 package com.difft.android.base.migration
 
-/**
- * Base45 (RFC 9285): every 2 bytes become 3 characters from a 45-character alphabet that QR
- * alphanumeric mode encodes at 5.5 bits each, keeping a binary pairing payload small in a QR.
- *
- * Decoding is strict — a stray character, a length leaving one character over, a triple above
- * 0xFFFF or a final pair above 0xFF all mean "not a payload"; every platform rejects the same
- * inputs. The alphabet contains a space, so callers strip line breaks and nothing else.
- */
+
+
+
+
+
+
+
+
 object Base45 {
     const val ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:"
 
@@ -35,10 +35,10 @@ object Base45 {
         return out.toString()
     }
 
-    /** True when every character is in the alphabet and there is at least one. Shape only; [decode] still validates. */
+    
     fun isAlphabet(text: String): Boolean = text.isNotEmpty() && text.all { it.code < index.size && index[it.code] >= 0 }
 
-    /** The bytes, or null when [text] is not legal Base45. */
+    
     fun decode(text: String): ByteArray? {
         if (!isAlphabet(text) || text.length % 3 == 1) return null
         val out = ByteArray(text.length / 3 * 2 + if (text.length % 3 == 2) 1 else 0)

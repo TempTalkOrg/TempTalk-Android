@@ -10,7 +10,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** #1350: stored notification test results, their fingerprint and their validity (design T4 to T6, T14). */
+
 class NotificationTestResultTest {
 
     private val loud = ChannelReading(IMPORTANCE_HIGH, hasSound = true)
@@ -51,14 +51,14 @@ class NotificationTestResultTest {
         assertEquals("ok|$now|0123456789abcdef", NotificationTestResult(NotificationTestOutcome.OK, now, "0123456789abcdef").encode())
     }
 
-    // T14: a corrupt value reads as "not tested" and never throws
+    
     @Test
     fun `malformed values decode to null`() {
         listOf(null, "", " ", "garbage", "ok|abc|fp", "maybe|1|fp", "ok|1", "ok|1|fp|extra", "ok|0|fp", "ok|-5|fp", "ok|1|", "|1|fp")
             .forEach { assertNull(NotificationTestResult.decode(it), "raw=$it") }
     }
 
-    // T6
+    
     @Test
     fun `a result is valid for 30 days and not before it was taken`() {
         val fp = "fp"
@@ -70,7 +70,7 @@ class NotificationTestResultTest {
         assertFalse(result.isValid("other", now))
     }
 
-    // T4
+    
     @Test
     fun `a MESSAGE importance change voids the message tests but not the call test`() {
         val before = input()
@@ -109,7 +109,7 @@ class NotificationTestResultTest {
         }
     }
 
-    // T5
+    
     @Test
     fun `a system update voids every result`() {
         val valid = NotificationTestResults.validOf(allOk(input()), input(), "vendor/device/1:16/BP1A/2:user/release-keys", now)

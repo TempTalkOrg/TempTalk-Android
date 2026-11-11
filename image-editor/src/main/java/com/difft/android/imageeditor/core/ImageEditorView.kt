@@ -23,22 +23,22 @@ import com.difft.android.imageeditor.core.renderers.TrashRenderer
 import java.util.LinkedList
 import kotlin.math.min
 
-/**
- * ImageEditorView
- *
- * Android [android.view.View] that allows manipulation of a base image, rotate/flip/crop and
- * addition and manipulation of text/drawing/and other image layers that move with the base image.
- *
- * Drawing
- *
- * Drawing is achieved by setting the [color] and putting the view in [Mode.Draw].
- * Touch events are then passed to a new [BezierDrawingRenderer] on a new [EditorElement].
- *
- * New images
- *
- * To add new images to the base image add via the [EditorModel.addElementCentered]
- * which centers the new item in the current crop area.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 class ImageEditorView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
@@ -96,7 +96,7 @@ class ImageEditorView @JvmOverloads constructor(
         initView(attrs)
     }
 
-    // setOnTouchListener forwards to a double-tap gesture detector — no whole-view click semantics.
+    
     @SuppressLint("ClickableViewAccessibility")
     private fun initView(attributeSet: AttributeSet?) {
         setWillNotDraw(false)
@@ -234,7 +234,7 @@ class ImageEditorView @JvmOverloads constructor(
         }
     }
 
-    // Image-editor drawing/manipulation gestures — no whole-view click semantics.
+    
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
         when (event.actionMasked) {
@@ -563,7 +563,7 @@ class ImageEditorView @JvmOverloads constructor(
     companion object {
         private val DEFAULT_BLACKOUT_COLOR = 0xFF000000.toInt()
 
-        /** Maximum distance squared a user can move the pointer before we consider a drag starting */
+        
         private const val MAX_MOVE_SQUARED_BEFORE_DRAG = 10
 
         private fun getPoint(event: MotionEvent): PointF = getPoint(event, 0)

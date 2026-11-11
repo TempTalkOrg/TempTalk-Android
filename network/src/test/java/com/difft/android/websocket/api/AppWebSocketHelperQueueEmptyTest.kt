@@ -12,12 +12,12 @@ import org.junit.Test
 import org.whispersystems.signalservice.internal.websocket.WebSocketProtos.WebSocketRequestMessage
 import org.whispersystems.signalservice.internal.websocket.WebSocketProtos.WebSocketResponseMessage
 
-/**
- * Pins the wire contract of the two end-of-queue markers the server pushes per connection:
- * `queue/conversation/empty` (previews done, backlog about to start) and `queue/empty` (backlog
- * fully pushed). Both must be ACK'd and mapped to their own flag; anything else keeps returning
- * null so unknown paths stay inert.
- */
+
+
+
+
+
+
 class AppWebSocketHelperQueueEmptyTest {
 
     private companion object {

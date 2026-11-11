@@ -13,13 +13,13 @@ import org.junit.After
 import org.junit.Before
 import org.junit.Test
 
-/**
- * A draft typed within the 500 ms debounce must survive the input pausing (a fold/unfold
- * recreation, the page covered or popped): [DraftViewModel.flushNow] writes it at once.
- *
- * Main is a [StandardTestDispatcher] that is never advanced, so the debounced collector cannot
- * write: every write observed here comes from flushNow.
- */
+
+
+
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class DraftViewModelFlushTest {
 

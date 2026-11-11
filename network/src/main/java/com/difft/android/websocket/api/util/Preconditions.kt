@@ -1,8 +1,8 @@
 package com.difft.android.websocket.api.util
 
-/**
- * Convenient ways to assert expected state.
- */
+
+
+
 object Preconditions {
 
     @JvmStatic

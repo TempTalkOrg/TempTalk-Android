@@ -26,11 +26,11 @@ import util.ScreenLockUtil
 import java.lang.ref.WeakReference
 import java.time.Duration
 
-/**
- * [TempTalkApplication.isScreenLockPending] (#1355): set when a lock check is scheduled, kept across
- * the 3×150 ms retries that run outside the check job, cleared once the decision is applied. Same
- * harness as [TempTalkApplicationScreenLockTest]: the real class, constructed directly.
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33], application = Application::class)
 class ScreenLockPendingTest {
@@ -126,11 +126,11 @@ class ScreenLockPendingTest {
     fun `stays pending across the retries and clears when they give up`() {
         setResumedActivity(null)
         scheduleQuickCheck()
-        idle(100) // first check: no activity, retry scheduled outside the check job
+        idle(100) 
         assertTrue(app.isScreenLockPending())
-        idle(300) // two retries
+        idle(300) 
         assertTrue(app.isScreenLockPending())
-        idle(600) // last retry gives up
+        idle(600) 
         assertFalse(app.isScreenLockPending())
     }
 
@@ -187,7 +187,7 @@ class ScreenLockPendingTest {
         ScreenLockUtil.markRecentlyUnlocked()
         app.isScreenLockPending()
         app.isScreenLockPending()
-        // isScreenLockRequiredOrShowing consumes the flag once: it must still be there.
+        
         assertFalse(app.isScreenLockRequiredOrShowing())
     }
 }

@@ -8,15 +8,15 @@ import com.difft.android.migration.ui.component.MigrationResultBody
 import com.difft.android.migration.ui.component.MigrationResultPage
 import com.difft.android.migration.ui.component.MigrationResultTone
 
-/**
- * The new device's completion page: success mark, title, one line and a single button into the app.
- * Stateless; [onStart] is the only exit.
- */
+
+
+
+
 @Composable
 fun MigrationSuccessScreen(
     onStart: () -> Unit,
-    // The session came across with the data (same-device no-login migration), so the copy can say
-    // the account moved rather than only the history.
+    
+    
     credentialHandoff: Boolean = false,
 ) {
     MigrationResultPage(

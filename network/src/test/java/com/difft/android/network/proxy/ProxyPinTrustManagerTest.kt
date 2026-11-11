@@ -12,8 +12,8 @@ import kotlin.test.assertFailsWith
 @RunWith(RobolectricTestRunner::class)
 class ProxyPinTrustManagerTest {
 
-    // Self-signed EC (prime256v1) cert generated for this test.
-    // Its SPKI pin (base64(sha256(DER SubjectPublicKeyInfo))) is [VALID_PIN].
+    
+    
     private val certPem = """
         -----BEGIN CERTIFICATE-----
         MIIBkjCCATegAwIBAgIUcdpFDZMPF2Ad94f71Bnw6YZB5X4wCgYIKoZIzj0EAwIw

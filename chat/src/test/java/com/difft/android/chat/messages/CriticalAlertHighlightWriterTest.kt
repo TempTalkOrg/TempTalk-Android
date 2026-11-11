@@ -11,12 +11,12 @@ import io.mockk.verifyOrder
 import org.junit.Test
 import kotlin.concurrent.thread
 
-/**
- * [CriticalAlertHighlightWriter] (#1381): no highlight for an alert of the call being joined or
- * already active; a join's clear is ordered after a write already in progress; and an alert for
- * another call that writes after the join's clear keeps its highlight. An alert for a call that has
- * ended (#1387) keeps its highlight: the room end only silences presentation.
- */
+
+
+
+
+
+
 class CriticalAlertHighlightWriterTest {
 
     private val dbRoomStore = mockk<DBRoomStore>(relaxed = true)
@@ -43,7 +43,7 @@ class CriticalAlertHighlightWriterTest {
 
     @Test
     fun `an alert for an ended room still gets its highlight`() {
-        // #1387: the call is over but the alert message stays in the chat and keeps its unread highlight.
+        
         registry.end(ROOM_A)
 
         writer.highlightIfUnread(CONVERSATION, ROOM_A, TS_A)
@@ -55,7 +55,7 @@ class CriticalAlertHighlightWriterTest {
     fun `a join that begins during the write clears after it`() {
         var join: Thread? = null
         every { dbRoomStore.setCriticalAlertIfUnread(CONVERSATION, TS_A) } answers {
-            // The join publishes its marker and clears while this write still holds the conversation lock.
+            
             join = thread {
                 gate.beginJoin(ROOM_A, CONVERSATION)
                 writer.clearForJoin(CONVERSATION)

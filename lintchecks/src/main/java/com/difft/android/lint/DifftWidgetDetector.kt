@@ -14,26 +14,16 @@ import org.jetbrains.uast.UCallExpression
 import org.w3c.dom.Element
 import java.util.EnumSet
 
-/**
- * Forbids the raw button / switch / checkbox widgets outside `:base`.
- *
- * Each of those controls has exactly one visual source of truth — the `DifftButton` /
- * `DifftSwitch` / `DifftCheckBox` composable — plus an XML shell (`DifftButtonView` /
- * `DifftSwitchView` / `DifftCheckBoxView`) for View layouts. A raw platform, AppCompat, Material
- * or Material3 widget forks that look and drifts from the design, which is what the unification
- * series (#1203 / #1206 / #1208) removed. `:base` itself is exempt via `lint.xml`: it hosts the
- * composables and shells.
- *
- * Three surfaces, one issue id:
- *  - layout XML tags (`<Button>`, `<androidx.appcompat.widget.SwitchCompat>`, ...)
- *  - Material / Material3 composable calls (`Button(...)`, `Switch(...)`, `Checkbox(...)`)
- *  - widget constructors in code (`AppCompatButton(context)`)
- *
- * `TextButton` is deliberately not covered: there is no Difft text button yet.
- */
+
+
+
+
+
+
+
 class DifftWidgetDetector : Detector(), Detector.XmlScanner, Detector.UastScanner {
 
-    // ---------- Layout XML ----------
+    
 
     override fun appliesTo(folderType: ResourceFolderType): Boolean = folderType == ResourceFolderType.LAYOUT
 
@@ -50,7 +40,7 @@ class DifftWidgetDetector : Detector(), Detector.XmlScanner, Detector.UastScanne
         )
     }
 
-    // ---------- Compose calls ----------
+    
 
     override fun getApplicableMethodNames(): List<String> = COMPOSABLES.keys.toList()
 
@@ -67,7 +57,7 @@ class DifftWidgetDetector : Detector(), Detector.XmlScanner, Detector.UastScanne
         )
     }
 
-    // ---------- Widget constructors ----------
+    
 
     override fun getApplicableConstructorTypes(): List<String> = VIEW_CLASSES.keys.toList()
 
@@ -88,7 +78,7 @@ class DifftWidgetDetector : Detector(), Detector.XmlScanner, Detector.UastScanne
         private const val SWITCH_VIEW = "com.difft.android.base.widget.DifftSwitchView"
         private const val CHECKBOX_VIEW = "com.difft.android.base.widget.DifftCheckBoxView"
 
-        /** Fully qualified widget classes, for constructor calls in code. */
+        
         private val VIEW_CLASSES: Map<String, String> = mapOf(
             "android.widget.Button" to BUTTON_VIEW,
             "androidx.appcompat.widget.AppCompatButton" to BUTTON_VIEW,
@@ -102,14 +92,14 @@ class DifftWidgetDetector : Detector(), Detector.XmlScanner, Detector.UastScanne
             "com.google.android.material.checkbox.MaterialCheckBox" to CHECKBOX_VIEW,
         )
 
-        /** Layout tags: the fully qualified classes plus the short `android.widget` forms. */
+        
         private val XML_TAGS: Map<String, String> = VIEW_CLASSES + mapOf(
             "Button" to BUTTON_VIEW,
             "Switch" to SWITCH_VIEW,
             "CheckBox" to CHECKBOX_VIEW,
         )
 
-        /** Composable names to the Difft composable that replaces them. */
+        
         private val COMPOSABLES: Map<String, String> = mapOf(
             "Button" to "DifftButton",
             "OutlinedButton" to "DifftButton",
@@ -120,7 +110,7 @@ class DifftWidgetDetector : Detector(), Detector.XmlScanner, Detector.UastScanne
             "TriStateCheckbox" to "DifftCheckBox",
         )
 
-        /** Facade classes Kotlin compiles the Material / Material3 top-level composables into. */
+        
         private val COMPOSE_FACADES: Set<String> = setOf(
             "androidx.compose.material3.ButtonKt",
             "androidx.compose.material3.SwitchKt",

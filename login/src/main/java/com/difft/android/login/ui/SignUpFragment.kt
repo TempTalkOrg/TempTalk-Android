@@ -43,8 +43,8 @@ class SignUpFragment : Fragment() {
             fragmentLogIn.visibility = View.VISIBLE
             fragmentSignUp.visibility = View.GONE
 
-            // The account field is a Compose-backed component; a plain View-level focus request
-            // cannot reach the inner text field.
+            
+            
             fragmentLogIn.findViewById<DifftClearableInputView>(R.id.account).focusAndShowKeyboard()
         }
     }

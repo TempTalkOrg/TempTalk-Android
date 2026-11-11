@@ -5,11 +5,11 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * While the tabletop dock is pinned the controls stay shown: a tap, the toolbar toggle and the
- * screen-share auto-hide flip only the title bar and keep the participants panel open. Unpinning
- * syncs the bottom flag to the title's so both bars toggle in step again.
- */
+
+
+
+
+
 class CallUiControllerDockPinnedTest {
 
     private val ui = CallUiController()
@@ -104,7 +104,7 @@ class CallUiControllerDockPinnedTest {
         sharing.autoHideChrome()
         assertFalse(sharing.showTopStatusViewEnabled.value)
         assertTrue("docked: the toolbar stays", sharing.showBottomToolBarViewEnabled.value)
-        // Unfolding mid-share: the toolbar follows the hidden title, so the next tap shows both.
+        
         sharing.applyLayoutControls(hidden = false, docked = false)
         assertFalse(sharing.showBottomToolBarViewEnabled.value)
         sharing.toggleOverlays()

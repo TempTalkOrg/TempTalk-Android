@@ -4,7 +4,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** [keepAliveUnansweredForCadence]: only an unanswered send judged on the timer tick disconnects. */
+
 class KeepAliveUnansweredRuleTest {
 
     @Test

@@ -40,10 +40,10 @@ import org.robolectric.annotation.Config
 import org.robolectric.shadow.api.Shadow
 import org.robolectric.shadows.ShadowContextImpl
 
-/**
- * #1354: [MessageForegroundService] promotes only on a verified channel, and its
- * starter does not start it when no channel can carry the notification.
- */
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [31])
 class MessageForegroundServiceChannelTest {
@@ -76,12 +76,12 @@ class MessageForegroundServiceChannelTest {
 
     private fun realNm() = app.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-    /** Replaces the notification service every context of the app resolves. */
+    
     private fun installNm(nm: NotificationManager) {
         Shadow.extract<ShadowContextImpl>(app.baseContext).setSystemService(Context.NOTIFICATION_SERVICE, nm)
     }
 
-    /** A manager at the per-app channel cap: nothing can be created; [existing] channels are found. */
+    
     private fun cappedNm(vararg existing: String): NotificationManager = mockk(relaxed = true) {
         every { getNotificationChannel(any()) } answers {
             firstArg<String>().takeIf { it in existing }?.let { NotificationChannel(it, it, NotificationManager.IMPORTANCE_HIGH) }
@@ -121,7 +121,7 @@ class MessageForegroundServiceChannelTest {
         controller.destroy()
     }
 
-    // A sticky restart in a fresh process with no channel stops without startForeground.
+    
     @Test
     fun `a sticky restart with no channel stops without promoting`() {
         installNm(cappedNm())
@@ -133,14 +133,14 @@ class MessageForegroundServiceChannelTest {
         verify(exactly = 0) { ForegroundServiceStarter.startForegroundSafely(any(), any(), any(), any()) }
         assertTrue(shadowOf(controller.get()).isStoppedBySelf)
         assertEquals(Service.START_NOT_STICKY, result)
-        // A service that stopped itself is neither running nor counted as started.
+        
         assertFalse(MessageForegroundService.isRunning)
         verify(exactly = 0) { counters.onServiceStarted() }
         controller.destroy()
     }
 
-    // The onCreate promotion uses the preflight id when the lookup throws, and stops
-    // without promoting when there is none.
+    
+    
     @Test
     fun `an onCreate promotion with a throwing lookup uses the preflight id only`() {
         assertEquals(NotificationChannelIds.RUNNING_IN_BACKGROUND, NotificationChannelSpecs.preflightForegroundChannel(app, "Test"))

@@ -11,28 +11,19 @@ import java.util.Random
 class RandomAvatarGenerator {
 
     companion object {
-        // 默认的大小
         private const val DEFAULT_SIZE = 8
 
-        // 随机种子
         private val random = Random()
 
-        /**
-         * 生成一个随机的 Blockies 头像 Bitmap
-         * 不需要传入任何参数
-         */
         fun generateRandomBitmap(): Bitmap {
-            // 使用随机种子生成 Blockies 数据
             val seed = generateRandomSeed()
             val data = RandomAvatarData(seed, DEFAULT_SIZE)
 
-            // 获取生成的图像数据和颜色
             val imageData = data.getImageData()
             val colors = data.getColors()
 
-            // 创建 Bitmap
             val size = DEFAULT_SIZE
-            val blockSize = 32 // 每个块的大小
+            val blockSize = 32
             val bitmap = createBitmap(size * blockSize, size * blockSize)
             val canvas = Canvas(bitmap)
 
@@ -43,10 +34,8 @@ class RandomAvatarGenerator {
             val spotPaint = Paint()
             spotPaint.color = colors[2]
 
-            // 背景颜色填充
             canvas.drawColor(colors[1])
 
-            // 绘制区块
             val blockRect = RectF()
             for (i in imageData.indices) {
                 val x = (i % size) * blockSize.toFloat()
@@ -68,12 +57,9 @@ class RandomAvatarGenerator {
             return bitmap
         }
 
-        /**
-         * 生成一个随机的种子字符串
-         */
         private fun generateRandomSeed(): String {
             val seedChars = "abcdefghijklmnopqrstuvwxyz0123456789"
-            val seedLength = 8 // 可以调整种子长度
+            val seedLength = 8
             val seedBuilder = StringBuilder()
 
             for (i in 0 until seedLength) {
@@ -86,9 +72,6 @@ class RandomAvatarGenerator {
     }
 }
 
-/**
- * Blockies 头像数据生成器
- */
 class RandomAvatarData(seed: String, size: Int) {
     private val randSeed = IntArray(4)
     private var imageData: IntArray

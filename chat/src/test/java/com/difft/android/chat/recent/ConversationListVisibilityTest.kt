@@ -3,11 +3,11 @@ package com.difft.android.chat.recent
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/**
- * The list counts as visible only while resumed AND not under the one-pane detail layer (§3.7),
- * and the "back on the list" refresh runs when the layer uncovers a resumed list, since closing a
- * conversation there does not resume the list as closing ChatActivity did.
- */
+
+
+
+
+
 class ConversationListVisibilityTest {
 
     private val published = mutableListOf<Boolean>()

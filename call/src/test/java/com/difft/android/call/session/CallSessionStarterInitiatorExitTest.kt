@@ -25,22 +25,14 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Test
 
-/**
- * Behavioral coverage for [CallSessionStarter.onStartCallSucceeded]'s pre-connect-exit guard —
- * the client half of PR #1111's "quick-exit leaves remote ringing" fix.
- *
- * `processStartCallResponse()` cannot be driven end-to-end in a unit test: it awaits
- * `room::ttCallResp.flow`, which resolves the property delegate through a ThreadLocal only the
- * real LiveKit getter populates (a mocked [io.livekit.android.room.Room] never registers it — see
- * [CallTypeCoordinatorTest]'s note). The success-side effects were therefore extracted into the
- * Room-independent [CallSessionStarter.onStartCallSucceeded], exercised directly here.
- *
- * The invariant under protection: when the initiator has already exited during window W
- * (`OnGoingCallStateManager.isInitiatorPreConnectCancelled()` is true), the late-arriving start
- * response must NOT ring / build local CallData / send the start-call message, and must instead
- * re-issue the authoritative termination against the now-known roomId — 1v1 `cancel`, group
- * `hangup` (end-for-all, empty uid list in window W).
- */
+
+
+
+
+
+
+
+
 class CallSessionStarterInitiatorExitTest {
 
     private val onGoingCallStateManager = OnGoingCallStateManager()
@@ -89,9 +81,9 @@ class CallSessionStarterInitiatorExitTest {
             systemShowTimestamp = 0L,
         )
 
-        // Guard fired: no start-call side effects were sent.
+        
         assertFalse(sentStartSideEffects)
-        // Authoritative cancel re-issued against the now-known roomId.
+        
         coVerify(exactly = 1) {
             callToChatController.cancelCall(
                 callerId = SELF_ID,
@@ -146,7 +138,7 @@ class CallSessionStarterInitiatorExitTest {
         )
 
         assertFalse(sentStartSideEffects)
-        // Group exit upgrades to hangup (end-for-all); no remote has joined in window W → empty uid list.
+        
         coVerify(exactly = 1) {
             callToChatController.hangUpCall(
                 callerId = SELF_ID,
@@ -162,12 +154,12 @@ class CallSessionStarterInitiatorExitTest {
         }
     }
 
-    /**
-     * The session's teardown clears the cancel latch ([OnGoingCallStateManager.endPresence]) before
-     * its cleanup releases the room, so a response landing in between sees no latch. The ending
-     * session must still skip the start side effects. It sends nothing either: the exit path owns the
-     * end signal, and for a group a re-sent hangup would end the call for everyone.
-     */
+    
+
+
+
+
+
     @Test
     fun `response after the teardown cleared the latch does not ring while the session is ending`() = runTest {
         every { callIntent.callType } returns CallType.ONE_ON_ONE.type
@@ -191,7 +183,7 @@ class CallSessionStarterInitiatorExitTest {
         coVerify(exactly = 0) { callToChatController.cancelCall(any(), any(), any(), any(), any()) }
     }
 
-    /** A group caller's LEAVE while the response is still in flight must not become an end-for-all. */
+    
     @Test
     fun `group leave while the response is in flight does not hang up for everyone`() = runTest {
         every { callIntent.callType } returns CallType.GROUP.type
@@ -212,12 +204,10 @@ class CallSessionStarterInitiatorExitTest {
         coVerify(exactly = 0) { callToChatController.hangUpCall(any(), any(), any(), any(), any(), any()) }
     }
 
-    /**
-     * T5-09 (L12): the re-cancel is best-effort and runs only while the session is alive. The latch is
-     * set, the session `Job` is cancelled (the session's last cleanup step) while the start flow awaits the response, then
-     * the response arrives: nothing is sent and nothing rings. The await-then-handle coroutine has the
-     * shape of `start()` (`scope.launch(IO) { …; handleStartCallResponse(response) }`).
-     */
+    
+
+
+
     @Test
     fun `T5-09 late response after the session is cancelled re-cancels nothing and does not ring`() = runTest {
         every { callIntent.callType } returns CallType.ONE_ON_ONE.type
@@ -230,7 +220,7 @@ class CallSessionStarterInitiatorExitTest {
         sessionScope.launch { starter.handleStartCallResponse(response.await()) }
         advanceUntilIdle()
 
-        sessionScope.cancel() // the session's last cleanup step cancels its Job
+        sessionScope.cancel() 
         response.complete(startResponse(ROOM_ID))
         advanceUntilIdle()
 

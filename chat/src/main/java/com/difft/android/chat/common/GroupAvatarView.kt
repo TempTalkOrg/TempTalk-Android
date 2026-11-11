@@ -36,13 +36,13 @@ class GroupAvatarView @JvmOverloads constructor(
 
     val binding: LayoutGroupAvatarBinding by viewbind(this)
 
-    /** ID of the avatar currently being loaded, used to prevent image mismatch */
+    
     private var currentLoadingId: String? = null
     
-    /** Pending avatar params to be loaded after onAttachedToWindow */
+    
     private var pendingAvatarParams: GroupAvatarParams? = null
     
-    /** Pending members params to be updated after onAttachedToWindow */
+    
     private var pendingMembersParams: MembersParams? = null
 
     private data class GroupAvatarParams(
@@ -61,14 +61,14 @@ class GroupAvatarView @JvmOverloads constructor(
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
-        // Execute pending members update after view is attached
+        
         pendingMembersParams?.let { params ->
             getLifecycleOwner()?.lifecycleScope?.launch {
                 updateMembersNumber(params.showMembersNumber, params.membersNumber, params.gid)
             }
             pendingMembersParams = null
         }
-        // Execute pending avatar load after view is attached
+        
         pendingAvatarParams?.let {
             loadAvatarInternal(it)
             pendingAvatarParams = null
@@ -87,19 +87,19 @@ class GroupAvatarView @JvmOverloads constructor(
         membersNumber: Int = 0,
         gid: String? = null
     ) {
-        // Update members count independently of avatar loading
+        
         if (isAttachedToWindow) {
             getLifecycleOwner()?.lifecycleScope?.launch {
                 updateMembersNumber(showMembersNumber, membersNumber, gid)
             } ?: L.e { "[GroupAvatarView] Failed to get lifecycleOwner for members update" }
         } else {
-            // Will be updated in onAttachedToWindow via pendingMembersParams
+            
             pendingMembersParams = MembersParams(showMembersNumber, membersNumber, gid)
         }
 
         val newAvatarId = groupAvatarData?.serverId
 
-        // No avatar data, show default icon
+        
         if (newAvatarId == null || groupAvatarData == null) {
             binding.ivAvatar.setImageResource(com.difft.android.base.R.drawable.base_ic_group)
             currentLoadingId = null
@@ -114,28 +114,28 @@ class GroupAvatarView @JvmOverloads constructor(
         if (isAttachedToWindow) {
             loadAvatarInternal(params)
         } else {
-            // View not attached yet, save params for onAttachedToWindow
+            
             pendingAvatarParams = params
             binding.ivAvatar.setImageResource(com.difft.android.base.R.drawable.base_ic_group)
         }
     }
 
-    /**
-     * Internal avatar loading logic, guaranteed to run after view is attached.
-     */
+    
+
+
     private fun loadAvatarInternal(params: GroupAvatarParams) {
         val groupAvatarData = params.groupAvatarData
         val avatarId = groupAvatarData.serverId ?: return
         
-        // Check if ID still matches (prevent mismatch during fast scrolling)
+        
         if (currentLoadingId != avatarId) return
         
         val cacheFile = GroupAvatarUtil.getCacheFile(avatarId)
         if (cacheFile != null) {
-            // Cache exists, load directly
+            
             loadFromCacheFile(avatarId, cacheFile, groupAvatarData)
         } else {
-            // Cache not found, show default icon and download in background
+            
             binding.ivAvatar.setImageResource(com.difft.android.base.R.drawable.base_ic_group)
             
             getLifecycleOwner()?.lifecycleScope?.launch {
@@ -149,12 +149,12 @@ class GroupAvatarView @JvmOverloads constructor(
         }
     }
 
-    /**
-     * Load and display avatar from cache file, retry download on failure.
-     */
+    
+
+
     private fun loadFromCacheFile(avatarId: String, cacheFile: File, groupAvatarData: GroupAvatarData) {
-        // Decrypting content:// provider (plaintext never on disk, docs §15) + stable uri key +
-        // lastModified signature; RESOURCE disk cache only when the Keystore key is available.
+        
+        
         val uri = AvatarEncryptedProvider.contentUri(AvatarEncryptedProvider.DIR_GROUP_AVATAR, cacheFile.name)
         Glide.with(context.getSafeContext())
             .load(uri)
@@ -187,9 +187,9 @@ class GroupAvatarView @JvmOverloads constructor(
             .into(binding.ivAvatar)
     }
 
-    /**
-     * Handle Glide load failure: delete corrupted cache and re-download.
-     */
+    
+
+
     private fun handleGlideLoadFailed(avatarId: String, groupAvatarData: GroupAvatarData) {
         getLifecycleOwner()?.lifecycleScope?.launch {
             val downloadedFile = withContext(Dispatchers.IO) {
@@ -217,7 +217,7 @@ class GroupAvatarView @JvmOverloads constructor(
             .into(binding.ivAvatar)
     }
 
-    // Numeric-only display (group member count); no English text to translate.
+    
     @SuppressLint("SetTextI18n")
     private suspend fun updateMembersNumber(show: Boolean, number: Int, gid: String?) = withContext(Dispatchers.Main) {
         if (!show) {

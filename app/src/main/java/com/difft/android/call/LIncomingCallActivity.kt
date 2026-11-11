@@ -85,8 +85,8 @@ class LIncomingCallActivity : BaseActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        // Orientation comes from BaseActivity's sw600dp policy (portrait on phones, free
-        // rotation on tablets / unfolded foldables) — the same gate the rest of the app uses.
+        
+        
         super.onCreate(savedInstanceState)
         screenState = ScreenDeviceUtil.readScreenState(this)
         initializeActivityState()
@@ -192,7 +192,7 @@ class LIncomingCallActivity : BaseActivity() {
         binding.answerSlider.touchObserver = { touchGuard.recordTouch(it) }
         binding.answerControls.onAccept = { if (allowsTap("accept")) acceptCall("tap") }
         binding.answerControls.onReject = { if (allowsTap("reject")) rejectCall("tap") }
-        // A completed slide is deliberate; the post-show cool-down filters accidental taps only.
+        
         binding.answerSlider.onAnswer = { acceptCall("slide") }
         binding.answerSlider.onDecline = { rejectCall("slide") }
         applyAnswerMode()
@@ -228,13 +228,13 @@ class LIncomingCallActivity : BaseActivity() {
         binding.windowZoomOut.setOnClickListener { pipController.enterIfPossible("windowZoomOut") }
     }
 
-    /**
-     * Screen woken by the call (full-screen intent, display off or keyguard up): the single-track
-     * slider replaces the buttons, so no pocket or palm tap can accept or reject. An unlocked phone
-     * already in use keeps the tap buttons. Re-evaluated on resume so a screen
-     * that comes back after the person unlocked the phone drops to taps
-     * (see [IncomingAnswerModeResolver.onResume]).
-     */
+    
+
+
+
+
+
+
     private fun applyAnswerMode(mode: IncomingAnswerMode, reason: String) {
         answerMode = mode
         val slide = mode == IncomingAnswerMode.SLIDE
@@ -247,12 +247,12 @@ class LIncomingCallActivity : BaseActivity() {
         applyAnswerMode(IncomingAnswerModeResolver.atCreate(callIntent.fullScreenLaunch, screenState), "create")
     }
 
-    /**
-     * Only after this screen has been paused and brought back (Home, then unlock and reopen — the
-     * foreground-restore reorder path). The first resume right after onCreate is skipped: a
-     * showWhenLocked window can occlude or clear a non-secure keyguard on its own, and reading
-     * "keyguard gone" there would drop the slider before anyone touched the phone.
-     */
+    
+
+
+
+
+
     private fun reevaluateAnswerModeOnResume() {
         if (answerMode != IncomingAnswerMode.SLIDE || !pausedSinceCreate) return
         val now = ScreenDeviceUtil.readScreenState(this)
@@ -379,16 +379,16 @@ class LIncomingCallActivity : BaseActivity() {
             }
             hangUpTheCall("accept: join the call failed")
         } else {
-            // Joined: this screen is about to be destroyed by the INVITED_DESTROY broadcast. Leave the
-            // controls disabled (and the slider un-armed) so nothing can accept twice in the gap.
+            
+            
             hangUpTheCall("accept: join the call")
         }
     }
 
-    /**
-     * A tap inside the post-show cool-down is dropped: the screen was most likely lit under an
-     * unintended touch. The slider bypasses this: a completed slide is deliberate.
-     */
+    
+
+
+
     private fun allowsTap(action: String): Boolean {
         if (touchGuard.allowsTap()) return true
         L.i { "[Call] LIncomingCallActivity $action tap ignored: cooldown sinceShownMs=${touchGuard.sinceShownMs()}" }

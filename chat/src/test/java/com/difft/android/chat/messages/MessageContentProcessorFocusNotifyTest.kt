@@ -34,7 +34,7 @@ import kotlin.test.assertEquals
 import com.difft.android.base.migration.pause.AdmissionKind
 import com.difft.android.test.fakes.TestMessagingPause
 
-/** `notifyType == NOTIFY_MESSAGE_TYPE_FOCUS (29)` reaches [GroupFocusRepository.apply] with the parsed snapshot. */
+
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28])

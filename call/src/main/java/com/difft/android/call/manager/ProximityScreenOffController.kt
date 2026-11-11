@@ -18,43 +18,43 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/**
- * Whether the call screen may hold the proximity screen-off lock right now.
- *
- * Same rule as Signal (`LockManager.IN_CALL` vs `IN_HANDS_FREE_CALL` / `IN_VIDEO`) and Telegram
- * (`VoIPService.onSensorChanged`): earpiece route only, no local camera, no screen share. On
- * speaker, wired or Bluetooth the phone is not at the ear, and a dark screen there is exactly the
- * state a user cannot tap their way out of. An unknown route (nothing enumerated yet) counts as
- * "not earpiece" — a few hundred ms without protection beats a dark screen on a wrong guess.
- */
+
+
+
+
+
+
+
+
+
 internal fun shouldHoldProximityLock(
     route: AudioRouteSnapshot,
     cameraEnabled: Boolean,
     screenSharing: Boolean,
 ): Boolean = !cameraEnabled && !screenSharing && route.settledRoute?.kind == AudioDeviceKind.EARPIECE
 
-/**
- * Turns the call screen off while the phone is at the ear by holding
- * [PowerManager.PROXIMITY_SCREEN_OFF_WAKE_LOCK] — the mechanism the system dialer, Signal and
- * Telegram use.
- *
- * Why the system lock instead of reading the sensor and dimming the window ourselves:
- * - The system applies the OEM's own threshold (`min(maximumRange, 5cm)` in AOSP
- *   `DisplayPowerProximityStateController`), so this app behaves exactly like the phone's dialer
- *   on the same hardware. The in-app rule `value < maximumRange` is permanently NEAR on phones
- *   whose virtual (ultrasonic) proximity sensor never reports its advertised maximum, which left
- *   the screen dark and untouchable for the whole call.
- * - Proximity-positive keeps the device AWAKE (`PowerManagerService.isBeingKeptAwakeLocked`): no
- *   keyguard, no `ACTION_SCREEN_OFF`, the Activity stays RESUMED.
- * - Pressing the power key while covered turns the screen back on
- *   (`PowerManagerService.interceptPowerKeyDown`) — an escape hatch a window-flag dim never had.
- *
- * Owned by the call session, not the call page: the lock is held for the whole call whenever
- * [shouldHold] is true, page visible or not — as Signal and Telegram hold it for the whole call.
- * It is released with [PowerManager.RELEASE_FLAG_WAIT_FOR_NO_PROXIMITY] so the screen does not
- * light up against the user's face when the call ends or the route changes. While held, the
- * sensor is also read for diagnostics only (see [ProximityDiagnostics]); it never drives the screen.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 class ProximityScreenOffController(
     context: Context,
     private val scope: CoroutineScope,
@@ -64,11 +64,11 @@ class ProximityScreenOffController(
     private val appContext: Context = context.applicationContext
     private var job: Job? = null
 
-    /** Start observing; called once per call session, from the main thread. */
+    
     fun start() {
         job?.cancel()
         job = scope.launch {
-            // isWakeLockLevelSupported is a Binder call — keep lock setup off the main thread.
+            
             val lock = withContext(ioDispatcher) { createLock() } ?: return@launch
             val diagnostics = ProximityDiagnostics(appContext)
             try {
@@ -84,9 +84,9 @@ class ProximityScreenOffController(
                     }
                 }
             } finally {
-                // Released or the session's Job cancelled: drop the lock. The wait-for-far flag
-                // still applies: if the phone is at the ear right now the screen lights up once it
-                // is moved away, not against the face (power key overrides either way).
+                
+                
+                
                 withContext(NonCancellable + ioDispatcher) {
                     release(lock)
                     diagnostics.stop()
@@ -95,7 +95,7 @@ class ProximityScreenOffController(
         }
     }
 
-    /** Stop observing and release the lock. Called from the session's teardown. */
+    
     fun release() {
         job?.cancel()
         job = null
@@ -147,12 +147,12 @@ class ProximityScreenOffController(
     }
 }
 
-/**
- * Field diagnostics only: logs the raw proximity reading and the near/far verdict the system
- * would reach (AOSP threshold `min(maximumRange, 5cm)`) on the first sample and on each
- * transition. Lets a device log confirm or rule out a misbehaving sensor. Must be started and
- * stopped from the same dispatcher; sensor callbacks arrive on the main looper.
- */
+
+
+
+
+
+
 private class ProximityDiagnostics(private val context: Context) : SensorEventListener {
     private var sensorManager: SensorManager? = null
     private var sensor: Sensor? = null

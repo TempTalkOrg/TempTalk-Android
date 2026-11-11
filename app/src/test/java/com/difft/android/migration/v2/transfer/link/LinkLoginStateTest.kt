@@ -9,12 +9,10 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * The confirmation page's starting state is a pure function of the scanned code (登录时导入由手机决定
- * §4.2): pairing info wins, then the `dataMigrationState` value, and a bare link code is a legacy
- * Desktop. Also pins the two rules the page's buttons depend on: when a login carries history, and
- * when attachments are offered as a choice (产品方案 §4.2, 1 GiB).
- */
+
+
+
+
 class LinkLoginStateTest {
 
     private val compound = QrPayload(ip = "192.168.1.23", port = 47821, fp = "AA", pin = "482913", alias = "TempTalk Desktop", transferKey = "a2V5")
@@ -47,7 +45,7 @@ class LinkLoginStateTest {
         assertFalse(base.copy(reachable = false).willSync)
         assertFalse(base.copy(reachable = null).willSync)
         assertFalse(base.copy(gateReject = "environment-mismatch").willSync)
-        // The Desktop already holds this account's history: never synced, whatever the switch says.
+        
         assertFalse(base.copy(peerState = LinkPeerState.SAME_ACCOUNT).willSync)
         assertTrue(base.copy(peerState = LinkPeerState.DIFFERENT_ACCOUNT).willSync)
     }

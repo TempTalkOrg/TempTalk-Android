@@ -26,13 +26,13 @@ import org.robolectric.android.controller.ActivityController
 import java.time.Duration
 import kotlin.test.assertNotNull
 
-/**
- * A real RecyclerView hosting the message action popup, shared by the list-scroll tests (#1294).
- *
- * The anchor is item [ANCHOR] (a bubble with a TextView taller than the viewport); the other items
- * are [FILLER_HEIGHT]px views. Gestures go through the overlay at the right edge, which is outside
- * the text, the handles and the menu.
- */
+
+
+
+
+
+
+
 internal class ListScrollFixture(
     private val composeRule: ComposeTestRule,
     globalConfigsManager: IGlobalConfigsManager,
@@ -40,16 +40,16 @@ internal class ListScrollFixture(
     class Adapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
         var anchorText = (0 until LINE_COUNT).joinToString("\n") { "Line $it" }
 
-        /** Height of item 0, the neighbour above the anchor. */
+        
         var leadHeight = FILLER_HEIGHT
 
-        /** Top padding of the anchor bubble; moves the text inside a stationary bubble. */
+        
         var anchorPaddingTop = 0
 
-        /**
-         * Like a long-text bubble: the bind sets the full text and a pre-draw listener registered by the
-         * bind truncates it to this many lines plus a "Read more" line.
-         */
+        
+
+
+
         var truncateToLines: Int? = null
 
         override fun getItemCount() = ITEM_COUNT
@@ -111,7 +111,7 @@ internal class ListScrollFixture(
     val highlight: View get() = (0 until overlay.childCount).map(overlay::getChildAt).single { it is SelectionHighlightView }
     val gestureX: Float get() = overlay.width - 10f
 
-    /** Shows the popup on the anchor; [withText] false shows it like an image or attachment bubble. */
+    
     fun showAndIdle(withText: Boolean = true) {
         bubble = assertNotNull(rv.findViewHolderForAdapterPosition(ANCHOR)).itemView
         textView = bubble.findViewById(TEXT_ID)
@@ -133,12 +133,12 @@ internal class ListScrollFixture(
         )
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(150))
         settle()
-        // Clear the long-press continuation guard (a tap would dismiss, so cancel instead).
+        
         send(MotionEvent.ACTION_DOWN, gestureX, 10f)
         send(MotionEvent.ACTION_CANCEL, gestureX, 10f)
     }
 
-    /** Three frames; state writes are delivered explicitly because a hidden menu is not drawn. */
+    
     fun settle() {
         repeat(3) {
             Snapshot.sendApplyNotifications()
@@ -158,7 +158,7 @@ internal class ListScrollFixture(
         }
     }
 
-    /** Finger DOWN at [fromY], then MOVEs up by [step] px [steps] times; no UP. */
+    
     fun dragUp(fromY: Float, step: Float, steps: Int): Float {
         send(MotionEvent.ACTION_DOWN, gestureX, fromY)
         var y = fromY
@@ -169,7 +169,7 @@ internal class ListScrollFixture(
         return y
     }
 
-    /** Lifts after a long still pause, so no fling starts; the main looper is not run. */
+    
     fun lift(y: Float) {
         send(MotionEvent.ACTION_MOVE, gestureX, y, 5_000)
         send(MotionEvent.ACTION_UP, gestureX, y, 5_000)
@@ -186,7 +186,7 @@ internal class ListScrollFixture(
         return highlight.y - (t[1] - o[1])
     }
 
-    /** The anchor's current on-screen bounds, in the coordinates the popup stores. */
+    
     fun expectedBubbleBounds(): PopupRect {
         val bounds = Rect().also(bubble::getGlobalVisibleRect)
         val root = Rect().also { activity.findViewById<View>(android.R.id.content).getGlobalVisibleRect(it) }

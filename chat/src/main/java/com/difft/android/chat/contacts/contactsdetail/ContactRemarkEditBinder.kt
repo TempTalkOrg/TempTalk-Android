@@ -25,32 +25,32 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
-/**
- * Binds [ContactRemarkEditViewModel] to the contact card host: maps effects to UI work (picker,
- * action sheet, wait dialog, toasts, keyboard), routes back-press to "leave edit mode" while
- * editing, and pushes the bottom-sheet host to full height while editing.
- *
- * Construct as a Fragment field: the picker registers its permission contract at construction,
- * which must happen before the Fragment is STARTED. [viewModelProvider] is deferred because
- * `viewModels()` cannot be resolved before the Fragment is attached.
- */
+
+
+
+
+
+
+
+
+
 internal class ContactRemarkEditBinder(
     private val fragment: Fragment,
     private val viewModelProvider: () -> ContactRemarkEditViewModel,
     private val onClose: () -> Unit,
 ) {
-    // Wait dialog claim scoped to this page (released with its view, dismissed by token only).
+    
     private val pageWait = PageWait(fragment)
 
     private val avatarPickLauncher = AvatarPickLauncher.forFragment(fragment) { path ->
         viewModelProvider().dispatch(ContactRemarkEditContract.Intent.AvatarPicked(path))
     }
 
-    /**
-     * Back while editing behaves like the close button: the ViewModel asks to save when there is an
-     * unsaved change, otherwise closes. Registered only for the duration of an edit (the dispatcher
-     * is LIFO), with the page's detail back owner so a covered or hidden card never takes Back.
-     */
+    
+
+
+
+
     private val backWhileEditing = object : OnBackPressedCallback(true) {
         override fun handleOnBackPressed() {
             viewModelProvider().dispatch(ContactRemarkEditContract.Intent.RequestClose)
@@ -70,8 +70,8 @@ internal class ContactRemarkEditBinder(
                     }
                 }
                 launch {
-                    // Swipe-down and scrim taps cannot be intercepted with a prompt, so they are
-                    // disabled while an unsaved change exists (product spec allows disabling them).
+                    
+                    
                     viewModel.state.map { it.hasUnsavedChanges }.distinctUntilChanged().collect { dirty ->
                         sheetHost()?.setDismissGesturesEnabled(!dirty)
                     }
@@ -83,7 +83,7 @@ internal class ContactRemarkEditBinder(
         }
     }
 
-    /** In a bottom sheet, back is delivered to the dialog's dispatcher, not the Activity's. */
+    
     private fun backPressedDispatcher() =
         ((fragment.parentFragment as? DialogFragment)?.dialog as? ComponentDialog)?.onBackPressedDispatcher
             ?: fragment.requireActivity().onBackPressedDispatcher
@@ -108,12 +108,12 @@ internal class ContactRemarkEditBinder(
         }
     }
 
-    /** Must pick Save or Discard; tapping outside is not an answer, so the dialog is not cancelable. */
+    
     private fun showUnsavedDialog() {
         val activity = fragment.requireActivity()
         fragment.dismissWithView(ComposeDialogManager.showMessageDialog(
             context = activity,
-            // The prompt is the body text; an empty title avoids a blank block between title and buttons.
+            
             title = "",
             message = activity.getString(R.string.contact_remark_unsaved_message),
             confirmText = activity.getString(R.string.unsaved_changes_save),
@@ -124,7 +124,7 @@ internal class ContactRemarkEditBinder(
         ))
     }
 
-    /** Existing remark avatar: offer photos / revert; otherwise the ViewModel goes straight to the picker. */
+    
     private fun showAvatarActionSheet() {
         var dialog: ComposeDialog? = null
         dialog = fragment.dismissWithView(ComposeDialogManager.showBottomDialog(fragment.requireActivity()) {
@@ -142,7 +142,7 @@ internal class ContactRemarkEditBinder(
         })
     }
 
-    /** The card may live in a dialog window (bottom sheet) or the Activity window. */
+    
     private fun hideKeyboard() {
         val window = (fragment.parentFragment as? DialogFragment)?.dialog?.window
             ?: fragment.activity?.window

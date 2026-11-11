@@ -22,9 +22,9 @@ import com.difft.android.chat.util.Util
 import com.difft.android.chat.util.ViewUtil
 import com.difft.android.chat.util.customizeOnDraw
 
-/**
- * One stop shop to turn an AppCompatSeekBar into an HSV Color Slider.
- */
+
+
+
 object HSVColorSlider {
 
   private const val MAX_HUE = 360

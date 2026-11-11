@@ -36,10 +36,10 @@ import org.robolectric.annotation.Config
 import org.robolectric.shadow.api.Shadow
 import org.robolectric.shadows.ShadowContextImpl
 
-/**
- * #1354: every promotion of the ongoing-call [ForegroundService] builds its
- * notification on a channel verified at that promotion, and never calls `startForeground` without one.
- */
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [31])
 class ForegroundServiceChannelTest {
@@ -91,8 +91,8 @@ class ForegroundServiceChannelTest {
         every { createNotificationChannel(any<NotificationChannel>()) } throws IllegalStateException("Limit exceed")
     }
 
-    // The starting and the ongoing-call notifications both sit on RUNNING_IN_BACKGROUND,
-    // re-created before the promotion when missing.
+    
+    
     @Test
     fun `every promotion posts on a re-created running-in-background channel`() {
         OgsmTestState.setCallStatus(ogsm, CallStatus.CONNECTED)
@@ -120,7 +120,7 @@ class ForegroundServiceChannelTest {
         assertTrue(notification.flags and Notification.FLAG_ONLY_ALERT_ONCE != 0)
     }
 
-    // A throwing lookup uses the preflight id and never an unverified MESSAGE.
+    
     @Test
     fun `a throwing lookup promotes on the preflight id`() {
         NotificationChannelSpecs.preflightForegroundChannel(app, "Test")

@@ -38,9 +38,9 @@ internal class MediaConverter {
     private var mTimeFrom: Long = 0
     private var mTimeTo: Long = 0
     private var mVideoResolution = 0
-    private var mVideoBitrate = 2000000 // 2Mbps
+    private var mVideoBitrate = 2000000 
     private var mVideoCodec = VIDEO_CODEC_H264
-    private var mAudioBitrate = 128000 // 128Kbps
+    private var mAudioBitrate = 128000 
     private var mAllowAudioRemux = false
 
     private var mListener: Listener? = null
@@ -90,7 +90,7 @@ internal class MediaConverter {
     @WorkerThread
     @Throws(EncodingException::class, IOException::class)
     fun convert() {
-        // Exception that may be thrown during release.
+        
         var exception: Exception? = null
         var muxer: Muxer? = null
         var videoTrackConverter: VideoTrackConverter? = null
@@ -124,11 +124,7 @@ internal class MediaConverter {
             exception = e
         } finally {
             if (VERBOSE) L.d { TAG + "releasing extractor, decoder, encoder, and muxer" }
-            // Try to release everything we acquired, even if one of the releases fails, in which
-            // case we save the first exception we got and re-throw at the end (unless something
-            // other exception has already been thrown). This guarantees the first exception thrown
-            // is reported as the cause of the error, everything is (attempted) to be released, and
-            // all other exceptions appear in the logs.
+            
             try {
                 if (videoTrackConverter != null) {
                     videoTrackConverter.release()
@@ -164,9 +160,9 @@ internal class MediaConverter {
         }
     }
 
-    /**
-     * Does the actual work for extracting, decoding, encoding and muxing.
-     */
+    
+
+
     @Throws(IOException::class, TranscodingException::class)
     private fun doExtractDecodeEditEncodeMux(
         videoTrackConverter: VideoTrackConverter?,
@@ -233,7 +229,7 @@ internal class MediaConverter {
             }
         }
 
-        // Basic sanity checks.
+        
         if (videoTrackConverter != null) {
             videoTrackConverter.verifyEndState()
         }
@@ -256,7 +252,7 @@ internal class MediaConverter {
 
     companion object {
         private const val TAG = "media-converter"
-        private const val VERBOSE = false // lots of logging
+        private const val VERBOSE = false 
 
         const val VIDEO_CODEC_H264 = "video/avc"
 
@@ -264,10 +260,10 @@ internal class MediaConverter {
             return format.getString(MediaFormat.KEY_MIME)!!
         }
 
-        /**
-         * Returns the first codec capable of encoding the specified MIME type, or null if no match was
-         * found.
-         */
+        
+
+
+
         internal fun selectCodec(mimeType: String): MediaCodecInfo? {
             val numCodecs = MediaCodecList.getCodecCount()
             for (i in 0 until numCodecs) {

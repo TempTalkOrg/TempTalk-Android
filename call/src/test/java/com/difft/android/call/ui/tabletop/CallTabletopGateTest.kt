@@ -4,10 +4,10 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
-/**
- * [TabletopGate]: every cell of the debounce table, plus the field sequences it exists for
- * (opening and closing transients on the Xiaomi 18 Fold, a resize during the flat hysteresis).
- */
+
+
+
+
 class CallTabletopGateTest {
 
     private val g = TabletopGeometry(bandTopPx = 1127, bandBottomPx = 1237, widthPx = 1672, heightPx = 2364, density = 2.75f)
@@ -82,7 +82,7 @@ class CallTabletopGateTest {
         assertEquals(g, GateState.Leaving(g).geometry)
     }
 
-    /** Feeds inputs; a timeout fires only when the time since the last restart reaches the step's timer. */
+    
     private class Driver {
         var state: GateState = GateState.Off
         val events = mutableListOf<GateEvent>()

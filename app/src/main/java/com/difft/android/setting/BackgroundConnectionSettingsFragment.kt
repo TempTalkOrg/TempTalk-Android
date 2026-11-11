@@ -48,11 +48,11 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 import com.difft.android.chat.R as ChatR
 
-/**
- * Background connection page: the switch, the checks it needs and the skin's own switches. Turning
- * the switch on with a failing requirement opens that setting and, on return with every requirement
- * met, turns the switch on automatically.
- */
+
+
+
+
+
 @AndroidEntryPoint
 class BackgroundConnectionSettingsFragment : Fragment(), SettingsIdiomPage {
 
@@ -69,7 +69,7 @@ class BackgroundConnectionSettingsFragment : Fragment(), SettingsIdiomPage {
     private val switchOn = mutableStateOf(false)
     private val highlightedRow = mutableStateOf<BgRow?>(null)
 
-    /** Set when the switch sent the user to fix a requirement; lets the return turn the switch on. Survives recreation. */
+    
     private var startedFromSwitch = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -101,7 +101,7 @@ class BackgroundConnectionSettingsFragment : Fragment(), SettingsIdiomPage {
         refreshTrigger.intValue++
         switchOn.value = MessageForegroundService.isRunning
         handleReturnFromFix()
-        // HyperOS applies a power-policy change a moment after its page closes: read the state once more.
+        
         viewLifecycleOwner.lifecycleScope.launch {
             delay(LATE_STATE_REFRESH_MS)
             refreshTrigger.intValue++
@@ -151,7 +151,7 @@ class BackgroundConnectionSettingsFragment : Fragment(), SettingsIdiomPage {
         )
     }
 
-    /** Turning on with a failing requirement opens that setting instead of refusing with a toast. */
+    
     private fun onSwitchTurnedOn() {
         val failing = firstFailingRequirement(readCheckState())
         if (failing == null) {
@@ -172,7 +172,7 @@ class BackgroundConnectionSettingsFragment : Fragment(), SettingsIdiomPage {
         }
     }
 
-    /** After the user comes back from a requirement page: turn on when all pass, else point at the next one. */
+    
     private fun handleReturnFromFix() {
         if (!startedFromSwitch || !isAdded) return
         val failing = firstFailingRequirement(readCheckState())
@@ -188,7 +188,7 @@ class BackgroundConnectionSettingsFragment : Fragment(), SettingsIdiomPage {
         }
     }
 
-    /** The one enable path, shared by the switch and the automatic turn-on after a fix. */
+    
     private fun enableBackgroundConnection(): Boolean {
         if (!messageServiceManager.checkBackgroundConnectionRequirements()) {
             L.w { "[BgConnection] requirements not met at enable" }
@@ -212,7 +212,7 @@ class BackgroundConnectionSettingsFragment : Fragment(), SettingsIdiomPage {
         switchOn.value = false
     }
 
-    /** The prompt slot keeps the user's own switch changes: an explicit off starts its 30-day floor. */
+    
     private fun recordSwitch(on: Boolean) {
         appScope.launch {
             runCatching { startupPromptStore.recordBackgroundConnectionSwitch(on, ServerTimeProvider.nowMillis()) }
@@ -248,7 +248,7 @@ class BackgroundConnectionSettingsFragment : Fragment(), SettingsIdiomPage {
         }
     }
 
-    /** The system request dialog; HyperOS routes it to its own power-policy page. */
+    
     @SuppressLint("BatteryLife")
     private fun openBatteryOptimizationSettings() {
         try {

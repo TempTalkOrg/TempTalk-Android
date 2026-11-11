@@ -22,28 +22,28 @@ import com.difft.android.migration.v2.transfer.login.MigrationP2pReceiveActivity
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 
-/**
- * The new package's first-launch entry into the same-device no-login migration.
- *
- * Reached two ways: `MainActivity`'s startup probe routes here instead of the login page when the old
- * app holds a session that can travel, or the old app's guide page opens it through the exported
- * trampoline with [PeerApps.EXTRA_AUTO_START], meaning the choice was already made over there.
- *
- * Every exit stops the receiver, including a system-driven `onDestroy`; otherwise the foreground
- * service keeps listening on loopback while the user signs in normally.
- */
+
+
+
+
+
+
+
+
+
+
 @AndroidEntryPoint
 class MigrationHandoffEntryActivity : BaseActivity() {
 
     private val viewModel: MigrationHandoffEntryViewModel by viewModels()
 
-    /** True once the receiver has been started, so the teardown in [onDestroy] must not fire. */
+    
     private var receiveStarted = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // The account material this page is about to move is sensitive; keep it out of recents
-        // thumbnails and screen recordings, exactly like the transfer screens.
+        
+        
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
 
         setContent {
@@ -70,10 +70,10 @@ class MigrationHandoffEntryActivity : BaseActivity() {
         )
     }
 
-    /**
-     * The receiver listens with no account of its own — the account arrives inside the container and
-     * is adopted by the handshake gate. The receive screen restarts the process when it lands.
-     */
+    
+
+
+
     private fun startReceive() {
         receiveStarted = true
         L.i { "[MigrationV2][Handoff] starting the no-login receiver" }
@@ -93,8 +93,8 @@ class MigrationHandoffEntryActivity : BaseActivity() {
 
     override fun onDestroy() {
         if (isFinishing && !receiveStarted) {
-            // Belt and braces for every exit that did not go through the ViewModel (a system-driven
-            // finish, a task swipe): the receiver must never outlive this path.
+            
+            
             MigrationTransferService.cancel(this)
         }
         super.onDestroy()

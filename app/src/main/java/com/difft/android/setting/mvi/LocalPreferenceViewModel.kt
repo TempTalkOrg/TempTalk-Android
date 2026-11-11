@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
 object LocalPreferenceContract {
-    /** [closeRequested] stays set until the page is actually removed, so a fold before the pop commits cannot lose it. */
+    
     data class State(val speed: Float, val voice: VoicePreset, val displayType: Int, val closeRequested: Boolean = false)
     sealed interface Intent {
         data class SelectSpeed(val value: Float) : Intent
@@ -20,7 +20,7 @@ object LocalPreferenceContract {
     }
 }
 
-/** Local preference truth is owned by the page VM and stored before its close request (#1457). */
+
 @HiltViewModel
 class LocalPreferenceViewModel @Inject constructor(private val userManager: UserManager) : ViewModel() {
     private val _state = MutableStateFlow(userManager.getUserData().let { user ->

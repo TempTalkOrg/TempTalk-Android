@@ -23,13 +23,13 @@
             android:orientation="vertical"
             android:paddingBottom="20dp">
 
-            <!-- Centered identity header (avatar + name + encryption meta); edit mode lives here too -->
+            
             <androidx.compose.ui.platform.ComposeView
                 android:id="@+id/compose_identity_header"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content" />
 
-            <!-- Card A: header (search input + member list + view-all toggle) -->
+            
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -118,8 +118,7 @@
                 </androidx.constraintlayout.widget.ConstraintLayout>
             </LinearLayout>
 
-            <!-- Card C: search chat history + group management. Moved below card D while group focus is
-                 available (GroupInfoFragment.placeSearchCard, UI spec 10c8d1c9). -->
+            
             <LinearLayout
                 android:id="@+id/card_search_management"
                 android:layout_width="match_parent"
@@ -186,7 +185,7 @@
 
             </LinearLayout>
 
-            <!-- Card D0: focus + mute / notifications / sound (Compose, driven by GroupFocusSettingsViewModel) -->
+            
             <androidx.compose.ui.platform.ComposeView
                 android:id="@+id/compose_notification_section"
                 android:layout_width="match_parent"
@@ -194,7 +193,7 @@
                 android:layout_marginHorizontal="16dp"
                 android:layout_marginTop="16dp" />
 
-            <!-- Card D: pin & save to photos & translate & disappearing -->
+            
             <LinearLayout
                 android:id="@+id/card_chat_settings"
                 android:layout_width="match_parent"
@@ -340,7 +339,6 @@
                 </RelativeLayout>
             </LinearLayout>
 
-            <!-- Card E: leave group -->
             <FrameLayout
                 android:id="@+id/leave_container"
                 android:layout_width="match_parent"
@@ -348,7 +346,6 @@
                 android:layout_marginHorizontal="16dp"
                 android:layout_marginTop="16dp"
                 android:background="@drawable/base_bg_settings_group">
-
 
                 <TextView
                     android:id="@+id/leave_button"

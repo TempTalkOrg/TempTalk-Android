@@ -39,17 +39,17 @@ kotlin {
 }
 
 dependencies {
-    implementation(project(":base")) // L logging
+    implementation(project(":base")) 
 
-    // Engine + adapters
-    api(libs.okhttp)                              // client + raw SSLServerSocket (already in :base)
-    implementation(libs.okhttp.tls)               // NEW: HeldCertificate self-signed cert
+    
+    api(libs.okhttp)                              
+    implementation(libs.okhttp.tls) 
     implementation(libs.okio)
-    implementation(libs.kotlinx.serialization.json) // wire DTOs (@SerialName)
-    implementation(libs.zxing.core) // QR encode
+    implementation(libs.kotlinx.serialization.json) 
+    implementation(libs.zxing.core) 
     implementation(libs.androidx.core.ktx)
 
-    // Tests
+    
     testImplementation(libs.junit)
     testImplementation(libs.kotlin.test)
     testImplementation(libs.mockk)

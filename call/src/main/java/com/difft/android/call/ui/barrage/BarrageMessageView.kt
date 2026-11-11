@@ -1,7 +1,7 @@
 package com.difft.android.call.ui.barrage
 
+import com.difft.android.base.ui.compose.floatingSurface
 import android.content.res.Configuration
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,8 +32,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -84,10 +82,10 @@ fun BarrageMessageView(
     var showInputOverlay by remember { mutableStateOf(false) }
     var inputText by remember { mutableStateOf("") }
 
-    // The stack floats just above whatever the bar plan occupies (bar, outside Emoji pill, or
-    // the two-row backplate). Pure window-size geometry: no posture or device special cases.
-    // With the side rail (#1451) it sits at the rail's bottom inset and stops short of the rail's band.
-    // With the tabletop dock it sits at the bottom of the stage, above the fold.
+    
+    
+    
+    
     val chrome = rememberCallChromeLayout(isGroup = !config.isOneVOneCall)
     val plan = chrome.barPlan
     val rail = chrome.rail
@@ -217,7 +215,7 @@ fun BarrageMessageView(
             }
         }
 
-        // The Emoji entry now lives in the action bar; this sheet is what it opens.
+        
         EmojiReactionSheet(
             visible = showSimpleBarrageEnabled && !isInPipMode,
             emojis = config.emojiPresets,
@@ -251,9 +249,9 @@ fun BarrageMessageView(
 }
 
 
-/**
- * Scrolling barrage message cards displayed at the bottom of the call screen.
- */
+
+
+
 @Composable
 private fun BarrageDisplay(
     visibleMessages: List<BarrageMessage>,
@@ -287,10 +285,9 @@ private fun BarrageMessageCard(message: BarrageMessage, textMaxLength: Int) {
     Column(
         modifier = Modifier
             .alpha(0.9f)
-            .shadow(elevation = 10.dp, spotColor = Color(0x14000000), ambientColor = Color(0x14000000))
             .wrapContentWidth()
             .heightIn(min = LCallUiConstants.BARRAGE_MESSAGE_ITEM_HEIGHT.dp)
-            .background(color = DifftTheme.colors.backgroundPopup, shape = DifftTheme.radius.largeShape)
+            .floatingSurface(DifftTheme.radius.largeShape, fill = DifftTheme.colors.backgroundPopup)
             .padding(start = 8.dp, top = 6.dp, end = 8.dp, bottom = 6.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,

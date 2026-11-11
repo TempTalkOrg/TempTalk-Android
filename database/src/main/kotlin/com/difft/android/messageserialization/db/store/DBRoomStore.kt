@@ -37,7 +37,7 @@ import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
-// All wcdb calls in this class run on Dispatchers.IO.
+
 @Suppress("BlockingWcdbInSuspend")
 @Singleton
 class DBRoomStore @Inject constructor(
@@ -76,40 +76,40 @@ class DBRoomStore @Inject constructor(
                         }
                     }
                 }
-                // Saved Messages (备忘录)
+                
                 if (forWhat.id == globalServices.myId) {
                     this.lastActiveTime = System.currentTimeMillis()
                     this.pinnedTime = System.currentTimeMillis()
                     this.roomName = ResUtils.getString(R.string.chat_favorites)
-                    this.emptyRoomSince = null  // Saved Messages is not an empty room
+                    this.emptyRoomSince = null  
                 }
                 try {
                     wcdb.room.insertObject(this)
-                    // New (or re-created after delete) room: trigger a server-config refetch
-                    // (mute, etc.) so settings survive delete + recreate without a restart.
+                    
+                    
                     RoomChangeTracker.trackRoomCreated(forWhat.id)
                 } catch (e: Exception) {
                     L.w { "[DBRoomStore] insertObject failed: ${e.stackTraceToString()}" }
                 }
             })
-        // The block above runs only when the row is created here, so a row that reached the DB another
-        // way (a migration importing local state) stays invisible forever: Saved Messages has no
-        // server-side counterpart to refill it and no messages to trigger a message-path update.
+        
+        
+        
         if (forWhat.id == globalServices.myId) repairSavedMessages(room)
         val cost = System.currentTimeMillis() - startTime
-        // Called for every incoming message; only a creation or a slow lookup is worth a line.
+        
         if (created || cost > SLOW_ROOM_LOOKUP_MS) {
             L.i { "[Message] createRoomIfNotExist created=$created cost=${cost}ms room=${forWhat.id}" }
         }
         return room
     }
 
-    /**
-     * Re-assert the Saved Messages invariants on an existing row: it always has the favorites name, is
-     * always visible (`lastActiveTime != 0` is the conversation list's filter), and is never an empty
-     * room. Only what is missing is filled, so a recomputed `lastActiveTime` and a user-cleared
-     * `pinnedTime` are left alone, and a row that is already correct is not written at all.
-     */
+    
+
+
+
+
+
     private fun repairSavedMessages(room: RoomModel) {
         val favoritesName = ResUtils.getString(R.string.chat_favorites)
         val needsName = room.roomName.isNullOrEmpty()
@@ -144,7 +144,6 @@ class DBRoomStore @Inject constructor(
             DBRoomModel.roomId.eq(forWhat.id)
         )
 
-        // ✅ 通知UI刷新
         RoomChangeTracker.trackRoom(forWhat.id, RoomChangeType.REFRESH)
     }
 
@@ -159,7 +158,6 @@ class DBRoomStore @Inject constructor(
             DBRoomModel.roomId.eq(forWhat.id)
         )
 
-        // ✅ 通知UI刷新
         RoomChangeTracker.trackRoom(forWhat.id, RoomChangeType.REFRESH)
     }
 
@@ -176,7 +174,6 @@ class DBRoomStore @Inject constructor(
             DBRoomModel.roomId.eq(forWhat.id)
         )
 
-        // ✅ 通知UI刷新
         RoomChangeTracker.trackRoom(forWhat.id, RoomChangeType.REFRESH)
     }
 
@@ -210,7 +207,7 @@ class DBRoomStore @Inject constructor(
 
     fun getRoom(roomId: String): RoomModel? = wcdb.room.getFirstObject(DBRoomModel.roomId.eq(roomId))
 
-    /** The [For] a bare conversation id stands for: a known group id is a group, anything else an account. */
+    
     fun resolveFor(roomId: String): For =
         if (wcdb.group.getFirstObject(DBGroupModel.gid.eq(roomId)) != null) For.Group(roomId) else For.Account(roomId)
 
@@ -218,29 +215,28 @@ class DBRoomStore @Inject constructor(
         L.i { "[DBRoomStore] updateConfidentialMode id:$roomId confidentialMode: $confidentialMode" }
         wcdb.room.updateValue(confidentialMode, DBRoomModel.confidentialMode, DBRoomModel.roomId.eq(roomId))
 
-        // ✅ 通知UI刷新
         RoomChangeTracker.trackRoom(roomId, RoomChangeType.REFRESH)
     }
 
-    /**
-     * Batch update conversation settings
-     * Only updates non-null fields passed in, flexibly adapting to different scenarios:
-     * - WebSocket Notify type 4: muteStatus, blockStatus, confidentialMode
-     * - WebSocket Notify type 5: messageExpiry, messageClearAnchor (use updateMessageExpiry)
-     * - API response: all fields
-     *
-     * @param roomId Conversation ID
-     * @param muteStatus Mute status
-     * @param blockStatus Block status (only valid for single chat)
-     * @param confidentialMode Confidential mode
-     * @param messageExpiry Message expiry time
-     * @param messageClearAnchor Message clear anchor
-     * @param conversationConfigVersion Server config version the written fields came from; written in
-     * the same statement so a crash can never leave the version ahead of the fields
-     * @param allowMentionMe Mute sub-option: still notify on @me while muted
-     * @param allowMentionAll Mute sub-option: still notify on @all while muted
-     * @param allowGroupCall Mute sub-option: still notify on group calls while muted
-     */
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     fun updateConversationSettings(
         roomId: String,
         muteStatus: Int? = null,
@@ -313,18 +309,17 @@ class DBRoomStore @Inject constructor(
             DBRoomModel.roomId.eq(roomId)
         )
 
-        // Notify UI refresh
         RoomChangeTracker.trackRoom(roomId, RoomChangeType.REFRESH)
     }
 
-    /**
-     * Update save to photos setting for a conversation
-     * @param roomId Conversation ID
-     * @param saveToPhotos Save to photos setting (null: follow global, 0: disabled, 1: enabled)
-     */
+    
+
+
+
+
     fun updateSaveToPhotos(roomId: String, saveToPhotos: Int?) {
         L.i { "[DBRoomStore] updateSaveToPhotos id:$roomId saveToPhotos: $saveToPhotos" }
-        // Use Value() for null to properly set database field to null
+        
         val value = if (saveToPhotos != null) Value(saveToPhotos) else Value()
         wcdb.room.updateValue(
             value,
@@ -332,24 +327,23 @@ class DBRoomStore @Inject constructor(
             DBRoomModel.roomId.eq(roomId)
         )
 
-        // Notify UI refresh
         RoomChangeTracker.trackRoom(roomId, RoomChangeType.REFRESH)
     }
 
-    /**
-     * Get save to photos setting for a conversation
-     * @param roomId Conversation ID
-     * @return Save to photos setting (null: follow global, 0: disabled, 1: enabled)
-     */
+    
+
+
+
+
     fun getSaveToPhotos(roomId: String): Int? {
         return wcdb.room.getFirstObject(DBRoomModel.roomId.eq(roomId))?.saveToPhotos
     }
 
-    /**
-     * Update the conversation-level auto-translate target (local only, never synced).
-     * @param roomId Conversation ID
-     * @param translateSetting 0: off, 1: Chinese, 2: English
-     */
+    
+
+
+
+
     fun updateTranslateSetting(roomId: String, translateSetting: Int) {
         L.i { "[Translate] updateTranslateSetting id:$roomId translateSetting: $translateSetting" }
         wcdb.room.updateValue(
@@ -358,45 +352,43 @@ class DBRoomStore @Inject constructor(
             DBRoomModel.roomId.eq(roomId)
         )
 
-        // Notify UI refresh
         RoomChangeTracker.trackRoom(roomId, RoomChangeType.REFRESH)
     }
 
-    /**
-     * Read the conversation-level auto-translate target.
-     * @return 0: off (also for an unknown conversation), 1: Chinese, 2: English
-     */
+    
+
+
+
     fun getTranslateSetting(roomId: String): Int =
         wcdb.room.getFirstObject(DBRoomModel.roomId.eq(roomId))?.translateSetting ?: 0
 
-    /**
-     * Distinct non-off auto-translate targets across every conversation, in one query.
-     * Used at startup to decide which translation models have to be on device.
-     */
+    
+
+
+
     fun getActiveTranslateTargets(): Set<Int> =
         wcdb.room.getOneColumnInt(
             DBRoomModel.translateSetting,
             DBRoomModel.translateSetting.notEq(0)
         ).filterNotNull().toSet()
 
-    /**
-     * 更新会话的 Critical Alert 状态
-     * @param roomId 会话ID
-     * @param criticalAlertType Critical Alert 类型（0: 无, 1: 有）
-     */
+    
+
+
+
+
     fun updateCriticalAlertType(roomId: String, criticalAlertType: Int) {
         L.i { "[DBRoomStore] updateCriticalAlertType id:$roomId criticalAlertType: $criticalAlertType" }
         wcdb.room.updateValue(criticalAlertType, DBRoomModel.criticalAlertType, DBRoomModel.roomId.eq(roomId))
 
-        // ✅ 通知UI刷新
         RoomChangeTracker.trackRoom(roomId, RoomChangeType.REFRESH)
     }
 
-    /**
-     * 设置会话的 Critical Alert 高亮状态（仅当消息未读时才设置）
-     * @param roomId 会话ID
-     * @param messageTimestamp Critical Alert 消息的 systemShowTimestamp
-     */
+    
+
+
+
+
     fun setCriticalAlertIfUnread(roomId: String, messageTimestamp: Long) {
         val room = wcdb.room.getFirstObject(DBRoomModel.roomId.eq(roomId)) ?: return
         if (messageTimestamp > room.readPosition) {
@@ -407,10 +399,10 @@ class DBRoomStore @Inject constructor(
         }
     }
 
-    /**
-     * 清除会话的 Critical Alert 高亮状态
-     * @param roomId 会话ID
-     */
+    
+
+
+
     fun clearCriticalAlert(roomId: String) {
         updateCriticalAlertType(roomId, difft.android.messageserialization.model.CRITICAL_ALERT_TYPE_NONE)
     }
@@ -425,7 +417,7 @@ class DBRoomStore @Inject constructor(
         L.i { "[DBRoomStore] updateMessageReadPosition  id:${forWhat.id} readPosition: $readPosition" }
 
         try {
-            // 如果当前正在更新的值更大，直接丢弃
+            
             val currentUpdating = updatingReadPositions[forWhat.id]
             if (currentUpdating != null && currentUpdating >= readPosition) {
                 L.d { "[Message] Ignoring readPosition $readPosition for ${forWhat.id}, larger value $currentUpdating is being processed" }
@@ -439,13 +431,12 @@ class DBRoomStore @Inject constructor(
                 room.updateRoomUnreadState(readPosition)
                 L.i { "[Message] Read position advanced from ${room.readPosition} to $readPosition for ${room.roomId}, clearing notifications" }
                 messageNotificationUtil.cancelNotificationsByConversation(room.roomId)
-                // Reading past the mark time supersedes a manual "unread" mark (Desktop onReadPosition rule).
+                
                 if (room.markUnreadFlag == MARK_UNREAD_FLAG_UNREAD && readPosition >= room.markUnreadAt) {
                     L.i { "[DBRoomStore] readPosition passed markUnreadAt=${room.markUnreadAt}, clearing manual unread id:${forWhat.id}" }
                     writeMarkUnread(forWhat, MARK_UNREAD_FLAG_CLEAR, room.markUnreadAt)
                 }
 
-                // ✅ 触发会话列表刷新，更新未读徽章
                 RoomChangeTracker.trackRoom(forWhat.id, RoomChangeType.REFRESH)
             }
 
@@ -458,16 +449,15 @@ class DBRoomStore @Inject constructor(
 
     override suspend fun getUnreadMessageInfo(room: For): UnreadMessageInfo {
         val readPosition = getMessageReadPosition(room)
-        // #909 #3: count via SQL COUNT (no object load); mention info via subquery against
-        // the `mention` table (bounded by mention count, not by total unread count).
+        
+        
         val unreadCond = DBMessageModel.roomId.eq(room.id)
             .and(DBMessageModel.systemShowTimestamp.gt(readPosition))
             .and(DBMessageModel.fromWho.notEq(myID))
             .and(DBMessageModel.type.notIn(MessageModel.TYPE_NOTIFY, MessageModel.TYPE_CONFIDENTIAL_PLACEHOLDER))
 
         val unreadCount = messageCount(unreadCond).toInt()
-        // #909 R3 hot-path short-circuit: when nothing is unread, mentions are necessarily empty —
-        // skip the group mention subquery entirely (this is called on every bottom-button refresh).
+        
         if (unreadCount == 0) return UnreadMessageInfo(0)
         if (room !is For.Group) return UnreadMessageInfo(unreadCount)
 
@@ -475,20 +465,20 @@ class DBRoomStore @Inject constructor(
         return UnreadMessageInfo(unreadCount, mentionType, mentionTimeStamps.size, mentionTimeStamps)
     }
 
-    /**
-     * Computes the @-mention type and the `timeStamp`s of mentioning unread messages for a
-     * group room, without loading any [MessageModel]. (#909 TP3)
-     *
-     * - The unread message ids are expressed as a correlated SQL subquery (never materialized).
-     * - `mentionType` is derived from the matching `mention.uid`s (me > all > none).
-     * - `mentionTimeStamps` = `message.timeStamp` of the mentioning messages — the consumer
-     *   (ChatMessageListFragment) matches these against `MessageModel.timeStamp`, so the
-     *   `timeStamp` field (not `systemShowTimestamp`) is preserved.
-     *
-     * @return Pair(mentionType, mentionTimeStamps).
-     */
+    
+
+
+
+
+
+
+
+
+
+
+
     private fun queryUnreadMentions(roomId: String, readPosition: Long): Pair<Int, List<Long>> {
-        // Subquery: ids of unread messages in range (mirrors unreadCond above).
+        
         val unreadIdsSubquery = StatementSelect()
             .select(DBMessageModel.id)
             .from("message")
@@ -499,9 +489,7 @@ class DBRoomStore @Inject constructor(
                     .and(DBMessageModel.type.notIn(MessageModel.TYPE_NOTIFY, MessageModel.TYPE_CONFIDENTIAL_PLACEHOLDER))
             )
 
-        // Single pass over mention rows (uid + messageId) for those unread messages where uid
-        // is me or @all — derives BOTH mentionType and the mentioning message ids in one query
-        // instead of two DB calls sharing the same WHERE. (#910 review r3372078153)
+        
         val mentionRows = wcdb.mention.getAllObjects(
             DBMentionModel.uid.`in`(myID, MENTIONS_ALL_ID)
                 .and(DBMentionModel.messageId.`in`(unreadIdsSubquery))
@@ -513,11 +501,11 @@ class DBRoomStore @Inject constructor(
         }
         if (mentionType == MENTIONS_TYPE_NONE) return MENTIONS_TYPE_NONE to emptyList()
 
-        // timeStamps of mentioning messages (bounded by mention count, not total unread).
-        // Order by systemShowTimestamp ASC (earliest first) so the consumer's
-        // mentionIds.firstOrNull() jumps to the earliest @-mention. The select column stays
-        // `timeStamp` (matched against MessageModel.timeStamp by ChatMessageListFragment);
-        // ordering is on systemShowTimestamp (the authoritative display order). (#909 R3)
+        
+        
+        
+        
+        
         val mentioningIds = mentionRows.map { it.messageId }.distinct()
         val mentionTimeStamps = wcdb.message.getOneColumnLong(
             DBMessageModel.timeStamp,
@@ -528,5 +516,5 @@ class DBRoomStore @Inject constructor(
     }
 }
 
-/** Room lookups slower than this are logged even when the room already existed. */
+
 private const val SLOW_ROOM_LOOKUP_MS = 50L

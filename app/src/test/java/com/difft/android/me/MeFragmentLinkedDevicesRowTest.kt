@@ -14,11 +14,11 @@ import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
 
-/**
- * State-assertion for the cl_linked_devices row: inflates the real MeFragmentBinding and drives the
- * count via the real [linkedDevicesBadgeState] rule plus the same plumbing
- * [MeFragment.observeLinkedDevicesCount] applies.
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class MeFragmentLinkedDevicesRowTest {
@@ -39,7 +39,7 @@ class MeFragmentLinkedDevicesRowTest {
         controller.destroy()
     }
 
-    /** Same rule + plumbing as [MeFragment.observeLinkedDevicesCount]. */
+    
     private fun applyCount(count: Int?) {
         val (visible, text) = linkedDevicesBadgeState(count)
         binding.tvLinkedDevicesCount.visibility = if (visible) View.VISIBLE else View.GONE
@@ -53,7 +53,7 @@ class MeFragmentLinkedDevicesRowTest {
         assertEquals("2", binding.tvLinkedDevicesCount.text.toString())
         assertEquals(View.VISIBLE, binding.tvLinkedDevices.visibility)
         assertEquals(View.VISIBLE, binding.ivLinkedDevicesArrow.visibility)
-        // Count value sits immediately left of the arrow.
+        
         val lp = binding.tvLinkedDevicesCount.layoutParams as ConstraintLayout.LayoutParams
         assertEquals(binding.ivLinkedDevicesArrow.id, lp.rightToLeft)
     }

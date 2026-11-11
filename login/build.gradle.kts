@@ -68,23 +68,22 @@ dependencies {
     implementation(project(":chat"))
     implementation(project(":database"))
 
-    // Hilt
+    
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
 
-    // Login specific dependencies
+    
     implementation(libs.signal.android)
 
-    // Retrofit (explicit for annotation processing)
+    
     implementation(libs.retrofit)
     implementation(libs.retrofit.converter.gson)
 
-    // PictureSelector
+    
     implementation(project(":selector"))
     implementation(libs.picture.selector.ucrop)
-    implementation(libs.picture.selector.compress)
 
-    // Test dependencies
+    
     testImplementation(libs.junit)
     testImplementation(libs.kotlin.test)
     testImplementation(libs.kotlinx.coroutines.test)
@@ -94,10 +93,10 @@ dependencies {
     testImplementation(libs.hilt.android.testing)
     kspTest(libs.hilt.compiler)
     testImplementation(testFixtures(project(":base")))
-    // Compose test
+    
     testImplementation(platform(libs.compose.bom))
     testImplementation(libs.compose.ui.test.junit4)
-    // Roborazzi
+    
     testImplementation(libs.roborazzi)
     testImplementation(libs.roborazzi.compose)
     testImplementation(libs.roborazzi.junit.rule)

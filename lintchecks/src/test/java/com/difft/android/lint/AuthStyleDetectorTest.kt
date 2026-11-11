@@ -7,7 +7,7 @@ import org.junit.Test
 
 class AuthStyleDetectorTest {
 
-    /** T41 — a Retrofit endpoint with no declaration anywhere. */
+    
     @Test
     fun `flags an endpoint that declares no auth style`() {
         lint()
@@ -44,7 +44,7 @@ class AuthStyleDetectorTest {
             .expectContains("getThing declares no auth style")
     }
 
-    /** T41 — an interface-level declaration covers every method on it. */
+    
     @Test
     fun `accepts endpoints covered by an interface-level declaration`() {
         lint()
@@ -78,7 +78,7 @@ class AuthStyleDetectorTest {
             .expectClean()
     }
 
-    /** T42 — a hand-passed header is forbidden unless the endpoint is EXPLICIT. */
+    
     @Test
     fun `flags a hand-passed Authorization header except on EXPLICIT`() {
         lint()
@@ -118,7 +118,7 @@ class AuthStyleDetectorTest {
             .expectContains("drop the baseAuth parameter")
     }
 
-    /** T42 — an interface-level style also forbids the parameter. */
+    
     @Test
     fun `flags a hand-passed header under an interface-level declaration`() {
         lint()
@@ -149,7 +149,7 @@ class AuthStyleDetectorTest {
             .expectErrorCount(1)
     }
 
-    /** T43 — EXPLICIT with the parameter dropped goes out unauthenticated; the real `signin` is clean. */
+    
     @Test
     fun `flags an EXPLICIT endpoint with no Authorization parameter`() {
         lint()

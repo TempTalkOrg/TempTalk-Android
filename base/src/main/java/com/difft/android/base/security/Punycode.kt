@@ -1,18 +1,18 @@
 package com.difft.android.base.security
 
-/**
- * Minimal RFC 3492 Punycode decoder.
- *
- * Used as a fallback when Android's ICU-backed [java.net.IDN.toUnicode] declines
- * to decode a valid `xn--` label — its round-trip validation can fail (e.g. for
- * labels whose decoded form uses characters ICU rejects during re-encoding),
- * in which case it returns the ACE form unchanged. Decoding here lets us still
- * reveal the human-readable (Unicode) form of the host in the warning dialog.
- *
- * Decodes a single label WITHOUT the leading `xn--` prefix. Throws
- * [IllegalArgumentException] on malformed input; callers should wrap in
- * `runCatching` and fall back to the original label.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
 internal object Punycode {
 
     private const val BASE = 36
@@ -26,8 +26,8 @@ internal object Punycode {
     private const val MAX_OUTPUT_CODE_POINTS = 256
 
     fun decode(input: String): String {
-        // Code points accumulated so far. Using a list of code points (not a
-        // StringBuilder) keeps insertion indices correct for supplementary chars.
+        
+        
         val output = ArrayList<Int>(input.length)
 
         var start = 0

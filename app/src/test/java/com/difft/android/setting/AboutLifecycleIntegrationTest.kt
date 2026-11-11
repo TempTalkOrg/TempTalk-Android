@@ -72,7 +72,7 @@ import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import kotlin.test.*
 
-/** Exercises About's real check wiring, page waits and owned temporary-file producers. */
+
 @HiltAndroidTest
 @RunWith(RobolectricTestRunner::class)
 @Config(application = com.difft.android.test.FoldableTestApplication_Application::class, sdk = [34])
@@ -252,7 +252,7 @@ class AboutLifecycleIntegrationTest {
     private fun sharing() = SelectChatsUtils(mockk(relaxed = true), mockk(relaxed = true))
     private fun target() = ChatsContact("receiver", "Receiver", null, "R", false, SelectChatsUtils.ITEM_TYPE_CONTACT, null)
 
-    @Test fun `owned share selector and confirmation cancellation release only their source once`() {
+    @Test fun `owned share keeps its source through a cancelled confirmation and releases it once when the picker closes`() {
         val picker = picker()
         val source = File(folder, "owned.zip").apply { writeText("owned") }
         val unrelated = File(folder, "unrelated.zip").apply { writeText("keep") }
@@ -260,11 +260,15 @@ class AboutLifecycleIntegrationTest {
         sharing().showChatSelectAndSendDialog(controller.get(), "log", file = source, onFileReleased = { released++; source.delete() })
         picker.onSelected?.invoke(target())
         requireNotNull(confirmationDismiss).invoke()
+        
+        assertEquals(0, released)
+        assertTrue(source.exists())
+        verify(exactly = 0) { picker.dismiss() }
+        picker.onSelected?.invoke(null)
         assertEquals(1, released)
         assertFalse(source.exists())
         picker.onSelected?.invoke(null)
         assertEquals(1, released)
-        assertFalse(source.exists())
         assertTrue(unrelated.exists())
     }
 

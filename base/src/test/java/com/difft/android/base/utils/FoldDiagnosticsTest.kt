@@ -6,7 +6,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.lang.ref.WeakReference
 
-/** Pure parts of the #1454 fold diagnostics: line format, long-tail rule, per-session caps and the process throttle. */
+
 class FoldDiagnosticsTest {
 
     @Test
@@ -54,7 +54,7 @@ class FoldDiagnosticsTest {
         assertEquals(FoldDiagThrottle.Decision.START, throttle.tryStart(2_000L))
         assertEquals(FoldDiagThrottle.Decision.THROTTLED, throttle.tryStart(3_000L))
         assertEquals(FoldDiagThrottle.Decision.DROP, throttle.tryStart(4_000L))
-        // The oldest start ages out: room for one more, then a new window's single throttled line.
+        
         assertEquals(FoldDiagThrottle.Decision.START, throttle.tryStart(30_000L))
         assertEquals(FoldDiagThrottle.Decision.THROTTLED, throttle.tryStart(30_500L))
         assertEquals(FoldDiagThrottle.Decision.DROP, throttle.tryStart(30_600L))

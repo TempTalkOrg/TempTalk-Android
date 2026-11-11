@@ -16,22 +16,11 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/**
- * Integration tests for [DBPublicKeyInfoStore] against a real in-memory
- * WCDB instance.
- *
- * **Currently @Ignore-d**: WCDB (Tencent SQLite wrapper) loads native libraries
- * via `System.loadLibrary` which are not available to JVM unit tests on the
- * host machine. To run these tests reliably we either need (a) instrumentation
- * test setup (androidTest source set + emulator/device), or (b) a JVM-compatible
- * SQLite shim. Both are out of scope for the initial refactor; the tests remain
- * here as compilation guards and documented expected behavior.
- *
- * Until then, ORM semantics (primary-key pattern, `insertOrReplace`, `getValue`
- * aggregation) are covered by the facade-level tests in
- * `ConversationManagerImplTest` via mocks, and by manual smoke verification on
- * a debug build.
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33])
 @Ignore("WCDB native library not loadable in JVM unit tests; run via instrumentation test instead")
@@ -62,7 +51,7 @@ class DBPublicKeyInfoStoreTest {
     @Test
     fun upsert_empty_list_is_noop() = runTest {
         store.upsert(emptyList())
-        // No DB calls expected; hasAllUids on empty set is vacuously true.
+        
         assertTrue(store.hasAllUids(emptyList()))
     }
 
@@ -83,8 +72,8 @@ class DBPublicKeyInfoStoreTest {
 
     @Test
     fun upsert_existing_uid_replaces_row() = runTest {
-        // Pattern-B validator: verifies PK-based replacement.
-        // Would fail if `databaseId` accidentally reintroduced as auto-inc PK.
+        
+        
         store.upsert(listOf(model("u1", key = "k1", reg = 1, resetTime = 100L)))
         store.upsert(listOf(model("u1", key = "k2", reg = 2, resetTime = 200L)))
 
@@ -125,7 +114,7 @@ class DBPublicKeyInfoStoreTest {
 
     @Test
     fun hasAllUids_empty_is_true_vacuously() = runTest {
-        // Empty input MUST NOT hit the DB; result is vacuously true.
+        
         assertTrue(store.hasAllUids(emptyList()))
     }
 

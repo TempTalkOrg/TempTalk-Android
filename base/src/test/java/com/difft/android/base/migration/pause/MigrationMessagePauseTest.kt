@@ -32,7 +32,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** [MigrationMessagePause]: persisted transitions, fail-closed load and the scope check (#1382). */
+
 class MigrationMessagePauseTest {
 
     @get:Rule
@@ -41,7 +41,7 @@ class MigrationMessagePauseTest {
     private val owner = "11111111-aaaa-bbbb-cccc-000000000001"
     private val other = "22222222-aaaa-bbbb-cccc-000000000002"
 
-    /** Wraps a store so reads and writes can fail a set number of times. */
+    
     private class FlakyDataStore(private val delegate: DataStore<Preferences>) : DataStore<Preferences> {
         var readFailures = 0
         var writeFailures = 0
@@ -257,7 +257,7 @@ class MigrationMessagePauseTest {
         undecided()
         pause.finish(owner, null, MigrationPauseOutcome.SUCCESS)
 
-        // A late failure for a confirmed import is skipped: the receipt is not touched.
+        
         assertEquals(PauseTransition.SKIPPED, pause.finish(owner, null, MigrationPauseOutcome.FAILED, dropReceipt))
         assertEquals("receipt", receipt())
         assertEquals(PauseTransition.SKIPPED, pause.finish(other, null, MigrationPauseOutcome.SUCCESS, dropReceipt))
@@ -385,7 +385,7 @@ class MigrationMessagePauseTest {
         assertEquals(Paused(null), pause.state)
         assertTrue(pause.hasRecord)
         assertNull(gate.tryAdmit(AdmissionKind.RECEIVE, "ws"))
-        // No transition can resolve it, and the scope check cannot attribute it to another login.
+        
         assertEquals(PauseTransition.SKIPPED, pause.finish(owner, null, MigrationPauseOutcome.FAILED))
         assertEquals(PauseTransition.SKIPPED, pause.finish(null, "session", MigrationPauseOutcome.FAILED))
         pause.clear(owner, "test")
@@ -441,7 +441,7 @@ class MigrationMessagePauseTest {
         loadedAndBegun()
         assertTrue(pause.clearForLogout())
 
-        // A commit marker queued by the export before the logout lands afterwards.
+        
         assertEquals(PauseTransition.NO_RECORD, pause.committing(owner, "session"))
         assertEquals(Paused(null), gate.state)
         assertNull(gate.tryAdmit(AdmissionKind.SEND, "test"))

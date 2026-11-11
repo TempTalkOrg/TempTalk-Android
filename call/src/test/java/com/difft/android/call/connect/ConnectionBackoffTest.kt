@@ -4,11 +4,11 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * Pins the retry loop's own bounds. Classification decides WHETHER to retry; these constants
- * decide how long retrying is allowed to take, which is the half that has no other guard —
- * nothing outside the coordinator caps the connect phase.
- */
+
+
+
+
+
 class ConnectionBackoffTest {
 
     @Test
@@ -37,8 +37,8 @@ class ConnectionBackoffTest {
 
     @Test
     fun `the wall-clock budget is what bounds the wait, not the failure cap`() {
-        // Documents why CONNECT_BUDGET_MS exists: exhausting the failure cap alone schedules
-        // minutes of backoff, so the failure count cannot be the effective ceiling.
+        
+        
         val backoffOnlyMs = (1..CallConnectionCoordinator.MAX_TRANSIENT_FAILURES)
             .sumOf { ConnectionBackoff.delayMsBeforeRetryAfterFailure(it) }
         assertTrue(

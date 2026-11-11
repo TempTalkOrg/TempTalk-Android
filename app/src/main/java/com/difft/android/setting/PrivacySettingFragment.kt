@@ -28,10 +28,10 @@ import java.util.Date
 import java.util.Locale
 import javax.inject.Inject
 
-/**
- * Fragment for privacy settings
- * Can be displayed in both Activity (single-pane) and dual-pane mode
- */
+
+
+
+
 @AndroidEntryPoint
 class PrivacySettingFragment : Fragment(), SettingsIdiomPage {
 
@@ -96,7 +96,7 @@ class PrivacySettingFragment : Fragment(), SettingsIdiomPage {
 
         binding.clRenewIdentityKey.visibility = View.VISIBLE
         binding.tvRenewKeyTips.visibility = View.VISIBLE
-        // to show the last identity key generate time.
+        
         val userData = model.state.value.user
         val lastGenTime = userData?.aciIdentityKeyGenTime ?: 0L
         if (lastGenTime > 0) {

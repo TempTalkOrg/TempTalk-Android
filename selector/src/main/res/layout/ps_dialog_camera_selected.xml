@@ -16,9 +16,9 @@
     <View
         android:id="@+id/top_line"
         android:layout_width="match_parent"
-        android:layout_height="0.5dp"
+        android:layout_height="@dimen/hairline"
         android:layout_below="@id/ps_tv_photo"
-        android:background="@color/line" />
+        android:background="@color/divider" />
 
     <TextView
         android:id="@+id/ps_tv_video"
@@ -34,9 +34,9 @@
     <TextView
         android:id="@+id/video_line"
         android:layout_width="match_parent"
-        android:layout_height="0.5dp"
+        android:layout_height="@dimen/hairline"
         android:layout_below="@id/ps_tv_video"
-        android:background="@color/line" />
+        android:background="@color/divider" />
 
     <TextView
         android:id="@+id/bottom_line"

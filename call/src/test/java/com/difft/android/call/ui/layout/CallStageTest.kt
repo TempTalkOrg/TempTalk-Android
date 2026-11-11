@@ -55,7 +55,7 @@ class CallStageTest {
     fun `a window key change snaps even when the not-animated state was conflated away`() {
         val rule = StageSnapRule()
         rule.snapFor(state(true, tile("a")), "k1", inPip = false)
-        // setWindow published animated=false and a tick replaced it before the stage drew.
+        
         assertTrue(rule.snapFor(state(true, tile("a"), tile("b")), "k2", inPip = false))
         assertFalse("the next state for the same key animates", rule.snapFor(state(true, tile("b")), "k2", inPip = false))
     }
@@ -65,7 +65,7 @@ class CallStageTest {
         val rule = StageSnapRule()
         val s1 = state(true, tile("a"))
         rule.snapFor(s1, "k1", inPip = false)
-        // The report key recomposed the stage before the collector delivered the new state.
+        
         rule.snapFor(s1, "k2", inPip = false)
         assertTrue(rule.snapFor(state(true, tile("a"), tile("b")), "k2", inPip = false))
     }
@@ -103,7 +103,7 @@ class CallStageTest {
         assertEquals("not outside picture in picture", 2, stageTiles(p, "z", inPip = false).size)
         val focus = stageTiles(p, "z", inPip = true).last()
         assertEquals("z", focus.id)
-        // Its first-frame gate keeps the avatar while the camera is off.
+        
         assertEquals(ContentMode.FIT, focus.contentMode)
         assertTrue(focus.z > 0)
     }

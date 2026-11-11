@@ -4,9 +4,9 @@ import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.RecyclerView
 import com.difft.android.chat.mediasend.v2.MediaSelectionViewModel
 
-/**
- * A touch helper for handling drag + drop on the media rail in the media send flow.
- */
+
+
+
 class MediaSelectionItemTouchHelper(
     private val viewModel: MediaSelectionViewModel
 ) : ItemTouchHelper.Callback() {

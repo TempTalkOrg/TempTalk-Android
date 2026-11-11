@@ -34,25 +34,25 @@ import org.whispersystems.signalservice.internal.push.SignalServiceProtos.Conten
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos.Envelope
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos.SyncMessage
 
-/**
- * Backward-compatibility regression test — verifies the "old version silently drops"
- * contract.
- *
- * New version sends `Content{forwardNotice=...}` (both primary and self-sync).
- * Old binaries don't know field 10 → `hasForwardNotice()` is a no-op branch they
- * never check, and every other `hasXxx()` returns false → control falls through
- * to `return null`. No crash, no DB write.
- *
- * We can't downgrade the current build, so we simulate the condition that matters
- * most: a Content / SyncMessage with none of the known branches set → processor
- * returns null cleanly. Pins the fall-through behavior as a contract.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28])
 class MessageContentProcessorBackwardCompatTest {
 
-    // An open receive ticket (#1382); deferred notify work retains its own from it.
+    
     private val admission = requireNotNull(TestMessagingPause().open().gate.tryAdmit(AdmissionKind.RECEIVE, "test"))
 
     private val testDispatcher = UnconfinedTestDispatcher()
@@ -108,14 +108,14 @@ class MessageContentProcessorBackwardCompatTest {
         unmockkAll()
     }
 
-    // ------------------------------------------------------------------
-    // Path 1: Unknown top-level Content type (simulates old version receiving
-    // Content{forwardNotice=...} where forwardNotice field 10 is unknown).
-    //
-    // Builds an empty Content (no dataMessage, no syncMessage, no receiptMessage,
-    // no callMessage, no groupKeyMessage, no notifyMessage, no forwardNotice).
-    // All hasXxx() return false → handleMessage falls through → return null.
-    // ------------------------------------------------------------------
+    
+    
+    
+    
+    
+    
+    
+    
     @Test
     fun `handleMessage with empty Content returns null silently — no crash`() = runTest {
         val envelope = minimalEnvelope("+15557777", 100L)
@@ -132,13 +132,13 @@ class MessageContentProcessorBackwardCompatTest {
         }
     }
 
-    // ------------------------------------------------------------------
-    // Path 2: Unknown SyncMessage sub-type. SyncMessage with no Sent, no Read
-    // → falls through the sync inner branch → return null.
-    // ------------------------------------------------------------------
+    
+    
+    
+    
     @Test
     fun `handleMessage with empty SyncMessage from myself returns null silently`() = runTest {
-        val envelope = minimalEnvelope(MY_ID, 200L) // senderId == myId → passes outer check
+        val envelope = minimalEnvelope(MY_ID, 200L) 
         val content = Content.newBuilder()
             .setSyncMessage(SyncMessage.newBuilder().build())
             .build()
@@ -155,11 +155,11 @@ class MessageContentProcessorBackwardCompatTest {
         }
     }
 
-    // ------------------------------------------------------------------
-    // Path 3: SyncMessage from a DIFFERENT user — rejected at outer senderId
-    // guard (handleMessage line 119-121). Pins the "don't process foreign
-    // sync messages" invariant.
-    // ------------------------------------------------------------------
+    
+    
+    
+    
+    
     @Test
     fun `handleMessage rejects SyncMessage when senderId is not myId`() = runTest {
         val otherSender = "+15558888"

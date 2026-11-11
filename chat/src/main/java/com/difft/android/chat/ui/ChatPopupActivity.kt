@@ -17,10 +17,10 @@ import com.difft.android.base.android.permission.PermissionUtil
 import com.difft.android.base.android.permission.PermissionUtil.launchSinglePermission
 import com.difft.android.base.android.permission.PermissionUtil.registerPermission
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.RoomChangeTracker
 import com.difft.android.base.utils.RoomChangeType
 import com.difft.android.base.utils.globalServices
+import com.difft.android.base.utils.pane.ConversationOpener
 import com.difft.android.base.widget.ComposeDialog
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.InsetAwareConstraintLayout
@@ -62,10 +62,10 @@ import com.difft.android.chat.util.MessageNotificationUtil
 import com.difft.android.chat.util.ViewUtil
 import javax.inject.Inject
 
-/**
- * Chat activity displayed as a popup bottom sheet.
- * Used when opening chat from ContactDetail popup.
- */
+
+
+
+
 @AndroidEntryPoint
 class ChatPopupActivity : BaseActivity(), ChatMessageListProvider, KeyboardPanelHost, VoiceRecordHost {
 
@@ -92,7 +92,7 @@ class ChatPopupActivity : BaseActivity(), ChatMessageListProvider, KeyboardPanel
             intent.sourceType = sourceType
             intent.source = source
             intent.jumpMessageTimeStamp = jumpMessageTimeStamp
-            // Launch in a new task to isolate keyboard events from background Activity
+            
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             activity.startActivity(intent)
         }
@@ -150,20 +150,20 @@ class ChatPopupActivity : BaseActivity(), ChatMessageListProvider, KeyboardPanel
 
     private lateinit var backPressedCallback: OnBackPressedCallback
 
-    // Constructed eagerly in onCreate rather than by lazy: a child fragment hosted here can call
-    // back into the KeyboardPanelHost overrides below, and a lazy initializer would leave a
-    // reentrancy window where those callbacks touch a half-built controller.
+    
+    
+    
     private lateinit var sheetController: PopupChatSheetController
 
-    // Disable BaseActivity auto padding - this Activity handles insets itself
+    
     override fun shouldApplySystemBarsPadding(): Boolean = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Force initialize ViewModels before child fragments are created.
-        // Fragments declared in layout via android:name will be created when mBinding is accessed,
-        // and they use this Activity's ViewModelStore. We must ensure ViewModels exist first.
+        
+        
+        
         chatViewModel
         chatSettingViewModel
 
@@ -198,16 +198,16 @@ class ChatPopupActivity : BaseActivity(), ChatMessageListProvider, KeyboardPanel
         onBackPressedDispatcher.addCallback(this, backPressedCallback)
     }
 
-    /**
-     * Maximize to full ChatActivity and close this popup.
-     * Animates the bottom sheet to full screen height before transitioning.
-     */
+    
+
+
+
     fun maximizeToFullActivity() {
-        // Get current scroll position before animation
+        
         val scrollPosition = getChatMessageListFragment()?.getFirstVisibleMessageTimestamp()
 
-        sheetController.maximize {
-            // Use scroll position if available, otherwise fallback to original jumpMessageTimeStamp
+        
+        val open = {
             ChatActivity.startActivity(
                 this,
                 chatViewModel.forWhat.id,
@@ -215,17 +215,29 @@ class ChatPopupActivity : BaseActivity(), ChatMessageListProvider, KeyboardPanel
                 source = intent.source,
                 jumpMessageTimeStamp = scrollPosition ?: intent.jumpMessageTimeStamp
             )
+        }
+        if ((applicationContext as? ConversationOpener)?.opensInDetailPane(this) == true) {
+            sheetController.handOffToDetailPane {
+                open()
+                finish()
+                @Suppress("DEPRECATION")
+                overridePendingTransition(0, android.R.anim.fade_out)
+            }
+            return
+        }
+        sheetController.maximize {
+            open()
             finish()
             @Suppress("DEPRECATION")
             overridePendingTransition(android.R.anim.fade_in, 0)
         }
     }
 
-    /** Cache: whether confidential toggle should be hidden (group member limit or bot chat) */
+    
     private var shouldHideConfidential = false
 
     private fun onCreateForShowingMessages(savedInstanceState: Bundle?) {
-//        ScreenShotUtil.forceDisable(this)
+
 
         if (TextUtils.isEmpty(chatViewModel.forWhat.id)) {
             ToastUtil.show("No contactID detected. Finishing Activity.")
@@ -339,21 +351,21 @@ class ChatPopupActivity : BaseActivity(), ChatMessageListProvider, KeyboardPanel
             .launchIn(lifecycleScope)
     }
 
-    /**
-     * Show confidential message first-use tip dialog
-     */
+    
+
+
     private fun showConfidentialTipDialog(onConfirm: () -> Unit) {
-        // Mark as shown when dialog is displayed
-        globalServices.userManager.update { hasShownConfidentialTip = true }
         var dialog: ComposeDialog? = null
         dialog = ComposeDialogManager.showBottomDialog(
             activity = this,
+            showDragHandle = false,
             onDismiss = { }
         ) {
             ConfidentialTipDialogContent(
                 title = getString(R.string.chat_confidential_tip_title),
                 content = getString(R.string.chat_confidential_tip_content),
                 onConfirm = {
+                    globalServices.userManager.update { hasShownConfidentialTip = true }
                     dialog?.dismiss()
                     onConfirm()
                 }
@@ -368,7 +380,7 @@ class ChatPopupActivity : BaseActivity(), ChatMessageListProvider, KeyboardPanel
             return
         }
         if (chatViewModel.forWhat is For.Group) {
-            // Check group member count asynchronously
+            
             lifecycleScope.launch(Dispatchers.IO) {
                 val memberCount = wcdb.getGroupMemberCount(chatViewModel.forWhat.id)
                 val limit = globalConfigsManager.getGroupConfidentialMemberLimit()
@@ -379,7 +391,7 @@ class ChatPopupActivity : BaseActivity(), ChatMessageListProvider, KeyboardPanel
                 }
             }
         } else {
-            // 1-on-1 chat, no limit
+            
             shouldHideConfidential = false
             updateConfidentialUI(conversationSet)
         }
@@ -387,27 +399,25 @@ class ChatPopupActivity : BaseActivity(), ChatMessageListProvider, KeyboardPanel
 
     private fun updateConfidentialUI(conversationSet: ConversationSetResponseBody? = null) {
         if (shouldHideConfidential) {
-            // Hide confidential toggle when group member limit exceeded
+            
             mBinding.includeFullInput.ivFullInputConfidential.visibility = View.GONE
             return
         }
 
         mBinding.includeFullInput.ivFullInputConfidential.visibility = View.VISIBLE
         if (conversationSet?.confidentialMode == 1) {
-            val drawable = ResUtils.getDrawable(R.drawable.chat_btn_confidential_mode_enable)
-            mBinding.includeFullInput.ivFullInputConfidential.setImageDrawable(drawable)
+            mBinding.includeFullInput.ivFullInputConfidential.setImageResource(R.drawable.chat_btn_confidential_mode_enable)
             mBinding.includeFullInput.ivFullInputConfidential.tag = 1
         } else {
-            val drawable = ResUtils.getDrawable(R.drawable.chat_btn_confidential_mode_disable)
-            mBinding.includeFullInput.ivFullInputConfidential.setImageDrawable(drawable)
+            mBinding.includeFullInput.ivFullInputConfidential.setImageResource(R.drawable.chat_btn_confidential_mode_disable)
             mBinding.includeFullInput.ivFullInputConfidential.tag = 0
         }
     }
 
-    // --- KeyboardPanelHost ------------------------------------------------------------------
-    // ChatMessageInputFragment is a direct FragmentContainerView child here, so it has no parent
-    // fragment and resolves its keyboard/panel host to this Activity. Every method forwards to the
-    // sheet controller, the single owner of the sheet's height and bottom padding.
+    
+    
+    
+    
 
     override fun addKeyboardStateListener(listener: InsetAwareConstraintLayout.KeyboardStateListener) {
         sheetController.addKeyboardStateListener(listener)
@@ -430,7 +440,7 @@ class ChatPopupActivity : BaseActivity(), ChatMessageListProvider, KeyboardPanel
     }
 
     override fun onDestroy() {
-        // Guard: onCreate may abort before the controller is built (e.g. super.onCreate throws).
+        
         if (::sheetController.isInitialized) {
             sheetController.release()
         }
@@ -464,11 +474,11 @@ class ChatPopupActivity : BaseActivity(), ChatMessageListProvider, KeyboardPanel
         }
     }
 
-    /**
-     * Fetch latest contact info from server, compare with local data,
-     * and refresh UI + message contact cache if changed.
-     * Bypasses the global event bus to avoid circular refresh.
-     */
+    
+
+
+
+
     private fun fetchContactInfoFromServer() {
         lifecycleScope.launch {
             try {

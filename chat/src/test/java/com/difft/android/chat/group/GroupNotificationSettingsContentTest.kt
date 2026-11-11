@@ -19,10 +19,10 @@ import org.robolectric.annotation.GraphicsMode
 import androidx.test.core.app.ApplicationProvider
 import android.content.Context
 
-/**
- * [GroupNotificationSettingsContent] contract (issue #1209): the custom-option group appears only
- * while the group does NOT follow the global setting, and picking an option reports its raw value.
- */
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34])
@@ -35,7 +35,7 @@ class GroupNotificationSettingsContentTest {
 
     private fun string(resId: Int) = context.getString(resId)
 
-    // T34
+    
     @Test
     fun `following the global setting shows the footer and hides the options`() {
         composeTestRule.setContent {
@@ -62,7 +62,7 @@ class GroupNotificationSettingsContentTest {
         composeTestRule.onNodeWithText(string(R.string.notification_off)).assertDoesNotExist()
     }
 
-    // T35
+    
     @Test
     fun `with the global setting off the options render and report their value`() {
         var selected = -1
@@ -80,12 +80,12 @@ class GroupNotificationSettingsContentTest {
         }
 
         composeTestRule.onNodeWithText(string(R.string.notification_custom_settings)).assertIsDisplayed()
-        // The mention option is the only one carrying an explanation line.
+        
         composeTestRule.onNodeWithText(string(R.string.notification_mention_only_description))
             .assertIsDisplayed()
         composeTestRule.onNodeWithText(string(R.string.notification_off)).assertIsDisplayed()
 
-        // The label also appears as the switch row's global-type value, so target the option row.
+        
         composeTestRule.onAllNodesWithText(string(R.string.notification_all)).onLast().performClick()
         assertEquals(GlobalNotificationType.ALL.value, selected)
     }

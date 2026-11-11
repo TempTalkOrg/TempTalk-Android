@@ -52,11 +52,11 @@ import retrofit2.http.Url
 
 interface HttpService {
 
-    /**
-     * Lightweight probe used only to anchor [com.difft.android.base.utils.time.ServerTimeProvider]:
-     * the response is a BaseResponse envelope whose outer serverTimestamp is captured by the
-     * ServerTimeCaptureConverterFactory hook. The body payload itself is unused here.
-     */
+    
+
+
+
+
     @Auth(AuthStyle.NONE)
     @GET("v1/health")
     suspend fun health(): BaseResponse<Any>
@@ -69,11 +69,11 @@ interface HttpService {
         @QueryMap params: Map<String, String>
     ): ResponseBody
 
-    /**
-     * Streaming GET: @Streaming keeps Retrofit from buffering the whole body into memory,
-     * so contentLength() reflects the response header and byteStream() reads incrementally.
-     * Required for real download progress and to avoid OOM on large files (e.g. APK upgrades).
-     */
+    
+
+
+
+
     @Auth(AuthStyle.NONE)
     @Streaming
     @GET
@@ -96,10 +96,10 @@ interface HttpService {
         @Query("properties") properties: String = "all",
     ): BaseResponse<ContactsDataResponse>
 
-    /**
-     * The refresh itself. Runs before `baseAuth` is persisted during login, so the caller supplies
-     * the credential and the interceptor must not touch it.
-     */
+    
+
+
+
     @Auth(AuthStyle.EXPLICIT)
     @PUT("v1/authorize/token")
     suspend fun fetchAuthToken(
@@ -118,19 +118,19 @@ interface HttpService {
         @Path("uid") uid: String
     ): BaseResponse<Any>
 
-    /**
-     * Fetch the weak-contact pending-removal set (bare array, unpaged, 15-day window).
-     * serverTimestamp comes from the outer BaseResponse.
-     * Note: different path from fetchDeleteContact above (v3/friend/{uid}, which unfriends).
-     */
+    
+
+
+
+
     @Auth(AuthStyle.JWT)
     @GET("v3/friend/deletedRecords")
     suspend fun fetchDeletedRecords(): BaseResponse<List<DeletedRecordDto>>
 
-    /**
-     * Remove a weak contact immediately. Idempotent; on success the server pushes changeType=1 to sync other devices.
-     * Note: different path from fetchDeleteContact above (v3/friend/{uid}, which unfriends).
-     */
+    
+
+
+
     @Auth(AuthStyle.JWT)
     @DELETE("v3/friend/deletedRecords/{uid}")
     suspend fun deleteDeletedRecord(
@@ -238,10 +238,10 @@ interface HttpService {
     @GET("/v1/messages")
     suspend fun getPendingMessage(): PendingMessageResponse
 
-    /**
-     * Reports the conversation the user is currently viewing so its backlog is delivered first.
-     * Root path like the other `/v1/messages` endpoints above (the Chat client's base carries `/chat/`).
-     */
+    
+
+
+
     @Auth(AuthStyle.BASIC)
     @POST("/v1/messages/setPriorConversation")
     suspend fun setPriorConversation(
@@ -260,7 +260,7 @@ interface HttpService {
         @Body req: GetPublicKeysReq
     ): BaseResponse<GetPublicKeysResp>
 
-    /** A `v3` route that authenticates on Basic, not on the account JWT the other `v3` routes use. */
+    
     @Auth(AuthStyle.BASIC)
     @POST("/chat/v3/messages/criticalAlertNew")
     suspend fun sendCriticalAlertNew(
@@ -273,10 +273,10 @@ interface HttpService {
         @Body req: GrayCheckRequestBody
     ): BaseResponse<List<GrayConfigData>?>
 
-    /**
-     * GIF trending list. Full URL is supplied via [url] (built from UrlManager.gifs +
-     * "v1/gifs/trending") so the request rides the `/gifs/` proxy host.
-     */
+    
+
+
+
     @Auth(AuthStyle.JWT)
     @GET
     suspend fun getGifsTrending(
@@ -287,7 +287,7 @@ interface HttpService {
         @Query("rating") rating: String? = null
     ): BaseResponse<GifListResponse>
 
-    /** GIF search list. Full URL via [url] (UrlManager.gifs + "v1/gifs/search"). */
+    
     @Auth(AuthStyle.JWT)
     @GET
     suspend fun getGifsSearch(
@@ -299,17 +299,17 @@ interface HttpService {
         @Query("rating") rating: String? = null
     ): BaseResponse<GifListResponse>
 
-    /**
-     * GIF favorites (zero-knowledge). Full URL via [url] (UrlManager.gifs + "v1/gifs/favorites")
-     * so it rides the `/gifs/` proxy host.
-     */
+    
+
+
+
     @Auth(AuthStyle.JWT)
     @GET
     suspend fun getFavorites(
         @Url url: String
     ): BaseResponse<FavoritesResponse>
 
-    /** Optimistic-lock PUT of the whole favorites list. URL via UrlManager.gifs + "v1/gifs/favorites". */
+    
     @Auth(AuthStyle.JWT)
     @PUT
     suspend fun putFavorites(

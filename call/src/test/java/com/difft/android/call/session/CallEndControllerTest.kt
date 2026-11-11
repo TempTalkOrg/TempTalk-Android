@@ -43,14 +43,14 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
-/**
- * [CallEndController] with recording collaborators and a real [OnGoingCallStateManager]: the remote
- * end order (foreground-service stop, caller ringback stop, hang-up tone, then the sticky finish
- * request), the out-of-page hang-up guards, the no-page finish path and the exit-context snapshot.
- * The page-less leave and the exit fallback are in [CallEndControllerExitFallbackTest].
- * Rows: T4-01..T4-09, T5-24, T5-25, T5-26. The graph-built rows (toast on main, E2 exit, late
- * collector) are in [CallEndControllerSessionTest].
- */
+
+
+
+
+
+
+
+
 class CallEndControllerTest {
 
     private val testDispatcher = StandardTestDispatcher()
@@ -240,7 +240,7 @@ class CallEndControllerTest {
         ).inCall()
         rig.controller.attachUi()
 
-        // E6: connected 1v1 exit; the hang-up signaling waits on the unstarted appScope.
+        
         rig.controller.requestExit(exitParams(), CallEndType.END)
         assertNull("the page exit has not finished yet", rig.controller.finishRequest.value)
 
@@ -372,7 +372,7 @@ class CallEndControllerTest {
         encMeta = null,
     )
 
-    /** Connected call whose end-call RTM settles at once. */
+    
     private object ConnectedExitSession : CallExitSession {
         override val callStatus = MutableStateFlow(CallStatus.CONNECTED)
         override fun getCurrentCallUidList(): List<String> = listOf("+10002")
@@ -385,16 +385,16 @@ class CallEndControllerTest {
     }
 }
 
-/**
- * A [CallEndController] over recording collaborators and a real [OnGoingCallStateManager]. Also
- * used by the projection tests that need the controller's `markEnding`.
- */
+
+
+
+
 internal class EndControllerRig(
     role: CallRole = CallRole.CALLER,
     val ogsm: OnGoingCallStateManager = OnGoingCallStateManager(),
     handlerFactory: ((EndControllerRig, CallExitContext) -> CallExitHandler)? = null,
 ) {
-    /** The controller's fenced writer; owns the projection under the detached test session id. */
+    
     val publisher = OngoingCallPublisher(OgsmTestState.DETACHED_SESSION_ID, ogsm).apply { bind() }
     val ringtone = mockk<CallRingtoneManager>(relaxed = true)
     val stopForegroundService = mockk<(String) -> Unit>(relaxed = true)
@@ -404,10 +404,10 @@ internal class EndControllerRig(
     val callType = MutableStateFlow(CallType.ONE_ON_ONE.type)
     val boundContexts = mutableListOf<CallExitContext>()
 
-    /** The session main scope stand-in; the exit fallback runs on its scheduler. */
+    
     val scope = TestScope(StandardTestDispatcher())
 
-    /** The handler the default factory hands out; its `context` is the last bound one. */
+    
     val exitHandler = mockk<CallExitHandler>(relaxed = true) {
         every { context } answers { boundContexts.last() }
     }
@@ -437,10 +437,10 @@ internal class EndControllerRig(
         scope = scope,
     )
 
-    /** A call page is attached, so a finish is left to the page. */
+    
     fun pageAttached(): EndControllerRig = apply { controller.attachUi() }
 
-    /** The page is up for [roomId]. */
+    
     fun inCall(roomId: String? = CallEndControllerTest.ROOM_ID): EndControllerRig = apply {
         OgsmTestState.enterCall(ogsm, roomId)
     }

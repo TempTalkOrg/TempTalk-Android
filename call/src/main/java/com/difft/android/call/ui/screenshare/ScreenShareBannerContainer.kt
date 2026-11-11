@@ -46,8 +46,8 @@ internal fun BannerContainer(
         BannerBounds(latestParentMaxWPx, latestParentMaxHPx, latestMarginEndPx, latestMarginTopPx, latestBannerWidthPx, bannerHeightPx.toFloat()),
     )
 
-    // The parent region can shrink under a saved position (the tabletop stage ends above the fold),
-    // so the position is re-clamped whenever the region changes, not only on a drag or resize.
+    
+    
     LaunchedEffect(parentMaxWPx, parentMaxHPx, marginEndPx, marginTopPx) {
         val (clampedDX, clampedDY) = clampDragDelta(latestDragDX, latestDragDY)
         if (clampedDX != latestDragDX || clampedDY != latestDragDY) {
@@ -130,7 +130,7 @@ internal fun BannerContainer(
     }
 }
 
-/** The banner's parent region and its own size, in px. */
+
 internal data class BannerBounds(
     val parentMaxWPx: Float,
     val parentMaxHPx: Float,
@@ -140,7 +140,7 @@ internal data class BannerBounds(
     val bannerHeightPx: Float,
 )
 
-/** The drag offset kept inside [bounds]: the banner never leaves its parent region. */
+
 internal fun clampBannerDragDelta(rawDX: Float, rawDY: Float, bounds: BannerBounds): Pair<Float, Float> {
     val baseX = bounds.parentMaxWPx - bounds.bannerWidthPx
     val minDX = -(baseX - bounds.marginEndPx).coerceAtLeast(0f)

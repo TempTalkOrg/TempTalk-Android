@@ -13,11 +13,11 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/**
- * The one-time failure of send jobs stored without a creator login (#1382 A04): only untagged send
- * jobs fail, the completion flag is written after the sweep and only then, and a sweep cut short
- * runs again.
- */
+
+
+
+
+
 class UntaggedSendJobSweepTest {
 
     private val appState = RecordingPreferencesDataStore()
@@ -66,11 +66,11 @@ class UntaggedSendJobSweepTest {
         assertEquals(true, appState.data.first()[AppStateKeys.UNTAGGED_SEND_JOBS_SWEPT])
     }
 
-    // -- Helpers --
+    
 
     private class Stored(val spec: JobSpec, val creatorLogin: String?)
 
-    /** Stored jobs that fail as the job controller does: one by one, each removed once failed. */
+    
     private class FakeStoredJobs(vararg jobs: Stored, private var crashAfter: Int = Int.MAX_VALUE) : StoredJobs {
         private val stored = jobs.toMutableList()
         val failed = mutableListOf<String>()

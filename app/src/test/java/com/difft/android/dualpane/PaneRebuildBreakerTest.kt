@@ -48,7 +48,7 @@ class PaneRebuildBreakerTest {
 
     @Test
     fun `an alternating disagreement is bounded by the total ceiling`() {
-        // 12 = four full per-disagreement budgets since the last agreement (shipped default).
+        
         val expected = List(12) { PaneRebuildVerdict.PROCEED } +
             listOf(PaneRebuildVerdict.TRIP, PaneRebuildVerdict.SUPPRESSED, PaneRebuildVerdict.SUPPRESSED)
         val breaker = PaneRebuildBreaker()

@@ -7,12 +7,7 @@ import com.difft.android.base.log.lumberjack.data.StackData
 
 abstract class BaseTree : Timber.Tree() {
 
-    // Override the canonical log() entry. Timber's prepareLog (private) already
-    // resolves the per-call tag from `Timber.tag(...)` and passes it here, so we
-    // no longer need our own convenience-method overrides nor `super.getTag()`
-    // (which became `internal` in Timber 5 and is unreachable from this module).
-    // The custom work — stack-data resolution, UID redaction, prefix formatting —
-    // happens here and then delegates to the abstract extended-signature log().
+    
     final override fun log(
         priority: Int,
         tag: String?,
@@ -43,10 +38,10 @@ abstract class BaseTree : Timber.Tree() {
                         return
                     }
                 } else {
-                    // Mirror the StackWalker semantics above: skip the baseline, then
-                    // filter out any further timber.log.* frames. Required because
-                    // Timber 5's `prepareLog` adds an extra frame between this method
-                    // and the user-meaningful caller.
+                    
+                    
+                    
+                    
                     val syntheticTrace = Throwable()
                     val frames = syntheticTrace.stackTrace
                     val callerIndex = (CALL_STACK_INDEX_LIVEKIT until frames.size)
@@ -74,9 +69,9 @@ abstract class BaseTree : Timber.Tree() {
         stackData: StackData
     )
 
-    // --------------------
-    // custom code - extended tag
-    // --------------------
+    
+    
+    
 
     protected fun formatLine(prefix: String, message: String) =
         L.formatter.formatLine(this, prefix, message)
@@ -85,9 +80,9 @@ abstract class BaseTree : Timber.Tree() {
         return L.formatter.formatLogPrefix(customTag, stackData)
     }
 
-    // --------------------
-    // custom code - callstack depth
-    // --------------------
+    
+    
+    
 
     companion object {
         internal const val CALL_STACK_INDEX = 4
@@ -118,9 +113,9 @@ abstract class BaseTree : Timber.Tree() {
         stackTrace.set(trace)
     }
 
-    // --------------------
-    // custom code - timestamp (调用时捕获，保证时间准确)
-    // --------------------
+    
+    
+    
 
     private val logTimestamp = ThreadLocal<Long>()
 

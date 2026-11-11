@@ -28,11 +28,11 @@ class UnifiedInputTouchHandlerTest {
         override fun onHoldEnd() { events += "end" }
     }
 
-    private val view = View(RuntimeEnvironment.getApplication())
+    private val view = View(RuntimeEnvironment.getApplication()).apply { layout(0, 0, WIDTH, HEIGHT) }
     private val callbacks = Recorder()
     private var intercept = true
     private val handler = UnifiedInputTouchHandler(
-        touchSlop = SLOP,
+        moveTolerancePx = SLOP,
         shouldIntercept = { intercept },
         callbacks = callbacks,
     )
@@ -68,6 +68,34 @@ class UnifiedInputTouchHandlerTest {
     }
 
     @Test
+    fun `moving within the tolerance still taps`() {
+        touch(MotionEvent.ACTION_DOWN)
+        touch(MotionEvent.ACTION_MOVE, x = 10f + SLOP)
+        touch(MotionEvent.ACTION_UP, x = 10f + SLOP)
+
+        assertEquals(listOf("pressed=true", "pressed=false", "tap"), callbacks.events)
+    }
+
+    @Test
+    fun `a quick release outside the field is not a tap`() {
+        touch(MotionEvent.ACTION_DOWN, y = HEIGHT - 2f)
+        touch(MotionEvent.ACTION_MOVE, y = HEIGHT + SLOP - 2f)
+        touch(MotionEvent.ACTION_UP, y = HEIGHT + SLOP - 2f)
+
+        assertEquals(listOf("pressed=true", "pressed=false"), callbacks.events)
+    }
+
+    @Test
+    fun `moving past the tolerance after the hold started is handed to the recorder`() {
+        touch(MotionEvent.ACTION_DOWN)
+        idle(UnifiedInputTouchHandler.LONG_PRESS_TIMEOUT_MS)
+        touch(MotionEvent.ACTION_MOVE, y = -300f)
+        touch(MotionEvent.ACTION_UP, y = -300f)
+
+        assertEquals(listOf("pressed=true", "pressed=false", "long", "move", "end"), callbacks.events)
+    }
+
+    @Test
     fun `text-input mode leaves the whole gesture to the field`() {
         intercept = false
 
@@ -99,8 +127,8 @@ class UnifiedInputTouchHandlerTest {
         assertEquals(listOf("pressed=true", "pressed=false", "long"), callbacks.events)
     }
 
-    private fun touch(action: Int, x: Float = 10f): Boolean {
-        val event = MotionEvent.obtain(0L, 0L, action, x, 10f, 0)
+    private fun touch(action: Int, x: Float = 10f, y: Float = 10f): Boolean {
+        val event = MotionEvent.obtain(0L, 0L, action, x, y, 0)
         return handler.onTouch(view, event).also { event.recycle() }
     }
 
@@ -109,6 +137,8 @@ class UnifiedInputTouchHandlerTest {
     }
 
     private companion object {
-        const val SLOP = 8
+        const val SLOP = 20
+        const val WIDTH = 300
+        const val HEIGHT = 88
     }
 }

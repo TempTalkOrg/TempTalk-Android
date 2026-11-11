@@ -5,68 +5,58 @@ import com.difft.android.base.utils.DEFAULT_DEVICE_ID
 import com.google.gson.JsonElement
 import com.google.gson.annotations.SerializedName
 
-/**
- * Represents a decrypted Signal Service notify message.
- *https://github.com/difftim/server-docs/blob/master/apis/directory_change_notifyMsg.md
- */
+
 data class TTNotifyMessage(
     val `data`: Data?,
     val notifyTime: Long,
     val notifyType: Int,
-    var showContent: String? = "", //本地组装，用于显示的消息,
-    var operatorName: String? = "", //本地组装，用于显示的消息 For pinned message now
-    val display: Int? = 0 //0 no need display, 1 need display to ui
+    var showContent: String? = "", 
+    var operatorName: String? = "", 
+    val display: Int? = 0 
 ) {
     companion object {
-        /**
-         * notify type
-         */
         const val NOTIFY_MESSAGE_TYPE_GROUP = 0
         const val NOTIFY_MESSAGE_TYPE_UPDATE_CONTACT = 1
         const val NOTIFY_MESSAGE_TYPE_CONVERSATION_SETTING = 4
-        const val NOTIFY_MESSAGE_TYPE_CONVERSATION_SHARE_SETTING = 5 //会话共享配置
+        const val NOTIFY_MESSAGE_TYPE_CONVERSATION_SHARE_SETTING = 5 
         const val NOTIFY_MESSAGE_TYPE_ADD_FRIEND = 6
 
-        //        const val NOTIFY_MESSAGE_TYPE_PASSCODE = 15 // passcodeNotify
-        const val NOTIFY_MESSAGE_TYPE_CALL_END = 17 // call end notify
-        const val NOTIFY_MESSAGE_TYPE_RESET_IDENTITY_KEY = 19 // reset Identity Key
+        const val NOTIFY_MESSAGE_TYPE_CALL_END = 17 
+        const val NOTIFY_MESSAGE_TYPE_RESET_IDENTITY_KEY = 19 
 
-        const val NOTIFY_MESSAGE_TYPE_CRITICAL_ALERT = 20 // critical alert
+        const val NOTIFY_MESSAGE_TYPE_CRITICAL_ALERT = 20 
 
-        const val NOTIFY_MESSAGE_TYPE_CRITICAL_ALERT_V2 = 22 // new critical alert
-        const val NOTIFY_MESSAGE_TYPE_SECONDARY_DEVICE_KEPT = 23 // secondary devices kept through an identity-continuation sign-in
+        const val NOTIFY_MESSAGE_TYPE_CRITICAL_ALERT_V2 = 22 
+        const val NOTIFY_MESSAGE_TYPE_SECONDARY_DEVICE_KEPT = 23 
 
-        const val NOTIFY_MESSAGE_TYPE_WEAK_CONTACT = 25 // weak contact (delayed removal)
-        // reuses Data.changeType: 0=enter weak / 1=remove
+        const val NOTIFY_MESSAGE_TYPE_WEAK_CONTACT = 25 
+        
 
-        const val NOTIFY_MESSAGE_TYPE_FOCUS = 29 // group focus state; data.focus is the snapshot, data.trigger USER/EXPIRED/INVALIDATED
+        const val NOTIFY_MESSAGE_TYPE_FOCUS = 29 
 
-        //本地创建 type
+        
         const val NOTIFY_MESSAGE_TYPE_LOCAL = 10000
 
-        /**
-         * notify action type
-         */
         const val NOTIFY_ACTION_TYPE_ADD_FRIEND_REQUEST = 1
-        const val NOTIFY_ACTION_TYPE_ADD_FRIEND_ACCEPT = 2 // chative accept others request
+        const val NOTIFY_ACTION_TYPE_ADD_FRIEND_ACCEPT = 2 
 
-        //（本地创建）action
-        const val NOTIFY_ACTION_TYPE_ADD_FRIEND_REQUEST_DONE = 10000 //已接受请求 chative
-        const val NOTIFY_ACTION_TYPE_ADD_FRIEND_REQUEST_SENT = 10001 //已发送请求（本地创建）chative
-        const val NOTIFY_ACTION_TYPE_BLOCKED_CHATIVE = 10002 //被对方block（本地创建） chative
-        const val NOTIFY_ACTION_TYPE_OFFLINE = 10003 //对方离线（本地创建）
-        const val NOTIFY_ACTION_TYPE_ACCOUNT_DISABLED = 10004 //对方账号禁用（本地创建）
-        const val NOTIFY_ACTION_TYPE_SCREEN_SHOT = 10005 //**拍摄了一张截图（本地创建）
-        const val NOTIFY_ACTION_TYPE_BLOCKED_WEA = 10006 //跨team无法发消息（本地创建） cc/wea
-        const val NOTIFY_ACTION_TYPE_REMOVE_FRIEND_DELETE_MESSAGES = 10007 //删除好友时删除消息（本地创建）
-        const val NOTIFY_ACTION_TYPE_ACCOUNT_UNREGISTERED = 10008 //对方账号已注销（本地创建）
-        const val NOTIFY_ACTION_TYPE_DEFAULT_ARCHIVE = 10009 //默认归档时间提醒消息（本地创建）
-        const val NOTIFY_ACTION_TYPE_NON_FRIEND_LIMIT = 10010 //非好友每天只能发3条消息（本地创建）
-        const val NOTIFY_ACTION_TYPE_RESET_IDENTITY_KEY = 10011 //重置identity key（本地创建）
-        const val NOTIFY_ACTION_TYPE_MESSAGES_EXPIRED = 10012 //Earlier messages expired（本地创建）
-        const val NOTIFY_ACTION_TYPE_FORWARD_NOTICE = 10020 // System notice emitted after a forward completes (Android-local convention, not cross-platform)
-        const val NOTIFY_ACTION_TYPE_COPY_NOTICE = 10021 // System notice emitted after a copy completes (Android-local convention, not cross-platform)
-        const val NOTIFY_ACTION_TYPE_TRANSLATE_SETTING_CHANGED = 10022 // System notice emitted when the conversation auto-translate setting changes (locally created)
+        
+        const val NOTIFY_ACTION_TYPE_ADD_FRIEND_REQUEST_DONE = 10000 
+        const val NOTIFY_ACTION_TYPE_ADD_FRIEND_REQUEST_SENT = 10001 
+        const val NOTIFY_ACTION_TYPE_BLOCKED_CHATIVE = 10002 
+        const val NOTIFY_ACTION_TYPE_OFFLINE = 10003 
+        const val NOTIFY_ACTION_TYPE_ACCOUNT_DISABLED = 10004 
+        const val NOTIFY_ACTION_TYPE_SCREEN_SHOT = 10005 
+        const val NOTIFY_ACTION_TYPE_BLOCKED_WEA = 10006 
+        const val NOTIFY_ACTION_TYPE_REMOVE_FRIEND_DELETE_MESSAGES = 10007 
+        const val NOTIFY_ACTION_TYPE_ACCOUNT_UNREGISTERED = 10008 
+        const val NOTIFY_ACTION_TYPE_DEFAULT_ARCHIVE = 10009 
+        const val NOTIFY_ACTION_TYPE_NON_FRIEND_LIMIT = 10010 
+        const val NOTIFY_ACTION_TYPE_RESET_IDENTITY_KEY = 10011 
+        const val NOTIFY_ACTION_TYPE_MESSAGES_EXPIRED = 10012 
+        const val NOTIFY_ACTION_TYPE_FORWARD_NOTICE = 10020 
+        const val NOTIFY_ACTION_TYPE_COPY_NOTICE = 10021 
+        const val NOTIFY_ACTION_TYPE_TRANSLATE_SETTING_CHANGED = 10022 
     }
 }
 
@@ -115,23 +105,22 @@ data class Data(
     val alertBody: String? = null,
     val showCriticalAlert: Boolean = false,
     val sourceDevice: Int = DEFAULT_DEVICE_ID,
-    // weak-contact (delayed-removal) notifyType=25 fields. changeType/serverTimestamp above are reused.
-    // Wire names anchored with @SerializedName so the Kotlin name is decoupled from the server contract.
-    // The server unified the identifier on `uid` and the expiry on `expireTime` (same wire names as
-    // the deletedRecords API [DeletedRecordDto]).
-    @SerializedName("uid") var uid: String? = null,            // target uid (top-level, distinct from members[].uid)
-    @SerializedName("name") var name: String? = null,          // server snapshot displayName
-    @SerializedName("avatar") var avatar: String? = null,      // Avatar2 JSON snapshot {"attachmentId":...}
-    @SerializedName("expireTime") var expireTime: Long = 0,    // absolute expiry, ms UTC (valid when changeType=0)
-    @SerializedName("reason") var reason: Int = 0,             // 0=deleted / 1=deregistered (client does not distinguish)
-    @SerializedName("deleteTime") var deleteTime: Long = 0,    // entered-weak time, ms UTC (matches DeletedRecordDto.deleteTime)
-    // notifyType=23 (SECONDARY_DEVICE_KEPT): a new primary signed in with the account's identity carried
-    // over, and the server kept these secondary devices signed in.
+    
+    
+    
+    @SerializedName("uid") var uid: String? = null,            
+    @SerializedName("name") var name: String? = null,          
+    @SerializedName("avatar") var avatar: String? = null,      
+    @SerializedName("expireTime") var expireTime: Long = 0,    
+    @SerializedName("reason") var reason: Int = 0,             
+    @SerializedName("deleteTime") var deleteTime: Long = 0,    
+    
+    
     @SerializedName("keptDeviceIds") val keptDeviceIds: List<String>? = null,
     @SerializedName("keptDeviceNames") val keptDeviceNames: List<String>? = null,
     @SerializedName("newDeviceName") val newDeviceName: String? = null,
     @SerializedName("keptTime") val keptTime: Long = 0,
-    // notifyType=29 (FOCUS): the focus snapshot, parsed by the focus package, and what caused it.
+    
     @SerializedName("focus") val focus: JsonElement? = null,
     @SerializedName("trigger") val trigger: String? = null,
     )
@@ -144,7 +133,7 @@ data class Group(
     val invitationRule: Int,
     val messageExpiry: Int,
     val name: String,
-    val publishRule: Int, //0 - 仅群主可发言 1 - 仅管理员可发言 2 - 任何人可发言
+    val publishRule: Int, 
     val rejoin: Boolean,
     val remindCycle: String,
     val linkInviteSwitch: Boolean,
@@ -180,7 +169,7 @@ data class PublicConfigs(
     val meetingVersion: Int = 0,
     val publicName: String = "",
     val msgEncVersion: Int = 0,
-    val publicAccountType: Int? = null,   // nullable on purpose (notify server-scope unconfirmed)
+    val publicAccountType: Int? = null,   
 )
 
 data class PrivateConfigs(
@@ -201,7 +190,7 @@ data class NotifyConversation(
     val blockStatus: Int,
     val confidentialMode: Int,
     val conversation: String,
-    /** Mute sub-options; absent from older servers, so nullable. */
+    
     val allowMentionMe: Boolean? = null,
     val allowMentionAll: Boolean? = null,
     val allowGroupCall: Boolean? = null

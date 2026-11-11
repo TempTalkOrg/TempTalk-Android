@@ -15,28 +15,13 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/**
- * Integration round-trip tests for [JobSpecModel] and [JobConstraintModel] against
- * a real in-memory WCDB instance.
- *
- * **Currently @Ignore-d**: WCDB (Tencent SQLite wrapper) loads native libraries
- * via `System.loadLibrary` which are not available to JVM unit tests on the host
- * machine. Matches the precedent in [com.difft.android.messageserialization.db.store.DBPublicKeyInfoStoreTest].
- * To run these tests reliably we either need (a) instrumentation test setup
- * (androidTest source set + emulator/device), or (b) a JVM-compatible SQLite shim.
- * Both are out of scope for the initial refactor; the tests remain here as
- * compilation guards and documented expected behavior.
- *
- * These tests validate:
- * - JobSpec row-round-trip preserves every field (10 columns including `serializedData TEXT`
- *   and `isRunning boolean` -> INTEGER).
- * - JobSpec `jobSpecId` primary key uniquely identifies rows (re-insert via insertOrReplace
- *   replaces instead of duplicating).
- * - JobConstraint composite PK `(jobSpecId, factoryKey)` uniquely identifies rows.
- * - `queueKey` nullability is preserved round-trip.
- * - `ORDER BY createTime ASC, jobSpecId ASC` returns stable ordering (schema parity with
- *   legacy `ORDER BY create_time, _id ASC` — see design §4.2.3).
- */
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33])
 @Ignore("WCDB native library not loadable in JVM unit tests; run via instrumentation test instead")
@@ -127,9 +112,9 @@ class JobModelRoundTripTest {
 
     @Test
     fun jobSpec_insertOrReplace_on_same_jobSpecId_replaces_row() {
-        // Verifies business PK uniqueness — if a synthetic _id AUTOINCREMENT PK were
-        // accidentally reintroduced, a second insertOrReplace with the same jobSpecId
-        // would produce TWO rows (different _id values), not one.
+        
+        
+        
         wcdb.jobSpec.insertOrReplaceObject(spec(id = "job-dup", runAttempt = 1))
         wcdb.jobSpec.insertOrReplaceObject(spec(id = "job-dup", runAttempt = 99))
 
@@ -140,8 +125,7 @@ class JobModelRoundTripTest {
 
     @Test
     fun jobSpec_multi_row_round_trip_preserves_all_rows() {
-        // Ordering-aware retrieval is validated in WcdbJobStorageReadTest (Task 2).
-        // Here we only verify the table can hold multiple distinct rows.
+        
         wcdb.jobSpec.insertObjects(
             listOf(
                 spec(id = "b-later", createTime = 200L),
@@ -170,8 +154,8 @@ class JobModelRoundTripTest {
 
     @Test
     fun jobConstraint_composite_pk_prevents_duplicate_rows() {
-        // If composite PK (jobSpecId, factoryKey) is correctly declared, a
-        // second insertOrReplace with the same tuple must replace, not duplicate.
+        
+        
         wcdb.jobConstraint.insertOrReplaceObject(constraint("job-1", "network"))
         wcdb.jobConstraint.insertOrReplaceObject(constraint("job-1", "network"))
 

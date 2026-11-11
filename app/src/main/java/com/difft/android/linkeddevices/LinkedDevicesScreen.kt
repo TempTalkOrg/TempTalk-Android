@@ -54,14 +54,14 @@ import androidx.compose.runtime.collectAsState
 import java.text.DateFormat
 import java.util.Date
 
-/** Long-press menu state: the press point (root-local px) + the target device. */
+
 private data class MenuState(val position: Offset, val device: DeviceUiState)
 
-/**
- * List screen hosted by [LinkedDevicesFragment] on both form factors; the fragment hides the back
- * button in dual-pane mode. The root [Box] hosts the in-composition long-press overlay menu. Fetch
- * is driven by the host's onResume, not from here.
- */
+
+
+
+
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LinkedDevicesScreen(
@@ -100,13 +100,13 @@ fun LinkedDevicesScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            // The host's XML root is already padded; consume so the Scaffold does not pad again.
+            
             .consumeWindowInsets(WindowInsets.safeDrawing)
             .onSizeChanged { rootSize = it }
             .onGloballyPositioned { rootCoords = it },
     ) {
         DifftScreen(
-            // Settings idiom: page colour behind elevated groups, like every other settings page.
+            
             containerColor = DifftTheme.colors.bg,
             topBar = {
                 TitleBar(
@@ -117,9 +117,9 @@ fun LinkedDevicesScreen(
                 )
             },
         ) { padding ->
-            // Full-screen spinner only before the first successful load; any later state (incl. a
-            // fetch failure) renders the list body, so the Link New Device entry never disappears.
-            // Fetch failures surface as a one-shot toast, never a full-screen error page.
+            
+            
+            
             if (state.isLoading && !state.hasLoadedOnce) {
                 LoadingBody(padding)
             } else {
@@ -174,8 +174,8 @@ private fun DeviceListBody(
     onLongPress: (DeviceUiState, Offset) -> Unit,
     onLinkNew: () -> Unit,
 ) {
-    // An empty list shows only the Link New Device card (no caption). Single DateFormat shared by
-    // every row.
+    
+    
     val dateFormat = remember { DateFormat.getDateInstance(DateFormat.MEDIUM) }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -208,8 +208,8 @@ private fun DeviceRow(
     onLongPress: (DeviceUiState, Offset) -> Unit,
 ) {
     var rowCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
-    // Read the latest coords/callback inside the long-press gesture: pointerInput is keyed on
-    // device.id and would otherwise capture a stale (first-frame null) rootCoords forever.
+    
+    
     val currentRootCoords by rememberUpdatedState(rootCoords)
     val currentOnLongPress by rememberUpdatedState(onLongPress)
     val name = device.displayName ?: stringResource(R.string.linked_devices_unnamed)
@@ -258,7 +258,7 @@ private fun LinkNewDeviceRow(onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            // Fill before the click so the ripple draws above it.
+            
             .background(DifftSettingsDefaults.RowSurfaceColor)
             .clickable { onClick() }
             .padding(horizontal = DifftTheme.spacing.insetLarge, vertical = 12.dp),

@@ -4,10 +4,10 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
-/**
- * [JumpTargetAnchor]: a hosted conversation opened at a searched message is laid out while the
- * search page's keyboard is still closing; when the list then grows, the jump is applied again.
- */
+
+
+
+
 class JumpTargetAnchorTest {
 
     private var clock = 0L
@@ -26,7 +26,7 @@ class JumpTargetAnchorTest {
         assertNull(anchor.reanchorOnLayout(delta = -800))
 
         anchor.set(42)
-        anchor.clear() // the user dragged
+        anchor.clear() 
         assertNull(anchor.reanchorOnLayout(delta = -800))
 
         anchor.set(42)
@@ -48,7 +48,7 @@ class JumpTargetAnchorTest {
         assertNull(anchor.reanchorOnLayout(delta = 121))
 
         anchor.set(42)
-        anchor.clear() // the user dragged
+        anchor.clear() 
         assertNull(anchor.reanchorOnLayout(delta = 121))
 
         anchor.set(42)

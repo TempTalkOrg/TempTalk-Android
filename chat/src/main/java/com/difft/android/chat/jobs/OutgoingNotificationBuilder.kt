@@ -12,10 +12,10 @@ import difft.android.messageserialization.model.MENTIONS_ALL_ID
 import difft.android.messageserialization.model.TextMessage
 import difft.android.messageserialization.model.isAttachmentMessage
 
-/**
- * Builds the push-notification payload for an outgoing [TextMessage]. Shared by [PushTextSendJob]
- * and [PushScreenShotSendJob] so both emit the exact same payload for the same wire message.
- */
+
+
+
+
 internal fun buildTextMessageNotification(
     textMessage: TextMessage,
     gson: Gson
@@ -32,17 +32,23 @@ internal fun buildTextMessageNotification(
         if (textMessage.recall != null) {
             NotificationType.RECALL_MSG.code
         } else if (!textMessage.mentions.isNullOrEmpty()) {
-            // The full mention list goes with every mention type (as on iOS / Desktop), so the server
-            // can tell a directly mentioned member apart from an @all-only one.
+            
+            
             mentionedPersons = textMessage.mentions?.mapNotNull { it.uid }?.toTypedArray()
             if (textMessage.mentions?.firstOrNull()?.uid == MENTIONS_ALL_ID) {
                 NotificationType.GROUP_MENTIONS_ALL.code
             } else {
                 NotificationType.GROUP_MENTIONS_DESTINATION.code
             }
+        } else if (textMessage.isAttachmentMessage()) {
+            NotificationType.GROUP_FILE.code
         } else {
-            if (textMessage.isAttachmentMessage()) {
-                NotificationType.GROUP_FILE.code
+            val quoteAuthor = textMessage.quote?.author?.takeIf { it.isNotEmpty() }
+            if (quoteAuthor != null) {
+                
+                
+                mentionedPersons = arrayOf(quoteAuthor)
+                NotificationType.GROUP_REPLY_DESTINATION.code
             } else {
                 NotificationType.GROUP_NORMAL.code
             }

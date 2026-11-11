@@ -51,13 +51,13 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 
-/**
- * The thin [LCallViewModel] over its [CallSession], including the VM-side collectors of the
- * session's UI output. Rows: T2-19, T3-01, T3-08, T3-15, T3-17, T3-18, T3-25, T3-27, T5-18, T5-23,
- * T5-29, T5-31.
- * The toast rows (T3-09, T3-24) need a real main Looper for `ToastUtil` and live in
- * `LCallViewModelToastCollectorTest`.
- */
+
+
+
+
+
+
+
 class LCallViewModelDelegationTest {
 
     private val testDispatcher = StandardTestDispatcher()
@@ -71,7 +71,7 @@ class LCallViewModelDelegationTest {
     private lateinit var h: CallSessionTestHarness
     private val extraHarnesses = mutableListOf<CallSessionTestHarness>()
 
-    /** Collects UI-controller flows on the test Main dispatcher; cancelled in `@After`. */
+    
     private val collectorScope = CoroutineScope(testDispatcher)
 
     @Before
@@ -96,7 +96,7 @@ class LCallViewModelDelegationTest {
 
         assertSame(params, session.params)
         assertSame(session, h.holder.current.value)
-        // Attached from the VM's init: a remote end is left to the page instead of ending the session.
+        
         OgsmTestState.enterCall(h.ogsm, "r1", session.id)
         session.onRemoteControl(CallActionType.HANGUP, "r1")
         assertSame(session, h.holder.current.value)
@@ -200,7 +200,7 @@ class LCallViewModelDelegationTest {
         LCallViewModelFixture.build(h)
         val ui = h.uiWriter(session())
 
-        // No scheduler advance: UNDISPATCHED subscribes before the constructor returns.
+        
         assertEquals(1, ui.subscriptionCountOf("_events"))
         assertEquals(1, ui.subscriptionCountOf("_groupCriticalAlert"))
     }
@@ -225,7 +225,7 @@ class LCallViewModelDelegationTest {
         val params = h.params(type = CallType.GROUP.type, callIntent = groupIntent("g1"))
         val vm = LCallViewModelFixture.build(h, h.start(params))
 
-        // The real dispatcher: group read on IO, then the write on Main (the test dispatcher).
+        
         session().graph.criticalAlertDispatcher.refreshGroupStatus(params.callIntent)
         awaitOnMain { vm.callUiController.isCriticalAlertEnable.value }
 
@@ -288,10 +288,10 @@ class LCallViewModelDelegationTest {
         assertSame(hb.sessions.single().graph.rtm, vm.rtm)
     }
 
-    /** The only session in these rows (ended sessions stay in [CallSessionTestHarness.sessions]). */
+    
     private fun session(): CallSession = h.sessions.single()
 
-    /** A harness whose sessions run their room setup on the test scheduler. */
+    
     private fun phaseBHarness() = CallSessionTestHarness(testDispatcher, default = testDispatcher).also { extraHarnesses += it }
 
     private fun collectBarrages(vm: LCallViewModel): List<BarrageMessage> {
@@ -301,7 +301,7 @@ class LCallViewModelDelegationTest {
         return received
     }
 
-    /** Runs the Main test dispatcher until [done]; the IO hops in these rows run on real threads. */
+    
     private fun awaitOnMain(done: () -> Boolean) {
         val deadline = System.currentTimeMillis() + AWAIT_TIMEOUT_MS
         while (!done()) {
@@ -311,7 +311,7 @@ class LCallViewModelDelegationTest {
         }
     }
 
-    /** `subscriptionCount` of a private backing flow (the session exposes read-only views). */
+    
     private fun CallSessionUiState.subscriptionCountOf(field: String): Int =
         when (val flow = CallSessionUiState::class.java.getDeclaredField(field).apply { isAccessible = true }.get(this)) {
             is MutableStateFlow<*> -> flow.subscriptionCount.value

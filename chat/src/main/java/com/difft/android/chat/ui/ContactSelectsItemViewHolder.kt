@@ -25,11 +25,6 @@ class ContactSelectsItemViewHolder(parentView: ViewGroup) : ViewHolder(run {
             binding.textViewEmail.text = value
         }
 
-//    var isSelected: Boolean
-//        get() = binding.selectMark.isVisible
-//        set(value) {
-//            binding.selectMark.isVisible = value
-//        }
 
     fun setAvatarUrl(url: String?, key: String?, firstLetter: String?, id: String) {
         binding.avatarView.setAvatar(url, key, firstLetter, id)

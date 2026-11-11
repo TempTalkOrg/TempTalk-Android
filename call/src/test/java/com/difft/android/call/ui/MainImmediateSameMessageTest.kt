@@ -28,12 +28,12 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
-/**
- * Framework pin for the share-start chrome reveal (row T3-26): the session sets `isShareScreening`
- * and emits `RevealCallChrome`, and the VM's `viewModelScope` collector (`Main.immediate`) applies
- * the reveal in the same main-thread message, with no Looper post in between. The main Looper is
- * paused, so anything posted would still be pending when the assertions run.
- */
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [33])
 class MainImmediateSameMessageTest {
@@ -64,7 +64,7 @@ class MainImmediateSameMessageTest {
         val dispatcher = f.build(CallType.GROUP.type)
         shadowOf(Looper.getMainLooper()).pause()
 
-        // The room-event collector body, run as it is in production: inside a Main.immediate coroutine.
+        
         roomEventScope.launch { f.dispatch(dispatcher, trackSubscribed(f, sharer())) }
 
         assertEquals(true, ui.isShareScreening.value)

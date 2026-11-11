@@ -17,18 +17,18 @@ import java.util.concurrent.TimeUnit
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
-/**
- * [HttpClientInterceptor] after auth (issue #1231) and host failover (#1396) moved out of it: a 401
- * passes through untouched, a failure is per-call state rather than a shared field, and the final
- * answer failover hands it is normalized. Failover itself is covered by [HostFailoverInterceptorTest].
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class)
 class HttpClientInterceptorFailoverTest {
 
     private val interceptor = HttpClientInterceptor(pinnedConnection = false)
 
-    // T36 — a 401 carrying a `reason` must NOT be rewritten to 200.
+    
     @Test
     fun `a 401 with a reason body is not rewritten to 200`() {
         val request = Request.Builder().url(URL).build()
@@ -50,7 +50,7 @@ class HttpClientInterceptorFailoverTest {
         assertEquals("""{"reason":"nope"}""", response.body?.string())
     }
 
-    // T37 — two concurrent calls on ONE interceptor instance never surface each other's error.
+    
     @Test
     fun `concurrent failures do not surface each others exception`() {
         val start = CountDownLatch(1)
@@ -70,7 +70,7 @@ class HttpClientInterceptorFailoverTest {
         assertEquals(419, results[1])
     }
 
-    // A 5xx that failover could not resolve on any host is the final failure, never a response.
+    
     @Test
     fun `a 5xx that reaches normalization becomes the generic network exception`() {
         val request = Request.Builder().url(URL).build()
@@ -91,7 +91,7 @@ class HttpClientInterceptorFailoverTest {
         assertEquals(0, error.errorCode)
     }
 
-    // The terminal verdict of a 4xx without a reason keeps its code.
+    
     @Test
     fun `a 404 without a reason becomes a network exception carrying its code`() {
         val request = Request.Builder().url(URL).build()
@@ -133,7 +133,7 @@ class HttpClientInterceptorFailoverTest {
         assertEquals("""{"status":1,"reason":"busy"}""", response.body.string())
     }
 
-    // A transport failure that failover rethrows is mapped to the localized generic error.
+    
     @Test
     fun `an io failure is mapped to the generic network error`() {
         val request = Request.Builder().url(URL).build()

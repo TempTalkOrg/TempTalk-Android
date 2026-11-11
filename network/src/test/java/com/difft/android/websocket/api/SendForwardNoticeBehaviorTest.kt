@@ -35,19 +35,19 @@ import org.whispersystems.signalservice.internal.push.conversationId
 import org.whispersystems.signalservice.internal.push.forwardNoticeMessage
 import java.io.IOException
 
-/**
- * Behavioral contract for [NewSignalServiceMessageSender.sendForwardNoticeMessage].
- *
- * Locks in the v2 design (issue #695): one HTTP request per send, with the self-sync
- * envelope piggybacked via [NewOutgoingPushMessage.syncContent] for 1v1-to-other.
- * The pre-#695 implementation issued TWO `sendMessage(...)` calls; if anyone
- * re-introduces that pattern these tests fail loud.
- *
- * The WS path is bypassed by throwing IOException from [messagingService.send] /
- * [messagingService.sendToGroup] so the HTTP fallback ([messageSendRepository.sendMessage])
- * fires — that's where we capture [NewOutgoingPushMessage] for assertions. Same trick
- * as [NewSignalServiceMessageSenderRetryTest]; full WS plumbing isn't needed.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class SendForwardNoticeBehaviorTest {
 
@@ -57,7 +57,7 @@ class SendForwardNoticeBehaviorTest {
     private val conversationManager: ConversationManager = mockk(relaxed = true)
     private val messageSendRepository: MessageSendRepository = mockk(relaxed = true)
 
-    /** An open send ticket: every public send requires one (#1382). */
+    
     private val admission = TestMessagingPause().open().gate.tryAdmit(AdmissionKind.SEND, "test")!!
 
     private lateinit var sender: NewSignalServiceMessageSender
@@ -80,8 +80,8 @@ class SendForwardNoticeBehaviorTest {
             messageSendRepository = messageSendRepository,
         )
 
-        // Public key info present for both peer and self — generateForwardNoticeSyncContent
-        // depends on the self-key being non-blank.
+        
+        
         coEvery { conversationManager.hasPublicKeyInfoData(any()) } returns true
         coEvery { conversationManager.getPublicKeyInfos(any<For>()) } returns listOf(
             PublicKeyInfo(uid = PEER_UID, identityKey = "k-peer", registrationId = 1, resetIdentityKeyTime = 0),
@@ -94,8 +94,8 @@ class SendForwardNoticeBehaviorTest {
             messageEncryptor.encryptGroupMessage(any(), any())
         } returns stubEncryptResult()
 
-        // Force HTTP fallback by failing the WS path. The HTTP path is what the
-        // tests inspect (see capturePushMessageOnHttp).
+        
+        
         coEvery { messagingService.send(any(), any()) } throws IOException("ws down")
         coEvery { messagingService.sendToGroup(any(), any()) } throws IOException("ws down")
     }
@@ -107,9 +107,9 @@ class SendForwardNoticeBehaviorTest {
         clearMocks(messagingService, messageEncryptor, conversationManager, messageSendRepository)
     }
 
-    // -----------------------------------------------------------------
-    // 1v1-to-other: ONE network call carrying syncContent. Pre-#695 made two.
-    // -----------------------------------------------------------------
+    
+    
+    
     @Test
     fun `1v1 to other peer sends one request with non-null syncContent`() = runTest {
         val captured = slot<NewOutgoingPushMessage>()
@@ -126,8 +126,8 @@ class SendForwardNoticeBehaviorTest {
             admission = admission,
         )
 
-        // Exactly one HTTP send. Self-sync rides via syncContent on this same request,
-        // not a second messageSendRepository.sendMessage() call.
+        
+        
         coVerify(exactly = 1) { messageSendRepository.sendMessage(any(), any()) }
         assertNotNull(
             "1v1-to-other must carry syncContent so server stamps both envelopes uniformly",
@@ -135,10 +135,10 @@ class SendForwardNoticeBehaviorTest {
         )
     }
 
-    // -----------------------------------------------------------------
-    // Group: server-side fan-out via member list covers self's other devices.
-    // No syncContent needed.
-    // -----------------------------------------------------------------
+    
+    
+    
+    
     @Test
     fun `group send issues one request with null syncContent`() = runTest {
         val captured = slot<NewOutgoingPushMessage>()
@@ -162,10 +162,10 @@ class SendForwardNoticeBehaviorTest {
         )
     }
 
-    // -----------------------------------------------------------------
-    // Note-to-Self: recipient == self, primary already routes to all my devices.
-    // No syncContent needed.
-    // -----------------------------------------------------------------
+    
+    
+    
+    
     @Test
     fun `NTS send issues one request with null syncContent`() = runTest {
         val captured = slot<NewOutgoingPushMessage>()
@@ -189,9 +189,9 @@ class SendForwardNoticeBehaviorTest {
         )
     }
 
-    // -----------------------------------------------------------------
-    // Helpers
-    // -----------------------------------------------------------------
+    
+    
+    
     private fun sampleProto(): SignalServiceProtos.ForwardNoticeMessage = forwardNoticeMessage {
         scene = SignalServiceProtos.ForwardNoticeMessage.ForwardScene.COMBINED
         sourceAuthorIds.add("+10001")
@@ -214,8 +214,8 @@ class SendForwardNoticeBehaviorTest {
         signedEKey = byteArrayOf(2),
         eKey = byteArrayOf(3),
         identityKey = byteArrayOf(4),
-        // Cover every uid that appears in `getPublicKeyInfos` — group recipients
-        // iterate the full list and dereference `ermKeys[uid]!!` per member.
+        
+        
         ermKeys = mapOf(
             PEER_UID to byteArrayOf(5),
             SELF_UID to byteArrayOf(6),

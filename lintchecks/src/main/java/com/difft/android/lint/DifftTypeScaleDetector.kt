@@ -10,34 +10,22 @@ import com.android.tools.lint.detector.api.Severity
 import com.intellij.psi.PsiMethod
 import org.jetbrains.uast.UCallExpression
 
-/**
- * Forbids hand-written text metrics in Compose code outside `:base`.
- *
- * The type scale lives in `DifftTheme.typography` (`h3`…`h7`, `p2`…`p4`, `footnote` — the Figma
- * `SF/H*` / `SF/P*` styles). A `Text(fontSize = 14.sp, lineHeight = 20.sp, …)` or a
- * `TextStyle(fontSize = …)` literal re-states one of those steps by hand, drifts from it the moment
- * the scale changes, and is how 130+ ad-hoc styles accumulated before issue #1232. `:base` is exempt
- * via `lint.xml` because it defines the scale; genuine one-off sizes outside the scale are exempt
- * by path there too, with the reason recorded next to each.
- *
- * Three surfaces, one issue id:
- *  - the metric parameters of `Text` / `BasicText` (`fontSize`, `fontWeight`, `lineHeight`,
- *    `fontFamily`, `letterSpacing`)
- *  - `TextStyle(...)` / `SpanStyle(...)` constructors that set any of those
- *  - `TextStyle.copy(...)` / `SpanStyle.copy(...)` that set any of those — a token nudged off
- *    the scale is the same drift with a nicer name
- *
- * `color`, `textAlign`, `maxLines` and the like are not metrics and stay free; `style = token` and
- * `token.copy(color = …)` are the intended forms.
- */
+
+
+
+
+
+
+
+
 class DifftTypeScaleDetector : Detector(), Detector.UastScanner {
 
     override fun getApplicableMethodNames(): List<String> = listOf("Text", "BasicText", "copy")
 
     override fun visitMethodCall(context: JavaContext, node: UCallExpression, method: PsiMethod) {
         val owner = method.containingClass?.qualifiedName ?: return
-        // Kotlin mangles a function taking an inline-class parameter (`Text-Nvy7gAk`, `copy-p1EtxEg`);
-        // the readable name is what precedes the dash.
+        
+        
         val name = method.name.substringBefore('-')
         when {
             name == "copy" && owner in STYLE_CLASSES -> {
@@ -78,7 +66,7 @@ class DifftTypeScaleDetector : Detector(), Detector.UastScanner {
         )
     }
 
-    /** The first metric parameter this call actually passes, or null when it passes none. */
+    
     private fun firstMetricArgument(node: UCallExpression, method: PsiMethod): String? {
         val parameters = method.parameterList.parameters
         for (index in parameters.indices) {

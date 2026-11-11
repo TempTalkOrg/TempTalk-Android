@@ -7,12 +7,12 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
-/**
- * Which CONFIDENTIAL forward bubbles are judged by the attachment tap policy instead of always
- * opening the detail page: only a single forward whose sole content is an attachment. Anything still
- * viewable — text alongside the attachment, nested forwards, a combined forward — keeps opening.
- * The policy itself is pinned in AttachmentDownloadDecisionTest.
- */
+
+
+
+
+
+
 class ConfidentialForwardTapGateTest {
 
     private fun attachment(status: Int) = Attachment(

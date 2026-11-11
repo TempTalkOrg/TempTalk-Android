@@ -18,15 +18,15 @@ import org.whispersystems.signalservice.internal.push.SignalServiceProtos.Envelo
 import uniffi.dtproto.DtProtoException
 import java.io.IOException
 
-/**
- * Drives [EnvelopToMessageProcessor.process] through every exception type in
- * the [DropReason] table and verifies the classification routing.
- *
- * Failures from the decrypt → MCP pipeline are injected by stubbing
- * `NewMessageDecryptionUtil.decrypt` to throw — that lets us cover the entire
- * `process()` → `classify()` → [EnvelopeProcessResult] chain without needing
- * a real DtProto / WCDB stack.
- */
+
+
+
+
+
+
+
+
+
 class EnvelopToMessageProcessorClassifyTest {
 
     private lateinit var decryptionUtil: NewMessageDecryptionUtil
@@ -46,6 +46,7 @@ class EnvelopToMessageProcessorClassifyTest {
             dbMessageStore = dbMessageStore,
             healthCounters = mockk(relaxed = true),
             lateDeliveryTracker = mockk(relaxed = true),
+            groupUtil = mockk(relaxed = true),
         )
     }
 
@@ -67,8 +68,8 @@ class EnvelopToMessageProcessorClassifyTest {
 
     @Test
     fun `decrypt throws other DtProtoException variant - TransientFailure (conservative)`() = runBlocking {
-        // VersionException isn't the deterministic-failure variant we trust;
-        // default to transient so we don't drop messages that could recover.
+        
+        
         val cause = DtProtoException.VersionException("version error")
         every { decryptionUtil.decrypt(any()) } throws cause
 
@@ -141,10 +142,10 @@ class EnvelopToMessageProcessorClassifyTest {
 
     @Test
     fun `decrypt throws WCDBException (from MCP internal write) - TransientFailure`() = runBlocking {
-        // WCDBException thrown anywhere inside the decrypt → MCP chain falls
-        // into classify's else → TransientFailure. Disk-full / DB-lock are
-        // recoverable so retrying is the right call. (Use mockk because
-        // WCDBException's public constructor isn't trivially callable from tests.)
+        
+        
+        
+        
         val cause: WCDBException = mockk(relaxed = true)
         every { decryptionUtil.decrypt(any()) } throws cause
 
@@ -161,7 +162,7 @@ class EnvelopToMessageProcessorClassifyTest {
             processor.process(envelope(), "test", admission)
             assertTrue("Expected CancellationException to propagate", false)
         } catch (e: CancellationException) {
-            // Expected — coroutine cancel must not be swallowed by classify.
+            
         }
     }
 
@@ -173,14 +174,14 @@ class EnvelopToMessageProcessorClassifyTest {
             processor.process(envelope(), "test", admission)
             assertTrue("Expected OutOfMemoryError to propagate", false)
         } catch (e: OutOfMemoryError) {
-            // Expected — system errors bubble up to crash reporters.
+            
         }
     }
 
     @Test
     fun `success path with null decryption result returns Success(null)`() = runBlocking {
-        // Envelope that survives takeIf chain but decrypt returns null
-        // (e.g., unsupported version dropped by NewMessageDecryptionUtil).
+        
+        
         every { decryptionUtil.decrypt(any()) } returns null
 
         val res = processor.process(envelope(), "test", admission)

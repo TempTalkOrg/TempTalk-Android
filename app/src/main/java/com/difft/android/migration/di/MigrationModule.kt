@@ -18,12 +18,12 @@ import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 
-/**
- * Hilt bindings for the data-migration engine.
- *
- * `NeutralImporter`, `WcdbWriteTargetImpl` and `RoundTripVerifier` are deliberately not bound:
- * they take a runtime staging-DB handle and are constructed at the call site.
- */
+
+
+
+
+
+
 @Module
 @InstallIn(SingletonComponent::class)
 abstract class MigrationModule {
@@ -36,10 +36,10 @@ abstract class MigrationModule {
     @Singleton
     abstract fun bindBackupSnapshotter(impl: BackupSnapshotterImpl): BackupSnapshotter
 
-    /**
-     * Default read source for the exporter is the live WCDB. Callers needing a consistent snapshot
-     * read construct a `SnapshotReadSource` at the call site because they own its lifecycle.
-     */
+    
+
+
+
     @Binds
     @Singleton
     abstract fun bindMigrationReadSource(impl: LiveReadSource): MigrationReadSource

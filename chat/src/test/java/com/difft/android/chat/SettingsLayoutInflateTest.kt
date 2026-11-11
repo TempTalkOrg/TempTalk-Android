@@ -14,12 +14,12 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/**
- * Structural pin for the three settings layouts converted to inset rounded groups (issue #1209):
- * they still inflate, every id the Kotlin side binds is still reachable, and each group container
- * carries the rounded background. The group-management layout additionally gained three wrapper
- * containers, which must not hide the ids inside them.
- */
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class SettingsLayoutInflateTest {
@@ -56,7 +56,7 @@ class SettingsLayoutInflateTest {
             R.id.ll_search_chat_history,
             R.id.rel_group_management,
             R.id.switch_stick,
-            // Mute / notification / sound rows now live in this Compose section.
+            
             R.id.compose_notification_section,
             R.id.save_to_photos_container,
             R.id.translate_container,
@@ -79,12 +79,12 @@ class SettingsLayoutInflateTest {
             R.id.switch_can_critical_alert,
         ).forEach { id -> assertNotNull("missing id $id", root.findViewById<View>(id)) }
 
-        // The hand-written back button + title were replaced by a Compose TitleBar host.
+        
         assertNotNull("missing compose title bar", root.findViewById<View>(R.id.compose_title_bar))
         assertNull("ib_back should be gone", root.findViewById<View>(R.id.ib_back))
         assertNull("tv_title should be gone", root.findViewById<View>(R.id.tv_title))
 
-        // The six rows now live in three group containers instead of directly under the root.
+        
         val moderators = root.findViewById<View>(R.id.cl_moderators)
         val group = moderators.parent as ViewGroup
         assertTrue("group container should be a LinearLayout", group is LinearLayout)

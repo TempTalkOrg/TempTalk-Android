@@ -16,10 +16,9 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/**
- * Pure-JVM tests for the phase-aware [RestoreFlagStore] (A4 c4 — design §3/§5). No Keystore, no
- * native WCDB — just Gson + atomic file IO under Robolectric.
- */
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = Application::class)
 class RestoreFlagStoreTest {
@@ -114,8 +113,8 @@ class RestoreFlagStoreTest {
 
     @Test
     fun `a flag written without the new keys reads back with account null and marker false`() {
-        // Gson skips the constructor, so the account is NOT "" for an old flag — it is null. The
-        // launcher treats a null account as "binds nobody"; this pins the shape it relies on.
+        
+        
         File(context.filesDir, RestoreFlagStore.FLAG_FILE_NAME).writeText(
             """{"state":"RESTORING","startedAt":1,"sourceBackupUri":"x","phase":"SIGNING_IN"}"""
         )

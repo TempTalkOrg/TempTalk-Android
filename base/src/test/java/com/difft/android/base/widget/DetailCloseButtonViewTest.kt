@@ -17,11 +17,11 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/**
- * [DetailCloseButtonView] contract: the shell measures to the shared 48dp disc when given
- * wrap_content, the View owns the click and the accessibility node (button role, "Close" label), and
- * the drop shadow is View elevation so a parent can draw it outside the composition bounds.
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34])
@@ -66,7 +66,7 @@ class DetailCloseButtonViewTest {
     }
 
     @Test
-    fun `an xml content description is kept and the shadow is View elevation`() {
+    fun `an xml content description is kept and the painted shadow is not clipped`() {
         val activity = host()
         val attrs = Robolectric.buildAttributeSet()
             .addAttribute(android.R.attr.contentDescription, "Dismiss preview")
@@ -74,7 +74,8 @@ class DetailCloseButtonViewTest {
         val view = DetailCloseButtonView(activity, attrs)
 
         assertEquals("Dismiss preview", view.contentDescription)
-        assertEquals(activity.resources.getDimension(R.dimen.detail_close_button_elevation), view.elevation)
+        assertEquals(0f, view.elevation)
+        assertEquals(false, view.clipChildren)
     }
 
     @Test
@@ -83,7 +84,7 @@ class DetailCloseButtonViewTest {
         val size = res.getDimension(R.dimen.detail_close_button_size)
         val margin = res.getDimension(R.dimen.detail_close_button_margin)
 
-        // XML dimens cannot express arithmetic; pin the relation the layouts rely on.
+        
         assertEquals(size + margin * 2, res.getDimension(R.dimen.detail_close_button_content_inset), 0.5f)
     }
 

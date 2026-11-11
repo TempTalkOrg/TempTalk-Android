@@ -25,7 +25,6 @@ import com.difft.android.call.layout.postureOf
 import com.difft.android.call.ui.actionbar.rememberCallActionBarPlan
 import com.difft.android.call.ui.actionbar.rememberCallSideRail
 import com.difft.android.call.ui.actionbar.rememberCallWindowSizeDp
-import com.difft.android.call.ui.actionbar.rememberDisplayCutoutRectsDp
 import com.difft.android.call.ui.tabletop.TabletopGeometry
 import com.difft.android.call.ui.tabletop.CallTabletopSpec
 import com.difft.android.call.ui.tabletop.bottomReserveDp
@@ -36,26 +35,26 @@ import com.difft.android.call.layout.Insets as LayoutInsets
 import com.difft.android.call.layout.Rect as LayoutRect
 import com.difft.android.call.layout.Size as LayoutSize
 
-/** Where camera tiles report their frame sizes for the call layout; null outside the call page. */
+
 internal val LocalCallFrameSizeSink = staticCompositionLocalOf<CallFrameSizeSink?> { null }
 
-/**
- * The window report last sent to the controller; null before the first. The stage records it with
- * each layout state it draws and snaps when it differs (design §4.3).
- */
+
+
+
+
 @Stable
 internal class CallLayoutReportKey {
     var value: CallLayoutWindowReport? by mutableStateOf(null)
         internal set
 }
 
-/** The page's [CallLayoutReportKey]; null outside the call page. */
+
 internal val LocalCallLayoutReportKey = staticCompositionLocalOf<CallLayoutReportKey?> { null }
 
-/**
- * Everything one report sends: [CallLayoutController.setTabletopControls], [CallLayoutController.setWindow]
- * then [CallLayoutController.setContent]. [controls]: the tabletop console's size, null outside tabletop.
- */
+
+
+
+
 internal data class CallLayoutWindowReport(
     val size: LayoutSize,
     val safe: LayoutInsets,
@@ -64,11 +63,11 @@ internal data class CallLayoutWindowReport(
     val controls: LayoutSize? = null,
 )
 
-/**
- * Decides which window reports reach the controller: changes only, none while in picture in
- * picture, and after it none until the window differs from the picture-in-picture one (the flag
- * can clear before the window has grown back).
- */
+
+
+
+
+
 internal class CallLayoutReportGate {
     private var pipWindow: LayoutSize? = null
     private var last: CallLayoutWindowReport? = null
@@ -88,12 +87,12 @@ internal class CallLayoutReportGate {
     }
 }
 
-/**
- * Reports the window, its safe area, the fold and the content rects to the layout [controller],
- * in one [SideEffect] per change. [statusBarHidden]: the page hides the status bar now, so the
- * safe area's top is 0 (the content rects keep its band either way). [gatedFold] is the debounced
- * half-open fold (`rememberGatedFold`); its posture decides the tabletop content rects.
- */
+
+
+
+
+
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun CallLayoutReporter(
@@ -109,8 +108,8 @@ internal fun CallLayoutReporter(
     val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     val status = WindowInsets.statusBarsIgnoringVisibility
     val nav = WindowInsets.navigationBarsIgnoringVisibility
-    // The call hides the navigation bar, so its bottom counts only while it is shown: a three-button
-    // bar (48dp) would otherwise lift the tabletop console and the content off the window bottom.
+    
+    
     val navShown = WindowInsets.navigationBars
     val statusBand = status.getTop(density) / scale
     val safe = LayoutInsets(
@@ -126,13 +125,12 @@ internal fun CallLayoutReporter(
 
     val barPlan = rememberCallActionBarPlan(isGroup)
     val posture = postureOf(fold)
-    // In the tabletop posture the content runs to the window bottom, controls shown or hidden: the
-    // layout places the console there itself (decision 39).
+    
+    
     val tabletop = posture == Posture.TABLETOP
     val rail = rememberCallSideRail().takeIf { !tabletop }
     val bottomReserve = bottomReserveDp(posture, barPlan, navBottomDp)
-    val cutouts = rememberDisplayCutoutRectsDp()
-    val content = remember(size, safe, statusBand, bottomReserve, navBottomDp, rail, tabletop, cutouts, isRtl) {
+    val content = remember(size, safe, statusBand, bottomReserve, navBottomDp, rail, tabletop, isRtl) {
         callContentRects(
             window = size,
             safe = safe,
@@ -141,7 +139,6 @@ internal fun CallLayoutReporter(
             navigationBarDp = navBottomDp.toDouble(),
             rail = rail,
             tabletop = tabletop,
-            cutouts = cutouts.map { LayoutRect(it.left.toDouble(), it.top.toDouble(), it.width.toDouble(), it.height.toDouble()) },
             isRtl = isRtl,
         )
     }
@@ -160,17 +157,17 @@ internal fun CallLayoutReporter(
     }
 }
 
-/**
- * The debounced half-open fold in window dp, padded across its thin axis, when it lies in and spans
- * [window]. Both orientations: a vertical fold is the book posture. The call window is edge to edge,
- * so the root's coordinates are the window's. A horizontal fold too low for the dock console above
- * the [navBottomDp] inset (a short split-screen or pop-up window) counts as none, so the page lays
- * out flat with the usual toolbar instead of cutting off the console's second row and its End.
- */
+
+
+
+
+
+
+
 internal fun gatedFoldDp(fold: TabletopGeometry?, window: LayoutSize, navBottomDp: Float): LayoutRect? =
     fold?.let { foldInWindow(padFold(it.foldDp(), vertical = !it.horizontal), window) }
         ?.takeIf { postureOf(it) != Posture.TABLETOP || consoleFitsBelow(it, window, navBottomDp) }
 
-/** Whether the dock below [fold] (its bottom plus the gap, as `dockBelow`) holds the console above [navBottomDp]. */
+
 private fun consoleFitsBelow(fold: LayoutRect, window: LayoutSize, navBottomDp: Float): Boolean =
     window.h - (fold.y + fold.h + CallTabletopSpec.GAP_DP) - navBottomDp >= CallTabletopSpec.CONSOLE_HEIGHT_DP

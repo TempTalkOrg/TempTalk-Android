@@ -31,22 +31,15 @@ class ScreenUnlockBroadcastReceiver(
         }
     }
 
-    /**
-     * 仅在APP后台且非PIP模式下恢复Call页面
-     */
+    
     private fun isNeedBringCallActivityToFront(): Boolean {
         return onGoingCallStateManager.isInCalling()
                 && onGoingCallStateManager.isInForeground().not()
                 && onGoingCallStateManager.isInPipMode().not()
     }
 
-    /**
-     * 注册广播接收器
-     *
-     * 使用 applicationContext 注册，确保 register/unregister 使用相同的
-     * Context identity（LoadedApk 以 Context 为 key 存储 ReceiverDispatcher），
-     * 同时避免持有 Activity 引用。
-     */
+    
+
     fun register(context: Context) {
         if (isRegistered) {
             L.w { "[Call] ScreenUnlockBroadcastReceiver already registered" }
@@ -73,14 +66,8 @@ class ScreenUnlockBroadcastReceiver(
         }
     }
 
-    /**
-     * 注销广播接收器
-     *
-     * unregisterReceiver 底层执行 Binder IPC（→ AMS），当 system_server
-     * 负载高时可能阻塞数百毫秒导致 ANR，因此将其移至 IO 线程异步执行。
-     * onDestroy 场景下不需要等待注销完成——Activity 已不在前台，receiver
-     * 不会再被触发。
-     */
+    
+
     fun unregister(context: Context) {
         if (!isRegistered) {
             return
@@ -90,8 +77,8 @@ class ScreenUnlockBroadcastReceiver(
         val ctx = registeredContext ?: context.applicationContext
         registeredContext = null
         val receiver = broadcastReceiver
-        // GlobalScope is deliberate: called from onDestroy where no lifecycle scope
-        // survives; this is a fire-and-forget Binder IPC cleanup.
+        
+        
         @Suppress("GlobalCoroutineUsage", "OPT_IN_USAGE")
         GlobalScope.launch(Dispatchers.IO) {
             try {
@@ -103,10 +90,6 @@ class ScreenUnlockBroadcastReceiver(
         }
     }
 
-    /**
-     * 释放资源
-     * @param context 上下文
-     */
     fun release(context: Context?) {
         context?.let { unregister(it) }
         L.i { "[Call] ScreenUnlockBroadcastReceiver released" }

@@ -15,42 +15,42 @@ import difft.android.messageserialization.model.isAnimatedImage
 import difft.android.messageserialization.model.isAudioFile
 import difft.android.messageserialization.model.isAudioMessage
 import difft.android.messageserialization.model.isImage
-import difft.android.messageserialization.model.isVideo
+import difft.android.messageserialization.model.isPlayableVideo
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos
 
-/**
- * Builds MessageActionPopup configuration based on message conditions
- */
+
+
+
 class MessageActionConfigBuilder(
     private val globalConfigsManager: IGlobalConfigsManager,
-    /** False on a build that ships no translate backend; the translate actions are then omitted. */
+    
     private val translateSupported: Boolean,
 ) {
+
     
-    /**
-     * Configuration for MessageActionPopup
-     */
+
+
     data class Config(
         val message: TextChatMessage,
         val reactions: List<String>,
-        val selectedEmojis: Set<String>,  // Current user's selected emojis (supports multiple)
+        val selectedEmojis: Set<String>,  
         val showReactionBar: Boolean,
         val quickActions: List<MessageAction>,
         val moreActions: List<MessageAction>,
-        val allActions: List<MessageAction>,  // Full action set (same list as quickActions post-expansion)
+        val allActions: List<MessageAction>,  
         val anchorBounds: Rect,
         val isOutgoing: Boolean
     )
+
     
-    /**
-     * Build configuration for the message action popup
-     * 
-     * @param message The message to show actions for
-     * @param mostUseEmojis List of most used emojis for reactions
-     * @param isForForward Whether in forward selection mode
-     * @param isSaved Whether the message is saved/favorited
-     * @param anchorBounds The bounds of the message bubble on screen
-     */
+
+
+
+
+
+
+
+
     fun build(
         message: TextChatMessage,
         mostUseEmojis: List<String>?,
@@ -66,114 +66,113 @@ class MessageActionConfigBuilder(
         } else {
             emptyList()
         }
+
         
-        // Find all emojis current user has reacted with (supports multiple reactions)
         val myId = globalServices.myId
         val selectedEmojis = message.reactions
             ?.filter { it.uid == myId }
             ?.mapNotNull { it.emoji }
             ?.toSet()
             ?: emptySet()
-        
+
         return Config(
             message = message,
             reactions = reactions,
             selectedEmojis = selectedEmojis,
             showReactionBar = showReactionBar,
-            quickActions = allActions,   // full expansion — grid renders this
-            moreActions = emptyList(),   // vestigial (cleanup candidate)
+            quickActions = allActions,   
+            moreActions = emptyList(),   
             allActions = allActions,
             anchorBounds = anchorBounds,
             isOutgoing = message.isMine
         )
     }
+
     
-    /**
-     * Build all available actions based on message and mode
-     */
+
+
     private fun buildAllActions(
         message: TextChatMessage,
         isForForward: Boolean,
         isSaved: Boolean
     ): List<MessageAction> {
         val actions = mutableListOf<MessageAction>()
-        
+
         if (isForForward) {
-            // Forward selection mode: limited actions
+            
             buildForwardModeActions(message, actions)
         } else {
-            // Normal mode: full action set
+            
             buildNormalModeActions(message, isSaved, actions)
         }
-        
+
         return actions
     }
+
     
-    /**
-     * Build actions for forward selection mode
-     */
+
+
     private fun buildForwardModeActions(
         message: TextChatMessage,
         actions: MutableList<MessageAction>
     ) {
-        // Copy - for text, long text attachment, or file
+        
         if (hasTextContent(message) || message.canDownloadFile() || message.isLongTextAttachment()) {
             actions.add(MessageAction.copy())
         }
 
-        // Forward - for non-audio messages
+        
         if (message.attachment?.isAudioMessage() != true) {
             actions.add(MessageAction.forward())
         }
 
-        // Save - for downloadable files
+        
         if (message.canDownloadFile()) {
             val isMediaFile = isMediaFile(message)
             actions.add(MessageAction.save(isMediaFile))
         }
 
-        // Add to Fav - for gif/webp messages (same as normal mode, §5.3): forwarded/combined-forward
-        // detail views expose it too, mirroring Save.
+        
         if (isAnimatedImageMessage(message)) {
             actions.add(MessageAction.favoriteGif())
         }
     }
+
     
-    /**
-     * Build actions for normal mode
-     */
+
+
     private fun buildNormalModeActions(
         message: TextChatMessage,
         isSaved: Boolean,
         actions: MutableList<MessageAction>
     ) {
         val isConfidential = message.mode == SignalServiceProtos.Mode.CONFIDENTIAL_VALUE
-        
+
         if (!isConfidential) {
-            // ① Primary — Quote
+            
             actions.add(MessageAction.quote())
 
-            // ① Primary — Copy
+            
             if (hasTextContent(message) || message.canDownloadFile() || message.isLongTextAttachment()) {
                 actions.add(MessageAction.copy())
             }
 
-            // ① Primary — Forward (non-audio messages)
+            
             if (message.attachment?.isAudioMessage() != true) {
                 actions.add(MessageAction.forward())
             }
 
-            // ① Primary — Select. Voice messages cannot be forwarded, so exclude them.
-            // Voice files (flags=0) are forwardable, so they remain selectable.
+            
+            
             if (message.attachment?.isAudioMessage() != true) {
                 actions.add(MessageAction.multiSelect())
             }
 
-            // ② Transform — Translate (text)
+            
             if (translateSupported && hasTextContent(message)) {
-                // "Turn off" whenever the translate block is on screen: a result, the translating
-                // placeholder, or an error row (which "off" is the only way to dismiss). Invisible and
-                // SameLanguage render no block, so they offer "translate" instead.
+                
+                
+                
                 val translateStatus = message.translateData?.translateStatus
                 val blockOnScreen = translateStatus != null &&
                     translateStatus != TranslateStatus.Invisible &&
@@ -185,7 +184,7 @@ class MessageActionConfigBuilder(
                 }
             }
 
-            // ② Transform — Speech to Text (audio)
+            
             if (message.attachment?.isAudioMessage() == true) {
                 if (message.speechToTextData == null || message.speechToTextData?.convertStatus != SpeechToTextStatus.Show) {
                     actions.add(MessageAction.speechToText())
@@ -194,40 +193,40 @@ class MessageActionConfigBuilder(
                 }
             }
 
-            // ③ Save — Save/Download (downloadable files)
+            
             if (message.canDownloadFile()) {
                 val isMediaFile = isMediaFile(message)
                 actions.add(MessageAction.save(isMediaFile))
             }
 
-            // ③ Save — Add to Fav (gif/webp messages, M3)
+            
             if (isAnimatedImageMessage(message)) {
                 actions.add(MessageAction.favoriteGif())
             }
 
-            // ③ Save — Add to Saved (not already saved)
+            
             if (!isSaved) {
                 actions.add(MessageAction.saveToNote())
             }
         }
 
-        // ④ Recall (red) — own messages within timeout
+        
         if (message.isMine && isWithinRecallTimeout(message)) {
             actions.add(MessageAction.recall())
         }
 
-        // ④ Delete (red) — saved messages
+        
         if (isSaved) {
             actions.add(MessageAction.deleteSaved())
         }
 
-        // ④ Info — always show
+        
         actions.add(MessageAction.moreInfo())
     }
+
     
-    /**
-     * Check if reaction bar should be shown
-     */
+
+
     private fun shouldShowReactionBar(
         message: TextChatMessage,
         mostUseEmojis: List<String>?,
@@ -240,15 +239,15 @@ class MessageActionConfigBuilder(
             && message.attachment?.isAudioFile() != true
             && message.mode != SignalServiceProtos.Mode.CONFIDENTIAL_VALUE
     }
+
     
-    /**
-     * Check if message has text content (not attachment-only)
-     */
+
+
     private fun hasTextContent(message: TextChatMessage): Boolean {
         if (message.isAttachmentMessage()) {
             return false
         }
-        
+
         message.forwardContext?.forwards?.let { forwards ->
             if (forwards.size == 1) {
                 val forward = forwards.firstOrNull()
@@ -261,32 +260,32 @@ class MessageActionConfigBuilder(
                 return true
             }
         }
-        
+
         return false
     }
+
     
-    /**
-     * Check if message is within recall timeout
-     */
+
+
     private fun isWithinRecallTimeout(message: TextChatMessage): Boolean {
         val recallTimeoutInterval = (globalConfigsManager.getNewGlobalConfigs()?.data?.recall?.timeoutInterval ?: (24 * 60 * 60)) * 1000L
         return ServerTimeProvider.nowMillis() - message.systemShowTimestamp <= recallTimeoutInterval
     }
+
     
-    /** True when the (direct or single-forward) attachment is an animated image (gif or animated
-     *  webp), per the unified [Attachment.isAnimatedImage] predicate (GIF flag + image/gif fallback).
-     *  Drives the "Add to Fav" menu visibility. A single forward wraps its gif in forwardContext
-     *  (attachment == null), so a naive message.attachment check misses it; singleForwardableAttachment
-     *  resolves both. A static webp with no GIF flag no longer shows "Add to Fav". */
+
+
+
+
     private fun isAnimatedImageMessage(message: TextChatMessage): Boolean =
         message.singleForwardableAttachment()?.isAnimatedImage() == true
 
-    /**
-     * Check if the downloadable file is a media file (image/video)
-     */
+    
+
+
     private fun isMediaFile(message: TextChatMessage): Boolean {
-        val attachment = message.attachment 
+        val attachment = message.attachment
             ?: message.forwardContext?.forwards?.firstOrNull()?.attachments?.firstOrNull()
-        return attachment != null && (attachment.isImage() || attachment.isVideo())
+        return attachment != null && (attachment.isImage() || attachment.isPlayableVideo())
     }
 }

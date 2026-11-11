@@ -25,23 +25,11 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 
-/**
- * H8/H9 (design-report §8.3, §8.4) — Robolectric integration coverage for the RecyclerView-reuse-safe
- * re-query behind [ChatMessageListFragment.currentItemView].
- *
- * **Why Robolectric (not just [ResolveByMessageIdTest]):** the pure-function test proves the
- * position-hit / position-miss branching of [resolveByMessageId], but design §8.4 flags the *real*
- * regression class as the Android-framework behaviour this task newly depends on — resolving a message
- * id to its **currently bound** itemView through a live [ListAdapter.getCurrentList] +
- * [RecyclerView.findViewHolderForAdapterPosition] after list mutation (RecyclerView reuse / async diff).
- * This test wires the REAL production [resolveByMessageId] to a REAL [RecyclerView] + [ListAdapter]
- * (id-based [DiffUtil.ItemCallback], mirroring the production [ChatMessageAdapter]) attached to a live
- * Activity, measured + laid out so ViewHolders are actually created and bound.
- *
- * A synchronous background diff executor + main-looper idle keeps `submitList` deterministic.
- *
- * Verify: :chat:testDebugUnitTest
- */
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [33])
 class CurrentItemViewRecyclerViewTest {
@@ -50,7 +38,7 @@ class CurrentItemViewRecyclerViewTest {
 
     private class VH(view: View) : RecyclerView.ViewHolder(view)
 
-    /** Minimal real ListAdapter mirroring ChatMessageAdapter's id-based diff. Synchronous diff executor. */
+    
     private class RowAdapter : ListAdapter<Row, VH>(
         AsyncDifferConfig.Builder(
             object : DiffUtil.ItemCallback<Row>() {
@@ -97,7 +85,7 @@ class CurrentItemViewRecyclerViewTest {
         runCatching { controller.destroy() }
     }
 
-    /** Exercises the REAL production helper: id -> current position -> currently bound itemView. */
+    
     private fun currentItemView(messageId: String): View? =
         resolveByMessageId(
             messageId,
@@ -123,7 +111,7 @@ class CurrentItemViewRecyclerViewTest {
         val resolved = currentItemView("b")
 
         assertNotNull("re-query by id must resolve a live itemView", resolved)
-        // It is exactly the view currently bound at b's position — not a captured/stale reference.
+        
         val boundAtPos1 = recyclerView.findViewHolderForAdapterPosition(1)?.itemView
         assertSame(boundAtPos1, resolved)
         assertEquals("b", (resolved as TextView).text.toString())
@@ -132,19 +120,19 @@ class CurrentItemViewRecyclerViewTest {
     @Test
     fun H8b_afterListUpdate_resolvesNewPositionView_notStaleReference() {
         submitAndLayout(listOf(Row("a"), Row("b"), Row("c")))
-        // Capture b's original itemView while it sits at position 1.
+        
         val originalBView = recyclerView.findViewHolderForAdapterPosition(1)?.itemView
         assertEquals("b", (originalBView as TextView).text.toString())
 
-        // Prepend a row: "b" shifts to position 2. RecyclerView reuse may rebind views across positions.
+        
         submitAndLayout(listOf(Row("x"), Row("a"), Row("b"), Row("c")))
 
         val resolved = currentItemView("b")
         assertNotNull(resolved)
-        // Re-query resolves whatever view is CURRENTLY bound at b's NEW position (2)...
+        
         val boundAtPos2 = recyclerView.findViewHolderForAdapterPosition(2)?.itemView
         assertSame(boundAtPos2, resolved)
-        // ...and that view actually renders "b" (proves reuse-safe re-query, not a stale hero view).
+        
         assertEquals("b", (resolved as TextView).text.toString())
     }
 
@@ -152,7 +140,7 @@ class CurrentItemViewRecyclerViewTest {
     fun H9_positionMiss_returnsNull_noCrash() {
         submitAndLayout(listOf(Row("a"), Row("b"), Row("c")))
 
-        // Id absent (deleted / scrolled out of the reuse window) -> position = -1.
+        
         assertNull(currentItemView("missing"))
     }
 

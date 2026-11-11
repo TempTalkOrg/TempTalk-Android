@@ -31,15 +31,15 @@ import javax.net.ssl.SSLContext
 import javax.net.ssl.TrustManager
 import javax.net.ssl.X509TrustManager
 
-/**
- * T40-T41c: how the two typed receive outcomes reach the wire.
- *
- * A storage fault is answered with a real `403 insufficient-storage` on the still-open connection —
- * from the finalize step and, just as importantly, from mid-body, where a bare rethrow would leave
- * the sender with a connection reset and no reason. A committed-but-unconfirmed import is answered
- * with nothing at all, and — through the linger teardown and a later receiver on the same port — it
- * must never acquire a terminal, because neither "succeeded" nor "failed" would be true.
- */
+
+
+
+
+
+
+
+
+
 @RunWith(RobolectricTestRunner::class)
 class StorageAndCommitOutcomeRouteTest {
 
@@ -49,7 +49,7 @@ class StorageAndCommitOutcomeRouteTest {
 
     @After fun tearDown() { server?.stop() }
 
-    // ── T40 ────────────────────────────────────────────────────────────────────────────────────
+    
 
     @Test
     fun `a storage fault at finalize is a 403 insufficient-storage and fails the session`() {
@@ -64,7 +64,7 @@ class StorageAndCommitOutcomeRouteTest {
         assertEquals(TransferTerminal.FAILED, sessions.status(prepared.first, prepared.third).terminal)
     }
 
-    // ── T40b ───────────────────────────────────────────────────────────────────────────────────
+    
 
     @Test
     fun `a storage fault mid-body is a 403 too, not a bare connection reset`() {
@@ -72,15 +72,15 @@ class StorageAndCommitOutcomeRouteTest {
         val port = start(sessions, BodyFailingSink(StorageFault("no room while the body streamed")))
         val prepared = prepare(sessions)
 
-        // Large enough that the pump's buffer flushes into the failing sink while the sender is still
-        // writing, which is the case a verbatim rethrow would turn into a reset with no reason.
+        
+        
         val reply = upload(port, prepared.first, prepared.second, body = ByteArray(BIG_BODY))
 
         assertEquals(403, reply.status)
         assertTrue("body carries the machine-readable reason: ${reply.body}", reply.body.contains("insufficient-storage"))
     }
 
-    // ── T41 ────────────────────────────────────────────────────────────────────────────────────
+    
 
     @Test
     fun `a committed-but-unconfirmed import answers nothing and publishes no terminal`() {
@@ -94,7 +94,7 @@ class StorageAndCommitOutcomeRouteTest {
         assertNull("and no terminal is published", sessions.status(prepared.first, prepared.third).terminal)
     }
 
-    // ── T41b ───────────────────────────────────────────────────────────────────────────────────
+    
 
     @Test
     fun `the listener teardown does not retire an unconfirmed session as cancelled`() {
@@ -104,7 +104,7 @@ class StorageAndCommitOutcomeRouteTest {
         val prepared = prepare(sessions)
         upload(port, prepared.first, prepared.second, body = ByteArray(1024))
 
-        // What ReceiverLinger does once its window expires: stop the server, which clears the session.
+        
         server?.stop()
         server = null
 
@@ -113,7 +113,7 @@ class StorageAndCommitOutcomeRouteTest {
         assertEquals(TransferStages.PROMOTING, after.stage)
     }
 
-    // ── T41c ───────────────────────────────────────────────────────────────────────────────────
+    
 
     @Test
     fun `a fresh receiver on the same port reloads the unconfirmed record without a terminal`() {
@@ -125,8 +125,8 @@ class StorageAndCommitOutcomeRouteTest {
         server?.stop()
         server = null
 
-        // A later receiver reads the same on-disk store. A missing `terminal` key must decode as null
-        // rather than dropping the whole file, or /status degrades to the 404 this mechanism rejects.
+        
+        
         val reloaded = SessionManager(terminalStore = FileTerminalRecordStore(records))
             .status(prepared.first, prepared.third)
 
@@ -134,20 +134,20 @@ class StorageAndCommitOutcomeRouteTest {
         assertEquals(TransferStages.PROMOTING, reloaded.stage)
     }
 
-    // ── fixtures ───────────────────────────────────────────────────────────────────────────────
+    
 
     private class StorageFault(message: String) : IOException(message), TransferStorageFault
 
     private class Unconfirmed(message: String) : IOException(message), TransferCommittedUnconfirmed
 
-    /** Accepts the whole body, then fails the verdict with [failure]. */
+    
     private class FinalizeFailingSink(private val failure: Throwable) : FileSink {
         override fun openWrite(meta: FileMetadata): Sink = blackholeSink()
         override fun finalizeFile(meta: FileMetadata, expectedSha256: String?): Result<String> =
             Result.failure(failure)
     }
 
-    /** Fails the first real append, while the sender is still writing. */
+    
     private class BodyFailingSink(private val failure: Throwable) : FileSink {
         override fun openWrite(meta: FileMetadata): Sink = object : Sink {
             override fun write(source: Buffer, byteCount: Long): Unit = throw failure
@@ -170,21 +170,21 @@ class StorageAndCommitOutcomeRouteTest {
             fileSink = sink,
             requirePin = false,
             onEvent = {},
-            // No interim beat may interleave with the response these cases read off the socket.
+            
             verdictHeartbeatIntervalMs = 60_000,
         )
         server = srv
         return srv.start(0)
     }
 
-    /** @return (sessionId, fileToken, sessionToken) for a single-file session bound to loopback. */
+    
     private fun prepare(sessions: SessionManager): Triple<String, String, String> {
         val meta = FileMetadata(id = FILE_ID, fileName = "c.ttmig", size = 0, fileType = "application/octet-stream")
         val prepared = sessions.createSession("127.0.0.1", mapOf(FILE_ID to meta))
         return Triple(prepared.sessionId, prepared.slots.getValue(FILE_ID).token, prepared.sessionToken)
     }
 
-    /** A null [Reply.status] means the server wrote no status line before closing. */
+    
     private class Reply(val status: Int?, val body: String)
 
     private fun upload(port: Int, sessionId: String, fileToken: String, body: ByteArray): Reply =
@@ -197,7 +197,7 @@ class StorageAndCommitOutcomeRouteTest {
                         "Host: 127.0.0.1\r\nContent-Length: ${body.size}\r\nConnection: close\r\n\r\n"
                     ).toByteArray(),
             )
-            // A receiver that answers 403 mid-body closes the connection under this write.
+            
             runCatching {
                 out.write(body)
                 out.flush()
@@ -210,7 +210,7 @@ class StorageAndCommitOutcomeRouteTest {
             }
         }
 
-    /** The pinning is not the subject here — accept whatever cert the server presents. */
+    
     private fun trustAllSocket(port: Int): Socket {
         val trustAll = object : X509TrustManager {
             override fun checkClientTrusted(chain: Array<out java.security.cert.X509Certificate>?, authType: String?) = Unit
@@ -224,7 +224,7 @@ class StorageAndCommitOutcomeRouteTest {
     private companion object {
         const val FILE_ID = "container"
 
-        /** Beyond the pump's buffer, so the failing sink is reached while the sender is still writing. */
+        
         const val BIG_BODY = 256 * 1024
     }
 }
